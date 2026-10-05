@@ -275,6 +275,7 @@ namespace {$sliceNamespace}\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LaraSlice\Core\Audit\Traits\AuditableSlice;
 PHP;
         if ($includeWorkflow) {
             $modelContent .= "\nuse LaraSlice\\Core\\Workflow\\HasWorkflow;\n";
@@ -311,6 +312,7 @@ REL;
 
 class {$studlyName} extends Model
 {
+    use AuditableSlice;
 PHP;
         if ($includeWorkflow) {
             $modelContent .= "\n    use HasWorkflow;\n";
@@ -637,7 +639,9 @@ return new class extends Migration {
                 {$migrationTitle}
                 {$migrationDesc}
                 {$migrationStatus}{$migrationFields}
-                \$table->timestamps();
+                \            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
         });
     }
 

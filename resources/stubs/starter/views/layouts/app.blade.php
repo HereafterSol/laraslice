@@ -138,6 +138,13 @@
                                             <span>Dashboard</span>
                                         </x-ui.sidebar-menu-button>
                                     </x-ui.sidebar-menu-item>
+                                    <x-ui.sidebar-menu-item>
+                                        <x-ui.sidebar-menu-button href="{{ route('settings.ai') }}" :is-active="request()->routeIs('settings.ai*')">
+                                            <x-lucide-bot class="size-4 text-indigo-500" />
+                                            <span>AI Copilot & Settings</span>
+                                            <x-ui.badge variant="secondary" class="ml-auto text-[9px] font-mono px-1 py-0">Active</x-ui.badge>
+                                        </x-ui.sidebar-menu-button>
+                                    </x-ui.sidebar-menu-item>
                                 </x-ui.sidebar-menu>
                             </x-ui.sidebar-group-content>
                         </x-ui.sidebar-group>
@@ -376,6 +383,15 @@
                                 <x-lucide-wand-2 class="size-4 mr-2" />
                                 <span>Open Slice Studio & Architecture Wizard</span>
                             </x-ui.command-item>
+                              <x-ui.command-item href="{{ route('laraslice.wizard.schema_studio') }}">
+                                  <x-lucide-columns-2 class="size-4 mr-2 text-emerald-400" />
+                                  <span>Schema Studio (2-Column Visual Builder)</span>
+                              </x-ui.command-item>
+                              <x-ui.command-item href="{{ route('settings.ai') }}">
+                                  <x-lucide-sparkles class="size-4 mr-2 text-indigo-400" />
+                                  <span>AI Copilot & Model Settings</span>
+                              </x-ui.command-item>
+
                             <x-ui.command-item href="{{ (Route::has('dashboard') ? route('dashboard') : url('/')) }}">
                                 <x-lucide-layout-dashboard class="size-4 mr-2" />
                                 <span>Go to Dashboard Overview</span>
@@ -433,5 +449,6 @@
                 });
             })();
             </script>
-    </body>
+        <x-ui.ai-copilot-bubble />
+</body>
 </html>

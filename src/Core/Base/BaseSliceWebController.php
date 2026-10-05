@@ -94,10 +94,14 @@ abstract class BaseSliceWebController extends Controller
                         $camelPlural = \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)) . 'Options';
                         $camelSingular = \Illuminate\Support\Str::camel($base) . 'Options';
                         $studlyPlural = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)) . 'Options';
+                        $snakePlural = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($base)) . 'Options';
+                        $snakeSingular = \Illuminate\Support\Str::snake($base) . 'Options';
 
                         $options[$camelPlural] = $data;
                         $options[$camelSingular] = $data;
                         $options[$studlyPlural] = $data;
+                        $options[$snakePlural] = $data;
+                        $options[$snakeSingular] = $data;
 
                         // Resolve quick-add store URL for dialog/drawer
                         $quickStoreUrl = null;
@@ -135,6 +139,8 @@ abstract class BaseSliceWebController extends Controller
                             $options[\Illuminate\Support\Str::camel($base) . 'QuickStoreUrl'] = $quickStoreUrl;
                             $options[\Illuminate\Support\Str::camel($pluralBase) . 'QuickStoreUrl'] = $quickStoreUrl;
                             $options[\Illuminate\Support\Str::studly($pluralBase) . 'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[\Illuminate\Support\Str::snake($base) . 'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[\Illuminate\Support\Str::snake($pluralBase) . 'QuickStoreUrl'] = $quickStoreUrl;
                         }
                         break;
                     }

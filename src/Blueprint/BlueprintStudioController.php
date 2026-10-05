@@ -15,6 +15,11 @@ use Throwable;
 
 final class BlueprintStudioController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(\LaraSlice\Wizard\Middleware\AuthorizeStudio::class);
+    }
+
     /**
      * Display the Blueprint Studio interface.
      */

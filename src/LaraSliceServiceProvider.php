@@ -36,35 +36,42 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         // 4. Register McpServer Singleton
         $this->app->singleton(McpServer::class, function ($app) {
-            return new McpServer($app->make(AiEngine::class));
+            return new McpServer($app->make(AiEngine::class), $app->make(SliceManager::class));
         });
     }
 
     public function boot(): void
     {
-        // 0. Register BlatUI twMerge fallback macro for zero-lock-in component compatibility
-        if (!\Illuminate\View\ComponentAttributeBag::hasMacro('twMerge')) {
-            \Illuminate\View\ComponentAttributeBag::macro('twMerge', function (...$classes) {
-                $merged = implode(' ', array_filter(array_map(function ($c) {
-                    return is_array($c) ? implode(' ', array_filter($c)) : (string) $c;
-                }, $classes)));
-                return $this->class($merged);
-            });
-        }
-        // 1. Publish Configuration & Migrations
+        // 0. Register Blueprint userstamps & auditStamps macros for enterprise auditability
+        \Illuminate\Database\Schema\Blueprint::macro('userstamps', function () {
+            $this->unsignedBigInteger('created_by')->nullable()->index();
+            $this->unsignedBigInteger('updated_by')->nullable()->index();
+        });
+
+        \Illuminate\Database\Schema\Blueprint::macro('dropUserstamps', function () {
+            $this->dropColumn(['created_by', 'updated_by']);
+        });
+
+        \Illuminate\Database\Schema\Blueprint::macro('softUserstamps', function () {
+            $this->unsignedBigInteger('deleted_by')->nullable()->index();
+        });
+
+        \Illuminate\Database\Schema\Blueprint::macro('dropSoftUserstamps', function () {
+            $this->dropColumn(['deleted_by']);
+        });
+
+        \Illuminate\Database\Schema\Blueprint::macro('auditStamps', function () {
+            $this->timestamps();
+            $this->unsignedBigInteger('created_by')->nullable()->index();
+            $this->unsignedBigInteger('updated_by')->nullable()->index();
+            $this->softDeletes();
+            $this->unsignedBigInteger('deleted_by')->nullable()->index();
+        });
+
+        // 1. Register Artisan CLI Commands
         if ($this->app->runningInConsole()) {
-            $this->publishes([
-                __DIR__ . '/../config/laraslice.php' => config_path('laraslice.php'),
-            ], 'laraslice-config');
-
-            $this->publishes([
-                __DIR__ . '/../database/migrations' => database_path('migrations'),
-            ], 'laraslice-migrations');
-
-            // Register Console Commands
             $this->commands([
                 SliceMakeCommand::class,
-                \LaraSlice\Commands\SliceInstallCommand::class,
                 \LaraSlice\Commands\SliceWizardCommand::class,
                 \LaraSlice\Commands\SliceFieldCommand::class,
                 \LaraSlice\Commands\SliceUiPruneCommand::class,
@@ -82,6 +89,9 @@ class LaraSliceServiceProvider extends ServiceProvider
                 \LaraSlice\Commands\SliceCacheCommand::class,
                 \LaraSlice\Commands\SliceClearCommand::class,
                 \LaraSlice\Commands\SlicePublishCommand::class,
+                \LaraSlice\Commands\AuditPruneCommand::class,
+                \LaraSlice\Commands\LaraSliceMcpCommand::class,
+                \LaraSlice\Commands\SkillPublishCommand::class,
             ]);
         }
 
@@ -91,9 +101,15 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         // 3. Register Wizard Routes
         if (config('laraslice.wizard.enabled', true)) {
-            Route::prefix('laraslice/wizard')->middleware(config('laraslice.wizard.middleware', ['web', 'auth']))->group(function () {
+            $wizardMiddleware = config('laraslice.wizard.middleware', ['web', 'auth']);
+            if (! in_array(\LaraSlice\Wizard\Middleware\AuthorizeStudio::class, $wizardMiddleware, true)) {
+                $wizardMiddleware[] = \LaraSlice\Wizard\Middleware\AuthorizeStudio::class;
+            }
+            Route::prefix('laraslice/wizard')->middleware($wizardMiddleware)->group(function () {
                 Route::get('/', [WizardController::class, 'show'])->name('laraslice.wizard');
+                Route::get('/studio', [WizardController::class, 'studio'])->name('laraslice.wizard.studio');
                 Route::get('/blueprint', [BlueprintStudioController::class, 'show'])->name('laraslice.wizard.blueprint');
+                Route::get('/schema-studio', [WizardController::class, 'schemaStudio'])->name('laraslice.wizard.schema_studio');
                 Route::post('/blueprint/plan', [BlueprintStudioController::class, 'plan'])->name('laraslice.wizard.blueprint.plan');
                 Route::post('/blueprint/apply', [BlueprintStudioController::class, 'apply'])->name('laraslice.wizard.blueprint.apply');
                 Route::post('/blueprint/migrate', [BlueprintStudioController::class, 'runMigrations'])->name('laraslice.wizard.blueprint.migrate');
@@ -102,6 +118,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 Route::post('/migrate', [WizardController::class, 'runMigration'])->name('laraslice.wizard.migrate');
                 Route::get('/slices', [WizardController::class, 'listSlices'])->name('laraslice.wizard.slices');
                 Route::get('/audit-logs', [WizardController::class, 'getAuditLogs'])->name('laraslice.wizard.audit_logs');
+                Route::post('/audit-logs/prune', [WizardController::class, 'pruneAuditLogs'])->name('laraslice.wizard.audit_logs.prune');
                 Route::post('/add-field', [WizardController::class, 'addField'])->name('laraslice.wizard.add_field');
                 Route::post('/add-fields-batch', [WizardController::class, 'addFieldsBatch'])->name('laraslice.wizard.add_fields_batch');
                 Route::post('/add-child-table', [WizardController::class, 'addChildTable'])->name('laraslice.wizard.add_child_table');
@@ -122,6 +139,23 @@ class LaraSliceServiceProvider extends ServiceProvider
                 Route::post('/destroy-domain', [WizardController::class, 'destroyDomain'])->name('laraslice.wizard.destroy_domain');
             });
         }
+
+        // Global LaraSlice AI Copilot Routes
+        $aiMiddleware = ['web'];
+        if (!app()->environment('local', 'testing') && config('laraslice.ai.require_auth', false)) {
+            $aiMiddleware[] = 'auth';
+        }
+        Route::middleware($aiMiddleware)->group(function () {
+            Route::post('/laraslice/ai/chat', [\LaraSlice\Core\Ai\AiChatController::class, 'chat'])->name('laraslice.ai.chat');
+            Route::get('/laraslice/ai/providers', [\LaraSlice\Core\Ai\AiChatController::class, 'providers'])->name('laraslice.ai.providers');
+                        Route::get('/laraslice/ai/page-overview', [\LaraSlice\Core\Ai\AiChatController::class, 'pageOverview'])->name('laraslice.ai.page_overview');
+            Route::get('/laraslice/ai/context', [\LaraSlice\Core\Ai\AiChatController::class, 'context'])->name('laraslice.ai.context');
+            Route::post('/laraslice/ai/config', [\LaraSlice\Core\Ai\AiChatController::class, 'updateConfig'])->name('laraslice.ai.config.update');
+                        Route::post('/laraslice/ai/record-create', [\LaraSlice\Core\Ai\AiChatController::class, 'createRecord'])->name('laraslice.ai.record_create');
+            Route::post('/laraslice/ai/test', [\LaraSlice\Core\Ai\AiChatController::class, 'test'])->name('laraslice.ai.test');
+            Route::get('/admin/settings/ai', [\LaraSlice\Core\Ai\AiChatController::class, 'settings'])->name('settings.ai');
+            Route::post('/admin/settings/ai', [\LaraSlice\Core\Ai\AiChatController::class, 'updateSettings'])->name('settings.ai.save');
+        });
 
         // 4. Register MCP (Model Context Protocol) Route for AI Agents (Cursor / Antigravity / Claude)
         if (config('laraslice.ai.mcp_server.enabled', true)) {
@@ -182,9 +216,18 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         // 8. Register default dashboard route fallback if host application doesn't define one
         $this->app->booted(function () {
-            if (! Route::has('dashboard')) {
-                Route::middleware(['web'])->get('/dashboard', function () {
-                    return redirect()->route('laraslice.wizard');
+            $routes = Route::getRoutes();
+            $hasDashboard = $routes->hasNamedRoute('dashboard');
+            if (! $hasDashboard) {
+                Route::middleware(['web', 'auth'])->get('/dashboard', function () {
+                    $user = auth()->user();
+                    if ($user && ($user->hasRole('super-admin') || (method_exists($user, 'hasPermission') && $user->hasPermission('studio.access')))) {
+                        return redirect()->route('laraslice.wizard');
+                    }
+                    if (Route::has('account.settings')) {
+                        return redirect()->route('account.settings');
+                    }
+                    return redirect('/');
                 })->name('dashboard');
             }
         });

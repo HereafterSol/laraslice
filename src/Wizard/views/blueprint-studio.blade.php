@@ -18,9 +18,13 @@
     <header class="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <a href="{{ route('laraslice.wizard') }}" class="hover:text-foreground font-medium">← Slice Wizard</a>
+                <a href="{{ route('laraslice.wizard') }}" class="hover:text-foreground font-medium">← Scaffold Wizard</a>
+                <span>/</span>
+                <a href="{{ route('laraslice.wizard.studio') }}" class="hover:text-foreground font-medium">Slice Studio</a>
                 <span>/</span>
                 <span class="text-foreground font-medium">Blueprint Low-Code Studio</span>
+                <span>/</span>
+                <a href="{{ route('laraslice.wizard.schema_studio') }}" class="hover:text-foreground font-medium">Schema Studio</a>
                 <span class="text-muted-foreground/30">•</span>
                 <a href="https://hereaftersol.com" target="_blank" class="text-primary hover:underline font-semibold">Hereafter Solutions</a>
                 <span class="text-muted-foreground/30">•</span>
@@ -405,6 +409,7 @@
                                                 <th class="w-28 px-2.5 py-2.5 text-center">Width</th>
                                                 <th class="w-14 px-2 py-2.5 text-center" title="NOT NULL Constraint">Req</th>
                                                 <th class="w-14 px-2 py-2.5 text-center" title="Allow NULL Values">Null</th>
+                                                <th class="w-14 px-2 py-2.5 text-center" title="Hide field from forms and table views">Hide</th>
                                                 <th class="w-32 px-2.5 py-2.5">Length / Options</th>
                                                 <th class="w-28 px-2.5 py-2.5">Default Value</th>
                                                 <th class="w-12 px-2.5 py-2.5 text-right"></th>
@@ -463,6 +468,15 @@
                                                     <!-- Nullable -->
                                                     <td class="px-2 py-2 text-center">
                                                         <input type="checkbox" x-model="field.nullable" @change="onNullableToggle(field); syncToYaml()" class="rounded border-input text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer" title="Allow NULL values">
+                                                    </td>
+                                                    <!-- Hide in UI views -->
+                                                    <td class="px-2 py-2 text-center">
+                                                        <button type="button" @click="field.hidden = !field.hidden; syncToYaml()" 
+                                                                :title="field.hidden ? 'Field is hidden from UI views' : 'Field is visible in UI views'"
+                                                                class="p-1 rounded hover:bg-muted transition-colors inline-flex items-center justify-center">
+                                                            <span x-show="field.hidden" class="text-amber-500 font-bold text-[10px] uppercase tracking-wider bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">Hide</span>
+                                                            <span x-show="!field.hidden" class="text-emerald-500 font-medium text-[10px] uppercase tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Show</span>
+                                                        </button>
                                                     </td>
                                                     <!-- Length / Options -->
                                                     <td class="px-2.5 py-2">
@@ -1730,9 +1744,38 @@ document.addEventListener('alpine:init', () => {
                 this.syncToYaml();
             }
             this.activeModelIndex = 0;
+            if (targetSlice) {
+                this.notifyCopilotOfSlice(targetSlice);
+            }
             try {
                 sessionStorage.setItem('laraslice_active_slice_idx', String(this.activeSliceIdx));
             } catch(e) {}
+        },
+
+        notifyCopilotOfSlice(slice) {
+            if (!slice) return;
+            try {
+                const bp = slice.blueprint || this.blueprint || {};
+                const models = Array.isArray(bp.models) ? bp.models : [];
+                const childModels = models.slice(1).map(m => m.table || m.handle || m.name);
+                const tablesData = models.map(m => ({
+                    name: m.table || m.handle || m.name,
+                    columns_count: (m.fields || []).length
+                }));
+                window.dispatchEvent(new CustomEvent('laraslice-slice-selected', {
+                    detail: {
+                        name: slice.name || slice.handle || bp.name,
+                        title: slice.name || bp.name || slice.handle,
+                        domain: slice.domain || bp.domain || 'Blueprint',
+                        version: bp.version || 'Blueprint Low-Code',
+                        description: bp.description || 'Declarative YAML/Visual Slice Blueprint',
+                        tables_data: tablesData,
+                        child_tables: childModels,
+                        permissions: bp.permissions || [],
+                        is_blueprint: true
+                    }
+                }));
+            } catch (e) {}
         },
 
         createNewSlice() {
@@ -2035,6 +2078,10 @@ document.addEventListener('alpine:init', () => {
             this.blueprint.models.forEach((_, idx) => {
                 this.modelCollapsed[idx] = false;
             });
+
+            if (this.slices && this.slices[this.activeSliceIdx]) {
+                this.notifyCopilotOfSlice(this.slices[this.activeSliceIdx]);
+            }
         },
 
         loadParsedBlueprint(data) {
@@ -2390,6 +2437,7 @@ document.addEventListener('alpine:init', () => {
                                 currentField.required = trimmed.replace('required:', '').trim() === 'true';
                             } else if (trimmed.startsWith('nullable:')) {
                                 currentField.nullable = trimmed.replace('nullable:', '').trim() === 'true';
+                        currentField.hidden = trimmed.replace('hidden:', '').trim() === 'true';
                             } else if (trimmed.startsWith('width:')) {
                                 currentField.width = parseInt(trimmed.replace('width:', '').trim()) || 50;
                             } else if (trimmed.startsWith('length:')) {
@@ -2459,6 +2507,9 @@ document.addEventListener('alpine:init', () => {
                         out.push(`        required: ${f.required ? 'true' : 'false'}`);
                         if (f.nullable) {
                             out.push('        nullable: true');
+                        }
+                        if (f.hidden) {
+                            out.push('        hidden: true');
                         }
                         if (f.width && f.width !== 50) {
                             out.push(`        width: ${f.width}`);

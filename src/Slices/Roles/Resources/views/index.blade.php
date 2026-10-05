@@ -40,10 +40,24 @@
         @forelse ($pagedList->items as $role)
             <x-ui.card class="bg-card border border-border shadow-xs hover:border-primary/40 transition flex flex-col justify-between">
                 <x-ui.card-header class="pb-3 px-5 pt-5">
+                    @php
+                        $privilegedRoles = class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class) 
+                            ? \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles() 
+                            : [];
+                        $isMfaRole = in_array($role->slug, $privilegedRoles);
+                    @endphp
                     <div class="flex items-center justify-between mb-2">
-                        <span class="px-2 py-0.5 text-xs font-mono font-bold rounded-md {{ $role->slug === 'super-admin' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' : 'bg-primary/10 text-primary border border-primary/20' }}">
-                            {{ $role->slug }}
-                        </span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="px-2 py-0.5 text-xs font-mono font-bold rounded-md {{ $role->slug === 'super-admin' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' : 'bg-primary/10 text-primary border border-primary/20' }}">
+                                {{ $role->slug }}
+                            </span>
+                            @if($isMfaRole)
+                                <span class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1" title="MFA Enforced for this role">
+                                    <x-lucide-shield-alert class="size-2.5" />
+                                    <span>MFA</span>
+                                </span>
+                            @endif
+                        </div>
                         <span class="text-xs text-muted-foreground font-medium">{{ $role->usersCount }} Users</span>
                     </div>
                     <x-ui.card-title class="text-base font-bold text-foreground">{{ $role->name }}</x-ui.card-title>

@@ -402,6 +402,9 @@ PHP;
             $content = file_get_contents($bladeFile);
 
             foreach ($fields as $field) {
+                if (!empty($field['hidden'])) {
+                    continue;
+                }
                 $snakeField = Str::snake($field['name']);
                 if (str_contains($content, "name=\"{$snakeField}\"")) {
                     continue;
@@ -514,6 +517,9 @@ HTML;
             }
 
             foreach ($fields as $field) {
+                if (!empty($field['hidden'])) {
+                    continue;
+                }
                 $snakeField = Str::snake($field['name']);
                 if (str_contains($content, "\${$varName}->{$snakeField}") || str_contains($content, "\$item->{$snakeField}")) {
                     continue;
@@ -1368,6 +1374,7 @@ PHP;
                         'width'    => (int) ($f['width'] ?? 50),
                         'required' => !empty($f['required']),
                         'nullable' => !empty($f['nullable']),
+                        'hidden'   => !empty($f['hidden']),
                         'length'   => $f['length'] ?? null,
                         'default'  => $f['default'] ?? null,
                         'added_in' => $existingAddedIn ?? $newVersion,

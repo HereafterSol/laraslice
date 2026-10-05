@@ -10,6 +10,9 @@ Route::middleware(['web'])->prefix('admin/settings')->name('settings.')->group(f
     Route::post('/smtp/test', [SettingWebController::class, 'testSmtp'])->name('smtp.test');
 
     Route::get('/theme', [ThemeWebController::class, 'index'])->name('theme');
+
+    Route::get('/ai', [SettingWebController::class, 'ai'])->name('ai');
+    Route::post('/ai', [SettingWebController::class, 'saveAi'])->name('ai.save');
 });
 
 Route::redirect('/settings/theme', '/admin/settings/theme');

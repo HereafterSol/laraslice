@@ -860,6 +860,7 @@ class SliceManager
         $hasDomainColumn = \Illuminate\Support\Facades\Schema::hasColumn('permissions', 'domain');
 
         $count = 0;
+        $validSlugs = [];
         foreach ($this->slices as $slice) {
             $sliceTitle = !empty($slice->title) ? $slice->title : ucwords(str_replace(['_', '-'], ' ', $slice->name));
             $domain = !empty($slice->domain) ? $slice->domain : ($slice->navigation['group'] ?? 'Vertical Slices');
@@ -889,6 +890,7 @@ class SliceManager
                         ['slug' => $slug],
                         $payload
                     );
+                    $validSlugs[] = $slug;
                     $count++;
                 }
             }
@@ -896,6 +898,11 @@ class SliceManager
 
         // 2. Register System-Level Core Slice Permissions
         $coreSystemPerms = [
+            ['slug' => 'studio.access', 'name' => 'Access Slice Studio & Wizard', 'desc' => 'Allows opening and accessing Slice Studio and Blueprint Studio interfaces.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
+            ['slug' => 'studio.create', 'name' => 'Scaffold & Generate Feature Slices', 'desc' => 'Allows generating new vertical slices, child tables, and fields via the wizard.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
+            ['slug' => 'studio.blueprint', 'name' => 'Blueprint Studio Schema Design', 'desc' => 'Allows designing, introspecting, and applying declarative schemas in Blueprint Studio.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
+            ['slug' => 'studio.migrate', 'name' => 'Execute Migrations from Studio', 'desc' => 'Allows running database migrations directly from Slice Studio.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
+            ['slug' => 'studio.wipe', 'name' => 'Wipe / Truncate Slice Records', 'desc' => 'Allows wiping demo or production records from slice tables.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
             ['slug' => 'system.slices.view', 'name' => 'View Slice Studio & Slices', 'desc' => 'Allows viewing of all installed vertical slices in studio and directory.'],
             ['slug' => 'system.slices.toggle', 'name' => 'Toggle Slices (Enable/Disable)', 'desc' => 'Allows enabling or disabling slices and domains from navigation.'],
             ['slug' => 'system.slices.seed', 'name' => 'Seed Demo Data', 'desc' => 'Allows generating realistic demo data at slice and domain levels.'],
@@ -934,19 +941,41 @@ class SliceManager
         foreach ($coreSystemPerms as $sp) {
             $payload = [
                 'name'        => $sp['name'],
-                'group'       => 'System Administration',
+                'group'       => $sp['group'] ?? 'System Administration',
                 'description' => $sp['desc'],
                 'updated_at'  => now(),
                 'created_at'  => now(),
             ];
             if ($hasDomainColumn) {
-                $payload['domain'] = 'System';
+                $payload['domain'] = $sp['domain'] ?? 'System';
             }
             \Illuminate\Support\Facades\DB::table('permissions')->updateOrInsert(
                 ['slug' => $sp['slug']],
                 $payload
             );
+            $validSlugs[] = $sp['slug'];
             $count++;
+        }
+
+        // 3. Automatically prune orphaned permissions belonging to deleted/removed slices
+        try {
+            $orphans = \Illuminate\Support\Facades\DB::table('permissions')
+                ->whereNotIn('slug', $validSlugs)
+                ->get(['id', 'slug']);
+
+            if ($orphans->isNotEmpty()) {
+                $orphanIds = $orphans->pluck('id')->toArray();
+                if (\Illuminate\Support\Facades\Schema::hasTable('permission_role')) {
+                    \Illuminate\Support\Facades\DB::table('permission_role')
+                        ->whereIn('permission_id', $orphanIds)
+                        ->delete();
+                }
+                \Illuminate\Support\Facades\DB::table('permissions')
+                    ->whereIn('id', $orphanIds)
+                    ->delete();
+            }
+        } catch (\Throwable $e) {
+            // Safe fallback
         }
 
         // Ensure super-admin role automatically receives all synced permissions by default

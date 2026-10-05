@@ -5,7 +5,7 @@
 <script>
 function larasliceWizard() {
     return {
-        mainTab: 'wizard',
+        mainTab: @js(old('tab', $initialTab ?? (request()->query('tab') ?: (request()->routeIs('*studio*') ? 'studio' : 'wizard')))),
         step: 1,
         projectName: '',
         domain: '',
@@ -136,6 +136,34 @@ function larasliceWizard() {
             this.refreshRbacList();
             this.activeSliceIdx = Math.max(0, idx - 1);
             this.switchSliceTab(this.activeSliceIdx);
+        },
+
+        pruneAuditLogsNow() {
+            if (!confirm(`Are you sure you want to permanently prune audit logs older than ${this.pruneDaysOption} days?`)) return;
+            this.isPruningAuditLogs = true;
+            fetch('/laraslice/wizard/audit-logs/prune', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                },
+                body: JSON.stringify({
+                    days: this.pruneDaysOption,
+                    slice: this.selectedSlice?.name || 'all'
+                })
+            })
+            .then(r => r.json())
+            .then(d => {
+                this.isPruningAuditLogs = false;
+                this.showAuditPruneModal = false;
+                alert(d.message || 'Audit logs pruned successfully.');
+                this.loadAuditLogs(this.selectedSlice?.name);
+            })
+            .catch(e => {
+                this.isPruningAuditLogs = false;
+                alert('Pruning failed: ' + e.message);
+            });
         },
 
         loadAuditLogs(sliceName) {
@@ -1169,9 +1197,15 @@ function larasliceWizard() {
                 slugBase + '.edit',
                 slugBase + '.delete'
             ];
-            const perms = Array.isArray(slice.permissions) && slice.permissions.length > 0
-                ? JSON.parse(JSON.stringify(slice.permissions))
+            const rawPerms = Array.isArray(slice.permissions) && slice.permissions.length > 0
+                ? slice.permissions
                 : defaultPerms;
+            const perms = rawPerms.map(p => {
+                if (typeof p === 'object' && p !== null) {
+                    return p.slug || p.name || p.key || JSON.stringify(p);
+                }
+                return String(p);
+            });
 
             this.navConfig = {
                 title: slice.navigation?.title || slice.title || slice.name,
@@ -1185,6 +1219,30 @@ function larasliceWizard() {
                 children: Array.isArray(slice.navigation?.children) ? JSON.parse(JSON.stringify(slice.navigation.children)) : []
             };
             this.newPermInput = '';
+
+            // Notify AI Copilot of selected slice context
+            try {
+                window.dispatchEvent(new CustomEvent('laraslice-slice-selected', {
+                    detail: {
+                        name: slice.name,
+                        title: slice.title || slice.name,
+                        domain: slice.domain || '',
+                        version: slice.version || '1.0.0',
+                        description: slice.description || '',
+                        tables_data: slice.tables_data || [],
+                        child_tables: slice.child_tables || [],
+                        fields: slice.fields || {},
+                        permissions: perms,
+                        navigation: this.navConfig
+                    }
+                }));
+            } catch (e) {}
+        },
+        formatPerm(p) {
+            if (typeof p === 'object' && p !== null) {
+                return p.slug || p.name || p.key || '';
+            }
+            return String(p || '');
         },
         submitField() {
             if (!this.newField.name) return alert('Field name required');
@@ -1550,31 +1608,29 @@ function larasliceWizard() {
         </div>
 
         <!-- Top Mode Selector -->
-        <div class="flex items-center gap-3 mb-8 bg-card p-1.5 rounded-2xl border border-border w-fit">
-            <button @click="mainTab = 'wizard'"
-                    :class="mainTab === 'wizard' ? 'bg-primary text-white shadow-lg shadow-amber-500/25 font-bold' : 'text-muted-foreground hover:text-foreground font-medium'"
-                    class="px-5 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer">
+        <div class="flex flex-wrap items-center gap-2.5 mb-8 bg-card p-1.5 rounded-2xl border border-border w-fit shadow-xs">
+            <button @click="mainTab = 'wizard'; try { history.replaceState({}, '', '{{ route('laraslice.wizard') }}'); } catch(e){}"
+                    :class="mainTab === 'wizard' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 font-bold' : 'text-muted-foreground hover:text-foreground font-medium'"
+                    class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer">
                 <span>🪄</span>
                 <span>Scaffold New Slice</span>
             </button>
-            <button @click="mainTab = 'studio'; loadSlices()"
-                    :class="mainTab === 'studio' ? 'bg-indigo-600 text-foreground shadow-lg shadow-indigo-600/25 font-bold' : 'text-muted-foreground hover:text-foreground font-medium'"
-                    class="px-5 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer">
+            <button @click="mainTab = 'studio'; try { history.replaceState({}, '', '{{ route('laraslice.wizard.studio') }}'); } catch(e){}; loadSlices()"
+                    :class="mainTab === 'studio' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 font-bold' : 'text-muted-foreground hover:text-foreground font-medium'"
+                    class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer">
                 <span>🛠️</span>
-                <span>Slice Studio & Field Manager (October Builder Style)</span>
+                <span>Slice Studio & Field Manager</span>
                 <span class="px-2 py-0.5 rounded-full bg-white/20 text-[10px]" x-text="installedSlices.length"></span>
             </button>
-            <button @click="copilotOpen = !copilotOpen"
-                    :class="copilotOpen ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white font-bold shadow-lg shadow-amber-500/25' : 'text-amber-400 hover:text-amber-300 font-semibold bg-amber-500/10 hover:bg-amber-500/20'"
-                    class="px-5 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer border border-amber-500/30">
-                <span>✨</span>
-                <span>AI Copilot (Elmapi Style)</span>
-                <span class="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-[10px] font-mono font-bold text-amber-300">NEW</span>
-            </button>
             <a href="{{ route('laraslice.wizard.blueprint') }}"
-               class="px-5 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-border text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50">
+               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-border text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50">
                 <span aria-hidden="true">⌘</span>
                 <span>Blueprint Studio</span>
+            </a>
+            <a href="{{ route('laraslice.wizard.schema_studio') }}"
+               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-border text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50">
+                <span>⚡</span>
+                <span>Schema Studio</span>
             </a>
         </div>
         <!-- Wizard Mode Grid -->
@@ -3000,8 +3056,8 @@ function larasliceWizard() {
                             <div class="flex items-center gap-1.5">
                                 <select x-model="navConfig.permission" class="w-full px-3 py-2 bg-muted/30 border border-border rounded-lg text-foreground text-xs font-mono focus:border-primary focus:outline-none">
                                     <option value="">Public / Unrestricted (Visible to all)</option>
-                                    <template x-for="p in navConfig.permissions" :key="p">
-                                        <option :value="p" x-text="p"></option>
+                                    <template x-for="p in navConfig.permissions" :key="formatPerm(p)">
+                                        <option :value="formatPerm(p)" x-text="formatPerm(p)"></option>
                                     </template>
                                 </select>
                             </div>
@@ -3033,11 +3089,11 @@ function larasliceWizard() {
                         <div class="flex flex-wrap gap-2 pt-1">
                             <template x-for="(perm, pIdx) in navConfig.permissions" :key="pIdx">
                                 <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono transition"
-                                     :class="navConfig.permission === perm ? 'bg-primary/10 border-primary/40 text-primary font-bold shadow-xs' : 'bg-muted/30 border-border text-foreground'">
-                                    <span class="size-2 rounded-full" :class="perm.endsWith('.view') ? 'bg-blue-500' : (perm.endsWith('.create') ? 'bg-emerald-500' : (perm.endsWith('.edit') ? 'bg-amber-500' : (perm.endsWith('.delete') ? 'bg-rose-500' : 'bg-purple-500')))"></span>
-                                    <span x-text="perm"></span>
-                                    <span x-show="navConfig.permission === perm" class="text-[9px] uppercase px-1 py-0.2 rounded bg-primary text-primary-foreground font-semibold">Sidebar Gate</span>
-                                    <button type="button" @click="navConfig.permissions.splice(pIdx, 1); if (navConfig.permission === perm) navConfig.permission = navConfig.permissions[0] || ''"
+                                     :class="navConfig.permission === formatPerm(perm) ? 'bg-primary/10 border-primary/40 text-primary font-bold shadow-xs' : 'bg-muted/30 border-border text-foreground'">
+                                    <span class="size-2 rounded-full" :class="formatPerm(perm).endsWith('.view') ? 'bg-blue-500' : (formatPerm(perm).endsWith('.create') ? 'bg-emerald-500' : (formatPerm(perm).endsWith('.edit') ? 'bg-amber-500' : (formatPerm(perm).endsWith('.delete') ? 'bg-rose-500' : 'bg-purple-500')))"></span>
+                                    <span x-text="formatPerm(perm)"></span>
+                                    <span x-show="navConfig.permission === formatPerm(perm)" class="text-[9px] uppercase px-1 py-0.2 rounded bg-primary text-primary-foreground font-semibold">Sidebar Gate</span>
+                                    <button type="button" @click="navConfig.permissions.splice(pIdx, 1); if (navConfig.permission === formatPerm(perm)) navConfig.permission = formatPerm(navConfig.permissions[0] || '')"
                                             class="text-muted-foreground hover:text-destructive transition ml-1 cursor-pointer font-bold" title="Remove capability">
                                         &times;
                                     </button>
@@ -3162,11 +3218,49 @@ function larasliceWizard() {
                             </h3>
                             <p class="text-xs text-muted-foreground mt-0.5">Immutable regulatory compliance log capturing entity creations, updates, and deletions</p>
                         </div>
-                        <button type="button" @click="loadAuditLogs(selectedSlice?.name)" :disabled="isLoadingAuditLogs"
+                        <button type="button" @click="showAuditPruneModal = true"
+                                    class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer">
+                                <svg class="size-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                <span>Prune Logs</span>
+                            </button>
+                            <button type="button" @click="loadAuditLogs(selectedSlice?.name)" :disabled="isLoadingAuditLogs"
                                 class="px-3 py-1.5 bg-muted/40 hover:bg-muted text-foreground border border-border rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
                             <span :class="isLoadingAuditLogs ? 'animate-spin' : ''">↺</span>
                             <span>Refresh Logs</span>
                         </button>
+                    </div>
+
+                                        <!-- Audit Search & Action Filter Toolbar -->
+                    <div class="p-3 bg-muted/30 rounded-xl border border-border/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div class="flex-1 relative">
+                            <input type="text" x-model="auditSearch" @input.debounce.300ms="loadAuditLogs(selectedSlice?.name)"
+                                   placeholder="Search by ID, user email, IP, or payload changes..."
+                                   class="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-primary focus:border-primary">
+                            <span class="absolute left-2.5 top-2 text-muted-foreground text-xs">🔍</span>
+                            <button type="button" x-show="auditSearch" @click="auditSearch = ''; loadAuditLogs(selectedSlice?.name)" class="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground text-xs">✕</button>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <button type="button" @click="auditActionFilter = 'all'; loadAuditLogs(selectedSlice?.name)"
+                                    class="px-2.5 py-1 rounded-md text-[11px] font-semibold transition"
+                                    :class="auditActionFilter === 'all' ? 'bg-primary text-primary-foreground shadow-xs' : 'bg-muted/60 text-muted-foreground hover:text-foreground'">
+                                All (<span x-text="auditCounts.all || 0"></span>)
+                            </button>
+                            <button type="button" @click="auditActionFilter = 'created'; loadAuditLogs(selectedSlice?.name)"
+                                    class="px-2.5 py-1 rounded-md text-[11px] font-semibold transition"
+                                    :class="auditActionFilter === 'created' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-muted/60 text-emerald-600 hover:text-foreground'">
+                                Created (<span x-text="auditCounts.created || 0"></span>)
+                            </button>
+                            <button type="button" @click="auditActionFilter = 'updated'; loadAuditLogs(selectedSlice?.name)"
+                                    class="px-2.5 py-1 rounded-md text-[11px] font-semibold transition"
+                                    :class="auditActionFilter === 'updated' ? 'bg-amber-600 text-white shadow-xs' : 'bg-muted/60 text-amber-600 hover:text-foreground'">
+                                Updated (<span x-text="auditCounts.updated || 0"></span>)
+                            </button>
+                            <button type="button" @click="auditActionFilter = 'deleted'; loadAuditLogs(selectedSlice?.name)"
+                                    class="px-2.5 py-1 rounded-md text-[11px] font-semibold transition"
+                                    :class="auditActionFilter === 'deleted' ? 'bg-rose-600 text-white shadow-xs' : 'bg-muted/60 text-rose-600 hover:text-foreground'">
+                                Deleted (<span x-text="auditCounts.deleted || 0"></span>)
+                            </button>
+                        </div>
                     </div>
 
                     <div class="space-y-3 text-xs">
@@ -3244,207 +3338,6 @@ function larasliceWizard() {
                             <p class="text-[11px] text-muted-foreground mt-0.5">Model actions utilizing the <code class="text-primary font-mono font-semibold">AuditableSlice</code> trait will automatically appear here with granular field diffs.</p>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- AI Copilot Persistent Slide-Out Drawer (ElmapiCMS Inspired) -->
-        <div x-show="copilotOpen"
-             x-cloak
-             x-transition:enter="transition ease-out duration-300 transform"
-             x-transition:enter-start="translate-x-full"
-             x-transition:enter-end="translate-x-0"
-             x-transition:leave="transition ease-in duration-200 transform"
-             x-transition:leave-start="translate-x-0"
-             x-transition:leave-end="translate-x-full"
-             class="fixed top-0 right-0 h-full w-full sm:w-[440px] bg-card/95 border-l border-border shadow-2xl z-50 flex flex-col backdrop-blur-md">
-            
-            <!-- Drawer Header -->
-            <div class="p-4 border-b border-border flex items-center justify-between bg-muted/40">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-indigo-600 flex items-center justify-center text-white shadow-md text-sm">
-                        ✨
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h3 class="text-xs font-bold text-foreground">LaraSlice Copilot</h3>
-                            <span class="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Online</span>
-                        </div>
-                        <p class="text-[11px] text-muted-foreground">Conversational Domain Architect</p>
-                    </div>
-                </div>
-                <button @click="copilotOpen = false" class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition cursor-pointer">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Messages Stream -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-                <template x-for="(msg, idx) in copilotMessages" :key="idx">
-                    <div class="space-y-2">
-                        <!-- Message Bubble -->
-                        <div :class="msg.role === 'user' ? 'justify-end' : 'justify-start'" class="flex items-start gap-2.5">
-                            <div x-show="msg.role === 'assistant'" class="w-6 h-6 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-[10px] text-indigo-400 shrink-0 mt-0.5">
-                                ✨
-                            </div>
-                            <div :class="msg.role === 'user' ? 'bg-primary text-white rounded-2xl rounded-tr-xs' : 'bg-muted/50 text-foreground border border-border/80 rounded-2xl rounded-tl-xs'"
-                                 class="p-3.5 max-w-[85%] space-y-2 shadow-xs leading-relaxed whitespace-pre-line"
-                                 x-text="msg.text">
-                            </div>
-                        </div>
-
-                        <!-- Clickable Option Chips (Elmapi Style) -->
-                        <div x-show="msg.options && msg.options.length > 0" class="flex flex-wrap gap-1.5 pl-8 pt-1">
-                            <template x-for="opt in (msg.options || [])" :key="opt">
-                                <button type="button"
-                                        @click="sendCopilotMessage(opt)"
-                                        class="px-2.5 py-1 text-[11px] bg-background hover:bg-primary/10 text-foreground hover:text-primary border border-border/80 hover:border-primary/40 rounded-full transition shadow-2xs cursor-pointer flex items-center gap-1">
-                                    <span>💬</span>
-                                    <span x-text="opt"></span>
-                                </button>
-                            </template>
-                        </div>
-
-                        <!-- Action Execution Card -->
-                        <div x-show="msg.can_execute && msg.plan" class="pl-8 pt-2">
-                            <div class="p-3.5 bg-gradient-to-br from-indigo-950/40 to-muted/40 border border-indigo-500/30 rounded-xl space-y-3 shadow-md">
-                                <div class="flex items-center justify-between border-b border-indigo-500/20 pb-2">
-                                    <span class="font-bold text-indigo-300 flex items-center gap-1.5">
-                                        <span>📦</span>
-                                        <span x-text="msg.plan?.title || msg.plan?.slice"></span>
-                                    </span>
-                                    <span class="text-[10px] font-mono text-muted-foreground" x-text="(msg.plan?.tables?.length || 0) + ' Entities'"></span>
-                                </div>
-                                <div class="space-y-1 text-[11px] text-muted-foreground">
-                                    <template x-for="tbl in (msg.plan?.tables || [])" :key="tbl.name">
-                                        <div class="flex items-center justify-between py-0.5">
-                                            <span class="font-mono text-foreground font-semibold" x-text="tbl.name"></span>
-                                            <span class="text-[10px] text-indigo-400" x-text="tbl.relation + ' (' + (tbl.fields?.length || 0) + ' fields)'"></span>
-                                        </div>
-                                    </template>
-                                </div>
-                                <button type="button"
-                                        @click="applyCopilotPlan(msg.plan)"
-                                        :disabled="copilotLoading"
-                                        class="w-full py-2 bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-bold rounded-lg text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
-                                    <span x-show="!copilotLoading">⚡ Apply Plan & Scaffold Entities</span>
-                                    <span x-show="copilotLoading">⏳ Scaffolding Architecture...</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </template>
-
-                <div x-show="copilotLoading" class="flex items-center gap-2 text-muted-foreground text-xs italic pl-8">
-                    <span class="animate-pulse">✨ Copilot is architecting domain...</span>
-                </div>
-            </div>
-
-            <!-- Input Bar -->
-            <div class="p-3 border-t border-border bg-card">
-                <form @submit.prevent="sendCopilotMessage()" class="flex items-center gap-2">
-                    <input type="text"
-                           x-model="copilotInput"
-                           placeholder="Type a request (e.g. 'Build HR complete solution')..."
-                           class="flex-1 px-3 py-2 text-xs bg-muted/40 border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs">
-                    <button type="submit"
-                            :disabled="copilotLoading || !copilotInput.trim()"
-                            class="px-3.5 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition shadow-xs disabled:opacity-40 cursor-pointer">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                    </button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Granular Delete Modal (Slice & Domain) -->
-        <div x-show="deleteModal.open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" @click.self="if(!deleteModal.isDeleting) deleteModal.open = false">
-            <div class="bg-card border border-border rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                <div class="flex items-center gap-3">
-                    <div class="size-10 rounded-xl bg-destructive/15 text-destructive flex items-center justify-center font-bold text-lg shrink-0">
-                        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="font-extrabold text-base text-foreground">
-                            Remove <span x-text="deleteModal.targetType === 'domain' ? 'Domain' : 'Slice'"></span>
-                        </h3>
-                        <p class="text-xs text-muted-foreground">
-                            Target: <span class="font-mono font-bold text-foreground" x-text="deleteModal.targetName"></span>
-                        </p>
-                    </div>
-                </div>
-
-                <div class="space-y-2.5 pt-2">
-                    <label class="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Select Destruction Mode:</label>
-
-                    <!-- Complete Destruction -->
-                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none"
-                           :class="deleteModal.mode === 'complete' ? 'border-destructive bg-destructive/10' : 'border-border bg-muted/20 hover:bg-muted/40'">
-                        <input type="radio" name="delete_mode" value="complete" x-model="deleteModal.mode" class="mt-0.5 text-destructive focus:ring-destructive">
-                        <div>
-                            <span class="font-bold text-xs text-foreground block">Complete Removal (Code + Database)</span>
-                            <span class="text-[11px] text-muted-foreground block">Deletes all PHP/Blade code files AND drops all associated database tables.</span>
-                        </div>
-                    </label>
-
-                    <!-- Code Only -->
-                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none"
-                           :class="deleteModal.mode === 'code_only' ? 'border-destructive bg-destructive/10' : 'border-border bg-muted/20 hover:bg-muted/40'">
-                        <input type="radio" name="delete_mode" value="code_only" x-model="deleteModal.mode" class="mt-0.5 text-destructive focus:ring-destructive">
-                        <div>
-                            <span class="font-bold text-xs text-foreground block">Code Only</span>
-                            <span class="text-[11px] text-muted-foreground block">Removes the slice folder and files. Database tables and existing data remain untouched.</span>
-                        </div>
-                    </label>
-
-                    <!-- Database Only -->
-                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none"
-                           :class="deleteModal.mode === 'db_only' ? 'border-destructive bg-destructive/10' : 'border-border bg-muted/20 hover:bg-muted/40'">
-                        <input type="radio" name="delete_mode" value="db_only" x-model="deleteModal.mode" class="mt-0.5 text-destructive focus:ring-destructive">
-                        <div>
-                            <span class="font-bold text-xs text-foreground block">Database Only (Drop Tables)</span>
-                            <span class="text-[11px] text-muted-foreground block">Drops all database tables. The PHP slice code files remain intact in your app.</span>
-                        </div>
-                    </label>
-
-                    <!-- Wipe Data Only -->
-                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none"
-                           :class="deleteModal.mode === 'wipe_data' ? 'border-destructive bg-destructive/10' : 'border-border bg-muted/20 hover:bg-muted/40'">
-                        <input type="radio" name="delete_mode" value="wipe_data" x-model="deleteModal.mode" class="mt-0.5 text-destructive focus:ring-destructive">
-                        <div>
-                            <span class="font-bold text-xs text-foreground block">Wipe Data Only (Truncate)</span>
-                            <span class="text-[11px] text-muted-foreground block">Clears all records from tables. Table schemas and code files are kept.</span>
-                        </div>
-                    </label>
-                </div>
-
-                <div x-show="deleteModal.errorMessage" class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-500 font-semibold" x-text="deleteModal.errorMessage"></div>
-
-                <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                    <button type="button"
-                            @click="deleteModal.open = false"
-                            :disabled="deleteModal.isDeleting"
-                            class="px-4 py-2 border border-border bg-muted/40 hover:bg-muted text-foreground font-bold text-xs rounded-xl transition cursor-pointer">
-                        Cancel
-                    </button>
-                    <button type="button"
-                            @click="confirmDelete()"
-                            :disabled="deleteModal.isDeleting"
-                            class="px-4 py-2 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
-                        <span x-show="!deleteModal.isDeleting">Confirm Delete</span>
-                        <span x-show="deleteModal.isDeleting" class="flex items-center gap-1.5">
-                            <svg class="animate-spin size-3.5" viewBox="0 0 24 24" fill="none">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                            </svg>
-                            Processing...
-                        </span>
-                    </button>
                 </div>
             </div>
         </div>

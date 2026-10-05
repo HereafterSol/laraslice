@@ -2,13 +2,18 @@
 
 namespace LaraSlice\Core\Audit\Traits;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LaraSlice\Core\Audit\AuditLogger;
 
 /**
  * Trait AuditableSlice
  *
- * Plug-and-play Eloquent model auditing for LaraSlice.
- * Automatically records created, updated, and deleted events with granular field diffs.
+ * Enterprise Full-Lifecycle Auditing for LaraSlice:
+ * 1. Intrinsic Temporal & Userstamps:
+ *    - Creation: created_at, created_by
+ *    - Mutation: updated_at, updated_by
+ *    - Soft Deletion: deleted_at, deleted_by
+ * 2. Immutable Event Ledger: Captures full attribute diffs in laraslice_audit_logs.
  */
 trait AuditableSlice
 {
@@ -22,6 +27,47 @@ trait AuditableSlice
      */
     public static function bootAuditableSlice(): void
     {
+        // 1. Automatically stamp created_by & updated_by on creating
+        static::creating(function ($model) {
+            if (auth()->check()) {
+                $userId = auth()->id();
+                if (empty($model->created_by) && $model->hasAuditColumn('created_by')) {
+                    $model->created_by = $userId;
+                }
+                if (empty($model->updated_by) && $model->hasAuditColumn('updated_by')) {
+                    $model->updated_by = $userId;
+                }
+            }
+        });
+
+        // 2. Automatically stamp updated_by on updating
+        static::updating(function ($model) {
+            if (auth()->check() && $model->hasAuditColumn('updated_by')) {
+                $model->updated_by = auth()->id();
+            }
+        });
+
+        // 3. Automatically stamp deleted_by on soft deletion
+        static::deleting(function ($model) {
+            if (auth()->check() && $model->hasAuditColumn('deleted_by')) {
+                // If the model uses SoftDeletes, stamp deleted_by
+                if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($model), true) || method_exists($model, 'isForceDeleting') && ! $model->isForceDeleting()) {
+                    $model->deleted_by = auth()->id();
+                    $model->saveQuietly();
+                }
+            }
+        });
+
+        // 4. Reset deleted_by on restore
+        if (method_exists(static::class, 'restoring')) {
+            static::restoring(function ($model) {
+                if ($model->hasAuditColumn('deleted_by')) {
+                    $model->deleted_by = null;
+                }
+            });
+        }
+
+        // 5. Immutable Audit Event Log Records
         static::created(function ($model) {
             if (! $model->shouldAudit('created')) {
                 return;
@@ -92,7 +138,7 @@ trait AuditableSlice
 
             AuditLogger::record([
                 'slice'       => $model->getAuditSlice(),
-                'action'      => 'deleted',
+                'action'      => method_exists($model, 'isForceDeleting') && $model->isForceDeleting() ? 'force_deleted' : 'deleted',
                 'entity_type' => get_class($model),
                 'entity_id'   => $model->getKey(),
                 'old_values'  => $oldValues,
@@ -100,6 +146,67 @@ trait AuditableSlice
                 'metadata'    => $model->getAuditMetadata('deleted'),
             ]);
         });
+
+        if (method_exists(static::class, 'restored')) {
+            static::restored(function ($model) {
+                if (! $model->shouldAudit('restored')) {
+                    return;
+                }
+
+                AuditLogger::record([
+                    'slice'       => $model->getAuditSlice(),
+                    'action'      => 'restored',
+                    'entity_type' => get_class($model),
+                    'entity_id'   => $model->getKey(),
+                    'old_values'  => null,
+                    'new_values'  => $model->filterAuditAttributes($model->getAttributes()),
+                    'metadata'    => $model->getAuditMetadata('restored'),
+                ]);
+            });
+        }
+    }
+
+    /**
+     * Relationship: User who created this record.
+     */
+    public function creator(): BelongsTo
+    {
+        $userModel = config('auth.providers.users.model', \App\Models\User::class);
+        return $this->belongsTo($userModel, 'created_by');
+    }
+
+    /**
+     * Relationship: User who last updated this record.
+     */
+    public function updater(): BelongsTo
+    {
+        $userModel = config('auth.providers.users.model', \App\Models\User::class);
+        return $this->belongsTo($userModel, 'updated_by');
+    }
+
+    /**
+     * Relationship: User who soft-deleted this record.
+     */
+    public function deleter(): BelongsTo
+    {
+        $userModel = config('auth.providers.users.model', \App\Models\User::class);
+        return $this->belongsTo($userModel, 'deleted_by');
+    }
+
+    /**
+     * Determine if a column exists on this model's table or fillable.
+     */
+    public function hasAuditColumn(string $column): bool
+    {
+        if (in_array($column, $this->getFillable(), true) || array_key_exists($column, $this->attributes)) {
+            return true;
+        }
+
+        try {
+            return \Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), $column);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -144,7 +251,6 @@ trait AuditableSlice
 
         $className = get_class($this);
 
-        // Pattern: App\Slices\{SliceName}\... or LaraSlice\Slices\{SliceName}\...
         if (preg_match('/Slices\\\\([^\\\\]+)/', $className, $matches)) {
             return strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $matches[1]));
         }

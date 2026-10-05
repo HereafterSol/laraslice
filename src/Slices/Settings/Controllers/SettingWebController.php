@@ -61,4 +61,21 @@ class SettingWebController extends Controller
 
         return back()->with('error', $res['message']);
     }
+
+
+    /**
+     * Display AI Copilot & Model configuration.
+     */
+    public function ai(): \Illuminate\View\View
+    {
+        return app(\LaraSlice\Core\Ai\AiChatController::class)->settings();
+    }
+
+    /**
+     * Save AI Copilot configuration.
+     */
+    public function saveAi(\Illuminate\Http\Request $request): \Illuminate\Http\RedirectResponse
+    {
+        return app(\LaraSlice\Core\Ai\AiChatController::class)->updateSettings($request);
+    }
 }

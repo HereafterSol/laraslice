@@ -66,8 +66,15 @@
 
             <div class="flex items-center gap-4 text-xs font-semibold">
                 <a href="{{ url('/') }}" class="text-muted-foreground hover:text-foreground transition">Home</a>
-                <a href="{{ route('laraslice.wizard') }}" class="text-primary hover:underline font-bold">Wizard</a>
-                <a href="{{ route('laraslice.wizard.blueprint') }}" class="text-muted-foreground hover:text-foreground transition">Blueprint Studio</a>
+                <a href="{{ route('laraslice.wizard') }}" class="{{ request()->routeIs('laraslice.wizard') && !request()->routeIs('laraslice.wizard.*') ? 'text-primary font-bold underline' : 'text-muted-foreground hover:text-foreground transition' }}">Wizard</a>
+                <a href="{{ route('laraslice.wizard.blueprint') }}" class="{{ request()->routeIs('laraslice.wizard.blueprint*') ? 'text-primary font-bold underline' : 'text-muted-foreground hover:text-foreground transition' }}">Blueprint Studio</a>
+                <a href="{{ route('laraslice.wizard.schema_studio') }}" class="{{ request()->routeIs('laraslice.wizard.schema_studio') ? 'text-primary font-bold underline' : 'text-muted-foreground hover:text-foreground transition' }} flex items-center gap-1.5">
+                    <span>Schema Studio</span>
+                    <span class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-mono font-bold">2-Col</span>
+                </a>
+                <a href="{{ route('settings.ai') }}" class="text-muted-foreground hover:text-foreground transition flex items-center gap-1">
+                    <span>AI Settings</span>
+                </a>
                 @if(Route::has('login'))
                     @auth
                         <span class="text-muted-foreground font-mono text-[11px]">{{ auth()->user()->email }}</span>
@@ -84,5 +91,6 @@
         @yield('content')
     </main>
 
+    @include('laraslice::partials.ai-copilot-bubble')
 </body>
 </html>

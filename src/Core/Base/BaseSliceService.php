@@ -100,7 +100,32 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     }
 
     /** Apply server-owned attributes after request data has been mass assigned. */
-    protected function prepareModelForSave(IBusinessObject $form, Model $model, bool $isNew): void {}
+    /** Apply server-owned attributes after request data has been mass assigned. */
+    protected function prepareModelForSave(IBusinessObject $form, Model $model, bool $isNew): void
+    {
+        if (auth()->check()) {
+            $userId = auth()->id();
+            if ($isNew && empty($model->created_by) && $this->modelHasColumn($model, 'created_by')) {
+                $model->created_by = $userId;
+            }
+            if ($this->modelHasColumn($model, 'updated_by')) {
+                $model->updated_by = $userId;
+            }
+        }
+    }
+
+    protected function modelHasColumn(Model $model, string $column): bool
+    {
+        if (in_array($column, $model->getFillable(), true) || array_key_exists($column, $model->getAttributes())) {
+            return true;
+        }
+
+        try {
+            return \Illuminate\Support\Facades\Schema::hasColumn($model->getTable(), $column);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
 
     protected function applySearch(Builder $query, string $search): void
     {

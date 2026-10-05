@@ -70,11 +70,66 @@ class RoleWebController extends BaseSliceWebController
         app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
         $permissions = Permission::all()->groupBy('group');
 
+        $isMfaEnforced = false;
+        if (class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class) && !empty($form->slug)) {
+            $isMfaEnforced = in_array($form->slug, \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles());
+        }
+
         return view($this->getViewPrefix() . 'form', [
             'form'              => $form,
             'isNew'             => false,
             'routePrefix'       => $this->getRoutePrefix(),
             'groupedPermissions'=> $permissions,
+            'isMfaEnforced'     => $isMfaEnforced,
         ]);
+    }
+
+    public function store(\Illuminate\Http\Request $request)
+    {
+        $response = parent::store($request);
+
+        if (class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class)) {
+            $slug = $request->input('slug') ?: \Illuminate\Support\Str::slug($request->input('name'));
+            if ($slug && $request->boolean('enforce_mfa')) {
+                $privileged = \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles();
+                if (!in_array($slug, $privileged)) {
+                    $privileged[] = $slug;
+                    \LaraSlice\Slices\Users\Services\SecurityPolicyService::set(
+                        'security.mfa_privileged_roles',
+                        json_encode(array_values(array_unique($privileged))),
+                        'Roles requiring mandatory MFA under Privileged Roles Only policy'
+                    );
+                }
+            }
+        }
+
+        return $response;
+    }
+
+    public function update(\Illuminate\Http\Request $request, string|int $id)
+    {
+        $response = parent::update($request, $id);
+
+        if (class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class)) {
+            $form = $this->getService()->getItemById($id);
+            $slug = $request->input('slug') ?: ($form ? $form->slug : null);
+            if ($slug) {
+                $privileged = \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles();
+                if ($request->boolean('enforce_mfa')) {
+                    if (!in_array($slug, $privileged)) {
+                        $privileged[] = $slug;
+                    }
+                } else {
+                    $privileged = array_values(array_diff($privileged, [$slug]));
+                }
+                \LaraSlice\Slices\Users\Services\SecurityPolicyService::set(
+                    'security.mfa_privileged_roles',
+                    json_encode(array_values(array_unique($privileged))),
+                    'Roles requiring mandatory MFA under Privileged Roles Only policy'
+                );
+            }
+        }
+
+        return $response;
     }
 }

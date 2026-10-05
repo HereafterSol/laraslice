@@ -11,9 +11,45 @@ use InvalidArgumentException;
 
 class WizardController extends Controller
 {
-    public function show()
+    public function show(Request $request)
     {
-        return view('laraslice::wizard');
+        $initialTab = $request->query('tab', 'wizard');
+        return view('laraslice::wizard', [
+            'initialTab' => $initialTab,
+        ]);
+    }
+
+    public function studio(Request $request)
+    {
+        return view('laraslice::wizard', [
+            'initialTab' => 'studio',
+        ]);
+    }
+
+    public function schemaStudio()
+    {
+        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+        $slicesList = [];
+        foreach ($manager->getAllSlices() as $slice) {
+            $slicesList[] = [
+                'name'        => $slice->name,
+                'title'       => $slice->title ?? $slice->name,
+                'domain'      => $slice->domain ?? 'General',
+                'description' => $slice->description ?? '',
+                'enabled'     => $slice->enabled ?? true,
+                'version'     => $slice->version ?? '1.0.0',
+            ];
+        }
+
+        $tables = [];
+        try {
+            $raw = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
+            foreach ($raw as $t) {
+                $tables[] = current((array)$t);
+            }
+        } catch (\Throwable $e) {}
+
+        return view('laraslice::schema-studio', compact('slicesList', 'tables'));
     }
 
     public function generate(Request $request)
@@ -251,6 +287,13 @@ class WizardController extends Controller
                 }
             }
 
+                        if (!empty($raw['child_tables'])) {
+                foreach ($raw['child_tables'] as $t) {
+                    if (!in_array($t, $tableNames)) {
+                        $tableNames[] = $t;
+                    }
+                }
+            }
             if (!empty($raw['tables'])) {
                 foreach ($raw['tables'] as $t) {
                     if (!in_array($t, $tableNames)) {
@@ -703,16 +746,13 @@ class WizardController extends Controller
             ]);
         }
 
-        // Default Copilot response
+        // Delegate to LaraSlice AiEngine for live intelligence, DB metrics, and Studio context
+        $aiResponse = app(\LaraSlice\Core\Ai\AiEngine::class)->chat($message, ['path' => '/laraslice/wizard']);
         return response()->json([
             'success' => true,
             'step'    => 1,
-            'reply'   => "I'm your LaraSlice Copilot! I can autonomously scaffold complete domain modules like:\n\n" .
-                         "â€¢ **HR Complete Solution** (Departments, Positions, Employees, Leaves)\n" .
-                         "â€¢ **E-Commerce Suite** (Categories, Products, Variants, Orders)\n" .
-                         "â€¢ **CRM Pipeline** (Accounts, Contacts, Leads, Deals)\n\n" .
-                         "What domain module would you like to build?",
-            'options' => ['Create HR complete solution', 'Build E-Commerce store', 'Scaffold CRM pipeline'],
+            'reply'   => $aiResponse['reply'],
+            'options' => ['How many users do we have?', 'Show users schema', 'How to wipe domain data?', 'Build E-Commerce store'],
         ]);
     }
 
@@ -780,24 +820,124 @@ class WizardController extends Controller
     /**
      * Fetch audit logs for a slice or recent system activity.
      */
+        public function pruneAuditLogs(Request $request)
+    {
+        $days = (int) $request->input('days', 90);
+        $slice = $request->input('slice');
+
+        if ($days < 1) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Days retention window must be at least 1 day.',
+            ], 422);
+        }
+
+        $cutoff = now()->subDays($days);
+        $query = \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+            ->where('created_at', '<', $cutoff);
+
+        if (!empty($slice) && $slice !== 'all') {
+            $query->where('slice', $slice);
+        }
+
+        $count = (clone $query)->count();
+        if ($count === 0) {
+            return response()->json([
+                'success' => true,
+                'pruned'  => 0,
+                'message' => "No audit logs older than {$days} days found to prune.",
+            ]);
+        }
+
+        $deleted = $query->delete();
+
+        return response()->json([
+            'success' => true,
+            'pruned'  => $deleted,
+            'message' => "Successfully pruned {$deleted} audit log records older than {$days} days.",
+        ]);
+    }
     public function getAuditLogs(Request $request)
     {
         $slice = $request->query('slice');
-        $limit = min((int) ($request->query('limit', 50)), 100);
+        $search = $request->query('search');
+        $action = $request->query('action');
+        $actorId = $request->query('actor_id');
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        $limit = min((int) ($request->query('limit', 50)), 200);
 
-        if (!empty($slice)) {
+        $query = \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+            ->latest('id');
+
+        if (!empty($slice) && $slice !== 'all') {
             $sliceHandle = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $slice));
-            $logs = \LaraSlice\Core\Audit\AuditLogger::forSlice($sliceHandle, $limit);
-            if ($logs->isEmpty() && $slice !== $sliceHandle) {
-                $logs = \LaraSlice\Core\Audit\AuditLogger::forSlice(strtolower($slice), $limit);
-            }
-        } else {
-            $logs = \LaraSlice\Core\Audit\AuditLogger::recent($limit);
+            $query->where(function ($q) use ($slice, $sliceHandle) {
+                $q->where('slice', $slice)
+                  ->orWhere('slice', $sliceHandle)
+                  ->orWhere('slice', strtolower($slice));
+            });
         }
+
+        if (!empty($action) && $action !== 'all') {
+            $query->where('action', $action);
+        }
+
+        if (!empty($actorId)) {
+            $query->where('actor_id', $actorId);
+        }
+
+        if (!empty($dateFrom)) {
+            $query->where('created_at', '>=', $dateFrom . ' 00:00:00');
+        }
+
+        if (!empty($dateTo)) {
+            $query->where('created_at', '<=', $dateTo . ' 23:59:59');
+        }
+
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('entity_id', 'LIKE', "%{$search}%")
+                  ->orWhere('actor_email', 'LIKE', "%{$search}%")
+                  ->orWhere('ip_address', 'LIKE', "%{$search}%")
+                  ->orWhere('entity_type', 'LIKE', "%{$search}%")
+                  ->orWhere('new_values', 'LIKE', "%{$search}%")
+                  ->orWhere('old_values', 'LIKE', "%{$search}%");
+            });
+        }
+
+        $total = (clone $query)->count();
+        $logs = $query->take($limit)->get()->map(function ($row) {
+            $row->old_values = $row->old_values ? json_decode($row->old_values, true) : null;
+            $row->new_values = $row->new_values ? json_decode($row->new_values, true) : null;
+            $row->metadata   = $row->metadata ? json_decode($row->metadata, true) : null;
+            return $row;
+        });
+
+        // Get aggregate action counts for quick filters
+        $counts = [
+            'all' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->count(),
+            'created' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+                ->where('action', 'created')
+                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->count(),
+            'updated' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+                ->where('action', 'updated')
+                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->count(),
+            'deleted' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+                ->whereIn('action', ['deleted', 'force_deleted'])
+                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->count(),
+        ];
 
         return response()->json([
             'success' => true,
             'slice'   => $slice,
+            'total'   => $total,
+            'counts'  => $counts,
             'logs'    => $logs,
         ]);
     }

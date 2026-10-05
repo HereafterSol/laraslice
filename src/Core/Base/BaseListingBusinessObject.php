@@ -8,6 +8,14 @@ abstract class BaseListingBusinessObject implements IBusinessObject
 {
     public string|int $id;
     public ?string $createdAt = null;
+    public string|int|null $createdBy = null;
+    public ?string $creatorName = null;
+    public ?string $updatedAt = null;
+    public string|int|null $updatedBy = null;
+    public ?string $updaterName = null;
+    public ?string $deletedAt = null;
+    public string|int|null $deletedBy = null;
+    public ?string $deleterName = null;
 
     public function toArray(): array
     {

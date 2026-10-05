@@ -49,6 +49,21 @@
                     <x-ui.textarea id="description" name="description" rows="2" placeholder="Describe role responsibilities...">{{ old('description', $form->description) }}</x-ui.textarea>
                 </div>
 
+                <!-- MFA Enforcement Policy Toggle -->
+                <div class="p-4 rounded-xl border border-border/80 bg-muted/20 flex items-center justify-between">
+                    <div class="space-y-0.5 pr-4">
+                        <label for="enforce_mfa" class="text-xs font-bold uppercase tracking-wider text-foreground cursor-pointer flex items-center gap-1.5">
+                            <x-lucide-shield-alert class="size-3.5 text-purple-600" />
+                            <span>Enforce Multi-Factor Authentication (MFA)</span>
+                        </label>
+                        <p class="text-xs text-muted-foreground">When global policy is set to "Privileged Roles Only", all users assigned to this role are strictly required to enroll and pass MFA.</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="enforce_mfa" name="enforce_mfa" value="1" {{ !empty($isMfaEnforced) ? 'checked' : '' }} class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                </div>
+
                 <!-- Granular Permissions Matrix -->
                 <div class="space-y-3 pt-3">
                     <div class="flex items-center justify-between">

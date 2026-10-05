@@ -1,35 +1,202 @@
 {
     "name": "Users",
     "title": "User Management",
-    "version": "1.0.1",
-    "description": "Core Slice: User administration, profiles, active/suspended status, and avatar management",
+    "version": "1.2.0",
+    "description": "Core Slice: Enterprise user administration, multi-persona profiles (Govt BPS/CNIC & Corporate EmpID), multi-device tracking, MFA, passkeys, and Enterprise security audit parity.",
     "author": "LaraSlice Core",
     "icon": "users",
     "active": true,
     "core": true,
     "permissions": [
-        "users.view",
-        "users.create",
-        "users.edit",
-        "users.delete",
-        "users.impersonate"
+        {
+            "slug": "users.view",
+            "name": "View Users Directory"
+        },
+        {
+            "slug": "users.create",
+            "name": "Create User Accounts"
+        },
+        {
+            "slug": "users.edit",
+            "name": "Edit User Profiles & Roles"
+        },
+        {
+            "slug": "users.delete",
+            "name": "Delete User Accounts"
+        },
+        {
+            "slug": "users.impersonate",
+            "name": "Impersonate Users"
+        },
+        {
+            "slug": "users.metrics",
+            "name": "View Access Metrics & GPS Telemetry"
+        },
+        {
+            "slug": "users.mfa",
+            "name": "Manage MFA Policies & Passkeys"
+        },
+        {
+            "slug": "users.devices",
+            "name": "View & Revoke Active Client Devices"
+        },
+        {
+            "slug": "users.security_logs",
+            "name": "View Security & Audit Trail"
+        },
+        {
+            "slug": "users.attempts",
+            "name": "View Login & Lockscreen Attempts"
+        }
     ],
     "fields": {
-        "cnic": {
+        "gender": {
             "type": "string",
+            "length": 20,
             "nullable": true,
             "default": null,
+            "hidden": false,
             "table": "users",
-            "added_in": "1.0.1"
+            "added_in": "1.1.0"
+        },
+        "phone": {
+            "type": "string",
+            "length": 30,
+            "nullable": true,
+            "default": null,
+            "hidden": false,
+            "table": "users",
+            "added_in": "1.1.0"
+        },
+        "customised_permissions": {
+            "type": "boolean",
+            "nullable": false,
+            "default": false,
+            "hidden": true,
+            "table": "users",
+            "added_in": "1.1.0"
+        },
+        "mfa_channel": {
+            "type": "string",
+            "length": 20,
+            "nullable": false,
+            "default": "none",
+            "hidden": false,
+            "table": "users",
+            "added_in": "1.1.0"
         }
     },
     "version_history": [
         {
-            "version": "1.0.1",
-            "migration": "2026_09_22_121659_add_cnic_to_users_table.php",
-            "description": "Added 1 column(s) to users: cnic (string)",
-            "author": "Common User via Slice Studio",
-            "date": "2026-09-22 12:16:59"
+            "version": "1.1.0",
+            "migration": "2026_10_03_220000_enhance_users_table_and_security_devices.php",
+            "description": "Added enterprise fields (gender, phone, dob, employee_id, department, designation, cnic), device tracking, recovery codes, and security audit tables with Slice Studio visibility control.",
+            "author": "Antigravity & User via Slice Studio",
+            "date": "2026-10-03 22:00:00"
+        },
+        {
+            "version": "1.2.0",
+            "migration": "2026_10_03_230000_create_user_details_table_and_split_profile.php",
+            "description": "Split users (pure auth) and user_details (1-to-1 aggregate for employee and profile details).",
+            "author": "Antigravity & User via Slice Studio",
+            "date": "2026-10-03 23:00:00"
+        },
+        {
+            "version": "1.3.0",
+            "migration": "2026_10_04_210000_create_enterprise_identity_and_device_trust_tables.php",
+            "description": "Added user_connect, user_creds, user_factors, user_codes, user_attempts, user_checks, user_push_devices, user_resets, user_tokens, and user_devices.",
+            "author": "Antigravity & User via Slice Studio",
+            "date": "2026-10-04 21:00:00"
         }
-    ]
+    ],
+    "child_tables": [
+        "user_details",
+        "user_devices",
+        "user_connect",
+        "user_creds",
+        "user_factors",
+        "user_codes",
+        "user_attempts",
+        "user_checks",
+        "user_push_devices",
+        "user_resets",
+        "user_tokens"
+    ],
+    "navigation": {
+        "label": "User Management",
+        "route": "users.index",
+        "icon": "users",
+        "order": 10,
+        "group": "Vertical Slices",
+        "children": [
+            {
+                "label": "All Users",
+                "route": "users.index",
+                "icon": "users"
+            },
+            {
+                "label": "Access Metrics",
+                "route": "users.metrics",
+                "icon": "activity"
+            },
+            {
+                "label": "MFA Management",
+                "route": "users.mfa",
+                "icon": "shield"
+            },
+            {
+                "label": "Active Devices & Sessions",
+                "route": "users.devices",
+                "icon": "smartphone"
+            },
+            {
+                "label": "Security & Audit Logs",
+                "route": "users.security_logs",
+                "icon": "shield-check"
+            },
+            {
+                "label": "Profile & Settings",
+                "route": "users.settings",
+                "icon": "settings"
+            }
+        ]
+    },
+    "child_fields": {
+        "user_details": {
+            "employee_id": {
+                "type": "string",
+                "length": 50,
+                "nullable": true,
+                "hidden": false
+            },
+            "department": {
+                "type": "string",
+                "length": 100,
+                "nullable": true,
+                "hidden": false
+            },
+            "designation": {
+                "type": "string",
+                "length": 100,
+                "nullable": true,
+                "hidden": false
+            },
+            "cnic": {
+                "type": "string",
+                "length": 20,
+                "nullable": true,
+                "hidden": false
+            },
+            "dob": {
+                "type": "date",
+                "nullable": true,
+                "hidden": false
+            },
+            "address": {
+                "type": "text",
+                "nullable": true,
+                "hidden": false
+            }
+        }
+    }
 }

@@ -1,23 +1,43 @@
 {
     "name": "Settings",
-    "title": "System Settings & Mail/SMTP",
+    "title": "System Settings & AI Copilot",
     "version": "1.0.0",
-    "description": "Core Slice: Dynamic SMTP configuration, mail testing, and enterprise system parameters",
+    "description": "Core Slice: Dynamic SMTP configuration, theme customizer, AI Copilot models, and enterprise system parameters",
     "author": "LaraSlice Core",
     "icon": "settings",
     "active": true,
     "core": true,
     "navigation": {
-        "label": "Settings & SMTP",
+        "label": "Settings & AI",
         "route": "settings.smtp",
         "icon": "settings",
-        "order": 40
+        "order": 40,
+        "children": [
+            {
+                "label": "SMTP Mail Settings",
+                "route": "settings.smtp",
+                "icon": "mail"
+            },
+            {
+                "label": "AI Copilot & Models",
+                "route": "settings.ai",
+                "icon": "bot"
+            },
+            {
+                "label": "Theme Customizer",
+                "route": "settings.theme",
+                "icon": "palette"
+            }
+        ]
     },
     "permissions": [
         "settings.view",
         "settings.edit",
         "settings.smtp.view",
         "settings.smtp.edit",
-        "settings.smtp.test"
+        "settings.smtp.test",
+        "ai.settings.view",
+        "ai.settings.edit",
+        "ai.copilot.use"
     ]
 }
