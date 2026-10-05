@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-10-05
+
+### Fixed
+- **Packagist Upstream Re-Tag Resolution**: Incremented release tag to `v1.2.1` to comply with Packagist immutability requirements.
+- **Passkey Revocation 404**: Multi-verb routing (`DELETE`, `POST`, `GET`) with safe model deletion and redirect to `#mfa`.
+
 ## [1.2.0] - 2026-10-05
 
 ### Added
