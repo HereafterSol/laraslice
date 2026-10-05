@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Changelog & Release History — LaraSlice Framework</title>
+    <meta name="description" content="Detailed changelog and release history for LaraSlice Framework. Discover new features, performance enhancements, and architectural upgrades.">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
+                        slate: { 850: '#111827', 900: '#0f172a', 950: '#020617' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        code, pre { font-family: 'JetBrains Mono', monospace; }
+        .gradient-glow {
+            background: radial-gradient(circle at 50% 10%, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0) 65%);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col selection:bg-amber-500/20 selection:text-amber-400">
+
+    <!-- GLOBAL NAVBAR -->
+    <header class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/80 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="flex items-center gap-2 group">
+                    <div class="size-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-slate-950 text-xs shadow-md">
+                        LS
+                    </div>
+                    <div>
+                        <span class="font-extrabold text-white text-base tracking-tight">LaraSlice</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v1.2</span>
+                    </div>
+                </a>
+            </div>
+            
+            <nav class="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-400">
+                <a href="index.html#generation" class="hover:text-amber-400 transition">3 Generation Engines</a>
+                <a href="index.html#comparison" class="hover:text-amber-400 transition">Architecture</a>
+                <a href="index.html#anatomy" class="hover:text-amber-400 transition">Slice Anatomy</a>
+                <a href="index.html#three-layers" class="hover:text-amber-400 transition">3-Layer Model</a>
+                <a href="index.html#faq" class="hover:text-amber-400 transition">Developer FAQ</a>
+                <a href="changelog.html" class="text-amber-400 transition font-bold flex items-center gap-1.5">
+                    <span>Changelog</span>
+                    <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v1.2</span>
+                </a>
+                <a href="https://github.com/hereaftersol/laraslice" target="_blank" class="hover:text-amber-400 transition flex items-center gap-1.5">
+                    <svg class="size-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    <span>GitHub</span>
+                </a>
+            </nav>
+
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-md">
+                    Home Page &rarr;
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CHANGELOG CONTENT -->
+    <main class="flex-1 gradient-glow py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
+        
+        <!-- Breadcrumb & Header -->
+        <div class="mb-12 text-center sm:text-left border-b border-slate-800 pb-8">
+            <div class="inline-flex items-center gap-2 text-xs font-mono text-amber-400 uppercase tracking-widest mb-3">
+                <a href="index.html" class="hover:underline text-slate-400">Home</a>
+                <span class="text-slate-600">/</span>
+                <span>Release History</span>
+            </div>
+            <h1 class="text-3xl sm:text-5xl font-black text-white tracking-tight mb-3">
+                LaraSlice Changelog
+            </h1>
+            <p class="text-sm sm:text-base text-slate-400 max-w-2xl leading-relaxed">
+                Explore the latest features, architectural upgrades, performance optimizations, and breaking changes across LaraSlice versions.
+            </p>
+        </div>
+
+        <div class="space-y-16">
+
+            <!-- RELEASE v1.2.0 (CURRENT MILESTONE) -->
+            <section class="relative pl-6 sm:pl-8 border-l-2 border-amber-500">
+                <div class="absolute -left-[9px] top-0 size-4 rounded-full bg-amber-500 ring-4 ring-slate-950"></div>
+                
+                <div class="flex flex-wrap items-center gap-3 mb-4">
+                    <span class="text-xl sm:text-2xl font-extrabold text-white">v1.2.0</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        Latest Release
+                    </span>
+                    <span class="text-xs font-mono text-slate-500">October 2026</span>
+                </div>
+
+                <p class="text-sm text-slate-300 leading-relaxed mb-6 font-medium">
+                    This milestone release brings live MySQL column reflection, conversational 1-click migrations, the visual Slice Studio orchestrator, an enterprise 15-table User aggregate with WebAuthn passkeys, and real-time DOM screen awareness.
+                </p>
+
+                <div class="space-y-6 text-xs text-slate-300">
+                    
+                    <!-- Feature 1 -->
+                    <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                        <div class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-amber-400">⚡</span>
+                            <span>Visual Slice Studio (`/laraslice/wizard/studio`)</span>
+                        </div>
+                        <p class="text-slate-400 leading-relaxed">
+                            Dedicated visual command center for browsing slices, aggregate entities, and live records. Features a bidirectional event bus (<code class="text-amber-300 font-mono">laraslice-slice-selected</code>) that instantly syncs selected slice context, tables, and permissions directly into the Copilot.
+                        </p>
+                    </div>
+
+                    <!-- Feature 2 -->
+                    <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                        <div class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-emerald-400">📐</span>
+                            <span>Real-Time MySQL Column Introspection ("What You Ask is What You Get")</span>
+                        </div>
+                        <p class="text-slate-400 leading-relaxed">
+                            The AI Copilot executes native <code class="text-emerald-300 font-mono">SHOW COLUMNS FROM `{table}`</code> queries, revealing exact SQL data types, nullability, primary/foreign/unique keys, and default values. Eliminates guesswork when querying specific tables like <code class="text-emerald-300 font-mono">user_details</code>.
+                        </p>
+                    </div>
+
+                    <!-- Feature 3 -->
+                    <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                        <div class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-blue-400">➕</span>
+                            <span>Conversational 1-Click Schema Migrations in Chat</span>
+                        </div>
+                        <p class="text-slate-400 leading-relaxed">
+                            Ask to add a field (e.g. <em>"add emergency_contact in user_details"</em>). The Copilot displays an interactive proposal card with inferred data types, non-breaking nullable defaults, enterprise recommendation chips, and a single-click <strong>"⚡ Apply Migration & Add Field Now"</strong> button that generates and runs the migration on MySQL immediately.
+                        </p>
+                    </div>
+
+                    <!-- Feature 4 -->
+                    <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                        <div class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-purple-400">⌨️</span>
+                            <span>Dynamic Context-Aware Slash (/) Commands</span>
+                        </div>
+                        <p class="text-slate-400 leading-relaxed">
+                            Typing <code class="text-purple-300 font-mono">/</code> in the Copilot auto-completes slice-specific actions:
+                            <code class="text-purple-300 font-mono">/fields [table]</code>, <code class="text-purple-300 font-mono">/add-field [table]</code>, <code class="text-purple-300 font-mono">/relations</code>, <code class="text-purple-300 font-mono">/permissions</code>, <code class="text-purple-300 font-mono">/nav</code>, <code class="text-purple-300 font-mono">/logs</code>, <code class="text-purple-300 font-mono">/suggest-fields</code>, <code class="text-purple-300 font-mono">/seed</code>, and <code class="text-purple-300 font-mono">/wipe</code>.
+                        </p>
+                    </div>
+
+                    <!-- Feature 5 -->
+                    <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                        <div class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-rose-400">👥</span>
+                            <span>Enterprise User Management Aggregate (15 Tables)</span>
+                        </div>
+                        <p class="text-slate-400 leading-relaxed">
+                            Upgraded the Users slice to a full multi-table aggregate: primary <code class="text-rose-300 font-mono">users</code> root table with 14 child entities including <code class="text-rose-300 font-mono">user_details</code>, <code class="text-rose-300 font-mono">user_devices</code>, <code class="text-rose-300 font-mono">user_passkeys</code> (WebAuthn/FIDO2 biometric login), and <code class="text-rose-300 font-mono">user_security_logs</code>.
+                        </p>
+                    </div>
+
+                    <!-- Feature 6 -->
+                    <div class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                        <div class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-cyan-400">🛡️</span>
+                            <span>Passkey Revocation & Safe Lifecycle Flow</span>
+                        </div>
+                        <p class="text-slate-400 leading-relaxed">
+                            Fixed passkey removal routing to support multi-verb dispatch (DELETE/POST/GET) and seamless redirection back to the MFA settings hub with live status alerts.
+                        </p>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- RELEASE v1.1.0 -->
+            <section class="relative pl-6 sm:pl-8 border-l-2 border-slate-700">
+                <div class="absolute -left-[9px] top-0 size-4 rounded-full bg-slate-700 ring-4 ring-slate-950"></div>
+                
+                <div class="flex flex-wrap items-center gap-3 mb-4">
+                    <span class="text-xl sm:text-2xl font-extrabold text-white">v1.1.0</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                        Feature Release
+                    </span>
+                    <span class="text-xs font-mono text-slate-500">September 2026</span>
+                </div>
+
+                <div class="space-y-4 text-xs text-slate-400">
+                    <ul class="list-disc pl-4 space-y-2 leading-relaxed">
+                        <li><strong class="text-slate-200">Declarative Blueprint Studio:</strong> Interactive visual schema designer with drag-and-drop table relationship mapping.</li>
+                        <li><strong class="text-slate-200">Multi-Table Aggregate Architecture:</strong> Introduced parent-child aggregate boundaries and transaction-safe cascading updates.</li>
+                        <li><strong class="text-slate-200">Cross-Slice Contracts & DTOs:</strong> Type-safe interfaces ensuring slices communicate strictly via contracts without tight coupling.</li>
+                        <li><strong class="text-slate-200">Dual-Layer Audit Engine:</strong> User-level intrinsic record stamps paired with an immutable system ledger and automatic retention pruning (<code class="text-amber-300 font-mono">slice:audit:prune</code>).</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- RELEASE v1.0.0 -->
+            <section class="relative pl-6 sm:pl-8 border-l-2 border-slate-700">
+                <div class="absolute -left-[9px] top-0 size-4 rounded-full bg-slate-700 ring-4 ring-slate-950"></div>
+                
+                <div class="flex flex-wrap items-center gap-3 mb-4">
+                    <span class="text-xl sm:text-2xl font-extrabold text-white">v1.0.0</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                        Initial Public Release
+                    </span>
+                    <span class="text-xs font-mono text-slate-500">August 2026</span>
+                </div>
+
+                <div class="space-y-4 text-xs text-slate-400">
+                    <ul class="list-disc pl-4 space-y-2 leading-relaxed">
+                        <li><strong class="text-slate-200">3-Layer Packaging Model (ADR-001):</strong> Core Engine, Starter Slices, and Project-specific domain slices with zero vendor lock-in.</li>
+                        <li><strong class="text-slate-200">Pure Blade + Alpine.js + Tailwind CSS v4:</strong> Lightweight, ultra-responsive UI shell built on BlatUI and Lucide icons.</li>
+                        <li><strong class="text-slate-200">CLI Generators:</strong> High-velocity artisan commands including <code class="text-amber-300 font-mono">slice:make</code>, <code class="text-amber-300 font-mono">slice:seed</code>, and <code class="text-amber-300 font-mono">slice:toggle</code>.</li>
+                        <li><strong class="text-slate-200">Dual Web & Mobile Scaffolding:</strong> 1-click export of typed RESTful endpoints and Flutter-compatible models.</li>
+                    </ul>
+                </div>
+            </section>
+
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-800 bg-slate-950 py-12 px-4 sm:px-6 lg:px-8 mt-20">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <span class="font-extrabold text-white">LaraSlice</span>
+                <span>&bull;</span>
+                <span>Open Source Vertical Slice Framework under MIT License</span>
+            </div>
+            <div>
+                Engineered with purpose by <a href="https://hereaftersol.com" target="_blank" class="text-amber-400 hover:underline">Hereafter Solutions (H. Sol)</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

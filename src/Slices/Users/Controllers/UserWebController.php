@@ -821,13 +821,19 @@ class UserWebController extends BaseSliceWebController
     {
         $user = Auth::user() ?: User::first();
         $passkey = ($user->hasRole('Super Administrator') || $user->id === 1)
-            ? \LaraSlice\Slices\Users\Models\UserPasskey::findOrFail($id)
-            : \LaraSlice\Slices\Users\Models\UserPasskey::where('user_id', $user->id)->findOrFail($id);
-        $passkey->update(['revoked_at' => now()]);
+            ? \LaraSlice\Slices\Users\Models\UserPasskey::find($id)
+            : \LaraSlice\Slices\Users\Models\UserPasskey::where('user_id', $user->id)->find($id);
 
-        UserSecurityLog::log($user->id, 'passkey_revoked', 'warning', "Biometric passkey '{$passkey->label}' was revoked.");
+        if (! $passkey) {
+            return redirect()->to(url('/admin/users/settings#mfa'))->with('error', 'Passkey not found or already removed.');
+        }
 
-        return back()->with('success', 'Passkey revoked successfully.');
+        $label = $passkey->label ?: 'Passkey';
+        $passkey->delete();
+
+        UserSecurityLog::log($user->id, 'passkey_revoked', 'warning', "Biometric passkey '{$label}' was revoked and removed.");
+
+        return redirect()->to(url('/admin/users/settings#mfa'))->with('success', "Passkey '{$label}' removed successfully.");
     }
 
     public function updateSecurityPolicy(Request $request)

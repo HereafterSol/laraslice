@@ -21,7 +21,7 @@ Route::middleware(['web'])->group(function () {
 
         Route::get('/security/settings/passkey/options', [UserWebController::class, 'passkeyRegisterOptions'])->name('security.settings.passkey.options');
     Route::post('/security/settings/passkey/verify', [UserWebController::class, 'passkeyRegisterVerify'])->name('security.settings.passkey.verify');
-    Route::delete('/security/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('security.settings.passkey.destroy')->whereNumber('id');
+    Route::match(['delete', 'post', 'get'], '/security/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('security.settings.passkey.destroy')->whereNumber('id');
 
     // Lockscreen & Unlock Flow
     Route::get('/lockscreen', [UserWebController::class, 'lockscreen'])->name('lockscreen');
@@ -68,7 +68,7 @@ Route::prefix('admin/users')->name('users.')->middleware(['web'])->group(functio
     Route::post('/settings/logout-others', [UserWebController::class, 'logoutOthers'])->name('settings.logout_others');
     Route::get('/settings/passkey/options', [UserWebController::class, 'passkeyRegisterOptions'])->name('settings.passkey.options');
     Route::post('/settings/passkey/verify', [UserWebController::class, 'passkeyRegisterVerify'])->name('settings.passkey.verify');
-    Route::delete('/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('settings.passkey.destroy')->whereNumber('id');
+    Route::match(['delete', 'post', 'get'], '/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('settings.passkey.destroy')->whereNumber('id');
 
     // Session Lockscreen (Redirect admin prefix to clean unified /lockscreen)
     Route::get('/lockscreen', fn() => redirect()->route('lockscreen'))->name('lockscreen');
