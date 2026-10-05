@@ -42,6 +42,18 @@ class LaraSliceServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Register the twMerge attribute macro used by the published BlatUI components,
+        // unless the host app already provides one (e.g. via gehrisandro/tailwind-merge-laravel)
+        if (!\Illuminate\View\ComponentAttributeBag::hasMacro('twMerge')) {
+            $this->app->singletonIf(\TailwindMerge\TailwindMerge::class, fn () => \TailwindMerge\TailwindMerge::instance());
+
+            \Illuminate\View\ComponentAttributeBag::macro('twMerge', function (...$args) {
+                $this->attributes['class'] = app(\TailwindMerge\TailwindMerge::class)->merge($args, $this->attributes['class'] ?? '');
+
+                return $this;
+            });
+        }
+
         // 0. Register Blueprint userstamps & auditStamps macros for enterprise auditability
         \Illuminate\Database\Schema\Blueprint::macro('userstamps', function () {
             $this->unsignedBigInteger('created_by')->nullable()->index();
