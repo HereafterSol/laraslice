@@ -827,6 +827,7 @@ class SliceManager
                 'badge'      => $slice->navigation['badge'] ?? null,
                 'version'    => $slice->version,
                 'group'      => $slice->navigation['group'] ?? $slice->raw['domain'] ?? null,
+                'core'       => (bool) ($slice->raw['core'] ?? false),
                 'permission' => $requiredPermission,
                 'children'   => $children,
             ];
