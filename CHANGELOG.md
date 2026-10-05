@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.5] - 2026-10-05
+
+### Fixed
+- **Slice Studio "Generation failed: 0 slice(s) successfully generated"**: Escaped `$table` in the `SliceGenerator` migration template. The unescaped variable raised a PHP warning that failed every slice during web requests and produced migrations with invalid PHP elsewhere. This also fixes the `BlueprintApplierTest` failures.
+- **Hidden generation errors**: Slice Studio's domain suite generation now logs each failing slice's exception and includes the slice name and error in the response message instead of only the success count.
+
 ## [1.2.4] - 2026-10-05
 *Special thanks to community contributor **Muhammad Adnan** ([@adnanansari901](https://github.com/adnanansari901)) for contributing the v1.2.4 security, passkey, and installation enhancements!*
 
