@@ -13,16 +13,17 @@
 
 <p align="center">
   <a href="https://packagist.org/packages/hereafter/laraslice"><img src="https://img.shields.io/badge/composer-hereafter%2Flaraslice-orange.svg" alt="Composer Package"></a>
-  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.2.1-amber.svg" alt="Latest Version"></a>
+  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.2.2-amber.svg" alt="Latest Version"></a>
   <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-red.svg" alt="Laravel Version"></a>
   <a href="https://php.net"><img src="https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-blue.svg" alt="PHP Version"></a>
   <a href="tests/"><img src="https://img.shields.io/badge/tests-58%2F58%20passing%20(100%25)-brightgreen.svg" alt="Tests Passing"></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-Cross--Platform-cyan.svg" alt="Flutter Support"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <a href="https://skills.sh/HereafterSol/laraslice"><img src="https://skills.sh/b/HereafterSol/laraslice" alt="skills.sh"></a>
 </p>
 
 <p align="center">
-  <code>composer require hereafter/laraslice</code>
+  <code>composer require hereafter/laraslice</code> &bull; <code>npx skills add HereafterSol/laraslice</code>
 </p>
 
 ---

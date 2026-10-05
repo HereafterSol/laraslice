@@ -70,7 +70,16 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         // 1. Register Artisan CLI Commands
         if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__ . '/../config/laraslice.php' => config_path('laraslice.php'),
+            ], 'laraslice-config');
+
+            $this->publishes([
+                __DIR__ . '/../resources/stubs/starter/welcome.blade.php' => resource_path('views/welcome.blade.php'),
+            ], 'laraslice-starter');
+
             $this->commands([
+                \LaraSlice\Commands\SliceInstallCommand::class,
                 SliceMakeCommand::class,
                 \LaraSlice\Commands\SliceWizardCommand::class,
                 \LaraSlice\Commands\SliceFieldCommand::class,

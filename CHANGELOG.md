@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2026-03-31
+
+### Fixed
+- Registered `SliceInstallCommand` in `LaraSliceServiceProvider` so `php artisan slice:install` is immediately available in downstream Laravel applications.
+- Registered `laraslice-config` and `laraslice-starter` vendor publish tags.
+
+### Added
+- Added `skills.sh.json` and official skills.sh directory badge to README.
+
 ## [1.2.1] - 2026-10-05
 
 ### Fixed

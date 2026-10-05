@@ -1,0 +1,13 @@
+{
+    "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+    "notGrouped": "bottom",
+    "groupings": [
+        {
+            "title": "Architecture & Framework",
+            "description": "Autonomous Vertical Slice Architecture for Laravel 13+ & Flutter.",
+            "skills": [
+                "laraslice"
+            ]
+        }
+    ]
+}
