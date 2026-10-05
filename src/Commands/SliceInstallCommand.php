@@ -180,17 +180,20 @@ class SliceInstallCommand extends Command
 
         // 5. Ensure frontend dependencies & run npm install
         if (!$this->option('skip-npm') && File::exists(base_path('package.json'))) {
-            $this->components->task('Configuring frontend packages in package.json', function () {
+            $needed = [
+                '@alpinejs/anchor' => '^3.14.8',
+                '@alpinejs/collapse' => '^3.14.8',
+                '@alpinejs/focus' => '^3.14.8',
+                '@floating-ui/dom' => '^1.6.12',
+                '@tailwindcss/vite' => '^4.0.0',
+                'alpinejs' => '^3.14.8',
+                'tailwindcss' => '^4.0.0',
+            ];
+
+            $this->components->task('Configuring frontend packages in package.json', function () use ($needed) {
                 $pkgPath = base_path('package.json');
                 $pkg = json_decode(File::get($pkgPath), true);
                 if (is_array($pkg)) {
-                    $needed = [
-                        '@alpinejs/anchor' => '^3.14.8',
-                        '@alpinejs/collapse' => '^3.14.8',
-                        '@alpinejs/focus' => '^3.14.8',
-                        '@floating-ui/dom' => '^1.6.12',
-                        'alpinejs' => '^3.14.8',
-                    ];
                     $changed = false;
                     foreach ($needed as $dep => $ver) {
                         if (!isset($pkg['devDependencies'][$dep]) && !isset($pkg['dependencies'][$dep])) {
@@ -205,7 +208,31 @@ class SliceInstallCommand extends Command
                 return true;
             });
 
-            if (!File::isDirectory(base_path('node_modules')) || !File::exists(base_path('node_modules/@alpinejs/anchor'))) {
+            // blatui.css uses Tailwind v4 (`@import 'tailwindcss'`), which needs the Vite plugin
+            $viteConfigPath = collect(['vite.config.js', 'vite.config.mjs', 'vite.config.ts'])
+                ->map(fn ($file) => base_path($file))
+                ->first(fn ($path) => File::exists($path));
+
+            if ($viteConfigPath && !str_contains(File::get($viteConfigPath), '@tailwindcss/vite')) {
+                $this->components->task('Registering Tailwind CSS v4 plugin in ' . basename($viteConfigPath), function () use ($viteConfigPath) {
+                    $viteConfig = File::get($viteConfigPath);
+                    if (!preg_match('/plugins\s*:\s*\[/', $viteConfig)) {
+                        $this->components->warn("Add `tailwindcss()` from '@tailwindcss/vite' to the Vite plugins manually.");
+                        return false;
+                    }
+
+                    $viteConfig = preg_replace('/plugins\s*:\s*\[/', "$0\n        tailwindcss(),", $viteConfig, 1);
+                    $viteConfig = preg_replace('/^(import\s.+;[ \t]*\R)(?!\s*import\s)/m', "$1import tailwindcss from '@tailwindcss/vite';\n", $viteConfig, 1);
+                    File::put($viteConfigPath, $viteConfig);
+
+                    return true;
+                });
+            }
+
+            $missingNodeModules = collect(array_keys($needed))
+                ->contains(fn ($dep) => !File::exists(base_path('node_modules/' . $dep)));
+
+            if ($missingNodeModules) {
                 $this->components->task('Installing Node dependencies (npm install)', function () {
                     try {
                         $process = \Symfony\Component\Process\Process::fromShellCommandline('npm install', base_path());

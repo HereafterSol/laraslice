@@ -5,9 +5,7 @@
 @source '../../storage/framework/views/*.php';
 @source '../views';
 @source '../../app/Slices/**/*.blade.php';
-@source '../../vendor/laraslice/framework/src/**/*.blade.php';
-@source '../../packages/laraslice/src/**/*.blade.php';
-@source 'E:/Apps/message/LaraSlice/src/**/*.blade.php';
+@source '../../vendor/hereafter/laraslice/src/**/*.blade.php';
 
 @custom-variant dark (&:is(.dark *));
 
