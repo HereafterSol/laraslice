@@ -10,52 +10,52 @@ return new class extends Migration {
         // 1. Enhance users table with enterprise, government & security fields
         Schema::table('users', function (Blueprint $table) {
             if (!Schema::hasColumn('users', 'cnic')) {
-                $table->string('cnic', 20)->nullable()->after('avatar_url');
+                $table->string('cnic', 20)->nullable();
             } else {
                 $table->string('cnic', 20)->nullable()->change();
             }
             if (!Schema::hasColumn('users', 'gender')) {
-                $table->string('gender', 20)->nullable()->after('email'); // 'male', 'female', 'other'
+                $table->string('gender', 20)->nullable(); // 'male', 'female', 'other'
             }
             if (!Schema::hasColumn('users', 'phone')) {
-                $table->string('phone', 30)->nullable()->after('gender');
+                $table->string('phone', 30)->nullable();
             }
             if (!Schema::hasColumn('users', 'dob')) {
-                $table->date('dob')->nullable()->after('phone');
+                $table->date('dob')->nullable();
             }
             if (!Schema::hasColumn('users', 'employee_id')) {
-                $table->string('employee_id', 50)->nullable()->after('dob');
+                $table->string('employee_id', 50)->nullable();
             }
             if (!Schema::hasColumn('users', 'department')) {
-                $table->string('department', 100)->nullable()->after('employee_id');
+                $table->string('department', 100)->nullable();
             }
             if (!Schema::hasColumn('users', 'designation')) {
-                $table->string('designation', 100)->nullable()->after('department');
+                $table->string('designation', 100)->nullable();
             }
 
             if (!Schema::hasColumn('users', 'customised_permissions')) {
-                $table->boolean('customised_permissions')->default(false)->after('bps_scale');
+                $table->boolean('customised_permissions')->default(false);
             }
             if (!Schema::hasColumn('users', 'mfa_channel')) {
-                $table->string('mfa_channel', 20)->default('none')->after('customised_permissions'); // 'none', 'totp', 'webauthn'
+                $table->string('mfa_channel', 20)->default('none'); // 'none', 'totp', 'webauthn'
             }
             if (!Schema::hasColumn('users', 'mfa_secret')) {
-                $table->text('mfa_secret')->nullable()->after('mfa_channel');
+                $table->text('mfa_secret')->nullable();
             }
             if (!Schema::hasColumn('users', 'mfa_confirmed_at')) {
-                $table->timestamp('mfa_confirmed_at')->nullable()->after('mfa_secret');
+                $table->timestamp('mfa_confirmed_at')->nullable();
             }
             if (!Schema::hasColumn('users', 'last_login_at')) {
-                $table->timestamp('last_login_at')->nullable()->after('mfa_confirmed_at');
+                $table->timestamp('last_login_at')->nullable();
             }
             if (!Schema::hasColumn('users', 'last_login_ip')) {
-                $table->string('last_login_ip', 45)->nullable()->after('last_login_at');
+                $table->string('last_login_ip', 45)->nullable();
             }
             if (!Schema::hasColumn('users', 'failed_attempts')) {
-                $table->integer('failed_attempts')->default(0)->after('last_login_ip');
+                $table->integer('failed_attempts')->default(0);
             }
             if (!Schema::hasColumn('users', 'locked_until')) {
-                $table->timestamp('locked_until')->nullable()->after('failed_attempts');
+                $table->timestamp('locked_until')->nullable();
             }
         });
 

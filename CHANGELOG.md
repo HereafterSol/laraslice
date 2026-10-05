@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.3] - 2026-03-31
+
+### Fixed
+- Removed non-standard `bps_scale` reference and fragile `->after(...)` clauses in `enhance_users_table_and_security_devices` migration that caused column not found errors during `php artisan slice:install` on fresh databases.
+
 ## [1.2.2] - 2026-03-31
 
 ### Fixed
