@@ -715,7 +715,11 @@ async function registerPasskey() {
 
     try {
         if (window.location.hostname === '127.0.0.1') {
-            throw new Error("Passkeys (WebAuthn) require a domain name (such as http://localhost:7000 or a .test domain) rather than an IP address (127.0.0.1). Please open this app via http://localhost:7000 to enroll your passkey.");
+            throw new Error("Passkeys (WebAuthn) require a domain name (such as http://localhost:7000 or an HTTPS .test domain) rather than an IP address (127.0.0.1). Please open this app via http://localhost:7000 to enroll your passkey.");
+        }
+
+        if (!window.isSecureContext) {
+            throw new Error("Passkeys (WebAuthn) require a secure context. Open this app over HTTPS (e.g. https://" + window.location.host + ") or via http://localhost.");
         }
 
         if (!window.PublicKeyCredential) {

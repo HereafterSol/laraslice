@@ -211,6 +211,10 @@
                             throw new Error("WebAuthn / Passkeys require localhost or a domain name rather than 127.0.0.1.");
                         }
 
+                        if (!window.isSecureContext) {
+                            throw new Error("Passkeys (WebAuthn) require a secure context. Open this app over HTTPS (e.g. https://" + window.location.host + ") or via http://localhost.");
+                        }
+
                         if (!window.PublicKeyCredential) {
                             throw new Error("Passkeys/WebAuthn are not supported on this browser.");
                         }
