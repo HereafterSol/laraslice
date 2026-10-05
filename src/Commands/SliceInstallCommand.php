@@ -151,20 +151,27 @@ class SliceInstallCommand extends Command
             if (File::exists($userModelFile)) {
                 $userModelContent = File::get($userModelFile);
                 if (!str_contains($userModelContent, 'HasSlicePermissions')) {
-                    if (str_contains($userModelContent, 'use HasFactory')) {
-                        $userModelContent = str_replace(
-                            'use HasFactory',
-                            'use HasFactory, HasSlicePermissions',
-                            $userModelContent
-                        );
+                    // Append to the first trait `use` in the class body, whatever traits it lists
+                    // (e.g. `use HasApiTokens, HasFactory, Notifiable;`), else add a new one.
+                    $classTraitPattern = '/(class\s+User\b[^{]*\{.*?^\s*use\s+)([^;]+);/ms';
+                    if (preg_match($classTraitPattern, $userModelContent)) {
+                        $userModelContent = preg_replace($classTraitPattern, '$1$2, HasSlicePermissions;', $userModelContent, 1);
+                    } else {
                         $userModelContent = preg_replace(
-                            '/(namespace\s+App\\\\Models;)/',
-                            "$1\n\nuse LaraSlice\\Core\\Security\\Traits\\HasSlicePermissions;",
+                            '/(class\s+User\b[^{]*\{)/',
+                            "$1\n    use HasSlicePermissions;\n",
                             $userModelContent,
                             1
                         );
-                        File::put($userModelFile, $userModelContent);
                     }
+
+                    $userModelContent = preg_replace(
+                        '/(namespace\s+App\\\\Models;)/',
+                        "$1\n\nuse LaraSlice\\Core\\Security\\Traits\\HasSlicePermissions;",
+                        $userModelContent,
+                        1
+                    );
+                    File::put($userModelFile, $userModelContent);
                 }
             }
 
