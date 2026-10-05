@@ -31,16 +31,6 @@
 
         @php
             $navSlices = \LaraSlice\Facades\LaraSlice::getNavigableSlices();
-            $domainGroups = [];
-            $standaloneSlices = [];
-            foreach ($navSlices as $s) {
-                $grp = $s['group'] ?? null;
-                if ($grp) {
-                    $domainGroups[$grp][] = $s;
-                } else {
-                    $standaloneSlices[] = $s;
-                }
-            }
 
             // Lucide Icon Resolver helper
             $resolveLucide = function ($iconName) {
@@ -95,184 +85,123 @@
             };
         @endphp
 
-        <x-ui.sidebar-provider style="--sidebar-width: calc(var(--spacing, 0.25rem) * 72); --header-height: calc(var(--spacing, 0.25rem) * 14);">
-            <x-ui.sidebar collapsible="offcanvas" variant="inset">
+        @php
+            $laraSliceVersion = class_exists(\Composer\InstalledVersions::class) && \Composer\InstalledVersions::isInstalled('hereafter/laraslice')
+                ? ltrim((string) \Composer\InstalledVersions::getPrettyVersion('hereafter/laraslice'), 'v')
+                : '1.0';
+
+            $sliceNavItem = fn (array $s) => [
+                'title'    => $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice',
+                'url'      => $s['url'],
+                'icon'     => $resolveLucide($s['icon'] ?? 'box'),
+                'isOpen'   => collect($s['children'] ?? [])->contains(fn ($c) => !empty($c['active'])),
+                'isActive' => !empty($s['active']) && !collect($s['children'] ?? [])->contains(fn ($c) => !empty($c['active'])),
+                'children' => array_map(fn ($c) => [
+                    'title'    => $c['label'],
+                    'url'      => $c['url'],
+                    'isActive' => !empty($c['active']),
+                ], $s['children'] ?? []),
+            ];
+
+            $navMain = [
+                ['title' => 'Workspace', 'items' => [
+                    ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
+                    ['title' => 'Slice Studio', 'icon' => 'wand-2', 'url' => route('laraslice.wizard'), 'isActive' => request()->routeIs('laraslice.wizard*')],
+                ]],
+            ];
+
+            // Domain slices first, then ungrouped app slices, then LaraSlice's core slices under Administration.
+            // A group named after the ungrouped bucket is treated as ungrouped so it never appears twice.
+            $navDomains = [];
+            $navUngrouped = [];
+            $navCore = [];
+            foreach ($navSlices as $s) {
+                $grp = $s['group'] ?? null;
+                if (!empty($s['core'])) {
+                    $navCore[] = $sliceNavItem($s);
+                } elseif ($grp && $grp !== 'Vertical Slices') {
+                    $navDomains[$grp][] = $sliceNavItem($s);
+                } else {
+                    $navUngrouped[] = $sliceNavItem($s);
+                }
+            }
+            foreach ($navDomains as $groupName => $items) {
+                $navMain[] = ['title' => $groupName, 'items' => $items];
+            }
+            if (!empty($navUngrouped)) {
+                $navMain[] = ['title' => 'Vertical Slices', 'items' => $navUngrouped];
+            }
+            if (!empty($navCore)) {
+                $navMain[] = ['title' => 'Administration', 'items' => $navCore];
+            }
+        @endphp
+
+        <x-ui.sidebar-provider>
+            <x-ui.sidebar>
                 <x-ui.sidebar-header>
-                    <x-ui.sidebar-menu>
-                        <x-ui.sidebar-menu-item>
-                            <x-ui.sidebar-menu-button class="data-[slot=sidebar-menu-button]:p-1.5!" href="{{ (Route::has('dashboard') ? route('dashboard') : url('/')) }}">
-                                <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-xs">
-                                    <x-lucide-layers class="size-4" />
-                                </div>
-                                <div class="flex flex-col text-left leading-none">
-                                    <span class="text-sm font-bold tracking-tight text-foreground">LaraSlice</span>
-                                    <span class="text-[10px] text-muted-foreground font-mono mt-0.5">Vertical Slice Core</span>
-                                </div>
-                                <x-ui.badge variant="secondary" class="ml-auto text-[10px] font-mono px-1 py-0">v1.0</x-ui.badge>
-                            </x-ui.sidebar-menu-button>
-                        </x-ui.sidebar-menu-item>
-                    </x-ui.sidebar-menu>
-                    </x-ui.sidebar-header>
-
-                    <x-ui.sidebar-content>
-                        {{-- Quick Create / Wizard & Search --}}
-                        <x-ui.sidebar-group>
-                            <x-ui.sidebar-group-content class="flex flex-col gap-2">
-                                <x-ui.sidebar-menu>
-                                    <x-ui.sidebar-menu-item class="flex items-center gap-2">
-                                        <x-ui.sidebar-menu-button href="{{ route('laraslice.wizard') }}" class="bg-primary text-primary-foreground min-w-8 duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground font-semibold">
-                                            <x-lucide-wand-2 class="size-4" />
-                                            <span>Slice Studio</span>
-                                        </x-ui.sidebar-menu-button>
-                                        <x-ui.button size="icon" variant="outline" class="size-8 group-data-[collapsible=icon]:opacity-0 cursor-pointer" @click="searchOpen = true" title="Search (Cmd+K)">
-                                            <x-lucide-search class="size-3.5" />
-                                            <span class="sr-only">Search</span>
-                                        </x-ui.button>
-                                    </x-ui.sidebar-menu-item>
-                                </x-ui.sidebar-menu>
-
-                                <x-ui.sidebar-menu>
-                                    <x-ui.sidebar-menu-item>
-                                        <x-ui.sidebar-menu-button href="{{ (Route::has('dashboard') ? route('dashboard') : url('/')) }}" :is-active="request()->routeIs('dashboard')">
-                                            <x-lucide-layout-dashboard class="size-4" />
-                                            <span>Dashboard</span>
-                                        </x-ui.sidebar-menu-button>
-                                    </x-ui.sidebar-menu-item>
-                                    <x-ui.sidebar-menu-item>
-                                        <x-ui.sidebar-menu-button href="{{ route('settings.ai') }}" :is-active="request()->routeIs('settings.ai*')">
-                                            <x-lucide-bot class="size-4 text-indigo-500" />
-                                            <span>AI Copilot & Settings</span>
-                                            <x-ui.badge variant="secondary" class="ml-auto text-[9px] font-mono px-1 py-0">Active</x-ui.badge>
-                                        </x-ui.sidebar-menu-button>
-                                    </x-ui.sidebar-menu-item>
-                                </x-ui.sidebar-menu>
-                            </x-ui.sidebar-group-content>
-                        </x-ui.sidebar-group>
-
-                        {{-- Domain-Grouped Slices --}}
-                        @foreach ($domainGroups as $groupName => $groupSlices)
-                            <x-ui.sidebar-group class="group-data-[collapsible=icon]:hidden">
-                                <x-ui.sidebar-group-label>{{ $groupName }}</x-ui.sidebar-group-label>
-                                <x-ui.sidebar-menu>
-                                    @foreach ($groupSlices as $s)
-                                        @php
-                                            $icon = $resolveLucide($s['icon'] ?? 'box');
-                                            $hasChildren = !empty($s['children']);
-                                            $hasActiveChild = false;
-                                            if ($hasChildren) {
-                                                foreach ($s['children'] as $c) {
-                                                    if (!empty($c['active'])) {
-                                                        $hasActiveChild = true;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            $isParentDirectlyActive = !empty($s['active']) && !$hasActiveChild;
-                                            $isOpen = $hasActiveChild || (!empty($s['active']) && $hasChildren);
-                                        @endphp
-                                        <x-ui.sidebar-menu-item>
-                                            @if ($hasChildren)
-                                                <div x-data="{ open: {{ $isOpen ? 'true' : 'false' }} }" class="w-full">
-                                                    <div class="flex items-center w-full group/btn">
-                                                        <x-ui.sidebar-menu-button href="{{ $s['url'] }}" :is-active="$isParentDirectlyActive" class="flex-1 pr-1">
-                                                            <x-dynamic-component :component="'lucide-' . $icon" class="size-4" />
-                                                            <span>{{ $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice' }}</span>
+                    <x-block.version-switcher title="LaraSlice" :versions="[$laraSliceVersion]">
+                        <x-slot:icon><x-lucide-layers class="size-4" /></x-slot:icon>
+                    </x-block.version-switcher>
+                    <x-block.search-form placeholder="Search slices, routes..." readonly @focus="searchOpen = true; $el.blur()" @click="searchOpen = true" />
+                </x-ui.sidebar-header>
+                <x-ui.sidebar-content class="gap-0">
+                    @foreach ($navMain as $group)
+                        <x-ui.collapsible :open="true" class="group/collapsible" ::data-state="open ? 'open' : 'closed'">
+                            <x-ui.sidebar-group>
+                                <x-ui.collapsible-trigger
+                                    class="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ring-sidebar-ring flex h-8 w-full shrink-0 items-center rounded-md px-2 text-sm font-medium outline-none transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                                    {{ $group['title'] }}
+                                    <x-lucide-chevron-right class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                </x-ui.collapsible-trigger>
+                                <x-ui.collapsible-content>
+                                    <x-ui.sidebar-group-content>
+                                        <x-ui.sidebar-menu>
+                                            @foreach ($group['items'] as $item)
+                                                <x-ui.sidebar-menu-item>
+                                                    @if (!empty($item['children']))
+                                                        {{-- Parent with sub-pages: a dropdown, open while one of its pages is active --}}
+                                                        <x-ui.collapsible :open="$item['isOpen'] ?? false" class="group/menu-collapsible" ::data-state="open ? 'open' : 'closed'">
+                                                            <x-ui.sidebar-menu-button :tooltip="$item['title']" @click="open = !open" ::aria-expanded="open">
+                                                                <x-dynamic-component :component="'lucide-' . $item['icon']" />
+                                                                <span class="min-w-0 truncate">{{ $item['title'] }}</span>
+                                                                <x-lucide-chevron-right class="ml-auto transition-transform duration-200 group-data-[state=open]/menu-collapsible:rotate-90" />
+                                                            </x-ui.sidebar-menu-button>
+                                                            <x-ui.collapsible-content>
+                                                                <x-ui.sidebar-menu-sub>
+                                                                    @foreach ($item['children'] as $child)
+                                                                        <x-ui.sidebar-menu-sub-item>
+                                                                            <x-ui.sidebar-menu-sub-button href="{{ $child['url'] }}" :is-active="$child['isActive']">
+                                                                                <span>{{ $child['title'] }}</span>
+                                                                            </x-ui.sidebar-menu-sub-button>
+                                                                        </x-ui.sidebar-menu-sub-item>
+                                                                    @endforeach
+                                                                </x-ui.sidebar-menu-sub>
+                                                            </x-ui.collapsible-content>
+                                                        </x-ui.collapsible>
+                                                    @else
+                                                        <x-ui.sidebar-menu-button href="{{ $item['url'] }}" :is-active="$item['isActive'] ?? false" :tooltip="$item['title']">
+                                                            <x-dynamic-component :component="'lucide-' . $item['icon']" />
+                                                            <span>{{ $item['title'] }}</span>
                                                         </x-ui.sidebar-menu-button>
-                                                        <button type="button" @click.stop="open = !open" class="p-1.5 mr-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors cursor-pointer" :title="open ? 'Collapse' : 'Expand'">
-                                                            <x-lucide-chevron-right class="size-3.5 transition-transform duration-200" ::class="open ? 'rotate-90' : ''" />
-                                                        </button>
-                                                    </div>
-                                                    <div x-show="open" x-collapse>
-                                                        <x-ui.sidebar-menu-sub>
-                                                            @foreach ($s['children'] as $child)
-                                                                <x-ui.sidebar-menu-sub-item>
-                                                                    <x-ui.sidebar-menu-sub-button href="{{ $child['url'] }}" :is-active="!empty($child['active'])">
-                                                                        <span>{{ $child['label'] }}</span>
-                                                                    </x-ui.sidebar-menu-sub-button>
-                                                                </x-ui.sidebar-menu-sub-item>
-                                                            @endforeach
-                                                        </x-ui.sidebar-menu-sub>
-                                                    </div>
-                                                </div>
-                                            @else
-                                                <x-ui.sidebar-menu-button href="{{ $s['url'] }}" :is-active="!empty($s['active'])">
-                                                    <x-dynamic-component :component="'lucide-' . $icon" class="size-4" />
-                                                    <span>{{ $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice' }}</span>
-                                                </x-ui.sidebar-menu-button>
-                                            @endif
-                                        </x-ui.sidebar-menu-item>
-                                    @endforeach
-                                </x-ui.sidebar-menu>
+                                                    @endif
+                                                </x-ui.sidebar-menu-item>
+                                            @endforeach
+                                        </x-ui.sidebar-menu>
+                                    </x-ui.sidebar-group-content>
+                                </x-ui.collapsible-content>
                             </x-ui.sidebar-group>
-                        @endforeach
-
-                        {{-- Standalone Slices --}}
-                        @if (!empty($standaloneSlices))
-                            <x-ui.sidebar-group class="group-data-[collapsible=icon]:hidden">
-                                <x-ui.sidebar-group-label>Vertical Slices</x-ui.sidebar-group-label>
-                                <x-ui.sidebar-menu>
-                                    @foreach ($standaloneSlices as $s)
-                                        @php
-                                            $icon = $resolveLucide($s['icon'] ?? 'box');
-                                            $hasChildren = !empty($s['children']);
-                                            $hasActiveChild = false;
-                                            if ($hasChildren) {
-                                                foreach ($s['children'] as $c) {
-                                                    if (!empty($c['active'])) {
-                                                        $hasActiveChild = true;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            $isParentDirectlyActive = !empty($s['active']) && !$hasActiveChild;
-                                            $isOpen = $hasActiveChild || (!empty($s['active']) && $hasChildren);
-                                        @endphp
-                                        <x-ui.sidebar-menu-item>
-                                            @if ($hasChildren)
-                                                <div x-data="{ open: {{ $isOpen ? 'true' : 'false' }} }" class="w-full">
-                                                    <div class="flex items-center w-full group/btn">
-                                                        <x-ui.sidebar-menu-button href="{{ $s['url'] }}" :is-active="$isParentDirectlyActive" class="flex-1 pr-1">
-                                                            <x-dynamic-component :component="'lucide-' . $icon" class="size-4" />
-                                                            <span>{{ $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice' }}</span>
-                                                        </x-ui.sidebar-menu-button>
-                                                        <button type="button" @click.stop="open = !open" class="p-1.5 mr-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors cursor-pointer" :title="open ? 'Collapse' : 'Expand'">
-                                                            <x-lucide-chevron-right class="size-3.5 transition-transform duration-200" ::class="open ? 'rotate-90' : ''" />
-                                                        </button>
-                                                    </div>
-                                                    <div x-show="open" x-collapse>
-                                                        <x-ui.sidebar-menu-sub>
-                                                            @foreach ($s['children'] as $child)
-                                                                <x-ui.sidebar-menu-sub-item>
-                                                                    <x-ui.sidebar-menu-sub-button href="{{ $child['url'] }}" :is-active="!empty($child['active'])">
-                                                                        <span>{{ $child['label'] }}</span>
-                                                                    </x-ui.sidebar-menu-sub-button>
-                                                                </x-ui.sidebar-menu-sub-item>
-                                                            @endforeach
-                                                        </x-ui.sidebar-menu-sub>
-                                                    </div>
-                                                </div>
-                                            @else
-                                                <x-ui.sidebar-menu-button href="{{ $s['url'] }}" :is-active="!empty($s['active'])">
-                                                    <x-dynamic-component :component="'lucide-' . $icon" class="size-4" />
-                                                    <span>{{ $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice' }}</span>
-                                                </x-ui.sidebar-menu-button>
-                                            @endif
-                                        </x-ui.sidebar-menu-item>
-                                    @endforeach
-                                </x-ui.sidebar-menu>
-                            </x-ui.sidebar-group>
-                        @endif
-                    </x-ui.sidebar-content>
-
-                    <x-ui.sidebar-footer>
-                        <x-block.nav-user
-                            name="{{ auth()->user()->name ?? 'Administrator' }}"
-                            email="{{ auth()->user()->email ?? 'admin@laraslice.dev' }}"
-                            avatar=""
-                            fallback="{{ substr(auth()->user()->name ?? 'Admin', 0, 2) }}" />
-                    </x-ui.sidebar-footer>
-                    <x-ui.sidebar-rail />
-                </x-ui.sidebar>
+                        </x-ui.collapsible>
+                    @endforeach
+                </x-ui.sidebar-content>
+                <x-ui.sidebar-footer>
+                    <x-block.nav-user
+                        name="{{ auth()->user()->name ?? 'Administrator' }}"
+                        email="{{ auth()->user()->email ?? 'admin@laraslice.dev' }}"
+                        avatar=""
+                        fallback="{{ substr(auth()->user()->name ?? 'Admin', 0, 2) }}" />
+                </x-ui.sidebar-footer>
+                <x-ui.sidebar-rail />
+            </x-ui.sidebar>
 
                 <x-ui.sidebar-inset>
                     {{-- Site Header --}}
