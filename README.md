@@ -378,6 +378,9 @@ To test changes to the framework live in a host Laravel application before publi
 **Core Leadership & Engineering**:
 - **Abdur Rehman** ([@AbdurRehman712](https://github.com/AbdurRehman712)) — Lead Architect & Creator
 
+**Contributors**:
+- **Muhammad Adnan** ([@adnanansari901](https://github.com/adnanansari901)) — Passkeys on HTTP dev domains, user devices schema, host User model & BlatUI Tailwind v4 install fixes
+
 ---
 
 ## 📄 License

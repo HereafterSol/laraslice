@@ -32,6 +32,12 @@
             "name": "BrandUp",
             "homepage": "https://brandup247.com",
             "role": "Digital Marketing Partner"
+        },
+        {
+            "name": "Muhammad Adnan",
+            "email": "adnanansari901@gmail.com",
+            "homepage": "https://github.com/adnanansari901",
+            "role": "Contributor"
         }
     ],
     "require": {

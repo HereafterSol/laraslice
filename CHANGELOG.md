@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [1.2.4] - 2026-10-05
+*Special thanks to community contributor **Muhammad Adnan** ([@adnanansari901](https://github.com/adnanansari901)) for contributing the v1.2.4 security, passkey, and installation enhancements!*
+
 
 ### Fixed
 - **Passkeys on HTTP dev domains**: Passkey flows (login, MFA enroll/challenge, lockscreen, settings) now detect an insecure context and ask for HTTPS or `localhost` instead of wrongly reporting "WebAuthn / Passkeys are not supported by this browser".
