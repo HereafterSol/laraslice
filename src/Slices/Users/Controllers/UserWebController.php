@@ -116,7 +116,7 @@ class UserWebController extends BaseSliceWebController
     {
         $this->authorizeSlice('metrics');
 
-        if ($currentUser = Auth::user() ?: User::first()) {
+        if ($currentUser = $this->currentUser() ?: User::first()) {
             $this->ensureCurrentDeviceRegistered($currentUser, $request);
         }
         $today = now()->startOfDay();
@@ -262,7 +262,7 @@ class UserWebController extends BaseSliceWebController
      */
     public function settings(Request $request)
     {
-        $user = Auth::user() ?: User::with(['detail', 'devices', 'recoveryCodes', 'securityLogs'])->first();
+        $user = $this->currentUser() ?: User::with(['detail', 'devices', 'recoveryCodes', 'securityLogs'])->first();
 
         if (!$user) {
             return redirect()->route($this->getRoutePrefix() . 'index')->with('error', 'User not found.');
@@ -284,7 +284,7 @@ class UserWebController extends BaseSliceWebController
 
     public function updateProfile(Request $request)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return redirect()->back()->with('error', 'User not authenticated.');
         }
@@ -313,7 +313,7 @@ class UserWebController extends BaseSliceWebController
 
     public function updatePassword(Request $request)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return redirect()->back()->with('error', 'User not authenticated.');
         }
@@ -346,7 +346,7 @@ class UserWebController extends BaseSliceWebController
 
     public function toggle2Fa(Request $request)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return redirect()->back()->with('error', 'User not authenticated.');
         }
@@ -399,7 +399,7 @@ class UserWebController extends BaseSliceWebController
 
     public function regenerateRecoveryCodes(Request $request)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return redirect()->back()->with('error', 'User not authenticated.');
         }
@@ -422,7 +422,7 @@ class UserWebController extends BaseSliceWebController
 
     public function issueMyDeviceCode(Request $request)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return redirect()->back()->with('error', 'User not authenticated.');
         }
@@ -445,7 +445,7 @@ class UserWebController extends BaseSliceWebController
 
     public function logoutOthers(Request $request)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if ($user) {
             $user->devices()->where('is_current', false)->delete();
         }
@@ -538,7 +538,7 @@ class UserWebController extends BaseSliceWebController
 
     public function lockscreen(Request $request)
     {
-        $user = Auth::user() ?? User::first();
+        $user = $this->currentUser() ?? User::first();
         session(['laraslice_session_locked' => true]);
         if (!session()->has('lockscreen_redirect_url')) {
             $prev = url()->previous();
@@ -558,7 +558,7 @@ class UserWebController extends BaseSliceWebController
         }
 
         $request->validate(['password' => 'required|string']);
-        $user = Auth::user() ?? User::first();
+        $user = $this->currentUser() ?? User::first();
 
         if ($user && Hash::check($request->password, $user->password)) {
             session()->forget('laraslice_session_locked');
@@ -640,7 +640,7 @@ class UserWebController extends BaseSliceWebController
     public function verifyTotpCode(Request $request)
     {
         $request->validate(['code' => 'required|string|size:6']);
-        $user = Auth::user() ?? User::first();
+        $user = $this->currentUser() ?? User::first();
 
         $inputCode = trim($request->input('code'));
         $secret = $user->mfa_secret ?? 'JBSWY3DPEHPK3PXP';
@@ -694,6 +694,22 @@ class UserWebController extends BaseSliceWebController
         return str_pad((string)$totp, 6, '0', STR_PAD_LEFT);
     }
 
+
+    /**
+     * Resolve the authenticated user as the slice User model.
+     * The host app's auth provider may use its own model (e.g. App\Models\User)
+     * on the same users table, which lacks the slice relationships.
+     */
+    protected function currentUser(): ?User
+    {
+        $authUser = Auth::user();
+
+        if ($authUser instanceof User || $authUser === null) {
+            return $authUser;
+        }
+
+        return User::find($authUser->getAuthIdentifier());
+    }
 
     public function ensureCurrentDeviceRegistered(User $user, Request $request): void
     {
@@ -763,7 +779,7 @@ class UserWebController extends BaseSliceWebController
      */
     public function passkeyRegisterOptions(Request $request): \Illuminate\Http\JsonResponse
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
@@ -779,7 +795,7 @@ class UserWebController extends BaseSliceWebController
      */
     public function passkeyRegisterVerify(Request $request): \Illuminate\Http\JsonResponse
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
@@ -819,7 +835,7 @@ class UserWebController extends BaseSliceWebController
      */
     public function destroyPasskey(Request $request, string|int $id)
     {
-        $user = Auth::user() ?: User::first();
+        $user = $this->currentUser() ?: User::first();
         $passkey = ($user->hasRole('Super Administrator') || $user->id === 1)
             ? \LaraSlice\Slices\Users\Models\UserPasskey::find($id)
             : \LaraSlice\Slices\Users\Models\UserPasskey::where('user_id', $user->id)->find($id);
@@ -882,7 +898,7 @@ class UserWebController extends BaseSliceWebController
 
     public function passkeyUnlockOptions(Request $request): \Illuminate\Http\JsonResponse
     {
-        $user = Auth::user() ?? User::first();
+        $user = $this->currentUser() ?? User::first();
         $service = new \LaraSlice\Slices\Users\Services\WebAuthnService();
         $options = $service->getLoginArgs($user);
         return response()->json($options);
