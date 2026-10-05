@@ -107,6 +107,13 @@
             "description": "Added user_connect, user_creds, user_factors, user_codes, user_attempts, user_checks, user_push_devices, user_resets, user_tokens, and user_devices.",
             "author": "Antigravity & User via Slice Studio",
             "date": "2026-10-04 21:00:00"
+        },
+        {
+            "version": "1.3.1",
+            "migration": "2026_10_05_000000_add_device_trust_columns_to_user_devices_table.php",
+            "description": "Backfilled session_id, device_label, and is_trusted on user_devices for installs where the v1.1.0 table pre-empted the v1.3.0 schema.",
+            "author": "LaraSlice Contributors",
+            "date": "2026-10-05 00:00:00"
         }
     ],
     "child_tables": [

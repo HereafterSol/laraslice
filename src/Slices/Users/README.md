@@ -73,6 +73,7 @@ The slice follows strict declarative migrations tracked both in Laravel's `migra
 * **v1.1.0**: `2026_10_03_220000_enhance_users_table_and_security_devices.php` - Initial enterprise fields (`gender`, `phone`, `dob`, `employee_id`, `department`, `designation`, `cnic`), device tracking, and security audit tables.
 * **v1.2.0**: `2026_10_03_230000_create_user_details_table_and_split_profile.php` - Split `users` (pure authentication aggregate) and `user_details` (1-to-1 extended profile aggregate).
 * **v1.3.0**: `2026_10_04_210000_create_enterprise_identity_and_device_trust_tables.php` - Enterprise security parity scaffolding: `user_connect`, `user_creds`, `user_factors`, `user_codes`, `user_attempts`, `user_checks`, `user_push_devices`, `user_resets`, `user_tokens`, and `user_devices`.
+* **v1.3.1**: `2026_10_05_000000_add_device_trust_columns_to_user_devices_table.php` - Backfills `session_id`, `device_label`, and `is_trusted` on `user_devices` when the v1.1.0 table already existed (fixes `Unknown column 'session_id'` on device enrollment).
 
 ---
 
