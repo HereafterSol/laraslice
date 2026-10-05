@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-10-05
+
+### Changed
+- **Admin sidebar rebuilt on BlatUI sidebar-02**: The starter layout's sidebar now uses collapsible navigation groups with a version switcher and search form in the header. Groups are Workspace, one per domain, Vertical Slices (ungrouped app slices), and Administration (core slices). Slices with child pages render as dropdowns that open automatically on their active page, and every item shows the Lucide icon from its slice navigation settings. Long labels truncate instead of overlapping.
+
+### Added
+- `block/version-switcher` and `block/search-form` BlatUI components, published by `slice:install`.
+- `core` flag on items returned by `SliceManager::getNavigableSlices()`.
+
+### Removed
+- Duplicate "AI Copilot & Settings" sidebar link (available under Settings & AI).
+
 ## [1.2.5] - 2026-10-05
 
 ### Fixed
