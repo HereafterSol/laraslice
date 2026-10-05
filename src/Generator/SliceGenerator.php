@@ -639,9 +639,9 @@ return new class extends Migration {
                 {$migrationTitle}
                 {$migrationDesc}
                 {$migrationStatus}{$migrationFields}
-                \            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamps();
+                \$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+                \$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+                \$table->timestamps();
         });
     }
 

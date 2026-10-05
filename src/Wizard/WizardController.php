@@ -1014,6 +1014,7 @@ class WizardController extends Controller
                     'dir'  => $sliceDir,
                 ];
             } catch (\Throwable $e) {
+                report($e);
                 $errors[$sliceName] = $e->getMessage();
             }
         }
@@ -1039,6 +1040,12 @@ class WizardController extends Controller
             ];
         }, $created);
 
+        // The wizard only displays `message`, so surface per-slice failures there too
+        $message = count($created) . " slice(s) successfully generated in domain [{$domain}].";
+        foreach ($errors as $failedSlice => $error) {
+            $message .= " [{$failedSlice}] failed: {$error}";
+        }
+
         return response()->json([
             'success'         => count($errors) === 0,
             'domain'          => $domain,
@@ -1046,7 +1053,7 @@ class WizardController extends Controller
             'errors'          => $errors,
             'migrated'        => $migrated,
             'migrationOutput' => $migrationOutput,
-            'message'         => count($created) . " slice(s) successfully generated in domain [{$domain}].",
+            'message'         => $message,
         ], count($created) > 0 ? 200 : 422);
     }
 
