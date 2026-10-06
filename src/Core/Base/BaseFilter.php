@@ -35,6 +35,18 @@ class BaseFilter implements IFilterObject
         return ['id', 'title', 'status', 'created_at', 'updated_at'];
     }
 
+    /**
+     * Load the first $limit rows in one page. For server code only (e.g. data-table
+     * index pages); request input stays capped at 100 by the constructor.
+     */
+    public function withLimit(int $limit): static
+    {
+        $this->page = 1;
+        $this->limit = max(1, $limit);
+
+        return $this;
+    }
+
     public function getSearch(): ?string { return $this->search; }
     public function getPage(): int { return $this->page; }
     public function getLimit(): int { return $this->limit; }

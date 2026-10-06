@@ -22,6 +22,11 @@ abstract class BaseSliceWebController extends Controller
         $filterClass = $this->getFilterClass();
         $filter = new $filterClass($request->all());
 
+        // The data-table on index pages searches/sorts/pages client-side, so load all rows up to the cap
+        if ($filter instanceof BaseFilter) {
+            $filter->withLimit((int) config('laraslice.data_table.max_rows', 1000));
+        }
+
         $pagedList = $this->getService()->getList($filter);
 
         return view($this->getViewPrefix() . 'index', [

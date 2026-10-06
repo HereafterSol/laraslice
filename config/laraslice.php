@@ -73,6 +73,15 @@ return [
     ],
 
     /*
+    | Listing pages use the BlatUI data-table, which searches, sorts and pages
+    | in the browser. Index pages load up to this many rows; a notice appears
+    | when a table holds more.
+    */
+    'data_table' => [
+        'max_rows' => (int) env('LARASLICE_DATA_TABLE_MAX_ROWS', 1000),
+    ],
+
+    /*
     |--------------------------------------------------------------------------
     | Web Wizard
     |--------------------------------------------------------------------------
