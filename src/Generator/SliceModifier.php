@@ -508,6 +508,21 @@ HTML;
 
             $content = file_get_contents($bladeFile);
 
+            // Data-table index views: add a column definition before the marker; rows are built from the columns
+            if (preg_match('/^([ \t]*)\/\/ @laraslice:columns/m', $content, $marker)) {
+                foreach ($fields as $field) {
+                    $snakeField = Str::snake($field['name']);
+                    if (!empty($field['hidden']) || str_contains($content, "'key' => '{$snakeField}'")) {
+                        continue;
+                    }
+                    $label = Str::title(str_replace('_', ' ', $snakeField));
+                    $columnLine = $marker[1] . "['key' => " . var_export($snakeField, true) . ", 'label' => " . var_export($label, true) . "],\n";
+                    $content = preg_replace('/^[ \t]*\/\/ @laraslice:columns/m', $columnLine . '$0', $content, 1);
+                }
+                file_put_contents($bladeFile, $content);
+                continue;
+            }
+
             // Detect loop item variable name, e.g. @forelse ($users as $user) or ($pagedList->items as $item)
             $varName = 'item';
             if (preg_match('/@forelse\s*\([^\)]+as\s+\$([a-zA-Z0-9_]+)\)/i', $content, $matches)) {
@@ -1008,36 +1023,23 @@ REL;
             . "            </div>\n"
             . "        </div>\n\n"
             . "        @if (\$childRecords && count(\$childRecords) > 0)\n"
-            . "            <div class=\"rounded-xl border border-border overflow-hidden bg-card/40\">\n"
-            . "                <table class=\"w-full text-sm text-left\">\n"
-            . "                    <thead class=\"text-xs uppercase bg-muted/50 text-muted-foreground border-b border-border\">\n"
-            . "                        <tr>\n"
-            . "                            <th class=\"px-4 py-2.5 font-medium\">Name</th>\n"
-            . "                            <th class=\"px-4 py-2.5 font-medium\">Details</th>\n"
-            . "                            <th class=\"px-4 py-2.5 font-medium text-right\">Actions</th>\n"
-            . "                        </tr>\n"
-            . "                    </thead>\n"
-            . "                    <tbody class=\"divide-y divide-border\">\n"
-            . "                        @foreach (\$childRecords as \$item)\n"
-            . "                            <tr class=\"hover:bg-muted/20 transition-colors\">\n"
-            . "                                <td class=\"px-4 py-2.5 font-medium text-foreground\">\n"
-            . "                                    {{ \$item->name ?? (\$item->first_name ? \$item->first_name . ' ' . (\$item->last_name ?? '') : (\$item->title ?? '#' . \$item->id)) }}\n"
-            . "                                </td>\n"
-            . "                                <td class=\"px-4 py-2.5 text-muted-foreground text-xs\">\n"
-            . "                                    {{ \$item->email ?? \$item->job_title ?? \$item->phone ?? \$item->status ?? '—' }}\n"
-            . "                                </td>\n"
-            . "                                <td class=\"px-4 py-2.5 text-right\">\n"
-            . "                                    @if (\\Illuminate\\Support\\Facades\\Route::has('{$parentRouteName}.{$childRouteName}.edit'))\n"
-            . "                                        <x-ui.button href=\"{{ route('{$parentRouteName}.{$childRouteName}.edit', ['parentId' => \$form->id, 'id' => \$item->id]) }}\" as=\"a\" variant=\"ghost\" size=\"sm\" class=\"size-7 p-0\">\n"
-            . "                                            <x-lucide-pencil class=\"size-3.5 text-muted-foreground\" />\n"
-            . "                                        </x-ui.button>\n"
-            . "                                    @endif\n"
-            . "                                </td>\n"
-            . "                            </tr>\n"
-            . "                        @endforeach\n"
-            . "                    </tbody>\n"
-            . "                </table>\n"
-            . "            </div>\n"
+            . "            @php\n"
+            . "                \$childColumns = [['key' => 'name', 'label' => 'Name'], ['key' => 'details', 'label' => 'Details']];\n"
+            . "                \$childEditRoute = '{$parentRouteName}.{$childRouteName}.edit';\n"
+            . "                \$childRows = collect(\$childRecords)->map(fn (\$item) => [\n"
+            . "                    'id' => \$item->id,\n"
+            . "                    'name' => (string) (\$item->name ?? (\$item->first_name ? \$item->first_name . ' ' . (\$item->last_name ?? '') : (\$item->title ?? '#' . \$item->id))),\n"
+            . "                    'details' => (string) (\$item->email ?? \$item->job_title ?? \$item->phone ?? \$item->status ?? '—'),\n"
+            . "                    'edit_url' => \\Illuminate\\Support\\Facades\\Route::has(\$childEditRoute) ? route(\$childEditRoute, ['parentId' => \$form->id, 'id' => \$item->id]) : null,\n"
+            . "                ])->values()->all();\n"
+            . "            @endphp\n"
+            . "            <x-ui.data-table :columns=\"\$childColumns\" :rows=\"\$childRows\" :page-size=\"5\" :selectable=\"false\" search-placeholder=\"Filter {$childLabel}...\">\n"
+            . "                <x-slot:actions>\n"
+            . "                    <x-ui.button as=\"a\" ::href=\"item.r.edit_url\" x-show=\"item.r.edit_url\" variant=\"ghost\" size=\"sm\">\n"
+            . "                        <x-lucide-pencil class=\"size-3.5\" /> Edit\n"
+            . "                    </x-ui.button>\n"
+            . "                </x-slot:actions>\n"
+            . "            </x-ui.data-table>\n"
             . "        @else\n"
             . "            <div class=\"rounded-xl border border-dashed border-border/80 p-6 text-center bg-muted/10\">\n"
             . "                <div class=\"flex flex-col items-center justify-center gap-1.5\">\n"

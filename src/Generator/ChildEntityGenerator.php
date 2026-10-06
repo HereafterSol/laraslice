@@ -327,29 +327,19 @@ PHP;
             mkdir($viewsDir, 0755, true);
         }
 
-        // Build Table Headers and Cells
-        $thLines = ["                        <th class=\"px-6 py-3 font-semibold\">ID</th>"];
-        $tdLines = ["                        <td class=\"px-6 py-4 font-medium text-foreground\">{{ \$item->id }}</td>"];
-
+        // Column definitions for the index data-table
+        $dataTableColumn = fn (string $key, string $label): string => "            ['key' => " . var_export($key, true) . ", 'label' => " . var_export($label, true) . '],';
+        $columnLines = [$dataTableColumn('id', 'ID')];
         if (!empty($fields)) {
             foreach ($fields as $f) {
-                $fName = $f['name'];
-                $fLabel = Str::headline($fName);
-                $thLines[] = "                        <th class=\"px-6 py-3 font-semibold\">{$fLabel}</th>";
-                $tdLines[] = "                        <td class=\"px-6 py-4 text-muted-foreground\">{{ \$item->{$fName} ?? '-' }}</td>";
+                $columnLines[] = $dataTableColumn($f['name'], Str::headline($f['name']));
             }
         } else {
-            $thLines[] = "                        <th class=\"px-6 py-3 font-semibold\">Name</th>";
-            $tdLines[] = "                        <td class=\"px-6 py-4 text-muted-foreground\">{{ \$item->name ?? '-' }}</td>";
+            $columnLines[] = $dataTableColumn('name', 'Name');
         }
+        $dataTableColumns = implode("\n", $columnLines);
 
-        $thLines[] = "                        <th class=\"px-6 py-3 text-right font-semibold\">Actions</th>";
         $editLinkExpr = "\$parentId ? (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', ['id' => \$item->id, 'parentId' => \$parentId]) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$parentId, 'id' => \$item->id])) : (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', \$item->id) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$item->{$foreignKey} ?? 1, 'id' => \$item->id]))";
-        $tdLines[] = "                        <td class=\"px-6 py-4 text-right\"><x-ui.button href=\"{{ {$editLinkExpr} }}\" as=\"a\" variant=\"ghost\" size=\"sm\">Edit</x-ui.button></td>";
-
-        $theadContent = implode("\n", $thLines);
-        $tbodyRowContent = implode("\n", $tdLines);
-        $colCount = count($thLines);
 
         $indexBlade = <<<BLADE
 @extends('layouts.app')
@@ -372,35 +362,38 @@ PHP;
             <x-lucide-plus class="mr-2 h-4 w-4" /> Create {$childSingularLabel}
         </x-ui.button>
     </div>
-    <x-ui.card>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
-                <thead class="text-xs uppercase bg-muted/60 text-muted-foreground border-b border-border">
-                    <tr>
-{$theadContent}
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                    @forelse(\$pagedList->items as \$item)
-                    <tr class="hover:bg-muted/30 transition-colors">
-{$tbodyRowContent}
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="{$colCount}" class="px-6 py-12 text-center text-muted-foreground">
-                            <div class="flex flex-col items-center justify-center gap-2">
-                                <x-lucide-inbox class="size-8 text-muted-foreground/40" />
-                                <p class="text-sm font-medium">No {$childPluralLabel} found</p>
-                                <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.create') ? route('{$childPluralSnake}.create') : '#') }}" as="a" variant="outline" size="sm">
-                                    Create your first {$childSingularLabel}
-                                </x-ui.button>
-                            </div>
-                        </td>
-                    </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+    @php
+        \$columns = [
+{$dataTableColumns}
+            // @laraslice:columns
+        ];
+        \$rows = \LaraSlice\Support\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
+            'edit_url' => {$editLinkExpr},
+        ]);
+    @endphp
+    <x-ui.card class="p-6">
+        @if (count(\$rows) === 0)
+            <div class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+                <x-lucide-inbox class="size-8 text-muted-foreground/40" />
+                <p class="text-sm font-medium">No {$childPluralLabel} found</p>
+                <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.create') ? route('{$childPluralSnake}.create') : '#') }}" as="a" variant="outline" size="sm">
+                    Create your first {$childSingularLabel}
+                </x-ui.button>
+            </div>
+        @else
+            @if (\$pagedList->totalCount > count(\$rows))
+                <p class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                    Showing the latest {{ count(\$rows) }} of {{ \$pagedList->totalCount }} records. Raise <code>LARASLICE_DATA_TABLE_MAX_ROWS</code> to load more.
+                </p>
+            @endif
+            <x-ui.data-table :columns="\$columns" :rows="\$rows" :page-size="10" search-placeholder="Filter {$childPluralLabel}...">
+                <x-slot:actions>
+                    <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
+                        <x-lucide-pencil class="size-4" /> Edit
+                    </x-ui.button>
+                </x-slot:actions>
+            </x-ui.data-table>
+        @endif
     </x-ui.card>
 </div>
 @endsection

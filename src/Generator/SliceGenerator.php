@@ -109,17 +109,16 @@ class SliceGenerator
             $schemaTableColumns = "\n" . $schemaTableColumns;
         }
 
-        $tableTitleLabel = htmlspecialchars($titleField['label'] ?? 'Title', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $tableStatusLabel = htmlspecialchars($statusField['label'] ?? 'Status', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $tableHeads = implode("\n", array_map(fn (array $field) => '                        <x-ui.table-head>' . $field['label_html'] . '</x-ui.table-head>', $extraFields));
-        if ($tableHeads !== '') {
-            $tableHeads = "\n" . $tableHeads;
-        }
-        $tableCells = implode("\n", array_map(fn (array $field) => '                            <x-ui.table-cell>{{ $item->' . $field['name'] . ' ?? \'-\' }}</x-ui.table-cell>', $extraFields));
-        if ($tableCells !== '') {
-            $tableCells = "\n" . $tableCells;
-        }
-        $tableColspan = 4 + count($extraFields);
+        // Column definitions for the index data-table; SliceModifier appends new fields before the marker
+        $dataTableColumn = fn (string $key, string $label): string => "            ['key' => " . var_export($key, true) . ", 'label' => " . var_export($label, true) . '],';
+        $dataTableColumns = implode("\n", array_merge(
+            [
+                $dataTableColumn('id', 'ID'),
+                $dataTableColumn('title', $titleField['label'] ?? 'Title'),
+                $dataTableColumn('status', $statusField['label'] ?? 'Status'),
+            ],
+            array_map(fn (array $field) => $dataTableColumn($field['name'], $field['label']), $extraFields)
+        ));
 
         if ($titleField) {
             $formTitle = $titleField['form'];
@@ -733,7 +732,18 @@ PHP;
         </div>
     @endif
 
-    <!-- Card Container with BlatUI Table -->
+    @php
+        \$columns = [
+{$dataTableColumns}
+            // @laraslice:columns
+        ];
+        \$rows = \LaraSlice\Support\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
+            'edit_url'   => route('{$snakeName}.edit', \$item->id),
+            'delete_url' => route('{$snakeName}.destroy', \$item->id),
+        ]);
+    @endphp
+
+    <!-- Card Container with BlatUI Data Table -->
     <x-ui.card variant="sectioned" class="border shadow-xs bg-card">
         <x-ui.card-header class="border-b pb-4 px-6 pt-6">
             <div class="flex items-center justify-between">
@@ -742,85 +752,58 @@ PHP;
                     <x-ui.card-description>All synchronized vertical slice records</x-ui.card-description>
                 </div>
                 <div class="text-xs text-muted-foreground font-medium">
-                    Total records: {{ count(\$pagedList->items) }}
+                    Total records: {{ \$pagedList->totalCount }}
                 </div>
             </div>
         </x-ui.card-header>
 
-        <x-ui.card-content class="p-0">
-            <x-ui.table>
-                <x-ui.table-header class="bg-muted/40">
-                    <x-ui.table-row>
-                        <x-ui.table-head class="w-16">ID</x-ui.table-head>
-                        <x-ui.table-head>{$tableTitleLabel}</x-ui.table-head>
-                        <x-ui.table-head>{$tableStatusLabel}</x-ui.table-head>{$tableHeads}
-                        <x-ui.table-head class="text-right">Actions</x-ui.table-head>
-                    </x-ui.table-row>
-                </x-ui.table-header>
-                <x-ui.table-body>
-                    @forelse (\$pagedList->items as \$item)
-                        <x-ui.table-row class="hover:bg-muted/30 transition">
-                            <x-ui.table-cell class="font-mono text-xs text-muted-foreground">#{{ \$item->id }}</x-ui.table-cell>
-                            <x-ui.table-cell class="font-medium text-foreground">
-                                <a href="{{ route('{$snakeName}.edit', \$item->id) }}" class="hover:text-primary transition">
-                                    {{ \$item->title }}
-                                </a>
-                            </x-ui.table-cell>
-                            <x-ui.table-cell>
-                                @if(\$item->status === 'active' || \$item->status === 'published')
-                                    <x-ui.badge variant="primary">Active</x-ui.badge>
-                                @elseif(\$item->status === 'draft')
-                                    <x-ui.badge variant="secondary">Draft</x-ui.badge>
-                                @else
-                                    <x-ui.badge variant="outline">{{ \$item->status }}</x-ui.badge>
-                                @endif
-                            </x-ui.table-cell>{$tableCells}
-                            <x-ui.table-cell class="text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <x-ui.button href="{{ route('{$snakeName}.edit', \$item->id) }}" as="a" variant="ghost" size="sm" class="size-8 p-0">
-                                        <x-lucide-pencil class="size-4 text-muted-foreground" />
-                                    </x-ui.button>
-                                    <form action="{{ route('{$snakeName}.destroy', \$item->id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <x-ui.button type="submit" variant="ghost" size="sm" class="size-8 p-0 hover:text-destructive">
-                                            <x-lucide-trash-2 class="size-4" />
-                                        </x-ui.button>
-                                    </form>
-                                </div>
-                            </x-ui.table-cell>
-                        </x-ui.table-row>
-                    @empty
-                        <x-ui.table-row>
-                            <x-ui.table-cell colspan="{$tableColspan}" class="h-36 text-center text-muted-foreground">
-                                <div class="flex flex-col items-center justify-center gap-3 py-4">
-                                    <x-lucide-inbox class="size-8 text-muted-foreground/50" />
-                                    <div>
-                                        <p class="text-sm font-semibold text-foreground">No records found in {$pluralName}</p>
-                                        <p class="text-xs text-muted-foreground mt-0.5">Start by creating your first entry or generate realistic mock data.</p>
-                                    </div>
-                                    <div class="flex items-center gap-2 pt-1">
-                                        <x-ui.button href="{{ route('{$snakeName}.create') }}" as="a" variant="outline" size="sm">
-                                            Create {$studlyName}
-                                        </x-ui.button>
-                                        @if(Route::has('laraslice.wizard.seed_slice'))
-                                            <form action="{{ route('laraslice.wizard.seed_slice') }}" method="POST" class="inline">
-                                                @csrf
-                                                <input type="hidden" name="slice" value="{$studlyName}">
-                                                <input type="hidden" name="count" value="10">
-                                                <x-ui.button type="submit" variant="secondary" size="sm" class="gap-1.5 text-amber-600 dark:text-amber-400">
-                                                    <x-lucide-sparkles class="size-3.5" />
-                                                    <span>Seed 10 Demo Records</span>
-                                                </x-ui.button>
-                                            </form>
-                                        @endif
-                                    </div>
-                                </div>
-                            </x-ui.table-cell>
-                        </x-ui.table-row>
-                    @endforelse
-                </x-ui.table-body>
-            </x-ui.table>
+        <x-ui.card-content class="p-6">
+            @if (\$pagedList->totalCount > count(\$rows))
+                <p class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                    Showing the latest {{ count(\$rows) }} of {{ \$pagedList->totalCount }} records. Raise <code>LARASLICE_DATA_TABLE_MAX_ROWS</code> to load more.
+                </p>
+            @endif
+
+            @if (count(\$rows) === 0)
+                <div class="flex flex-col items-center justify-center gap-3 py-10 text-center text-muted-foreground">
+                    <x-lucide-inbox class="size-8 text-muted-foreground/50" />
+                    <div>
+                        <p class="text-sm font-semibold text-foreground">No records found in {$pluralName}</p>
+                        <p class="text-xs text-muted-foreground mt-0.5">Start by creating your first entry or generate realistic mock data.</p>
+                    </div>
+                    <div class="flex items-center gap-2 pt-1">
+                        <x-ui.button href="{{ route('{$snakeName}.create') }}" as="a" variant="outline" size="sm">
+                            Create {$studlyName}
+                        </x-ui.button>
+                        @if(Route::has('laraslice.wizard.seed_slice'))
+                            <form action="{{ route('laraslice.wizard.seed_slice') }}" method="POST" class="inline">
+                                @csrf
+                                <input type="hidden" name="slice" value="{$studlyName}">
+                                <input type="hidden" name="count" value="10">
+                                <x-ui.button type="submit" variant="secondary" size="sm" class="gap-1.5 text-amber-600 dark:text-amber-400">
+                                    <x-lucide-sparkles class="size-3.5" />
+                                    <span>Seed 10 Demo Records</span>
+                                </x-ui.button>
+                            </form>
+                        @endif
+                    </div>
+                </div>
+            @else
+                <x-ui.data-table :columns="\$columns" :rows="\$rows" :page-size="10" search-placeholder="Filter {$pluralName}...">
+                    <x-slot:actions>
+                        <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
+                            <x-lucide-pencil class="size-4" /> Edit
+                        </x-ui.button>
+                        <form method="POST" :action="item.r.delete_url" class="inline" onsubmit="return confirm('Delete this record?')">
+                            @csrf
+                            @method('DELETE')
+                            <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                                <x-lucide-trash-2 class="size-4" /> Delete
+                            </x-ui.button>
+                        </form>
+                    </x-slot:actions>
+                </x-ui.data-table>
+            @endif
         </x-ui.card-content>
     </x-ui.card>
 </div>
