@@ -277,6 +277,11 @@ class SliceSeederService
     {
         $colLower = strtolower($column);
 
+        // 0. User stamps reference users.id: use a real user (deleted_by stays empty on live records)
+        if (in_array($colLower, ['created_by', 'updated_by', 'deleted_by'], true)) {
+            return $colLower === 'deleted_by' ? null : $this->resolveStampUserId();
+        }
+
         // 1. Foreign keys: pick from existing parent records
         if (str_ends_with($colLower, '_id')) {
             $parentBase = substr($colLower, 0, -3);
@@ -394,11 +399,12 @@ class SliceSeederService
             return "Sample automated demonstration record for {$table} within LaraSlice vertical slice architecture.";
         }
 
-        if (str_contains($colLower, 'date')) {
+        // Whole-word match so names like `updated_by` or `candidate_name` are not treated as dates
+        if (preg_match('/(^|_)date(_|$)/', $colLower)) {
             return now()->subDays(rand(1, 90))->toDateString();
         }
 
-        if (str_contains($colLower, 'is_') || str_contains($colLower, 'has_') || $colLower === 'active') {
+        if (str_starts_with($colLower, 'is_') || str_starts_with($colLower, 'has_') || $colLower === 'active') {
             return 1;
         }
 
@@ -426,6 +432,24 @@ class SliceSeederService
 
         // Generic text fallback
         return Str::headline($column) . ' ' . ($index + 1);
+    }
+
+    /**
+     * User id for created_by / updated_by: the authenticated user, else the first existing user.
+     */
+    protected function resolveStampUserId(): ?int
+    {
+        if ($id = auth()->id()) {
+            return (int) $id;
+        }
+
+        if (!Schema::hasTable('users')) {
+            return null;
+        }
+
+        $id = DB::table('users')->orderBy('id')->value('id');
+
+        return $id === null ? null : (int) $id;
     }
 
     /**
