@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - 2026-10-06
+
+### Changed
+- **BlatUI data-table on every listing**: Generated slice and child-entity index pages, the parent-form "Associated records" panel, and the Users directory, devices, MFA register, security logs and access metrics now use `<x-ui.data-table>` with client-side search, sorting, row selection, paging and row actions. Cells are plain text; dates are shown as `Y-m-d H:i` so they sort chronologically.
+- The MFA register's method/status filters are replaced by the data-table search (search "passkey" or "needs enrollment").
+- Security log and metrics lists load up to the data-table cap instead of a fixed 100 rows.
+
+### Added
+- `laraslice.data_table.max_rows` config (`LARASLICE_DATA_TABLE_MAX_ROWS`, default 1000) and `BaseFilter::withLimit()`; index pages load up to that many rows and show a notice when a table holds more.
+- `LaraSlice\Support\DataTableRows` helper for building data-table rows.
+- Generated index views keep columns in one array ending with `// @laraslice:columns`, where Slice Studio appends new fields.
+
+### Fixed
+- Generated index pages showed only the first 20 records with no way to page through the rest.
+
+### Upgrading
+Existing generated slices keep their old index view; regenerate it from Slice Studio (or re-run the generator) to get the data-table. Rebuild assets afterwards (`npm run build`).
+
 ## [1.3.2] - 2026-10-06
 
 ### Fixed
