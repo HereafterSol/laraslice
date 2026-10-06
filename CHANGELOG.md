@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.2] - 2026-10-06
+
+### Fixed
+- **Seed Demo Data `Data truncated for column 'updated_by'`**: The demo seeder treated any column containing "date" as a date, including `updated_by`. Date columns are now matched by whole word (`close_date`, `date_of_birth`).
+- **Orphaned userstamps in demo data**: `created_by` and `updated_by` are now filled with the authenticated user (or the first existing user) instead of made-up ids; `deleted_by` stays null.
+- **Boolean guessing**: `is_` / `has_` columns are matched as prefixes only, so names like `analysis_notes` keep text values.
+
 ## [1.3.1] - 2026-10-05
 
 ### Changed
