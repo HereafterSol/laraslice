@@ -77,118 +77,39 @@
                 </div>
             </x-ui.card-header>
 
-            <x-ui.card-content class="p-0">
-                <x-ui.table>
-                    <x-ui.table-header class="bg-muted/40">
-                        <x-ui.table-row>
-                            <x-ui.table-head>Reason / Failure Mode</x-ui.table-head>
-                            <x-ui.table-head>Attempted Identifier</x-ui.table-head>
-                            <x-ui.table-head>Channel</x-ui.table-head>
-                            <x-ui.table-head>Client Platform</x-ui.table-head>
-                            <x-ui.table-head>IP & Location</x-ui.table-head>
-                            <x-ui.table-head class="text-right">Timestamp</x-ui.table-head>
-                        </x-ui.table-row>
-                    </x-ui.table-header>
-                    <x-ui.table-body>
-                        @forelse ($attempts as $att)
-                            <x-ui.table-row class="hover:bg-muted/30 transition">
-                                <!-- Reason Badge -->
-                                <x-ui.table-cell>
-                                    @php $r = strtolower($att->reason ?? ''); @endphp
-                                    @if (str_contains($r, 'lockscreen'))
-                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                                            <x-lucide-lock class="size-3" />
-                                            <span>{{ ucwords(str_replace('_', ' ', $r)) }}</span>
-                                        </span>
-                                    @elseif (str_contains($r, 'locked_out') || str_contains($r, 'max'))
-                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                            <x-lucide-shield-ban class="size-3" />
-                                            <span>{{ ucwords(str_replace('_', ' ', $r)) }}</span>
-                                        </span>
-                                    @elseif (str_contains($r, 'passkey'))
-                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
-                                            <x-lucide-key class="size-3" />
-                                            <span>{{ ucwords(str_replace('_', ' ', $r)) }}</span>
-                                        </span>
-                                    @elseif (str_contains($r, 'mfa'))
-                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-500/10 text-purple-600 border border-purple-500/20">
-                                            <x-lucide-shield class="size-3" />
-                                            <span>{{ ucwords(str_replace('_', ' ', $r)) }}</span>
-                                        </span>
-                                    @else
-                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-red-500/10 text-red-600 border border-red-500/20">
-                                            <x-lucide-x-circle class="size-3" />
-                                            <span>{{ ucwords(str_replace('_', ' ', $r)) }}</span>
-                                        </span>
-                                    @endif
-                                </x-ui.table-cell>
+            <x-ui.card-content class="p-6">
+                @php
+                    $attemptColumns = [
+                        ['key' => 'reason', 'label' => 'Reason'],
+                        ['key' => 'identifier', 'label' => 'Attempted Identifier'],
+                        ['key' => 'user', 'label' => 'User'],
+                        ['key' => 'channel', 'label' => 'Channel'],
+                        ['key' => 'client', 'label' => 'Client Platform'],
+                        ['key' => 'ip', 'label' => 'IP Address'],
+                        ['key' => 'location', 'label' => 'Location'],
+                        ['key' => 'time', 'label' => 'Timestamp'],
+                    ];
+                    $attemptRows = $attempts->map(fn ($att) => [
+                        'id'         => $att->id,
+                        'reason'     => ucwords(str_replace('_', ' ', strtolower($att->reason ?? 'unknown'))),
+                        'identifier' => $att->identifier_attempted ?: 'Unknown',
+                        'user'       => $att->user ? $att->user->name . ' (#' . $att->user->id . ')' : 'Unauthenticated',
+                        'channel'    => $att->channel ?: 'Web',
+                        'client'     => ($att->browser ?: 'Browser') . ' on ' . ($att->os ?: 'OS') . ($att->device_type ? ' (' . $att->device_type . ')' : ''),
+                        'ip'         => $att->ip_address ?? '—',
+                        'location'   => $att->location_label ?: 'Local',
+                        'time'       => $att->created_at?->format('Y-m-d H:i:s') ?? '—',
+                    ])->values()->all();
+                @endphp
 
-                                <!-- Identifier / User -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col">
-                                        <span class="font-mono text-xs font-bold text-foreground">{{ $att->identifier_attempted ?: 'Unknown' }}</span>
-                                        @if ($att->user)
-                                            <span class="text-[11px] text-muted-foreground">{{ $att->user->name }} (ID: #{{ $att->user->id }})</span>
-                                        @else
-                                            <span class="text-[10px] text-muted-foreground">Unauthenticated Attempt</span>
-                                        @endif
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Channel Badge -->
-                                <x-ui.table-cell>
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-muted text-muted-foreground border border-border">
-                                        {{ $att->channel ?: 'Web' }}
-                                    </span>
-                                </x-ui.table-cell>
-
-                                <!-- Client Browser & OS -->
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-1.5">
-                                        @if ($att->device_type === 'Mobile')
-                                            <x-lucide-smartphone class="size-3.5 text-muted-foreground shrink-0" />
-                                        @elseif ($att->device_type === 'Tablet')
-                                            <x-lucide-tablet class="size-3.5 text-muted-foreground shrink-0" />
-                                        @else
-                                            <x-lucide-monitor class="size-3.5 text-muted-foreground shrink-0" />
-                                        @endif
-                                        <span class="text-xs font-medium text-foreground">
-                                            {{ $att->browser ?: 'Browser' }} on {{ $att->os ?: 'OS' }}
-                                        </span>
-                                    </div>
-                                    <div class="text-[10px] text-muted-foreground truncate max-w-xs font-mono mt-0.5" title="{{ $att->user_agent }}">
-                                        {{ $att->user_agent ?: '-€”' }}
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- IP & Location -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col">
-                                        <span class="text-xs font-mono font-medium text-foreground">{{ $att->ip_address }}</span>
-                                        <span class="text-[10px] text-muted-foreground flex items-center gap-1">
-                                            <x-lucide-map-pin class="size-2.5" />
-                                            <span>{{ $att->location_label ?: 'Local' }}</span>
-                                        </span>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Timestamp -->
-                                <x-ui.table-cell class="text-right text-xs text-muted-foreground font-mono">
-                                    {{ $att->created_at ? $att->created_at->format('M d, Y H:i:s') : '-€”' }}
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @empty
-                            <x-ui.table-row>
-                                <x-ui.table-cell colspan="6" class="h-32 text-center text-muted-foreground">
-                                    <div class="flex flex-col items-center justify-center gap-2">
-                                        <x-lucide-shield-check class="size-8 text-emerald-500/50" />
-                                        <p class="text-sm font-medium">No failed authentication or lockscreen attempts logged</p>
-                                    </div>
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @endforelse
-                    </x-ui.table-body>
-                </x-ui.table>
+                @if (count($attemptRows) === 0)
+                    <div class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+                        <x-lucide-shield-check class="size-8 text-emerald-500/50" />
+                        <p class="text-sm font-medium">No failed authentication or lockscreen attempts logged</p>
+                    </div>
+                @else
+                    <x-ui.data-table :columns="$attemptColumns" :rows="$attemptRows" :page-size="10" :selectable="false" search-placeholder="Filter attempts..." />
+                @endif
             </x-ui.card-content>
         </x-ui.card>
     </div>
@@ -211,81 +132,35 @@
                 </div>
             </x-ui.card-header>
 
-            <x-ui.card-content class="p-0">
-                <x-ui.table>
-                    <x-ui.table-header class="bg-muted/40">
-                        <x-ui.table-row>
-                            <x-ui.table-head>Event</x-ui.table-head>
-                            <x-ui.table-head>User / Identifier</x-ui.table-head>
-                            <x-ui.table-head>IP Address</x-ui.table-head>
-                            <x-ui.table-head>Client / Browser</x-ui.table-head>
-                            <x-ui.table-head class="text-right">Timestamp</x-ui.table-head>
-                        </x-ui.table-row>
-                    </x-ui.table-header>
-                    <x-ui.table-body>
-                        @forelse ($logs as $log)
-                            <x-ui.table-row class="hover:bg-muted/30 transition">
-                                <x-ui.table-cell>
-                                    @php $ev = strtolower($log->event_type ?? ''); @endphp
-                                    @if (str_contains($ev, 'success'))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                            <x-lucide-check-circle-2 class="size-3" />
-                                            Success
-                                        </span>
-                                    @elseif (str_contains($ev, 'fail'))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                            <x-lucide-x-circle class="size-3" />
-                                            Failed Attempt
-                                        </span>
-                                    @elseif (str_contains($ev, 'lock'))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                                            <x-lucide-lock class="size-3" />
-                                            Locked Out
-                                        </span>
-                                    @else
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                                            <x-lucide-shield-alert class="size-3" />
-                                            {{ ucwords(str_replace('_', ' ', $ev)) }}
-                                        </span>
-                                    @endif
-                                </x-ui.table-cell>
+            <x-ui.card-content class="p-6">
+                @php
+                    $logColumns = [
+                        ['key' => 'event', 'label' => 'Event'],
+                        ['key' => 'user', 'label' => 'User / Identifier'],
+                        ['key' => 'email', 'label' => 'Email'],
+                        ['key' => 'ip', 'label' => 'IP Address'],
+                        ['key' => 'client', 'label' => 'Client / Browser'],
+                        ['key' => 'time', 'label' => 'Timestamp'],
+                    ];
+                    $logRows = $logs->map(fn ($log) => [
+                        'id'     => $log->id,
+                        'event'  => ucwords(str_replace('_', ' ', strtolower($log->event_type ?? 'event'))),
+                        'user'   => $log->user->name ?? ($log->identifier_attempted ?: 'Unauthenticated'),
+                        'email'  => $log->user->email ?? '—',
+                        'ip'     => $log->ip_address ?? '—',
+                        'client' => \Illuminate\Support\Str::limit($log->user_agent ?? '—', 60),
+                        'time'   => $log->created_at?->format('Y-m-d H:i:s') ?? '—',
+                    ])->values()->all();
+                @endphp
 
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col">
-                                        @if ($log->user)
-                                            <span class="font-semibold text-xs text-foreground">{{ $log->user->name }}</span>
-                                            <span class="text-[11px] text-muted-foreground">{{ $log->user->email }}</span>
-                                        @else
-                                            <span class="font-mono text-xs text-foreground">{{ $log->identifier_attempted }}</span>
-                                            <span class="text-[10px] text-muted-foreground">Unauthenticated Attempt</span>
-                                        @endif
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell class="text-xs text-muted-foreground font-mono">
-                                    {{ $log->ip_address }}
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell class="text-xs text-muted-foreground truncate max-w-xs font-mono">
-                                    {{ $log->user_agent ?? '-€”' }}
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell class="text-right text-xs text-muted-foreground font-mono">
-                                    {{ $log->created_at ? $log->created_at->format('M d, Y H:i:s') : '-€”' }}
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @empty
-                            <x-ui.table-row>
-                                <x-ui.table-cell colspan="5" class="h-32 text-center text-muted-foreground">
-                                    <div class="flex flex-col items-center justify-center gap-2">
-                                        <x-lucide-shield-check class="size-8 text-muted-foreground/50" />
-                                        <p class="text-sm font-medium">No security alerts or lockout events recorded</p>
-                                    </div>
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @endforelse
-                    </x-ui.table-body>
-                </x-ui.table>
+                @if (count($logRows) === 0)
+                    <div class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+                        <x-lucide-shield-check class="size-8 text-muted-foreground/50" />
+                        <p class="text-sm font-medium">No security alerts or lockout events recorded</p>
+                    </div>
+                @else
+                    <x-ui.data-table :columns="$logColumns" :rows="$logRows" :page-size="10" :selectable="false" search-placeholder="Filter events..." />
+                @endif
             </x-ui.card-content>
         </x-ui.card>
     </div>

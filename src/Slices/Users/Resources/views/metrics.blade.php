@@ -186,115 +186,49 @@
                 </div>
             </x-ui.card-header>
 
-            <x-ui.card-content class="p-0">
-                <x-ui.table>
-                    <x-ui.table-header class="bg-muted/40">
-                        <x-ui.table-row>
-                            <x-ui.table-head>User Information</x-ui.table-head>
-                            <x-ui.table-head>Employment / Role</x-ui.table-head>
-                            <x-ui.table-head>Device & Platform</x-ui.table-head>
-                            <x-ui.table-head>Network & IP</x-ui.table-head>
-                            <x-ui.table-head>Session Status</x-ui.table-head>
-                            <x-ui.table-head class="text-right">Action</x-ui.table-head>
-                        </x-ui.table-row>
-                    </x-ui.table-header>
-                    <x-ui.table-body>
-                        @forelse ($activeSessions as $session)
-                            @php $u = $session->user; @endphp
-                            <x-ui.table-row class="hover:bg-muted/30 transition">
-                                <!-- User Information -->
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-3">
-                                        <div class="size-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20">
-                                            {{ strtoupper(substr($u->name ?? 'U', 0, 1)) }}
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-semibold text-foreground text-xs">{{ $u->name ?? 'Unknown' }}</span>
-                                            <span class="text-[11px] text-muted-foreground">{{ $u->email ?? '—' }}</span>
-                                            @if ($u?->detail?->cnic)
-                                                <span class="text-[10px] text-muted-foreground/80 font-mono">CNIC: {{ $u->detail->cnic }}</span>
-                                            @endif
-                                        </div>
-                                    </div>
-                                </x-ui.table-cell>
+            <x-ui.card-content class="p-6">
+                @php
+                    $sessionColumns = [
+                        ['key' => 'user', 'label' => 'User'],
+                        ['key' => 'email', 'label' => 'Email'],
+                        ['key' => 'role', 'label' => 'Designation'],
+                        ['key' => 'department', 'label' => 'Department'],
+                        ['key' => 'device', 'label' => 'Device'],
+                        ['key' => 'browser_os', 'label' => 'Browser / OS'],
+                        ['key' => 'ip', 'label' => 'IP Address'],
+                        ['key' => 'location', 'label' => 'Location'],
+                        ['key' => 'status', 'label' => 'Session Status'],
+                    ];
+                    $sessionRows = $activeSessions->map(fn ($session) => [
+                        'id'         => $session->id,
+                        'user'       => $session->user->name ?? 'Unknown',
+                        'email'      => $session->user->email ?? '—',
+                        'role'       => $session->user?->detail?->designation ?? 'Team Member',
+                        'department' => $session->user?->detail?->department ?? 'General',
+                        'device'     => $session->device_name ?? '—',
+                        'browser_os' => ($session->browser ?? 'Browser') . ' on ' . ($session->os ?? 'OS'),
+                        'ip'         => $session->ip_address ?? '—',
+                        'location'   => $session->location_label ?? '—',
+                        'status'     => $session->is_current ? 'Active now' : ($session->last_active_at?->format('Y-m-d H:i') ?? '—'),
+                        'revoke_url' => route('users.devices.destroy', $session->id),
+                    ])->values()->all();
+                @endphp
 
-                                <!-- Employment / Role -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col text-xs">
-                                        <span class="font-semibold text-foreground">{{ $u?->detail?->designation ?? 'Team Member' }}</span>
-                                        <span class="text-[11px] text-muted-foreground">{{ $u?->detail?->department ?? 'General' }}</span>
-                                        @if ($u?->detail?->employee_id)
-                                            <span class="text-[10px] text-muted-foreground font-mono">ID: {{ $u->detail->employee_id }}</span>
-                                        @endif
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Device & Platform -->
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-2">
-                                        @php $plat = strtolower($session->platform ?? 'web'); @endphp
-                                        @if ($plat === 'android' || $plat === 'ios')
-                                            <x-lucide-smartphone class="size-4 text-emerald-500 shrink-0" />
-                                        @else
-                                            <x-lucide-laptop class="size-4 text-blue-500 shrink-0" />
-                                        @endif
-                                        <div class="flex flex-col text-xs">
-                                            <span class="font-medium text-foreground">{{ $session->device_name }}</span>
-                                            <span class="text-[11px] text-muted-foreground font-mono">{{ $session->browser ?? 'Browser' }} on {{ $session->os ?? 'OS' }}</span>
-                                        </div>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Network & IP -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col text-xs font-mono">
-                                        <span class="text-foreground">{{ $session->ip_address }}</span>
-                                        @if($session->location_label)
-                                            <div class="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                                <x-lucide-map-pin class="size-3 text-rose-500 shrink-0" />
-                                                <span>{{ $session->location_label }}</span>
-                                            </div>
-                                        @endif
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Session Status -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col text-xs">
-                                        @if ($session->is_current)
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                                <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                                Active Now
-                                            </span>
-                                        @else
-                                            <span class="text-muted-foreground font-mono">
-                                                {{ $session->last_active_at ? $session->last_active_at->diffForHumans() : 'Recently' }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Action: Revoke Device -->
-                                <x-ui.table-cell class="text-right">
-                                    <form action="{{ route('users.devices.destroy', $session->id) }}" method="POST" onsubmit="return confirm('Terminate and revoke this active device session?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 rounded-lg transition">
-                                            <x-lucide-log-out class="size-3.5" />
-                                            <span>Revoke</span>
-                                        </button>
-                                    </form>
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @empty
-                            <x-ui.table-row>
-                                <x-ui.table-cell colspan="6" class="text-center py-10 text-muted-foreground text-sm">
-                                    No active sessions found.
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @endforelse
-                    </x-ui.table-body>
-                </x-ui.table>
+                @if (count($sessionRows) === 0)
+                    <p class="py-10 text-center text-sm text-muted-foreground">No active sessions found.</p>
+                @else
+                    <x-ui.data-table :columns="$sessionColumns" :rows="$sessionRows" :page-size="10" :selectable="false" search-placeholder="Filter sessions...">
+                        <x-slot:actions>
+                            <form method="POST" :action="item.r.revoke_url" class="inline" onsubmit="return confirm('Terminate and revoke this active device session?')">
+                                @csrf
+                                @method('DELETE')
+                                <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                                    <x-lucide-log-out class="size-4" /> Revoke
+                                </x-ui.button>
+                            </form>
+                        </x-slot:actions>
+                    </x-ui.data-table>
+                @endif
             </x-ui.card-content>
         </x-ui.card>
     </div>
@@ -314,77 +248,45 @@
                 </div>
             </x-ui.card-header>
 
-            <x-ui.card-content class="p-0">
-                <x-ui.table>
-                    <x-ui.table-header class="bg-muted/40">
-                        <x-ui.table-row>
-                            <x-ui.table-head>User</x-ui.table-head>
-                            <x-ui.table-head>Device & Platform</x-ui.table-head>
-                            <x-ui.table-head>Browser / OS</x-ui.table-head>
-                            <x-ui.table-head>IP & Location</x-ui.table-head>
-                            <x-ui.table-head>Last Active</x-ui.table-head>
-                            <x-ui.table-head class="text-right">Action</x-ui.table-head>
-                        </x-ui.table-row>
-                    </x-ui.table-header>
-                    <x-ui.table-body>
-                        @forelse ($devices as $dev)
-                            <x-ui.table-row class="hover:bg-muted/30 transition">
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="size-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20">
-                                            {{ strtoupper(substr($dev->user->name ?? 'U', 0, 1)) }}
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-semibold text-foreground text-xs">{{ $dev->user->name ?? 'Unknown User' }}</span>
-                                            <span class="text-[11px] text-muted-foreground">{{ $dev->user->email ?? '—' }}</span>
-                                        </div>
-                                    </div>
-                                </x-ui.table-cell>
+            <x-ui.card-content class="p-6">
+                @php
+                    $deviceColumns = [
+                        ['key' => 'user', 'label' => 'User'],
+                        ['key' => 'email', 'label' => 'Email'],
+                        ['key' => 'device', 'label' => 'Device'],
+                        ['key' => 'browser_os', 'label' => 'Browser / OS'],
+                        ['key' => 'ip', 'label' => 'IP Address'],
+                        ['key' => 'location', 'label' => 'Location'],
+                        ['key' => 'last_active', 'label' => 'Last Active'],
+                    ];
+                    $deviceRows = $devices->map(fn ($dev) => [
+                        'id'          => $dev->id,
+                        'user'        => $dev->user->name ?? 'Unknown User',
+                        'email'       => $dev->user->email ?? '—',
+                        'device'      => $dev->device_name ?? '—',
+                        'browser_os'  => ($dev->browser ?? 'Browser') . ' / ' . ($dev->os ?? 'OS'),
+                        'ip'          => $dev->ip_address ?? '—',
+                        'location'    => $dev->location_label ?? 'Local / Remote',
+                        'last_active' => $dev->last_active_at?->format('Y-m-d H:i') ?? 'Never',
+                        'revoke_url'  => route('users.devices.destroy', $dev->id),
+                    ])->values()->all();
+                @endphp
 
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-2 text-xs">
-                                        <x-lucide-laptop class="size-4 text-primary shrink-0" />
-                                        <span class="font-medium text-foreground">{{ $dev->device_name }}</span>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell>
-                                    <span class="text-xs text-muted-foreground font-mono">{{ $dev->browser ?? 'Browser' }} / {{ $dev->os ?? 'OS' }}</span>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col text-xs font-mono">
-                                        <span class="text-foreground">{{ $dev->ip_address }}</span>
-                                        <span class="text-[11px] text-muted-foreground">{{ $dev->location_label ?? 'Local / Remote' }}</span>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell>
-                                    <span class="text-xs text-muted-foreground font-mono">
-                                        {{ $dev->last_active_at ? $dev->last_active_at->diffForHumans() : 'Never' }}
-                                    </span>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell class="text-right">
-                                    <form action="{{ route('users.devices.destroy', $dev->id) }}" method="POST" onsubmit="return confirm('Revoke this device?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 rounded-lg transition">
-                                            <x-lucide-trash-2 class="size-3.5" />
-                                            <span>Revoke</span>
-                                        </button>
-                                    </form>
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @empty
-                            <x-ui.table-row>
-                                <x-ui.table-cell colspan="6" class="text-center py-10 text-muted-foreground text-sm">
-                                    No registered devices found.
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @endforelse
-                    </x-ui.table-body>
-                </x-ui.table>
+                @if (count($deviceRows) === 0)
+                    <p class="py-10 text-center text-sm text-muted-foreground">No registered devices found.</p>
+                @else
+                    <x-ui.data-table :columns="$deviceColumns" :rows="$deviceRows" :page-size="10" :selectable="false" search-placeholder="Filter devices...">
+                        <x-slot:actions>
+                            <form method="POST" :action="item.r.revoke_url" class="inline" onsubmit="return confirm('Revoke this device?')">
+                                @csrf
+                                @method('DELETE')
+                                <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                                    <x-lucide-trash-2 class="size-4" /> Revoke
+                                </x-ui.button>
+                            </form>
+                        </x-slot:actions>
+                    </x-ui.data-table>
+                @endif
             </x-ui.card-content>
         </x-ui.card>
     </div>
@@ -483,97 +385,44 @@
                 </div>
             </x-ui.card-header>
 
-            <x-ui.card-content class="p-0">
-                <x-ui.table>
-                    <x-ui.table-header class="bg-muted/40">
-                        <x-ui.table-row>
-                            <x-ui.table-head>User</x-ui.table-head>
-                            <x-ui.table-head>Location / Coordinates</x-ui.table-head>
-                            <x-ui.table-head>IP & Telemetry</x-ui.table-head>
-                            <x-ui.table-head>Source & Device</x-ui.table-head>
-                            <x-ui.table-head>Timestamp</x-ui.table-head>
-                            <x-ui.table-head class="text-right">Map View</x-ui.table-head>
-                        </x-ui.table-row>
-                    </x-ui.table-header>
-                    <x-ui.table-body>
-                        @forelse ($locationRecords as $loc)
-                            <x-ui.table-row class="hover:bg-muted/30 transition">
-                                <!-- User -->
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="size-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20">
-                                            {{ strtoupper(substr($loc->user->name ?? 'U', 0, 1)) }}
-                                        </div>
-                                        <div class="flex flex-col">
-                                            <span class="font-semibold text-foreground text-xs">{{ $loc->user->name ?? 'Unknown User' }}</span>
-                                            <span class="text-[11px] text-muted-foreground">{{ $loc->user->email ?? '—' }}</span>
-                                        </div>
-                                    </div>
-                                </x-ui.table-cell>
+            <x-ui.card-content class="p-6">
+                @php
+                    $locationColumns = [
+                        ['key' => 'user', 'label' => 'User'],
+                        ['key' => 'email', 'label' => 'Email'],
+                        ['key' => 'location', 'label' => 'Location'],
+                        ['key' => 'coordinates', 'label' => 'Coordinates'],
+                        ['key' => 'ip', 'label' => 'IP Address'],
+                        ['key' => 'device', 'label' => 'Device'],
+                        ['key' => 'source', 'label' => 'Source'],
+                        ['key' => 'time', 'label' => 'Timestamp'],
+                    ];
+                    $locationRows = $locationRecords->values()->map(fn ($loc, $i) => [
+                        'id'          => $i + 1,
+                        'user'        => $loc->user->name ?? 'Unknown User',
+                        'email'       => $loc->user->email ?? '—',
+                        'location'    => $loc->location_label ?? '—',
+                        'coordinates' => ($loc->latitude && $loc->longitude) ? $loc->latitude . ', ' . $loc->longitude : '—',
+                        'ip'          => $loc->ip_address ?? '—',
+                        'device'      => $loc->device_name ?? '—',
+                        'source'      => $loc->source ?? '—',
+                        'time'        => $loc->last_active_at ? \Carbon\Carbon::parse($loc->last_active_at)->format('Y-m-d H:i:s') : '—',
+                        'map_url'     => ($loc->latitude && $loc->longitude) ? 'https://www.google.com/maps?q=' . $loc->latitude . ',' . $loc->longitude : null,
+                    ])->all();
+                @endphp
 
-                                <!-- Location / Coordinates -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col gap-1 text-xs">
-                                        <div class="flex items-center gap-1.5 font-medium text-foreground">
-                                            <x-lucide-map-pin class="size-3.5 text-rose-500 shrink-0" />
-                                            <span>{{ $loc->location_label }}</span>
-                                        </div>
-                                        @if($loc->latitude && $loc->longitude)
-                                            <span class="text-[11px] text-muted-foreground font-mono">
-                                                Lat: {{ $loc->latitude }}, Lng: {{ $loc->longitude }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- IP & Telemetry -->
-                                <x-ui.table-cell>
-                                    <span class="text-xs font-mono font-medium text-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border">
-                                        {{ $loc->ip_address }}
-                                    </span>
-                                </x-ui.table-cell>
-
-                                <!-- Source & Device -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col text-xs">
-                                        <span class="font-medium text-foreground">{{ $loc->device_name }}</span>
-                                        <span class="text-[11px] text-muted-foreground">{{ $loc->source }}</span>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Timestamp -->
-                                <x-ui.table-cell>
-                                    <div class="flex flex-col text-xs font-mono">
-                                        <span class="text-foreground">
-                                            {{ $loc->last_active_at ? \Carbon\Carbon::parse($loc->last_active_at)->diffForHumans() : 'Recently' }}
-                                        </span>
-                                        <span class="text-[10px] text-muted-foreground">
-                                            {{ $loc->last_active_at ? \Carbon\Carbon::parse($loc->last_active_at)->format('Y-m-d H:i:s') : '—' }}
-                                        </span>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <!-- Map View -->
-                                <x-ui.table-cell class="text-right">
-                                    @if($loc->latitude && $loc->longitude)
-                                        <a href="https://www.google.com/maps?q={{ $loc->latitude }},{{ $loc->longitude }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 border border-rose-500/20 transition">
-                                            <x-lucide-map class="size-3.5" />
-                                            <span>Open Map</span>
-                                        </a>
-                                    @else
-                                        <span class="text-xs text-muted-foreground font-mono">No GPS</span>
-                                    @endif
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @empty
-                            <x-ui.table-row>
-                                <x-ui.table-cell colspan="6" class="text-center py-10 text-muted-foreground text-sm">
-                                    No location telemetry captured yet.
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @endforelse
-                    </x-ui.table-body>
-                </x-ui.table>
+                @if (count($locationRows) === 0)
+                    <p class="py-10 text-center text-sm text-muted-foreground">No location telemetry captured yet.</p>
+                @else
+                    <x-ui.data-table :columns="$locationColumns" :rows="$locationRows" :page-size="10" :selectable="false" search-placeholder="Filter locations...">
+                        <x-slot:actions>
+                            <x-ui.button as="a" ::href="item.r.map_url" x-show="item.r.map_url" target="_blank" rel="noopener noreferrer" variant="ghost" size="sm">
+                                <x-lucide-map class="size-4" /> Open Map
+                            </x-ui.button>
+                            <span x-show="!item.r.map_url" class="text-xs text-muted-foreground">No GPS</span>
+                        </x-slot:actions>
+                    </x-ui.data-table>
+                @endif
             </x-ui.card-content>
         </x-ui.card>
     </div>
@@ -593,83 +442,32 @@
                 </div>
             </x-ui.card-header>
 
-            <x-ui.card-content class="p-0">
-                <x-ui.table>
-                    <x-ui.table-header class="bg-muted/40">
-                        <x-ui.table-row>
-                            <x-ui.table-head>Event</x-ui.table-head>
-                            <x-ui.table-head>User / Identifier</x-ui.table-head>
-                            <x-ui.table-head>IP Address</x-ui.table-head>
-                            <x-ui.table-head>Client / Browser</x-ui.table-head>
-                            <x-ui.table-head class="text-right">Timestamp</x-ui.table-head>
-                        </x-ui.table-row>
-                    </x-ui.table-header>
-                    <x-ui.table-body>
-                        @forelse ($logs as $log)
-                            <x-ui.table-row class="hover:bg-muted/30 transition">
-                                <x-ui.table-cell>
-                                    @php $ev = strtolower($log->event_type ?? ''); @endphp
-                                    @if (str_contains($ev, 'success'))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                            <x-lucide-check-circle-2 class="size-3" />
-                                            Success
-                                        </span>
-                                    @elseif (str_contains($ev, 'fail'))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                            <x-lucide-x-circle class="size-3" />
-                                            Failed Attempt
-                                        </span>
-                                    @elseif (str_contains($ev, 'lock'))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                                            <x-lucide-lock class="size-3" />
-                                            Locked Out
-                                        </span>
-                                    @else
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-muted text-muted-foreground border border-border">
-                                            <x-lucide-info class="size-3" />
-                                            {{ ucwords(str_replace('_', ' ', $log->event_type)) }}
-                                        </span>
-                                    @endif
-                                </x-ui.table-cell>
+            <x-ui.card-content class="p-6">
+                @php
+                    $logColumns = [
+                        ['key' => 'event', 'label' => 'Event'],
+                        ['key' => 'user', 'label' => 'User / Identifier'],
+                        ['key' => 'identifier', 'label' => 'Identifier'],
+                        ['key' => 'ip', 'label' => 'IP Address'],
+                        ['key' => 'client', 'label' => 'Client / Browser'],
+                        ['key' => 'time', 'label' => 'Timestamp'],
+                    ];
+                    $logRows = $logs->map(fn ($log) => [
+                        'id'         => $log->id,
+                        'event'      => ucwords(str_replace('_', ' ', strtolower($log->event_type ?? 'event'))),
+                        'user'       => $log->user->name ?? $log->identifier_attempted ?? 'Unknown',
+                        'identifier' => $log->identifier_attempted ?? $log->user->email ?? '—',
+                        'ip'         => $log->ip_address ?? '—',
+                        'client'     => $log->user_agent ? \Illuminate\Support\Str::limit($log->user_agent, 60) : 'Unknown client',
+                        'time'       => $log->created_at?->format('Y-m-d H:i:s') ?? '—',
+                    ])->values()->all();
+                @endphp
 
-                                <x-ui.table-cell>
-                                    <div class="flex items-center gap-2">
-                                        <div class="size-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0">
-                                            {{ strtoupper(substr($log->user->name ?? $log->identifier_attempted ?? 'U', 0, 1)) }}
-                                        </div>
-                                        <div class="flex flex-col text-xs">
-                                            <span class="font-medium text-foreground">{{ $log->user->name ?? $log->identifier_attempted ?? 'Unknown' }}</span>
-                                            <span class="text-[11px] text-muted-foreground">{{ $log->identifier_attempted ?? $log->user->email ?? '' }}</span>
-                                        </div>
-                                    </div>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell>
-                                    <span class="text-xs text-muted-foreground font-mono">{{ $log->ip_address ?? '—' }}</span>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell>
-                                    <span class="text-xs text-muted-foreground truncate max-w-xs block font-mono" title="{{ $log->user_agent }}">
-                                        {{ $log->user_agent ? substr($log->user_agent, 0, 45) . '...' : 'Unknown client' }}
-                                    </span>
-                                </x-ui.table-cell>
-
-                                <x-ui.table-cell class="text-right">
-                                    <div class="flex flex-col text-xs font-mono">
-                                        <span class="text-foreground">{{ $log->created_at ? $log->created_at->diffForHumans() : '—' }}</span>
-                                        <span class="text-[10px] text-muted-foreground">{{ $log->created_at ? $log->created_at->format('Y-m-d H:i:s') : '—' }}</span>
-                                    </div>
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @empty
-                            <x-ui.table-row>
-                                <x-ui.table-cell colspan="5" class="text-center py-10 text-muted-foreground text-sm">
-                                    No security logs recorded.
-                                </x-ui.table-cell>
-                            </x-ui.table-row>
-                        @endforelse
-                    </x-ui.table-body>
-                </x-ui.table>
+                @if (count($logRows) === 0)
+                    <p class="py-10 text-center text-sm text-muted-foreground">No security logs recorded.</p>
+                @else
+                    <x-ui.data-table :columns="$logColumns" :rows="$logRows" :page-size="10" :selectable="false" search-placeholder="Filter events..." />
+                @endif
             </x-ui.card-content>
         </x-ui.card>
     </div>

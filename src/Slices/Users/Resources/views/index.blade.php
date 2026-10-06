@@ -61,7 +61,35 @@
         </x-ui.card-content>
     </x-ui.card>
 
-    <!-- Users Table Card -->
+    @php
+        $columns = [
+            ['key' => 'name', 'label' => 'Name'],
+            ['key' => 'email', 'label' => 'Email'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'gender', 'label' => 'Gender'],
+            ['key' => 'employment', 'label' => 'Employment'],
+            ['key' => 'roles', 'label' => 'Roles'],
+            ['key' => 'permissions', 'label' => 'Permissions'],
+            ['key' => 'cnic', 'label' => 'CNIC'],
+            ['key' => 'phone', 'label' => 'Phone'],
+        ];
+        $rows = collect($pagedList->items)->map(fn ($user) => [
+            'id'          => $user->id,
+            'name'        => $user->name,
+            'email'       => $user->email,
+            'status'      => ucfirst($user->status ?? 'pending'),
+            'gender'      => $user->gender ? ucfirst($user->gender) : '—',
+            'employment'  => trim(implode(' · ', array_filter([$user->employeeId ?? null, $user->designation ?? $user->department ?? null]))) ?: '—',
+            'roles'       => !empty($user->roles) ? implode(', ', (array) $user->roles) : 'Standard User',
+            'permissions' => (int) ($user->permissionsCount ?? 0),
+            'cnic'        => $user->cnic ?? '—',
+            'phone'       => $user->phone ?? '—',
+            'edit_url'    => route('users.edit', $user->id),
+            'delete_url'  => route('users.destroy', $user->id),
+        ])->values()->all();
+    @endphp
+
+    <!-- Users Data Table Card -->
     <x-ui.card variant="sectioned" class="border shadow-xs bg-card">
         <x-ui.card-header class="border-b pb-4 px-6 pt-6">
             <div class="flex items-center justify-between">
@@ -70,152 +98,42 @@
                     <x-ui.card-description>All enterprise identities, access statuses, and assigned RBAC permissions</x-ui.card-description>
                 </div>
                 <div class="text-xs text-muted-foreground font-medium">
-                    Total: {{ count($pagedList->items) }} users
+                    Total: {{ $pagedList->totalCount }} users
                 </div>
             </div>
         </x-ui.card-header>
 
-        <x-ui.card-content class="p-0">
-            <x-ui.table>
-                <x-ui.table-header class="bg-muted/40">
-                    <x-ui.table-row>
-                        <x-ui.table-head>User Identity</x-ui.table-head>
-                        <x-ui.table-head>Gender</x-ui.table-head>
-                        <x-ui.table-head>Status</x-ui.table-head>
-                        <x-ui.table-head>Employment</x-ui.table-head>
-                        <x-ui.table-head>Roles & Permissions</x-ui.table-head>
-                        <x-ui.table-head>Contact / CNIC</x-ui.table-head>
-                        <x-ui.table-head class="text-right">Actions</x-ui.table-head>
-                    </x-ui.table-row>
-                </x-ui.table-header>
-                <x-ui.table-body>
-                    @forelse ($pagedList->items as $user)
-                        <x-ui.table-row class="hover:bg-muted/30 transition">
-                            <!-- User Identity -->
-                            <x-ui.table-cell>
-                                <div class="flex items-center gap-3">
-                                    <div class="size-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20">
-                                        {{ strtoupper(substr($user->name, 0, 1)) }}
-                                    </div>
-                                    <div class="flex flex-col">
-                                        <a href="{{ route('users.edit', $user->id) }}" class="font-semibold text-foreground hover:text-primary transition">
-                                            {{ $user->name }}
-                                        </a>
-                                        <span class="text-xs text-muted-foreground">{{ $user->email }}</span>
-                                    </div>
-                                </div>
-                            </x-ui.table-cell>
+        <x-ui.card-content class="p-6">
+            @if ($pagedList->totalCount > count($rows))
+                <p class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                    Showing the latest {{ count($rows) }} of {{ $pagedList->totalCount }} users. Raise <code>LARASLICE_DATA_TABLE_MAX_ROWS</code> to load more.
+                </p>
+            @endif
 
-                            <!-- Gender Badge -->
-                            <x-ui.table-cell>
-                                @php $g = strtolower($user->gender ?? ''); @endphp
-                                @if ($g === 'male')
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                                        Male
-                                    </span>
-                                @elseif ($g === 'female')
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-pink-500/10 text-pink-600 border border-pink-500/20">
-                                        Female
-                                    </span>
-                                @elseif ($g === 'other')
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/10 text-purple-600 border border-purple-500/20">
-                                        Other
-                                    </span>
-                                @else
-                                    <span class="text-xs text-muted-foreground/60">—</span>
-                                @endif
-                            </x-ui.table-cell>
-
-                            <!-- Status Badge -->
-                            <x-ui.table-cell>
-                                @if ($user->status === 'active')
-                                    <x-ui.badge variant="outline" class="text-emerald-600 border-emerald-500/30 bg-emerald-500/10">Active</x-ui.badge>
-                                @elseif ($user->status === 'suspended')
-                                    <x-ui.badge variant="outline" class="text-rose-600 border-rose-500/30 bg-rose-500/10">Suspended</x-ui.badge>
-                                @else
-                                    <x-ui.badge variant="outline" class="text-amber-600 border-amber-500/30 bg-amber-500/10">{{ ucfirst($user->status ?? 'pending') }}</x-ui.badge>
-                                @endif
-                            </x-ui.table-cell>
-
-                            <!-- Employment -->
-                            <x-ui.table-cell>
-                                <div class="flex flex-col text-xs">
-                                    @if (!empty($user->employeeId))
-                                        <span class="font-mono font-medium text-foreground">{{ $user->employeeId }}</span>
-                                    @else
-                                        <span class="text-muted-foreground/60">—</span>
-                                    @endif
-
-                                    @if (!empty($user->designation) || !empty($user->department))
-                                        <span class="text-[11px] text-muted-foreground truncate max-w-[140px]">
-                                            {{ $user->designation ?? $user->department }}
-                                        </span>
-                                    @endif
-                                </div>
-                            </x-ui.table-cell>
-
-                            <!-- Assigned Roles & Permissions Count -->
-                            <x-ui.table-cell>
-                                <div class="flex flex-col gap-1 items-start">
-                                    <div class="flex flex-wrap gap-1">
-                                        @if (!empty($user->roles))
-                                            @foreach ($user->roles as $roleName)
-                                                <x-ui.badge variant="secondary" class="text-[11px]">{{ $roleName }}</x-ui.badge>
-                                            @endforeach
-                                        @else
-                                            <span class="text-xs text-muted-foreground">Standard User</span>
-                                        @endif
-                                    </div>
-                                    @if (!empty($user->permissionsCount) && $user->permissionsCount > 0)
-                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" title="Effective active permissions">
-                                            <x-lucide-shield-check class="size-3" />
-                                            {{ $user->permissionsCount }} permissions
-                                        </span>
-                                    @endif
-                                </div>
-                            </x-ui.table-cell>
-
-                            <!-- Contact / CNIC -->
-                            <x-ui.table-cell>
-                                <div class="flex flex-col text-xs font-mono text-muted-foreground">
-                                    <span>{{ $user->cnic ?? '—' }}</span>
-                                    @if(!empty($user->phone))
-                                        <span class="text-[11px] text-muted-foreground/80">{{ $user->phone }}</span>
-                                    @endif
-                                </div>
-                            </x-ui.table-cell>
-
-                            <!-- Actions -->
-                            <x-ui.table-cell class="text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <x-ui.button href="{{ route('users.edit', $user->id) }}" as="a" variant="ghost" size="sm" class="size-8 p-0" title="Edit User">
-                                        <x-lucide-pencil class="size-4 text-muted-foreground" />
-                                    </x-ui.button>
-                                    <form action="{{ route('users.destroy', $user->id) }}" method="POST" class="inline" onsubmit="return confirm('Delete user account?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <x-ui.button type="submit" variant="ghost" size="sm" class="size-8 p-0 hover:text-destructive" title="Delete User">
-                                            <x-lucide-trash-2 class="size-4" />
-                                        </x-ui.button>
-                                    </form>
-                                </div>
-                            </x-ui.table-cell>
-                        </x-ui.table-row>
-                    @empty
-                        <x-ui.table-row>
-                            <x-ui.table-cell colspan="7" class="h-32 text-center text-muted-foreground">
-                                <div class="flex flex-col items-center justify-center gap-2">
-                                    <x-lucide-inbox class="size-8 text-muted-foreground/50" />
-                                    <p class="text-sm font-medium">No users found matching your criteria</p>
-                                    <x-ui.button href="{{ route('users.create') }}" as="a" variant="outline" size="sm">
-                                        Create new user
-                                    </x-ui.button>
-                                </div>
-                            </x-ui.table-cell>
-                        </x-ui.table-row>
-                    @endforelse
-                </x-ui.table-body>
-            </x-ui.table>
+            @if (count($rows) === 0)
+                <div class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+                    <x-lucide-inbox class="size-8 text-muted-foreground/50" />
+                    <p class="text-sm font-medium">No users found matching your criteria</p>
+                    <x-ui.button href="{{ route('users.create') }}" as="a" variant="outline" size="sm">
+                        Create new user
+                    </x-ui.button>
+                </div>
+            @else
+                <x-ui.data-table :columns="$columns" :rows="$rows" :page-size="10" search-placeholder="Filter users..." sticky-actions>
+                    <x-slot:actions>
+                        <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
+                            <x-lucide-pencil class="size-4" /> Edit
+                        </x-ui.button>
+                        <form method="POST" :action="item.r.delete_url" class="inline" onsubmit="return confirm('Delete user account?')">
+                            @csrf
+                            @method('DELETE')
+                            <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                                <x-lucide-trash-2 class="size-4" /> Delete
+                            </x-ui.button>
+                        </form>
+                    </x-slot:actions>
+                </x-ui.data-table>
+            @endif
         </x-ui.card-content>
     </x-ui.card>
 </div>

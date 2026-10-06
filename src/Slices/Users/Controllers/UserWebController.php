@@ -140,7 +140,7 @@ class UserWebController extends BaseSliceWebController
 
         $logs = UserSecurityLog::with(['user', 'user.detail'])
             ->orderByDesc('created_at')
-            ->limit(100)
+            ->limit((int) config('laraslice.data_table.max_rows', 1000))
             ->get();
 
         // Extract comprehensive location & telemetry history
@@ -247,8 +247,9 @@ class UserWebController extends BaseSliceWebController
     public function securityLogs(Request $request)
     {
         $this->authorizeSlice('security_logs');
-        $logs = UserSecurityLog::with('user')->orderByDesc('created_at')->limit(100)->get();
-        $attempts = UserAttempt::with('user')->orderByDesc('created_at')->limit(100)->get();
+        $maxRows = (int) config('laraslice.data_table.max_rows', 1000);
+        $logs = UserSecurityLog::with('user')->orderByDesc('created_at')->limit($maxRows)->get();
+        $attempts = UserAttempt::with('user')->orderByDesc('created_at')->limit($maxRows)->get();
 
         return view($this->getViewPrefix() . 'security_logs', [
             'logs'        => $logs,

@@ -255,194 +255,126 @@
                 <span class="text-sm font-bold text-foreground">MFA Directory</span>
                 <span class="text-xs px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{{ count($users) }} Records</span>
             </div>
-            <div class="flex flex-wrap items-center gap-3">
-                <select id="filterMethod" class="text-xs rounded-lg border border-input bg-background text-foreground py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-ring">
-                    <option value="all">All Methods</option>
-                    <option value="passkey">Passkey / WebAuthn</option>
-                    <option value="totp">Authenticator App (TOTP)</option>
-                    <option value="password">Password Only</option>
-                </select>
-                <select id="filterStatus" class="text-xs rounded-lg border border-input bg-background text-foreground py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-ring">
-                    <option value="all">All Statuses</option>
-                    <option value="enrolled">Enrolled</option>
-                    <option value="needs_enrollment">Needs Enrollment</option>
-                </select>
-                <input type="text" id="searchMfa" placeholder="Search user or CNIC..." class="text-xs rounded-lg border border-input bg-background text-foreground py-1.5 px-3 placeholder-muted-foreground w-48 focus:outline-none focus:ring-1 focus:ring-ring">
-            </div>
+
         </x-ui.card-header>
 
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-muted-foreground">
-                <thead class="text-xs font-semibold uppercase tracking-wider bg-muted/50 text-muted-foreground border-b border-border">
-                    <tr>
-                        <th class="px-4 py-3">ID</th>
-                        <th class="px-4 py-3">User</th>
-                        <th class="px-4 py-3">Role / Sector</th>
-                        <th class="px-4 py-3">MFA Method</th>
-                        <th class="px-4 py-3">Enrollment</th>
-                        <th class="px-3 py-3 text-center">Passkeys</th>
-                        <th class="px-3 py-3 text-center">TOTP</th>
-                        <th class="px-3 py-3 text-center">Recovery Codes</th>
-                        <th class="px-3 py-3 text-center">Devices</th>
-                        <th class="px-3 py-3 text-center">Pending</th>
-                        <th class="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                    @forelse($users as $u)
-                        @php
-                            $isEnrolled = $u->hasMfa();
-                            $formattedId = str_pad($u->id, 6, '0', STR_PAD_LEFT);
-                            $roleName = $u->roles->first()?->name ?? 'User';
-                            $dept = $u->detail?->department ?? 'General';
+        @php
+            $mfaColumns = [
+                ['key' => 'code', 'label' => 'ID'],
+                ['key' => 'name', 'label' => 'User'],
+                ['key' => 'cnic', 'label' => 'CNIC'],
+                ['key' => 'role', 'label' => 'Role'],
+                ['key' => 'dept', 'label' => 'Sector'],
+                ['key' => 'method', 'label' => 'MFA Method'],
+                ['key' => 'enrollment', 'label' => 'Enrollment'],
+                ['key' => 'passkeys', 'label' => 'Passkeys'],
+                ['key' => 'totp', 'label' => 'TOTP'],
+                ['key' => 'recovery', 'label' => 'Recovery Codes'],
+                ['key' => 'devices', 'label' => 'Devices'],
+            ];
+            $mfaRows = [];
+            $mfaPayloads = [];
+            foreach ($users as $u) {
+                $isEnrolled = $u->hasMfa();
+                $formattedId = str_pad($u->id, 6, '0', STR_PAD_LEFT);
+                $roleName = $u->roles->first()?->name ?? 'User';
+                $dept = $u->detail?->department ?? 'General';
 
-                            $activePasskeys = $u->passkeys ? $u->passkeys->whereNull('revoked_at') : collect();
-                            $passkeysCount = $activePasskeys->count();
-                            $hasTotp = !empty($u->mfa_secret) || $u->mfa_channel === 'totp';
+                $activePasskeys = $u->passkeys ? $u->passkeys->whereNull('revoked_at') : collect();
+                $passkeysCount = $activePasskeys->count();
+                $hasTotp = !empty($u->mfa_secret) || $u->mfa_channel === 'totp';
 
-                            if ($passkeysCount > 0 && $hasTotp) {
-                                $methodLabel = 'Passkey + Authenticator';
-                                $methodClass = 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20';
-                                $methodType = 'passkey';
-                            } elseif ($passkeysCount > 0 || $u->mfa_channel === 'webauthn') {
-                                $methodLabel = 'Passkey (FIDO2)';
-                                $methodClass = 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20';
-                                $methodType = 'passkey';
-                            } elseif ($hasTotp) {
-                                $methodLabel = 'Authenticator App';
-                                $methodClass = 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20';
-                                $methodType = 'totp';
-                            } else {
-                                $methodLabel = 'Password Only';
-                                $methodClass = 'bg-muted text-muted-foreground border-border';
-                                $methodType = 'password';
-                            }
+                if ($passkeysCount > 0 && $hasTotp) {
+                    $methodLabel = 'Passkey + Authenticator';
+                } elseif ($passkeysCount > 0 || $u->mfa_channel === 'webauthn') {
+                    $methodLabel = 'Passkey (FIDO2)';
+                } elseif ($hasTotp) {
+                    $methodLabel = 'Authenticator App';
+                } else {
+                    $methodLabel = 'Password Only';
+                }
 
-                            $recCodesCount = $u->recoveryCodes->whereNull('used_at')->count();
-                            if ($recCodesCount === 0 && !empty($u->two_factor_recovery_codes)) {
-                                $recCodesCount = is_array($u->two_factor_recovery_codes) ? count($u->two_factor_recovery_codes) : ($isEnrolled ? 8 : 0);
-                            }
-                            $devicesCount = $u->devices?->count() ?? 0;
-                        @endphp
+                $recCodesCount = $u->recoveryCodes->whereNull('used_at')->count();
+                if ($recCodesCount === 0 && !empty($u->two_factor_recovery_codes)) {
+                    $recCodesCount = is_array($u->two_factor_recovery_codes) ? count($u->two_factor_recovery_codes) : ($isEnrolled ? 8 : 0);
+                }
+                $devicesCount = $u->devices?->count() ?? 0;
 
-                        <!-- Clean Serialized Data for High-Fidelity Modal -->
-                        <script type="application/json" id="mfa-data-{{ $u->id }}">
-                        {!! json_encode([
-                            'id' => $u->id,
-                            'formattedId' => $formattedId,
-                            'name' => $u->name,
-                            'email' => $u->email,
-                            'cnic' => $u->detail?->cnic ?? 'N/A',
-                            'role' => $roleName,
-                            'dept' => $dept,
-                            'enrolled' => $isEnrolled,
-                            'methodLabel' => $methodLabel,
-                            'activeSince' => $u->mfa_confirmed_at ? $u->mfa_confirmed_at->format('d-m-Y h:i A') : ($isEnrolled ? 'Enrolled' : 'Not Enrolled'),
-                            'passkeys' => $passkeysCount,
-                            'hasTotp' => $hasTotp,
-                            'recoveryCodes' => $recCodesCount,
-                            'devices' => $devicesCount,
-                            'pending' => 0,
-                            'passkeysList' => $activePasskeys->map(fn($pk) => [
-                                'id' => $pk->id,
-                                'name' => $pk->label ?: $pk->name ?: 'Hardware Key / Biometrics',
-                                'credential_id' => substr($pk->credential_id, 0, 16) . '...',
-                                'created_at' => $pk->created_at ? $pk->created_at->format('d M Y, h:i A') : 'Recently',
-                                'last_used_at' => $pk->last_used_at ? $pk->last_used_at->diffForHumans() : 'Never'
-                            ])->values(),
-                            'devicesList' => ($u->devices ?? collect())->map(fn($d) => [
-                                'id' => $d->id,
-                                'device_name' => $d->device_name,
-                                'platform' => $d->platform ?? 'Desktop',
-                                'browser' => $d->browser ?? 'Browser',
-                                'ip_address' => $d->ip_address ?? '127.0.0.1',
-                                'last_active_at' => $d->last_active_at ? $d->last_active_at->diffForHumans() : 'Active Now'
-                            ])->values(),
-                            'logsList' => ($u->securityLogs ?? collect())->sortByDesc('created_at')->take(15)->values()->map(fn($l) => [
-                                'event' => $l->event,
-                                'severity' => $l->severity ?? 'info',
-                                'description' => $l->description,
-                                'ip_address' => $l->ip_address,
-                                'created_at' => $l->created_at ? $l->created_at->format('M d, H:i') : ''
-                            ])->values()
-                        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) !!}
-                        </script>
+                $mfaRows[] = [
+                    'id'         => $u->id,
+                    'code'       => $formattedId,
+                    'name'       => $u->name,
+                    'cnic'       => $u->detail?->cnic ?? 'N/A',
+                    'role'       => $roleName,
+                    'dept'       => $dept,
+                    'method'     => $methodLabel,
+                    'enrollment' => $isEnrolled ? 'Enrolled' : 'Needs Enrollment',
+                    'passkeys'   => $passkeysCount,
+                    'totp'       => $hasTotp ? 1 : 0,
+                    'recovery'   => $recCodesCount,
+                    'devices'    => $devicesCount,
+                ];
 
-                        <tr class="hover:bg-muted/40 transition-colors mfa-row" data-name="{{ strtolower($u->name) }}" data-cnic="{{ strtolower($u->detail?->cnic ?? '') }}" data-status="{{ $isEnrolled ? 'enrolled' : 'needs_enrollment' }}" data-method="{{ $methodType }}">
-                            <td class="px-4 py-3 font-mono text-xs font-semibold text-muted-foreground">
-                                {{ $formattedId }}
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-9 h-9 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center font-bold text-xs shrink-0">
-                                        {{ strtoupper(substr($u->name, 0, 2)) }}
-                                    </div>
-                                    <div>
-                                        <p class="font-medium text-foreground">{{ $u->name }}</p>
-                                        <p class="text-xs text-muted-foreground font-mono">{{ $u->detail?->cnic ?? 'N/A' }}</p>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <p class="font-medium text-foreground">{{ $roleName }}</p>
-                                <p class="text-xs text-muted-foreground">{{ $dept }}</p>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border {{ $methodClass }}">
-                                    {{ $methodLabel }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3">
-                                @if($isEnrolled)
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                        <span class="size-1.5 rounded-full bg-emerald-500"></span>
-                                        Enrolled
-                                    </span>
-                                @else
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-600 border border-red-500/20">
-                                        <span class="size-1.5 rounded-full bg-red-500"></span>
-                                        Needs Enrollment
-                                    </span>
-                                @endif
-                            </td>
-                            <td class="px-3 py-3 text-center">
-                                <span class="px-2 py-0.5 rounded text-xs font-mono {{ $passkeysCount > 0 ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-500/30' : 'bg-muted text-muted-foreground' }}">
-                                    {{ $passkeysCount }}
-                                </span>
-                            </td>
-                            <td class="px-3 py-3 text-center">
-                                <span class="px-2 py-0.5 rounded text-xs font-mono {{ $hasTotp ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold border border-purple-500/30' : 'bg-muted text-muted-foreground' }}">
-                                    {{ $hasTotp ? 1 : 0 }}
-                                </span>
-                            </td>
-                            <td class="px-3 py-3 text-center">
-                                <span class="px-2 py-0.5 rounded text-xs font-mono {{ $recCodesCount > 0 ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold border border-purple-500/30' : 'bg-muted text-muted-foreground' }}">
-                                    {{ $recCodesCount }}
-                                </span>
-                            </td>
-                            <td class="px-3 py-3 text-center">
-                                <span class="px-2 py-0.5 rounded text-xs font-mono {{ $devicesCount > 0 ? 'bg-muted font-medium text-foreground' : 'bg-muted text-muted-foreground' }}">
-                                    {{ $devicesCount }}
-                                </span>
-                            </td>
-                            <td class="px-3 py-3 text-center">
-                                <span class="px-2 py-0.5 rounded bg-muted text-xs font-mono font-medium text-muted-foreground">0</span>
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <button type="button" onclick="openRecoveryConsole({{ $u->id }})" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-xs transition-colors">
-                                    <x-lucide-sliders class="size-3.5" />
-                                    Manage
-                                </button>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="11" class="px-4 py-8 text-center text-muted-foreground">No identities available in MFA register.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+                // Serialized data for the recovery console modal (openRecoveryConsole reads #mfa-data-{id})
+                $mfaPayloads[$u->id] = [
+                    'id' => $u->id,
+                    'formattedId' => $formattedId,
+                    'name' => $u->name,
+                    'email' => $u->email,
+                    'cnic' => $u->detail?->cnic ?? 'N/A',
+                    'role' => $roleName,
+                    'dept' => $dept,
+                    'enrolled' => $isEnrolled,
+                    'methodLabel' => $methodLabel,
+                    'activeSince' => $u->mfa_confirmed_at ? $u->mfa_confirmed_at->format('d-m-Y h:i A') : ($isEnrolled ? 'Enrolled' : 'Not Enrolled'),
+                    'passkeys' => $passkeysCount,
+                    'hasTotp' => $hasTotp,
+                    'recoveryCodes' => $recCodesCount,
+                    'devices' => $devicesCount,
+                    'pending' => 0,
+                    'passkeysList' => $activePasskeys->map(fn($pk) => [
+                        'id' => $pk->id,
+                        'name' => $pk->label ?: $pk->name ?: 'Hardware Key / Biometrics',
+                        'credential_id' => substr($pk->credential_id, 0, 16) . '...',
+                        'created_at' => $pk->created_at ? $pk->created_at->format('d M Y, h:i A') : 'Recently',
+                        'last_used_at' => $pk->last_used_at ? $pk->last_used_at->diffForHumans() : 'Never'
+                    ])->values(),
+                    'devicesList' => ($u->devices ?? collect())->map(fn($d) => [
+                        'id' => $d->id,
+                        'device_name' => $d->device_name,
+                        'platform' => $d->platform ?? 'Desktop',
+                        'browser' => $d->browser ?? 'Browser',
+                        'ip_address' => $d->ip_address ?? '127.0.0.1',
+                        'last_active_at' => $d->last_active_at ? $d->last_active_at->diffForHumans() : 'Active Now'
+                    ])->values(),
+                    'logsList' => ($u->securityLogs ?? collect())->sortByDesc('created_at')->take(15)->values()->map(fn($l) => [
+                        'event' => $l->event,
+                        'severity' => $l->severity ?? 'info',
+                        'description' => $l->description,
+                        'ip_address' => $l->ip_address,
+                        'created_at' => $l->created_at ? $l->created_at->format('M d, H:i') : ''
+                    ])->values(),
+                ];
+            }
+        @endphp
+
+        @foreach ($mfaPayloads as $payloadId => $payload)
+            <script type="application/json" id="mfa-data-{{ $payloadId }}">{!! json_encode($payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) !!}</script>
+        @endforeach
+
+        <x-ui.card-content class="p-6">
+            @if (count($mfaRows) === 0)
+                <p class="py-8 text-center text-sm text-muted-foreground">No identities available in MFA register.</p>
+            @else
+                <x-ui.data-table :columns="$mfaColumns" :rows="$mfaRows" :page-size="10" :selectable="false" search-placeholder="Search user, CNIC, method or status..." sticky-actions>
+                    <x-slot:actions>
+                        <x-ui.button size="sm" class="bg-purple-600 text-white hover:bg-purple-700" @click="openRecoveryConsole(item.r.id)">
+                            <x-lucide-sliders class="size-4" /> Manage
+                        </x-ui.button>
+                    </x-slot:actions>
+                </x-ui.data-table>
+            @endif
+        </x-ui.card-content>
     </x-ui.card>
 </div>
 
@@ -960,33 +892,6 @@ function switchModalTab(tab) {
     });
 }
 
-// Client filtering
-document.getElementById('searchMfa').addEventListener('input', filterRows);
-document.getElementById('filterStatus').addEventListener('change', filterRows);
-document.getElementById('filterMethod').addEventListener('change', filterRows);
 
-function filterRows() {
-    const q = document.getElementById('searchMfa').value.toLowerCase();
-    const st = document.getElementById('filterStatus').value;
-    const method = document.getElementById('filterMethod').value;
-    const rows = document.querySelectorAll('.mfa-row');
-
-    rows.forEach(r => {
-        const name = r.getAttribute('data-name');
-        const cnic = r.getAttribute('data-cnic');
-        const status = r.getAttribute('data-status');
-        const rMethod = r.getAttribute('data-method');
-
-        const matchQ = !q || name.includes(q) || cnic.includes(q);
-        const matchSt = st === 'all' || status === st;
-        const matchMethod = method === 'all' || rMethod === method;
-
-        if (matchQ && matchSt && matchMethod) {
-            r.style.display = '';
-        } else {
-            r.style.display = 'none';
-        }
-    });
-}
 </script>
 @endsection
