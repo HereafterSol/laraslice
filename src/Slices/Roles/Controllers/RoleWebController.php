@@ -46,6 +46,8 @@ class RoleWebController extends BaseSliceWebController
 
     public function create()
     {
+        $this->authorizeSlice('create');
+
         $formClass = $this->getFormClass();
         $form = new $formClass();
         app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
@@ -61,6 +63,8 @@ class RoleWebController extends BaseSliceWebController
 
     public function edit(string|int $id)
     {
+        $this->authorizeSlice('edit');
+
         $form = $this->getService()->getItemById($id);
 
         if (!$form) {

@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use LaraSlice\Slices\Users\Controllers\UserWebController;
 
 // 1. User Self-Service Hub (Accessible to ANY authenticated user without /admin prefix)
-Route::middleware(['web'])->group(function () {
+Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/account/settings', [UserWebController::class, 'settings'])->name('account.settings');
     Route::get('/security/settings', [UserWebController::class, 'settings'])->name('security.settings');
     Route::get('/profile', [UserWebController::class, 'settings'])->name('profile');
@@ -21,7 +21,7 @@ Route::middleware(['web'])->group(function () {
 
         Route::get('/security/settings/passkey/options', [UserWebController::class, 'passkeyRegisterOptions'])->name('security.settings.passkey.options');
     Route::post('/security/settings/passkey/verify', [UserWebController::class, 'passkeyRegisterVerify'])->name('security.settings.passkey.verify');
-    Route::match(['delete', 'post', 'get'], '/security/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('security.settings.passkey.destroy')->whereNumber('id');
+    Route::match(['delete', 'post'], '/security/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('security.settings.passkey.destroy')->whereNumber('id');
 
     // Lockscreen & Unlock Flow
     Route::get('/lockscreen', [UserWebController::class, 'lockscreen'])->name('lockscreen');
@@ -32,7 +32,7 @@ Route::middleware(['web'])->group(function () {
 });
 
 // 2. Admin User Management Slice (Protected administrative operations)
-Route::prefix('admin/users')->name('users.')->middleware(['web'])->group(function () {
+Route::prefix('admin/users')->name('users.')->middleware(['web', 'auth'])->group(function () {
     // Static Root & Creation
     Route::get('/', [UserWebController::class, 'index'])->name('index');
     Route::get('/create', [UserWebController::class, 'create'])->name('create');
@@ -68,7 +68,7 @@ Route::prefix('admin/users')->name('users.')->middleware(['web'])->group(functio
     Route::post('/settings/logout-others', [UserWebController::class, 'logoutOthers'])->name('settings.logout_others');
     Route::get('/settings/passkey/options', [UserWebController::class, 'passkeyRegisterOptions'])->name('settings.passkey.options');
     Route::post('/settings/passkey/verify', [UserWebController::class, 'passkeyRegisterVerify'])->name('settings.passkey.verify');
-    Route::match(['delete', 'post', 'get'], '/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('settings.passkey.destroy')->whereNumber('id');
+    Route::match(['delete', 'post'], '/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('settings.passkey.destroy')->whereNumber('id');
 
     // Session Lockscreen (Redirect admin prefix to clean unified /lockscreen)
     Route::get('/lockscreen', fn() => redirect()->route('lockscreen'))->name('lockscreen');

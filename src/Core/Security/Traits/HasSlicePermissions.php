@@ -31,10 +31,6 @@ trait HasSlicePermissions
     {
         $roles = is_array($role) ? $role : func_get_args();
 
-        if (in_array('super-admin', $roles, true) && isset($this->email) && $this->email === config('laraslice.super_admin_email', 'admin@laraslice.com')) {
-            return true;
-        }
-
         $userRoles = [];
         try {
             if ((method_exists($this, 'relationLoaded') && $this->relationLoaded('roles')) || isset($this->roles)) {

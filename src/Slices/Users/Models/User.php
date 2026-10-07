@@ -6,12 +6,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use LaraSlice\Core\Security\Traits\HasSlicePermissions;
 use LaraSlice\Slices\Roles\Models\Role;
 
 class User extends Authenticatable
 {
-    use Notifiable, HasSlicePermissions;
+    use HasApiTokens, Notifiable, HasSlicePermissions;
 
     protected $table = 'users';
 
