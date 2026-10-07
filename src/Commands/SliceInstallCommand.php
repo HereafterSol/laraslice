@@ -17,8 +17,8 @@ class SliceInstallCommand extends Command
     protected $signature = 'slice:install 
                             {--force : Overwrite existing welcome page and files}
                             {--skip-npm : Skip automatic npm install if node_modules is missing}
-                            {--email=admin@laraslice.com : Default admin email}
-                            {--password=password : Default admin password}';
+                            {--email=admin@laraslice.com : Super admin email}
+                            {--password= : Super admin password (a random one is generated when omitted)}';
 
     /**
      * The console command description.
@@ -83,17 +83,22 @@ class SliceInstallCommand extends Command
             return true;
         });
 
-        // 3. Run Database Migrations
+        // 3. Run Database Migrations (including Sanctum's token table for the API slices)
         $this->components->task('Running database migrations', function () {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('personal_access_tokens')) {
+                Artisan::call('vendor:publish', ['--tag' => 'sanctum-migrations']);
+            }
             Artisan::call('migrate', ['--force' => true]);
             return true;
         });
 
         // 4. Seed Super Admin User, Role & Permissions
         $email = $this->option('email');
-        $password = $this->option('password');
+        $passwordGiven = filled($this->option('password'));
+        $password = $passwordGiven ? (string) $this->option('password') : \Illuminate\Support\Str::password(20);
+        $adminCreated = false;
 
-        $this->components->task('Seeding Super Admin user [' . $email . '] & RBAC permissions', function () use ($email, $password) {
+        $this->components->task('Seeding Super Admin user [' . $email . '] & RBAC permissions', function () use ($email, $password, $passwordGiven, &$adminCreated) {
             // Find or create role
             $role = null;
             if (class_exists(Role::class)) {
@@ -123,14 +128,20 @@ class SliceInstallCommand extends Command
                 $userModelClass = User::class;
             }
 
-            $user = $userModelClass::updateOrCreate(
-                ['email' => $email],
-                [
+            // Re-running the installer never resets an existing account's password unless asked to
+            $user = $userModelClass::where('email', $email)->first();
+            if (! $user) {
+                $user = $userModelClass::create([
                     'name' => 'Administrator',
+                    'email' => $email,
                     'password' => Hash::make($password),
                     'status' => 'active',
-                ]
-            );
+                ]);
+                $adminCreated = true;
+            } elseif ($passwordGiven) {
+                $user->forceFill(['password' => Hash::make($password)])->save();
+                $adminCreated = true;
+            }
 
             // Ensure super-admin role is attached to user in role_user table
             if (isset($role) && isset($user->id) && \Illuminate\Support\Facades\Schema::hasTable('role_user')) {
@@ -255,10 +266,14 @@ class SliceInstallCommand extends Command
                 ['Landing Page', url('/')],
                 ['Login Portal', url('/login')],
                 ['Blueprint Studio', url('/laraslice/wizard')],
-                ['Default Email', $email],
-                ['Default Password', $password],
+                ['Super Admin Email', $email],
+                ['Super Admin Password', $adminCreated ? $password : '(unchanged: account already existed)'],
             ]
         );
+
+        if ($adminCreated && ! $passwordGiven) {
+            $this->components->warn('This generated password is shown only once. Store it now and change it after signing in.');
+        }
 
         $this->line('<fg=gray>Run <fg=yellow>php artisan serve</> and visit <fg=cyan>' . url('/login') . '</> to begin!</>');
         $this->newLine();

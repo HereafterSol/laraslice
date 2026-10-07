@@ -231,6 +231,18 @@ class AuthenticationHardeningTest extends TestCase
         $this->assertStringNotContainsString($codes[0], $second);
     }
 
+    public function test_login_page_escapes_old_input_for_alpine_and_hides_demo_credentials_outside_local(): void
+    {
+        $html = $this->withSession(['_old_input' => ['email' => "x'); alert(1); ('"]])
+            ->get('/login')->assertOk()->getContent();
+
+        // HTML entities are decoded before Alpine evaluates x-data, so the quote must be JS-escaped
+        $apostrophe = '\\' . 'u0027';
+        $this->assertStringContainsString("email: 'x{$apostrophe}); alert(1); ({$apostrophe}'", $html);
+        $this->assertStringNotContainsString('x&#039;); alert(1)', $html);
+        $this->assertStringNotContainsString('DEMO</span>', $html, 'demo credentials only appear in the local environment');
+    }
+
     public function test_api_registration_is_disabled_by_default(): void
     {
         $this->postJson('/api/auth/register', [
