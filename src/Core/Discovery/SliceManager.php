@@ -636,29 +636,7 @@ class SliceManager
         $nav = [];
         $currentUser = auth()->check() ? auth()->user() : null;
 
-        $isSuperAdmin = false;
-        if ($currentUser) {
-            if (method_exists($currentUser, 'hasRole') && $currentUser->hasRole('super-admin')) {
-                $isSuperAdmin = true;
-            } elseif (method_exists($currentUser, 'isSuperAdmin') && $currentUser->isSuperAdmin()) {
-                $isSuperAdmin = true;
-            } elseif (isset($currentUser->email) && $currentUser->email === config('laraslice.super_admin_email', 'admin@laraslice.com')) {
-                $isSuperAdmin = true;
-            } elseif (isset($currentUser->id)) {
-                try {
-                    if (\Illuminate\Support\Facades\Schema::hasTable('role_user') && \Illuminate\Support\Facades\Schema::hasTable('roles')) {
-                        $isSuperAdmin = \Illuminate\Support\Facades\DB::table('role_user')
-                            ->join('roles', 'role_user.role_id', '=', 'roles.id')
-                            ->where('role_user.user_id', $currentUser->id)
-                            ->where(function ($q) {
-                                $q->where('roles.slug', 'super-admin')
-                                  ->orWhere('roles.id', 1);
-                            })
-                            ->exists();
-                    }
-                } catch (\Throwable $e) {}
-            }
-        }
+        $isSuperAdmin = $currentUser && \LaraSlice\Core\Security\Access::isSuperAdmin($currentUser);
 
         foreach ($this->getActiveSlices() as $slice) {
             if (isset($slice->navigation['visible']) && $slice->navigation['visible'] === false) {
@@ -982,7 +960,7 @@ class SliceManager
         // Ensure super-admin role automatically receives all synced permissions by default
         try {
             $superAdminRole = \Illuminate\Support\Facades\Schema::hasTable('roles')
-                ? \Illuminate\Support\Facades\DB::table('roles')->where('slug', 'super-admin')->orWhere('id', 1)->first()
+                ? \Illuminate\Support\Facades\DB::table('roles')->where('slug', 'super-admin')->first()
                 : null;
 
             if ($superAdminRole && \Illuminate\Support\Facades\Schema::hasTable('permission_role')) {

@@ -1067,50 +1067,14 @@ class WizardController extends Controller
     protected function authorizeWizardAction($abilities): void
     {
         $user = auth()->user();
-        if (!$user) {
-            return;
+        if (! $user) {
+            abort(401, 'Unauthenticated.');
         }
 
-        // 1. Super admin bypass
-        if (method_exists($user, 'hasRole') && $user->hasRole('super-admin')) {
-            return;
+        $abilities = (array) $abilities;
+        if (! \LaraSlice\Core\Security\Access::allows($user, $abilities)) {
+            abort(403, 'Unauthorized. Required permissions: [' . implode(', ', $abilities) . ']');
         }
-        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
-            return;
-        }
-        if (isset($user->email) && $user->email === config('laraslice.super_admin_email', 'admin@laraslice.com')) {
-            return;
-        }
-        if (isset($user->id)) {
-            try {
-                if (\Illuminate\Support\Facades\Schema::hasTable('role_user') && \Illuminate\Support\Facades\Schema::hasTable('roles')) {
-                    $isSuperAdmin = \Illuminate\Support\Facades\DB::table('role_user')
-                        ->join('roles', 'role_user.role_id', '=', 'roles.id')
-                        ->where('role_user.user_id', $user->id)
-                        ->where(function ($q) {
-                            $q->where('roles.slug', 'super-admin')
-                              ->orWhere('roles.id', 1);
-                        })
-                        ->exists();
-                    if ($isSuperAdmin) {
-                        return;
-                    }
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        // 2. Explicit ability check
-        $abilities = (array)$abilities;
-        foreach ($abilities as $ability) {
-            if (method_exists($user, 'hasPermission') && $user->hasPermission($ability)) {
-                return;
-            }
-            if (method_exists($user, 'can') && $user->can($ability)) {
-                return;
-            }
-        }
-
-        abort(403, 'Unauthorized. Required permissions: [' . implode(', ', $abilities) . ']');
     }
 
     public function toggleSlice(Request $request)
@@ -1131,6 +1095,8 @@ class WizardController extends Controller
                 'active'  => $newActive,
                 'message' => "Slice [{$validated['slice']}] is now " . ($newActive ? 'Enabled' : 'Disabled (Hidden from Navigation)'),
             ]);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -1155,6 +1121,8 @@ class WizardController extends Controller
                 'updated' => $updated,
                 'message' => "Domain [{$validated['domain']}] slices updated.",
             ]);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }

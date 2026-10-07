@@ -104,7 +104,7 @@ class SecurityPolicyService
     public static function isPrivilegedUser(User|AppUser|Authenticatable $user): bool
     {
         // 1. Super Admin universal check
-        if ($user->email === 'admin@laraslice.com' || (int) $user->id === 1) {
+        if (\LaraSlice\Core\Security\Access::isSuperAdmin($user)) {
             return true;
         }
 

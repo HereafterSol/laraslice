@@ -50,9 +50,10 @@ class LaraSliceServiceProvider extends ServiceProvider
     {
         // Register the twMerge attribute macro used by the published BlatUI components,
         // unless the host app already provides one (e.g. via gehrisandro/tailwind-merge-laravel)
-        if (!\Illuminate\View\ComponentAttributeBag::hasMacro('twMerge')) {
-            $this->app->singletonIf(\TailwindMerge\TailwindMerge::class, fn () => \TailwindMerge\TailwindMerge::instance());
+        // The binding is per application; macros are static and outlive it (tests, Octane), so bind every boot.
+        $this->app->singletonIf(\TailwindMerge\TailwindMerge::class, fn () => \TailwindMerge\TailwindMerge::instance());
 
+        if (!\Illuminate\View\ComponentAttributeBag::hasMacro('twMerge')) {
             \Illuminate\View\ComponentAttributeBag::macro('twMerge', function (...$args) {
                 $this->attributes['class'] = app(\TailwindMerge\TailwindMerge::class)->merge($args, $this->attributes['class'] ?? '');
 

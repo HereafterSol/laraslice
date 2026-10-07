@@ -18,9 +18,21 @@ abstract class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            \BladeUI\Icons\BladeIconsServiceProvider::class,
+            \MallardDuck\LucideIcons\BladeLucideIconsServiceProvider::class,
             SanctumServiceProvider::class,
             LaraSliceServiceProvider::class,
         ];
+    }
+
+    /**
+     * Mirror a host app after `slice:install`: the starter layout and BlatUI components are published.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->app['view']->addLocation(dirname(__DIR__) . '/resources/stubs/starter/views');
     }
 
     protected function defineEnvironment($app): void

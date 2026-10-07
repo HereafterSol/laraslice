@@ -107,20 +107,97 @@ class AiEngine
     }
 
     /**
-     * Get a setting value with fallback.
+     * Get a setting value with fallback. Secret settings are decrypted.
      */
     public function getSetting(string $key, mixed $default = null): mixed
     {
         try {
             if (Schema::hasTable('settings')) {
-                $val = DB::table('settings')->where('key', $key)->value('value');
-                if ($val !== null) {
+                $val = \LaraSlice\Slices\Settings\Models\Setting::get($key);
+                if ($val !== null && $val !== '') {
                     return $val;
                 }
             }
         } catch (\Throwable $e) {}
 
-        return config("laraslice.{$key}", $default);
+        return $default;
+    }
+
+    /**
+     * API key for a provider: the encrypted settings value, else config/env.
+     */
+    public function providerKey(string $provider): ?string
+    {
+        $key = $this->getSetting("ai.{$provider}_api_key") ?: config("laraslice.ai.providers.{$provider}.key");
+
+        return $key ? (string) $key : null;
+    }
+
+    /**
+     * Model id for a provider: the settings value, else config/env, else the given default.
+     */
+    public function providerModel(string $provider, string $default): string
+    {
+        return (string) ($this->getSetting("ai.{$provider}_model") ?: config("laraslice.ai.providers.{$provider}.model") ?: $default);
+    }
+
+    /**
+     * Whether the signed-in user may let the copilot touch a table.
+     *
+     * Abilities: "count" (row totals only), "view" (columns and sample rows) and "create" (insert).
+     * Protected tables (users, roles, settings, tokens, ...) never expose rows or accept inserts;
+     * every other table needs the matching slice permission, e.g. shop_product.view.
+     */
+    public function canAccessTable(string $table, string $ability): bool
+    {
+        $user = auth()->user();
+        if (! $user || $table === '') {
+            return false;
+        }
+
+        $base = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($table));
+        $plural = \Illuminate\Support\Str::plural($base);
+        $permission = $ability === 'create' ? 'create' : 'view';
+        $candidates = ["{$base}.{$permission}", "{$plural}.{$permission}", "{$base}.*", "{$plural}.*"];
+
+        if ($this->isProtectedTable($table)) {
+            return $ability === 'count' && \LaraSlice\Core\Security\Access::allows($user, $candidates);
+        }
+
+        return \LaraSlice\Core\Security\Access::allows($user, $candidates);
+    }
+
+    /**
+     * Table names in the default connection, without schema prefixes.
+     *
+     * @return array<int, string>
+     */
+    protected function listTables(): array
+    {
+        try {
+            return array_values(array_map(fn ($t) => $t['name'], \Illuminate\Support\Facades\Schema::getTables()));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public function isProtectedTable(string $table): bool
+    {
+        foreach ((array) config('laraslice.ai.protected_tables', []) as $pattern) {
+            if (\Illuminate\Support\Str::is($pattern, $table)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Columns whose values the copilot never displays or writes.
+     */
+    public function isSensitiveColumn(string $column): bool
+    {
+        return (bool) preg_match('/(password|token|secret|api_?key|hash|mfa|otp|remember|recovery|credential|signature|private)/i', $column);
     }
 
     /**
@@ -179,11 +256,7 @@ class AiEngine
                 $dbMetrics['passkeys_total'] = DB::table('user_passkeys')->count();
             }
 
-            $dbName = DB::connection()->getDatabaseName();
-            $rawTables = DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = ? LIMIT 60", [$dbName]);
-            foreach ($rawTables as $t) {
-                $dbMetrics['tables_list'][] = $t->TABLE_NAME ?? $t->table_name;
-            }
+            $dbMetrics['tables_list'] = array_slice($this->listTables(), 0, 60);
             $dbMetrics['tables_count'] = count($dbMetrics['tables_list']);
         } catch (\Throwable $e) {}
 
@@ -275,16 +348,7 @@ class AiEngine
     public function resolveTableFromQuery(string $query, string $currentPath = ''): ?string
     {
         $q = strtolower(trim($query));
-        static $tables = null;
-        if ($tables === null) {
-            try {
-                $dbName = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
-                $rows = \Illuminate\Support\Facades\DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = ?", [$dbName]);
-                $tables = array_map(fn($r) => $r->TABLE_NAME ?? $r->table_name, $rows);
-            } catch (\Throwable $e) {
-                $tables = [];
-            }
-        }
+        $tables = $this->listTables();
 
         // 1. Current page table affinity
         $pageTable = null;
@@ -377,8 +441,8 @@ class AiEngine
 
         // Check if path is Dashboard or Studio
         if ($path === '/' || str_contains($path, 'dashboard')) {
-            $userCount = \Illuminate\Support\Facades\Schema::hasTable('users') ? \Illuminate\Support\Facades\DB::table('users')->count() : 0;
-            $auditCount = \Illuminate\Support\Facades\Schema::hasTable('laraslice_audit_logs') ? \Illuminate\Support\Facades\DB::table('laraslice_audit_logs')->count() : 0;
+            $userCount = $this->canAccessTable('users', 'count') && \Illuminate\Support\Facades\Schema::hasTable('users') ? \Illuminate\Support\Facades\DB::table('users')->count() : 0;
+            $auditCount = $this->canAccessTable('laraslice_audit_logs', 'count') && \Illuminate\Support\Facades\Schema::hasTable('laraslice_audit_logs') ? \Illuminate\Support\Facades\DB::table('laraslice_audit_logs')->count() : 0;
             return [
                 'title'       => 'Executive Dashboard Overview',
                 'domain'      => 'System Core',
@@ -459,7 +523,7 @@ class AiEngine
             $hasTable = true;
         }
 
-        if ($hasTable) {
+        if ($hasTable && $this->canAccessTable($table, 'count')) {
             $count = \Illuminate\Support\Facades\DB::table($table)->count();
             $cols = \Illuminate\Support\Facades\Schema::getColumnListing($table);
             $hasSoftDeletes = in_array('deleted_at', $cols);
@@ -467,7 +531,9 @@ class AiEngine
             $entityName = ucwords(str_replace(['shop_', '_'], ['', ' '], $table));
             $singularName = \Illuminate\Support\Str::singular($entityName);
 
-            $colsList = implode(', ', array_slice(array_filter($cols, fn($c) => !in_array($c, ['id', 'created_at', 'updated_at', 'deleted_at'])), 0, 4));
+            $colsList = $this->canAccessTable($table, 'view')
+                ? implode(', ', array_slice(array_filter($cols, fn($c) => !in_array($c, ['id', 'created_at', 'updated_at', 'deleted_at']) && ! $this->isSensitiveColumn($c)), 0, 4))
+                : 'restricted';
 
             $paragraph = "You are currently viewing the **{$entityName}** registry (`{$path}`). There are currently **{$count} total records** in the `{$table}` table (**{$activeCount} active**). Key attributes include `{$colsList}`. Records in this slice are fully indexed, support CRUD actions, and connect dynamically into domain business workflows.";
 
@@ -643,7 +709,7 @@ class AiEngine
             $candidateClean = trim(preg_replace('/\b(table|tables|the|a|an|in|of|for|whats|what|is|are|fields|columns|schema|structure)\b/i', '', $candidateClean));
             $candidateClean = trim(preg_replace('/[\s_-]+/', '_', $candidateClean), '_');
 
-            $allDbTables = array_map(function($t) { $arr = (array)$t; $name = reset($arr); return str_contains($name, ".") ? explode(".", $name)[1] : $name; }, \Illuminate\Support\Facades\DB::select("SHOW TABLES"));
+            $allDbTables = $this->listTables();
             $targetTable = null;
             if (in_array($candidateClean, $allDbTables, true)) {
                 $targetTable = $candidateClean;
@@ -660,8 +726,19 @@ class AiEngine
                 }
             }
 
+            if ($targetTable && ! $this->canAccessTable($targetTable, 'view')) {
+                return "### 🔒 Access restricted\n\nYou don't have permission to inspect the `{$targetTable}` table.";
+            }
+
             if ($targetTable && \Illuminate\Support\Facades\Schema::hasTable($targetTable)) {
-                $colsInfo = \Illuminate\Support\Facades\DB::select("SHOW COLUMNS FROM `{$targetTable}`");
+                $colsInfo = array_map(fn ($c) => (object) [
+                    'Field' => $c['name'],
+                    'Type' => $c['type'],
+                    'Null' => $c['nullable'] ? 'YES' : 'NO',
+                    'Key' => ($c['auto_increment'] ?? false) || $c['name'] === 'id' ? 'PRI' : '',
+                    'Extra' => ($c['auto_increment'] ?? false) ? 'auto_increment' : '',
+                    'Default' => $c['default'],
+                ], \Illuminate\Support\Facades\Schema::getColumns($targetTable));
                 $rowCount = \Illuminate\Support\Facades\DB::table($targetTable)->count();
                 $entityTitle = ucwords(str_replace(['shop_', 'user_', '_'], ['', '', ' '], $targetTable));
                 $sliceTitle = $selectedSlice['title'] ?? $selectedSlice['name'] ?? 'Domain Slice';
@@ -707,7 +784,7 @@ class AiEngine
             || preg_match('/^\/(?:add-field|suggest-fields)\b/i', $msg)) {
 
             $targetTable = null;
-            $allDbTables = array_map(function($t) { $arr = (array)$t; $name = reset($arr); return str_contains($name, ".") ? explode(".", $name)[1] : $name; }, \Illuminate\Support\Facades\DB::select("SHOW TABLES"));
+            $allDbTables = $this->listTables();
             
             // Check if specific table is mentioned in the query
             foreach ($allDbTables as $dt) {
@@ -724,6 +801,10 @@ class AiEngine
             }
             if (!$targetTable) {
                 $targetTable = 'users';
+            }
+
+            if (! $this->canAccessTable($targetTable, 'view')) {
+                return "### 🔒 Access restricted\n\nYou don't have permission to inspect the `{$targetTable}` table.";
             }
 
             $currentCols = \Illuminate\Support\Facades\Schema::hasTable($targetTable) ? \Illuminate\Support\Facades\Schema::getColumnListing($targetTable) : [];
@@ -1204,6 +1285,10 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             $tableName = !empty($sm[2]) ? $this->resolveTableFromQuery(trim($sm[2]), $currentPath) : $this->resolveTableFromQuery('', $currentPath);
             $targetTable = $tableName ?: 'users';
 
+            if (! $this->canAccessTable($targetTable, 'view')) {
+                return "### 🔒 Access restricted\n\nYou don't have permission to inspect the `{$targetTable}` table.";
+            }
+
             if (\Illuminate\Support\Facades\Schema::hasTable($targetTable)) {
                 $cols = \Illuminate\Support\Facades\Schema::getColumnListing($targetTable);
                 $entityTitle = ucwords(str_replace(['shop_', '_'], ['', ' '], $targetTable));
@@ -1232,6 +1317,10 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
         // 7. Slash Command / Intent: /count or "how many [table]"
         $targetTable = $this->resolveTableFromQuery($msg, $currentPath);
         if ($targetTable && (preg_match('/^\/count\b/i', $msg) || preg_match('/(how many|count|total|list|show|all|records)/i', $msg) || $msg === $targetTable)) {
+            if (! $this->canAccessTable($targetTable, 'count')) {
+                return "### 🔒 Access restricted\n\nYou don't have permission to view `{$targetTable}` records.";
+            }
+
             try {
                 $total = \Illuminate\Support\Facades\DB::table($targetTable)->count();
                 $cols = \Illuminate\Support\Facades\Schema::getColumnListing($targetTable);
@@ -1247,8 +1336,8 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
                 }
                 $reply .= ".\n\n";
 
-                $displayCols = array_slice(array_filter($cols, fn($c) => !in_array($c, ['password', 'remember_token', 'deleted_at'])), 0, 5);
-                if (!empty($displayCols) && $total > 0) {
+                $displayCols = array_slice(array_values(array_filter($cols, fn($c) => $c !== 'deleted_at' && ! $this->isSensitiveColumn($c))), 0, 5);
+                if (!empty($displayCols) && $total > 0 && $this->canAccessTable($targetTable, 'view')) {
                     $sample = \Illuminate\Support\Facades\DB::table($targetTable)->select($displayCols)->limit(5)->get();
                     if ($sample->isNotEmpty()) {
                         $reply .= "| " . implode(' | ', array_map(fn($c) => ucwords(str_replace('_', ' ', $c)), $displayCols)) . " |\n";
@@ -1417,11 +1506,9 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
         try {
             switch ($provider) {
             case 'opencode':
-                $apiKey = $this->getSetting('ai.opencode_api_key') ?: env('OPENCODE_API_KEY');
-                if (empty($apiKey)) {
-                    $apiKey = 'sk-5bR4ae9ul9VzQbUyQRzmBR7S7hkgIekoGhbhheJoH5G3eD5xH8WeJgP8Ld1nw6om';
-                }
-                $model = $this->getSetting('ai.opencode_model') ?: env('OPENCODE_MODEL', 'space-bunny-free');
+                $apiKey = $this->providerKey('opencode');
+                if (empty($apiKey)) return null;
+                $model = $this->providerModel('opencode', 'space-bunny-free');
                 $reply = $this->callOpenAiCompatible(
                     'https://opencode.ai/zen/v1/chat/completions',
                     $apiKey,
@@ -1444,33 +1531,34 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
                 return $reply;
 
                 case 'openai':
-                    $apiKey = $this->getSetting('ai.openai_api_key') ?: env('OPENAI_API_KEY');
+                    $apiKey = $this->providerKey('openai');
                     if (empty($apiKey)) return null;
-                    $model = $this->getSetting('ai.openai_model', 'gpt-4o-mini');
+                    $model = $this->providerModel('openai', 'gpt-4o-mini');
                     return $this->callOpenAiCompatible('https://api.openai.com/v1/chat/completions', $apiKey, $model, $systemPrompt, $message, $history);
 
                 case 'gemini':
-                    $apiKey = $this->getSetting('ai.gemini_api_key') ?: env('GEMINI_API_KEY');
+                    $apiKey = $this->providerKey('gemini');
                     if (empty($apiKey)) return null;
-                    $model = $this->getSetting('ai.gemini_model', 'gemini-2.5-flash');
+                    $model = $this->providerModel('gemini', 'gemini-2.5-flash');
                     // Google Gemini OpenAI-compatible endpoint
                     return $this->callOpenAiCompatible('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', $apiKey, $model, $systemPrompt, $message, $history);
 
                 case 'openrouter':
-                    $apiKey = $this->getSetting('ai.openrouter_api_key') ?: env('OPENROUTER_API_KEY');
+                    $apiKey = $this->providerKey('openrouter');
                     if (empty($apiKey)) return null;
-                    $model = $this->getSetting('ai.openrouter_model', 'meta-llama/llama-3.3-70b-instruct');
+                    $model = $this->providerModel('openrouter', 'meta-llama/llama-3.3-70b-instruct');
                     return $this->callOpenAiCompatible('https://openrouter.ai/api/v1/chat/completions', $apiKey, $model, $systemPrompt, $message, $history);
 
                 case 'anthropic':
-                    $apiKey = $this->getSetting('ai.anthropic_api_key') ?: env('ANTHROPIC_API_KEY');
+                    $apiKey = $this->providerKey('anthropic');
                     if (empty($apiKey)) return null;
-                    $model = $this->getSetting('ai.anthropic_model', 'claude-3-5-sonnet-20241022');
+                    $model = $this->providerModel('anthropic', 'claude-3-5-sonnet-20241022');
                     return $this->callAnthropic($apiKey, $model, $systemPrompt, $message, $history);
 
                 case 'ollama':
-                    $endpoint = $this->getSetting('ai.ollama_endpoint', 'http://localhost:11434');
-                    $model = $this->getSetting('ai.ollama_model', 'deepseek-r1:8b');
+                    $endpoint = (string) ($this->getSetting('ai.ollama_endpoint') ?: config('laraslice.ai.providers.ollama.endpoint') ?: 'http://localhost:11434');
+                    if (! in_array(parse_url($endpoint, PHP_URL_SCHEME), ['http', 'https'], true)) return null;
+                    $model = $this->providerModel('ollama', 'deepseek-r1:8b');
                     return $this->callOllama($endpoint, $model, $systemPrompt, $message, $history);
 
                 default:
@@ -1490,10 +1578,8 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
-        foreach (array_slice($history, -4) as $h) {
-            if (!empty($h['role']) && !empty($h['content'])) {
-                $messages[] = ['role' => $h['role'], 'content' => $h['content']];
-            }
+        foreach ($this->sanitizeHistory($history) as $h) {
+            $messages[] = $h;
         }
 
         $messages[] = ['role' => 'user', 'content' => $message];
@@ -1515,7 +1601,6 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             "Authorization: Bearer {$apiKey}",
         ]);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -1529,16 +1614,33 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
     }
 
     /**
+     * Keep the last few client-supplied turns, limited to user/assistant roles and bounded length.
+     * A client must never be able to inject a system message.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    protected function sanitizeHistory(array $history): array
+    {
+        $clean = [];
+        foreach (array_slice($history, -4) as $h) {
+            if (! is_array($h) || ! is_string($h['content'] ?? null) || trim($h['content']) === '') {
+                continue;
+            }
+            $clean[] = [
+                'role' => ($h['role'] ?? null) === 'assistant' ? 'assistant' : 'user',
+                'content' => mb_substr($h['content'], 0, 4000),
+            ];
+        }
+
+        return $clean;
+    }
+
+    /**
      * Anthropic Claude Messages API call.
      */
     protected function callAnthropic(string $apiKey, string $model, string $systemPrompt, string $message, array $history = []): ?string
     {
-        $messages = [];
-        foreach (array_slice($history, -4) as $h) {
-            if (!empty($h['role']) && !empty($h['content'])) {
-                $messages[] = ['role' => $h['role'] === 'assistant' ? 'assistant' : 'user', 'content' => $h['content']];
-            }
-        }
+        $messages = $this->sanitizeHistory($history);
         $messages[] = ['role' => 'user', 'content' => $message];
 
         $payload = [
@@ -1559,7 +1661,6 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             'anthropic-version: 2023-06-01',
         ]);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -1681,7 +1782,7 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
         $pageContext = ['path' => '/admin/settings/ai'];
 
         if ($provider === 'opencode') {
-            $model = $this->getSetting('ai.opencode_model') ?: env('OPENCODE_MODEL', 'space-bunny-free');
+            $model = $this->providerModel('opencode', 'space-bunny-free');
             $testReply = $this->callCustomProvider('What is 2+2? Answer with the calculation and result concisely.', $context, $pageContext, 'opencode');
             $latency = round((microtime(true) - $start) * 1000);
 
@@ -1856,6 +1957,10 @@ Latency: {$latency}ms.",
      */
     public function createRecord(string $table, array $data, string $mode = 'manual'): array
     {
+        if (! $this->canAccessTable($table, 'create')) {
+            return ['success' => false, 'message' => "You don't have permission to create records in '{$table}'."];
+        }
+
         try {
             if (!\Illuminate\Support\Facades\Schema::hasTable($table)) {
                 return ['success' => false, 'message' => "Table '{$table}' does not exist in the database."];
@@ -1865,7 +1970,8 @@ Latency: {$latency}ms.",
             $insertData = [];
 
             foreach ($data as $k => $v) {
-                if (in_array($k, $cols) && !in_array($k, ['id', 'created_at', 'updated_at', 'deleted_at'])) {
+                $serverOwned = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'];
+                if (is_string($k) && in_array($k, $cols, true) && ! in_array($k, $serverOwned, true) && ! $this->isSensitiveColumn($k)) {
                     if (str_starts_with($k, 'is_') || str_starts_with($k, 'has_')) {
                         $insertData[$k] = ($v === '1' || $v === 1 || $v === true || $v === 'on' || $v === 'true' || $v === 'active') ? 1 : 0;
                     } elseif (str_ends_with($k, '_id')) {
@@ -1893,14 +1999,6 @@ Latency: {$latency}ms.",
             }
             if (in_array('status', $cols) && empty($insertData['status'])) {
                 $insertData['status'] = 'active';
-            }
-            if ($table === 'users') {
-                if (empty($insertData['password']) && in_array('password', $cols)) {
-                    $insertData['password'] = \Illuminate\Support\Facades\Hash::make('password123');
-                }
-                if (empty($insertData['email']) && in_array('email', $cols)) {
-                    $insertData['email'] = \Illuminate\Support\Str::slug($nameVal ?: 'user') . rand(10, 99) . '@example.com';
-                }
             }
             if ($table === 'shop_products') {
                 if (empty($insertData['sku']) && in_array('sku', $cols)) {
@@ -1941,6 +2039,9 @@ Latency: {$latency}ms.",
                 }
             }
 
+            if (in_array('created_by', $cols)) {
+                $insertData['created_by'] = auth()->id();
+            }
             if (in_array('created_at', $cols)) {
                 $insertData['created_at'] = now();
             }
@@ -1976,7 +2077,9 @@ Latency: {$latency}ms.",
                 'message' => "✅ **New {$entityTitle} Record Created!**\n\nSuccessfully inserted **ID #{$id}** into `{$table}` table. Current total: **{$totalNow} {$entityTitle}**.",
             ];
         } catch (\Throwable $e) {
-            return ['success' => false, 'message' => "Failed to insert record: " . $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'message' => 'Failed to insert the record. Check the values and try again.'];
         }
     }
 }
