@@ -703,6 +703,16 @@
 <script>
 let currentModalData = null;
 
+// Device names, browsers and log text come from user agents and user input: escape before innerHTML
+function esc(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function openRecoveryConsole(userId) {
     const rawEl = document.getElementById('mfa-data-' + userId);
     if (!rawEl) return;
@@ -774,12 +784,12 @@ function openRecoveryConsole(userId) {
                         <svg class="size-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                     </span>
                     <div>
-                        <p class="font-bold text-foreground">${pk.name}</p>
-                        <p class="text-muted-foreground font-mono text-[11px]">ID: ${pk.credential_id} &bull; Registered: ${pk.created_at}</p>
-                        <p class="text-[10px] text-muted-foreground">Last used: ${pk.last_used_at}</p>
+                        <p class="font-bold text-foreground">${esc(pk.name)}</p>
+                        <p class="text-muted-foreground font-mono text-[11px]">ID: ${esc(pk.credential_id)} &bull; Registered: ${esc(pk.created_at)}</p>
+                        <p class="text-[10px] text-muted-foreground">Last used: ${esc(pk.last_used_at)}</p>
                     </div>
                 </div>
-                <form method="POST" action="{{ url('/admin/users/settings/passkey') }}/${pk.id}">
+                <form method="POST" action="{{ url('/admin/users/settings/passkey') }}/${esc(pk.id)}">
                     <input type="hidden" name="_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="_method" value="DELETE">
                     <button type="submit" onclick="return confirm('Revoke this passkey credential? The user will no longer be able to use this hardware/biometric key to sign in.')" class="px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:text-white hover:bg-red-600 border border-red-500/30 rounded-lg transition-colors">
@@ -802,13 +812,13 @@ function openRecoveryConsole(userId) {
                         <svg class="size-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                     </span>
                     <div>
-                        <p class="font-bold text-foreground">${dev.device_name} &bull; ${dev.browser}</p>
-                        <p class="text-muted-foreground font-mono text-[11px]">${dev.ip_address} &bull; ${dev.platform} &bull; Active: ${dev.last_active_at}</p>
+                        <p class="font-bold text-foreground">${esc(dev.device_name)} &bull; ${esc(dev.browser)}</p>
+                        <p class="text-muted-foreground font-mono text-[11px]">${esc(dev.ip_address)} &bull; ${esc(dev.platform)} &bull; Active: ${esc(dev.last_active_at)}</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">Authorized Bypass</span>
-                    <form method="POST" action="{{ url('/admin/users/devices') }}/${dev.id}">
+                    <form method="POST" action="{{ url('/admin/users/devices') }}/${esc(dev.id)}">
                         <input type="hidden" name="_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="_method" value="DELETE">
                         <button type="submit" onclick="return confirm('Revoke this device session?')" class="p-1.5 text-muted-foreground hover:text-red-600 transition-colors" title="Revoke Device Session">
@@ -836,13 +846,13 @@ function openRecoveryConsole(userId) {
                 <div class="p-3 rounded-xl border border-border bg-card flex items-start justify-between text-xs gap-3">
                     <div class="space-y-0.5">
                         <div class="flex items-center gap-2">
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${badgeClass}">${log.event}</span>
-                            <span class="text-muted-foreground font-mono text-[11px]">${log.ip_address || '127.0.0.1'}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${badgeClass}">${esc(log.event)}</span>
+                            <span class="text-muted-foreground font-mono text-[11px]">${esc(log.ip_address || '127.0.0.1')}</span>
                         </div>
-                        <p class="font-medium text-foreground pt-0.5">${log.description}</p>
+                        <p class="font-medium text-foreground pt-0.5">${esc(log.description)}</p>
                     </div>
                     <div class="text-right text-muted-foreground font-mono text-[11px] shrink-0">
-                        <p>${log.created_at}</p>
+                        <p>${esc(log.created_at)}</p>
                     </div>
                 </div>
             `;

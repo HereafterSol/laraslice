@@ -83,15 +83,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Web Wizard
+    | Authentication
     |--------------------------------------------------------------------------
     |
-    | Enable the 4-step web-based project generator wizard (vanillaslice-style).
+    | Self-service sign-up through POST /api/auth/register is off unless
+    | LARASLICE_API_REGISTRATION=true.
+    |
+    */
+    'auth' => [
+        'api_registration' => (bool) env('LARASLICE_API_REGISTRATION', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Web Wizard & Slice Studio
+    |--------------------------------------------------------------------------
+    |
+    | The studio writes PHP files and runs migrations, so it is disabled unless
+    | LARASLICE_WIZARD_ENABLED=true. Even when enabled, file writes, migrations
+    | and destructive actions are refused in production unless
+    | LARASLICE_WIZARD_ALLOW_IN_PRODUCTION=true.
     |
     */
     'wizard' => [
-        'enabled' => env('LARASLICE_WIZARD_ENABLED', true),
-        'route'   => '/laraslice/wizard',
+        'enabled' => (bool) env('LARASLICE_WIZARD_ENABLED', false),
+        'allow_in_production' => (bool) env('LARASLICE_WIZARD_ALLOW_IN_PRODUCTION', false),
         'middleware' => ['web', 'auth'],
     ],
 
@@ -108,15 +124,49 @@ return [
     |
     */
     'ai' => [
-        'enabled' => env('LARASLICE_AI_ENABLED', true),
-        'default_provider' => env('LARASLICE_AI_PROVIDER', 'openai'), // openai, gemini, anthropic, ollama
-        'api_key' => env('LARASLICE_AI_KEY', ''),
-        'model' => env('LARASLICE_AI_MODEL', 'gpt-4o'),
+        // Provider credentials are read from the environment here only; keys saved
+        // from the AI settings page are stored encrypted in the settings table.
+        'providers' => [
+            'opencode' => [
+                'key' => env('OPENCODE_API_KEY'),
+                'model' => env('OPENCODE_MODEL'),
+            ],
+            'openai' => [
+                'key' => env('OPENAI_API_KEY'),
+                'model' => env('OPENAI_MODEL'),
+            ],
+            'anthropic' => [
+                'key' => env('ANTHROPIC_API_KEY'),
+                'model' => env('ANTHROPIC_MODEL'),
+            ],
+            'gemini' => [
+                'key' => env('GEMINI_API_KEY'),
+                'model' => env('GEMINI_MODEL'),
+            ],
+            'openrouter' => [
+                'key' => env('OPENROUTER_API_KEY'),
+                'model' => env('OPENROUTER_MODEL'),
+            ],
+            'ollama' => [
+                'endpoint' => env('OLLAMA_ENDPOINT'),
+                'model' => env('OLLAMA_MODEL'),
+            ],
+        ],
+
+        // Tables the copilot may never read rows from or insert into.
+        'protected_tables' => [
+            'users', 'user_*', 'roles', 'permissions', 'role_user', 'permission_role',
+            'settings', 'password_reset_tokens', 'personal_access_tokens', 'sessions',
+            'migrations', 'jobs', 'failed_jobs', 'job_batches', 'cache', 'cache_locks',
+            'laraslice_audit_logs',
+        ],
+
+        // HTTP endpoint for IDE agents. Off by default; authenticate with a Sanctum
+        // bearer token. The `php artisan laraslice:mcp` stdio server is unaffected.
         'mcp_server' => [
-            'enabled' => true,
+            'enabled' => (bool) env('LARASLICE_MCP_ENABLED', false),
             'route' => '/.well-known/mcp',
-            'middleware' => ['web', 'auth'],
-            'tools_enabled' => true, // Allows AI agents to query slice schemas and generate features
+            'middleware' => ['api', 'auth:sanctum'],
         ],
     ],
 ];

@@ -92,7 +92,7 @@ final class ChildEntityDefinition
                     throw new InvalidArgumentException("Enum field '{$name}' requires between 1 and 50 options.");
                 }
                 foreach ($options as $value => $label) {
-                    if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($label) || $label === '') {
+                    if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($label) || $label === '' || ! BladeSafeText::isSafe($label)) {
                         throw new InvalidArgumentException("Enum field '{$name}' has an invalid option.");
                     }
                 }
@@ -131,6 +131,9 @@ final class ChildEntityDefinition
             $label = $field['label'] ?? Str::headline($name);
             if (! is_string($label) || trim($label) === '' || mb_strlen($label) > 160) {
                 throw new InvalidArgumentException("Child field '{$name}' label must contain 1 to 160 characters.");
+            }
+            if ($problem = BladeSafeText::problem($label, "Child field '{$name}' label")) {
+                throw new InvalidArgumentException($problem);
             }
 
             $normalized[$name] = [

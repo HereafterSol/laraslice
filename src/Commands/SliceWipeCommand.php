@@ -34,12 +34,17 @@ class SliceWipeCommand extends Command
             return Command::SUCCESS;
         }
 
-        if ($domainName) {
-            $this->info("🧹 Wiping table data for domain: [{$domainName}]...");
-            $result = $seeder->wipeDomain($domainName);
-        } else {
-            $this->info("🧹 Wiping table data for slice: [{$sliceName}]...");
-            $result = $seeder->wipeSlice($sliceName);
+        try {
+            if ($domainName) {
+                $this->info("🧹 Wiping table data for domain: [{$domainName}]...");
+                $result = $seeder->wipeDomain($domainName);
+            } else {
+                $this->info("🧹 Wiping table data for slice: [{$sliceName}]...");
+                $result = $seeder->wipeSlice($sliceName);
+            }
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            $this->error('❌ ' . $e->getMessage());
+            return Command::FAILURE;
         }
 
         if (!$result['success']) {

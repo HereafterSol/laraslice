@@ -68,7 +68,7 @@ class WebAuthnService
             (string) $user->email,
             (string) $user->name,
             60,
-            false,
+            'preferred', // discoverable where supported, so sign-in works without listing credentials
             'preferred',
             null,
             $excludeIds
@@ -129,13 +129,12 @@ class WebAuthnService
             $ids = $user->passkeys()->whereNull('revoked_at')->pluck('credential_id')->map(function ($id) {
                 return $this->b64decode($id);
             })->filter()->toArray();
-        } else {
-            $ids = UserPasskey::whereNull('revoked_at')->pluck('credential_id')->map(function ($id) {
-                return $this->b64decode($id);
-            })->filter()->toArray();
         }
 
-        $args = $webauthn->getGetArgs($ids, 60, true, true, true, true, true, 'preferred');
+        // Without a known user the list stays empty and the browser offers discoverable passkeys;
+        // never hand out every credential id in the system. User verification is required
+        // because a passkey sign-in counts as a full second factor.
+        $args = $webauthn->getGetArgs($ids, 60, true, true, true, true, true, 'required');
         $challenge = $this->b64encode($webauthn->getChallenge()->getBinaryString());
         session(['webauthn_login_challenge' => $challenge]);
 
@@ -167,7 +166,7 @@ class WebAuthnService
             $passkey->public_key,
             $challenge,
             (int) $passkey->sign_count,
-            false,
+            true,
             true
         );
 

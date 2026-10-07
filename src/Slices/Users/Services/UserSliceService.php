@@ -4,7 +4,9 @@ namespace LaraSlice\Slices\Users\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Validation\ValidationException;
+use LaraSlice\Core\Security\Access;
 use LaraSlice\Core\Base\BaseSliceService;
 use LaraSlice\Core\Contracts\IBusinessObject;
 use LaraSlice\Core\Contracts\IFilterObject;
@@ -139,12 +141,6 @@ class UserSliceService extends BaseSliceService
     {
         /** @var UserFormBusinessObject $form */
         /** @var User $model */
-        if (!empty($form->password)) {
-            $model->password = Hash::make($form->password);
-        } elseif ($isNew && empty($model->password)) {
-            $model->password = Hash::make('Secret123!');
-        }
-
         $model->name = $form->name;
         $model->email = $form->email;
         $model->status = $form->status ?? 'active';
@@ -154,6 +150,63 @@ class UserSliceService extends BaseSliceService
         $model->customised_permissions = $form->customisedPermissions;
         if (!empty($form->mfaChannel)) {
             $model->mfa_channel = $form->mfaChannel;
+        }
+    }
+
+    protected function validate(IBusinessObject $form): void
+    {
+        /** @var UserFormBusinessObject $form */
+        if (empty($form->id) && empty($form->password)) {
+            throw ValidationException::withMessages(['password' => 'A password is required for new users.']);
+        }
+
+        if (! empty($form->password) && mb_strlen($form->password) < 8) {
+            throw ValidationException::withMessages(['password' => 'The password must be at least 8 characters.']);
+        }
+
+        $this->guardRoleAssignment($form);
+    }
+
+    /**
+     * Non-super-admins may not edit super-admin accounts, and may only grant roles they hold themselves.
+     */
+    protected function guardRoleAssignment(UserFormBusinessObject $form): void
+    {
+        $actor = auth()->user();
+
+        // Console commands and seeders run without an actor
+        if (! $actor || Access::isSuperAdmin($actor)) {
+            return;
+        }
+
+        $target = empty($form->id) ? null : User::find($form->id);
+
+        if ($target && Access::isSuperAdmin($target)) {
+            throw new AuthorizationException('Only a super-admin can modify a super-admin account.');
+        }
+
+        $requested = array_map('intval', (array) (! empty($form->roles) ? $form->roles : $form->roleIds));
+        $current = $target ? $target->roles()->pluck('roles.id')->map(fn ($id) => (int) $id)->all() : [];
+        $actorRoles = method_exists($actor, 'roles')
+            ? $actor->roles()->pluck('roles.id')->map(fn ($id) => (int) $id)->all()
+            : [];
+
+        $added = array_diff($requested, $current);
+        if (array_diff($added, $actorRoles) !== []) {
+            throw ValidationException::withMessages(['roles' => 'You can only assign roles that you hold yourself.']);
+        }
+    }
+
+    protected function prepareModelForSave(IBusinessObject $form, Model $model, bool $isNew): void
+    {
+        parent::prepareModelForSave($form, $model, $isNew);
+
+        /** @var UserFormBusinessObject $form */
+        // fill() copies a null password from the form; keep the stored hash unless a new one was given
+        if (empty($form->password) && ! $isNew) {
+            $model->setRawAttributes(array_merge($model->getAttributes(), [
+                'password' => $model->getRawOriginal('password'),
+            ]));
         }
     }
 

@@ -400,7 +400,14 @@
                             <div x-show="showSetupDetails" x-cloak x-transition class="p-5 rounded-2xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/20 flex flex-col md:flex-row items-center gap-6">
                                 <div class="shrink-0 flex flex-col items-center">
                                     <div class="p-2 bg-white rounded-xl shadow-xs border border-border">
-                                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data={{ urlencode('otpauth://totp/LaraSlice:' . $user->email . '?secret=' . ($user->mfa_secret ?? 'JBSWY3DPEHPK3PXP') . '&issuer=LaraSlice') }}" alt="TOTP QR Code" class="w-36 h-36 rounded-lg block" />
+                                        @if (!empty($qrSvg))
+                                            <div class="w-36 h-36 [&>svg]:w-full [&>svg]:h-full">{!! $qrSvg !!}</div>
+                                        @elseif (!empty($otpauthUri))
+                                            <a href="{{ $otpauthUri }}" class="w-36 h-36 rounded-lg flex flex-col items-center justify-center gap-1 text-center text-[11px] font-semibold text-slate-700 p-2">
+                            <span>Open in authenticator app</span>
+                            <span class="text-[10px] font-normal text-slate-500">or enter the setup key</span>
+                        </a>
+                                        @endif
                                     </div>
                                     <span class="text-[11px] font-medium text-muted-foreground mt-2 flex items-center gap-1">
                                         <x-lucide-scan class="size-3 text-purple-600" /> Link additional device
@@ -415,9 +422,9 @@
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <div class="px-3 py-2 bg-background border border-input rounded-lg font-mono text-sm font-bold tracking-widest text-purple-600 dark:text-purple-400 select-all shadow-xs">
-                                            {{ chunk_split($user->mfa_secret ?? 'JBSWY3DPEHPK3PXP', 4, ' ') }}
+                                            {{ chunk_split((string) $user->mfa_secret, 4, ' ') }}
                                         </div>
-                                        <button type="button" onclick="navigator.clipboard.writeText('{{ $user->mfa_secret ?? 'JBSWY3DPEHPK3PXP' }}'); alert('Secret key copied to clipboard!');" class="p-2 rounded-lg border border-input hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Copy Secret">
+                                        <button type="button" onclick="navigator.clipboard.writeText(@js((string) $user->mfa_secret)); alert('Secret key copied to clipboard!');" class="p-2 rounded-lg border border-input hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Copy Secret">
                                             <x-lucide-copy class="size-4" />
                                         </button>
                                     </div>
@@ -470,15 +477,18 @@
                                 @endif
                             </div>
                             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 font-mono text-xs">
-                                @forelse ($user->recoveryCodes as $rc)
-                                    <div class="p-2 rounded bg-muted/40 border border-border text-center {{ $rc->used_at ? 'line-through text-muted-foreground/40' : 'text-foreground' }}">
-                                        {{ substr($rc->code_hash, 0, 4) }}-{{ substr($rc->code_hash, 4, 4) }}
+                                @if (session('recovery_codes'))
+                                    @foreach (session('recovery_codes') as $code)
+                                        <div class="p-2 rounded bg-muted/40 border border-border text-center text-foreground select-all">{{ $code }}</div>
+                                    @endforeach
+                                    <div class="col-span-2 sm:col-span-4 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                        Save these codes now. They are stored only as hashes and will not be shown again.
                                     </div>
-                                @empty
-                                    <div class="col-span-4 p-3 rounded-lg border border-dashed text-xs text-muted-foreground text-center">
-                                        No recovery codes generated yet. Enable 2FA to generate backup codes.
+                                @else
+                                    <div class="col-span-2 sm:col-span-4 p-3 rounded-lg border border-dashed text-xs text-muted-foreground text-center">
+                                        {{ $user->recoveryCodes->whereNull('used_at')->count() }} unused recovery code(s). Codes are shown only once, when generated; regenerate them if you have lost yours.
                                     </div>
-                                @endforelse
+                                @endif
                             </div>
                         </div>
                     </x-ui.card-content>

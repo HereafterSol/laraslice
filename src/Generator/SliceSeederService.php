@@ -163,7 +163,12 @@ class SliceSeederService
             throw new \InvalidArgumentException("Slice [{$sliceName}] not found.");
         }
 
-        $tables = array_reverse($this->resolveSliceTablesInOrder($slice));
+        if ($this->manager->isProtectedSlice($slice)) {
+            throw new \RuntimeException("Slice [{$slice->name}] is a core LaraSlice slice; its data cannot be wiped.");
+        }
+
+        $protected = $this->manager->protectedTables();
+        $tables = array_values(array_diff(array_reverse($this->resolveSliceTablesInOrder($slice)), $protected));
         $wipedTables = [];
 
         $this->disableForeignKeyConstraints();
@@ -201,10 +206,14 @@ class SliceSeederService
         }
 
         $allWiped = [];
+        $protected = $this->manager->protectedTables();
         $this->disableForeignKeyConstraints();
         try {
             foreach ($slices as $slice) {
-                $tables = array_reverse($this->resolveSliceTablesInOrder($slice));
+                if ($this->manager->isProtectedSlice($slice)) {
+                    continue;
+                }
+                $tables = array_values(array_diff(array_reverse($this->resolveSliceTablesInOrder($slice)), $protected));
                 foreach ($tables as $tbl) {
                     if (Schema::hasTable($tbl) && !in_array($tbl, $allWiped, true)) {
                         DB::table($tbl)->truncate();

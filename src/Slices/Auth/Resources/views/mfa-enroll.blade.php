@@ -118,7 +118,14 @@
                 <!-- QR Code Section -->
                 <div class="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800">
                     <div class="p-2.5 bg-white rounded-xl shadow-md shrink-0">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data={{ urlencode('otpauth://totp/LaraSlice:' . $user->email . '?secret=' . $secret . '&issuer=LaraSlice') }}" alt="TOTP QR Code" class="w-36 h-36 rounded-lg block" />
+                        @if (!empty($qrSvg))
+                            <div class="w-36 h-36 [&>svg]:w-full [&>svg]:h-full">{!! $qrSvg !!}</div>
+                        @else
+                            <a href="{{ $otpauthUri }}" class="w-36 h-36 rounded-lg flex flex-col items-center justify-center gap-1 text-center text-[11px] font-semibold text-slate-700 p-2">
+                            <span>Open in authenticator app</span>
+                            <span class="text-[10px] font-normal text-slate-500">or enter the setup key</span>
+                        </a>
+                        @endif
                     </div>
                     <div class="space-y-3 flex-1 text-center sm:text-left">
                         <div>

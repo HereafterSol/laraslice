@@ -7,29 +7,35 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Cache;
 use LaraSlice\Slices\Auth\Services\AuthSliceService;
+use LaraSlice\Slices\Auth\Services\LoginAttemptService;
 use LaraSlice\Slices\Users\Models\User;
 use LaraSlice\Slices\Users\Models\UserDevice;
 use LaraSlice\Slices\Users\Models\UserSecurityLog;
 use LaraSlice\Slices\Users\Models\UserAttempt;
 use LaraSlice\Slices\Users\Models\UserConnect;
 use LaraSlice\Slices\Users\Models\UserCred;
-use LaraSlice\Slices\Users\Models\UserCode;
 use LaraSlice\Slices\Users\Models\UserFactor;
 use LaraSlice\Slices\Users\Models\UserPasskey;
 use LaraSlice\Slices\Users\Services\SecurityPolicyService;
 use LaraSlice\Slices\Users\Services\WebAuthnService;
+use LaraSlice\Slices\Users\Services\TotpService;
+use LaraSlice\Slices\Users\Services\RecoveryCodeService;
+use LaraSlice\Slices\Users\Services\QrCodeService;
 
 class AuthWebController extends Controller
 {
-    protected AuthSliceService $authService;
+    /** Seconds a password-verified user has to finish the MFA step. */
+    public const MFA_PENDING_TTL = 300;
 
-    public function __construct(AuthSliceService $service)
-    {
-        $this->authService = $service;
-    }
+    private const MFA_SESSION_KEYS = ['mfa_pending_user_id', 'mfa_remember', 'mfa_pending_at', 'mfa_new_device_detected', 'mfa_device_summary'];
+
+    public function __construct(
+        protected AuthSliceService $authService,
+        protected LoginAttemptService $attempts,
+        protected TotpService $totp,
+        protected RecoveryCodeService $recoveryCodes,
+    ) {}
 
     /**
      * Display login page.
@@ -49,130 +55,8 @@ class AuthWebController extends Controller
             'password' => 'required|string',
         ]);
 
-        $identifier = trim($credentials['email']);
-        $password = $credentials['password'];
         $remember = (bool) $request->input('remember', false);
-
-        // Find user by email or CNIC
-        $user = User::where('email', $identifier)
-            ->orWhereHas('detail', function ($q) use ($identifier) {
-                $q->where('cnic', $identifier);
-            })
-            ->first();
-
-        if (!$user) {
-            UserAttempt::record(
-                identifier: $identifier,
-                request: $request,
-                reason: 'unknown_account',
-                userId: null
-            );
-
-            UserSecurityLog::create([
-                'user_id'              => null,
-                'identifier_attempted' => $identifier,
-                'event_type'           => 'unknown_account',
-                'ip_address'           => $request->ip() ?: '127.0.0.1',
-                'user_agent'           => $request->userAgent(),
-                'created_at'           => now(),
-            ]);
-
-            return back()->withErrors([
-                'email' => 'The provided credentials do not match our records.',
-            ])->onlyInput('email');
-        }
-
-        // 1. Account Lockout Check
-        if ($user->locked_until && $user->locked_until->isFuture()) {
-            $minutes = max(1, (int) ceil(now()->diffInSeconds($user->locked_until) / 60));
-
-            UserAttempt::record(
-                identifier: $user->email,
-                request: $request,
-                reason: 'login_locked_attempt',
-                userId: $user->id
-            );
-
-            UserSecurityLog::create([
-                'user_id'              => $user->id,
-                'identifier_attempted' => $user->email,
-                'event_type'           => 'login_locked_attempt',
-                'ip_address'           => $request->ip() ?: '127.0.0.1',
-                'user_agent'           => $request->userAgent(),
-                'created_at'           => now(),
-            ]);
-
-            return back()->withErrors([
-                'email' => "Account temporarily locked due to too many failed sign-in attempts. Try again in {$minutes} minutes.",
-            ])->onlyInput('email');
-        }
-
-        // 2. Password Verification & Failure Tracking
-        if (!Hash::check($password, $user->password)) {
-            $user->failed_attempts = ($user->failed_attempts ?? 0) + 1;
-
-            if ($user->failed_attempts >= 5) {
-                $user->locked_until = now()->addMinutes(15);
-                $user->save();
-
-                UserAttempt::record(
-                    identifier: $user->email,
-                    request: $request,
-                    reason: 'account_locked_out_max_attempts',
-                    userId: $user->id
-                );
-
-                UserSecurityLog::create([
-                    'user_id'              => $user->id,
-                    'identifier_attempted' => $user->email,
-                    'event_type'           => 'account_locked_out',
-                    'ip_address'           => $request->ip() ?: '127.0.0.1',
-                    'user_agent'           => $request->userAgent(),
-                    'payload'              => ['description' => 'Account locked for 15 minutes after 5 consecutive password failures.'],
-                    'created_at'           => now(),
-                ]);
-
-                return back()->withErrors([
-                    'email' => 'Account locked for 15 minutes due to too many failed sign-in attempts.',
-                ])->onlyInput('email');
-            }
-
-            $user->save();
-            $remaining = 5 - $user->failed_attempts;
-
-            UserAttempt::record(
-                identifier: $user->email,
-                request: $request,
-                reason: "invalid_password ({$user->failed_attempts}/5)",
-                userId: $user->id
-            );
-
-            UserSecurityLog::create([
-                'user_id'              => $user->id,
-                'identifier_attempted' => $user->email,
-                'event_type'           => 'login_failed',
-                'ip_address'           => $request->ip() ?: '127.0.0.1',
-                'user_agent'           => $request->userAgent(),
-                'payload'              => ['description' => "Password mismatch ({$user->failed_attempts}/5)."],
-                'created_at'           => now(),
-            ]);
-
-            return back()->withErrors([
-                'email' => "Invalid password. You have {$remaining} attempt(s) remaining before temporary lockout.",
-            ])->onlyInput('email');
-        }
-
-        // Account Status Check
-        if ($user->status !== 'active') {
-            return back()->withErrors([
-                'email' => 'Your account is currently inactive or suspended.',
-            ])->onlyInput('email');
-        }
-
-        // Reset failed attempts on valid password
-        $user->failed_attempts = 0;
-        $user->locked_until = null;
-        $user->save();
+        $user = $this->attempts->verify($credentials['email'], $credentials['password'], $request);
 
         // 3. Dynamic Database-Backed Multi-Factor Authentication Policy
         $requiresMfa = SecurityPolicyService::requiresMfa($user);
@@ -198,7 +82,7 @@ class AuthWebController extends Controller
             ]);
 
             return redirect()->intended('/admin/users/settings')
-                ->cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, false, true);
+                ->withCookie($this->deviceCookie($token));
         }
 
         // 4. Device Recognition / Trust Check (Edge vs Chrome / Multi-Browser detection)
@@ -220,16 +104,6 @@ class AuthWebController extends Controller
 
         if (!$isEnrolled) {
             // Factor revoked by Admin or never enrolled -> Send to Enrollment Screen
-            if (empty($user->mfa_secret)) {
-                $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-                $secret = '';
-                for ($i = 0; $i < 16; $i++) {
-                    $secret .= $chars[random_int(0, 31)];
-                }
-                $user->mfa_secret = $secret;
-                $user->save();
-            }
-
             UserSecurityLog::create([
                 'user_id'              => $user->id,
                 'identifier_attempted' => $user->email,
@@ -266,12 +140,10 @@ class AuthWebController extends Controller
      */
     public function showMfaChallenge(): View|RedirectResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return redirect()->route('login')->with('error', 'Session timed out. Please sign in again.');
         }
-
-        $user = User::findOrFail($userId);
 
         $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
         $hasTotp = (!empty($user->mfa_confirmed_at) && !empty($user->mfa_secret));
@@ -308,12 +180,10 @@ class AuthWebController extends Controller
      */
     public function verifyMfaChallenge(Request $request): RedirectResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return redirect()->route('login')->with('error', 'Session timed out. Please sign in again.');
         }
-
-        $user = User::findOrFail($userId);
         $remember = (bool) session('mfa_remember', false);
         $verified = false;
         $methodUsed = 'Authenticator App';
@@ -343,33 +213,27 @@ class AuthWebController extends Controller
         }
 
         // 2. Recovery Code Mode
-        $recoveryInput = strtoupper(trim($request->input('recovery_code') ?: ''));
-        if (!$verified && ($mode === 'recovery' || strlen($recoveryInput) >= 8)) {
-            $cleanCode = str_replace('-', '', $recoveryInput);
-            $recRecord = $user->recoveryCodes()->where('code_hash', $cleanCode)->whereNull('used_at')->first();
-            if ($recRecord) {
-                $recRecord->update(['used_at' => now()]);
+        $recoveryInput = (string) ($request->input('recovery_code') ?: '');
+        if (!$verified && ($mode === 'recovery' || strlen(RecoveryCodeService::normalize($recoveryInput)) >= 8)) {
+            if ($this->recoveryCodes->consume($user, $recoveryInput)) {
                 $verified = true;
                 $methodUsed = 'Emergency Recovery Code';
-            } else {
-                // Also check user_codes
-                $hash = hash('sha256', $cleanCode);
-                $codeRow = UserCode::where('user_id', $user->id)->where('code_hash', $hash)->whereNull('used_at')->first();
-                if ($codeRow) {
-                    $codeRow->update(['used_at' => now()]);
-                    $verified = true;
-                    $methodUsed = 'Emergency Recovery Code';
-                }
             }
         }
 
-        // 3. Standard 6-Digit RFC-6238 TOTP Mode
+        // 3. Standard 6-Digit RFC-6238 TOTP Mode (each code is accepted once)
         $totpInput = trim($request->input('code') ?: '');
         if (!$verified && strlen($totpInput) === 6) {
-            if ($this->validateTotpCode($user->mfa_secret ?? '', $totpInput)) {
+            if ($this->totp->verify($user->mfa_secret, $totpInput, $user->id)) {
                 $verified = true;
                 $methodUsed = 'Authenticator App (TOTP)';
             }
+        }
+
+        if ($verified && !$this->attempts->canSignIn($user)) {
+            $this->forgetPendingMfa();
+
+            return redirect()->route('login')->withErrors(['email' => 'Your account is currently inactive or locked.']);
         }
 
         if ($verified) {
@@ -392,10 +256,10 @@ class AuthWebController extends Controller
                 'created_at'           => now(),
             ]);
 
-            session()->forget(['mfa_pending_user_id', 'mfa_remember', 'mfa_pending_at', 'mfa_new_device_detected', 'mfa_device_summary']);
+            $this->forgetPendingMfa();
 
             return redirect()->intended('/admin/users/settings')
-                ->cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, false, true)
+                ->withCookie($this->deviceCookie($token))
                 ->with('success', "Signed in successfully via {$methodUsed}.");
         }
 
@@ -424,12 +288,10 @@ class AuthWebController extends Controller
      */
     public function redeemDeviceCodeAjax(Request $request): \Illuminate\Http\JsonResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return response()->json(['ok' => false, 'message' => 'Session expired. Please sign in again.'], 401);
         }
-
-        $user = User::findOrFail($userId);
         $code = strtoupper(trim($request->input('code') ?: ''));
         if (empty($code)) {
             return response()->json(['ok' => false, 'message' => 'Please enter a device enrollment code.'], 422);
@@ -462,42 +324,42 @@ class AuthWebController extends Controller
         // Authorize this device
         [$device, $token] = UserDevice::recordDevice($user, $request, true);
 
-        UserSecurityLog::log($user->id, 'device_code_redeemed', 'success', "Device enrollment code {$code} redeemed. Browser authorized.");
+        UserSecurityLog::log($user->id, 'device_code_redeemed', 'success', 'Device enrollment code redeemed. Browser authorized.');
 
         return response()->json([
             'ok'      => true,
             'message' => 'Device enrollment code accepted! This browser has been authorized.',
-        ])->cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, false, true);
+        ])->withCookie($this->deviceCookie($token));
     }
 
     /**
      * Display MFA First-Time / Re-enrollment View (Dual-Mode: Passkey & TOTP).
      */
-    public function showMfaEnroll(): View|RedirectResponse
+    public function showMfaEnroll(QrCodeService $qr): View|RedirectResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return redirect()->route('login')->with('error', 'Session timed out. Please sign in again.');
         }
 
-        $user = User::findOrFail($userId);
+        // A password alone must never reveal or replace an existing factor
+        if ($this->hasEnrolledFactor($user)) {
+            return redirect()->route('login.mfa.challenge');
+        }
 
         if (empty($user->mfa_secret)) {
-            $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-            $secret = '';
-            for ($i = 0; $i < 16; $i++) {
-                $secret .= $chars[random_int(0, 31)];
-            }
-            $user->mfa_secret = $secret;
+            $user->mfa_secret = TotpService::generateSecret();
             $user->save();
         }
 
-        $preferredMethod = SecurityPolicyService::preferredMethodFor($user);
+        $otpauthUri = $this->totp->provisioningUri($user->email, $user->mfa_secret, config('app.name', 'LaraSlice'));
 
         return view('auth::mfa-enroll', [
             'user'            => $user,
             'secret'          => $user->mfa_secret,
-            'preferredMethod' => $preferredMethod,
+            'otpauthUri'      => $otpauthUri,
+            'qrSvg'           => $qr->svg($otpauthUri),
+            'preferredMethod' => SecurityPolicyService::preferredMethodFor($user),
         ]);
     }
 
@@ -506,15 +368,18 @@ class AuthWebController extends Controller
      */
     public function confirmMfaEnroll(Request $request): RedirectResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return redirect()->route('login')->with('error', 'Session timed out. Please sign in again.');
         }
 
-        $user = User::findOrFail($userId);
+        if ($this->hasEnrolledFactor($user)) {
+            return redirect()->route('login.mfa.challenge');
+        }
+
         $inputCode = trim($request->input('code') ?: '');
 
-        if (!$this->validateTotpCode($user->mfa_secret ?? '', $inputCode)) {
+        if (!$this->totp->verify($user->mfa_secret, $inputCode, $user->id)) {
             return back()->with('error', 'The 6-digit confirmation code does not match your Authenticator app. Please ensure your device clock is synchronized and try again.');
         }
 
@@ -532,8 +397,8 @@ class AuthWebController extends Controller
             ]
         );
 
-        // Generate 8 emergency recovery backup codes
-        $plainCodes = $this->generateRecoveryCodes($user);
+        // Generate emergency recovery codes; the plain codes are shown once, on the next page
+        $plainCodes = $this->recoveryCodes->generate($user);
 
         Auth::login($user, (bool) session('mfa_remember', false));
         $request->session()->regenerate();
@@ -549,11 +414,12 @@ class AuthWebController extends Controller
             'created_at'           => now(),
         ]);
 
-        session()->forget(['mfa_pending_user_id', 'mfa_remember', 'mfa_pending_at', 'mfa_new_device_detected', 'mfa_device_summary']);
+        $this->forgetPendingMfa();
 
         return redirect()->to('/admin/users/settings#mfa')
-            ->cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, false, true)
-            ->with('success', 'Authenticator app successfully activated! Your device has been bound and authorized.');
+            ->withCookie($this->deviceCookie($token))
+            ->with('recovery_codes', $plainCodes)
+            ->with('success', 'Authenticator app successfully activated! Save your recovery codes now; they will not be shown again.');
     }
 
     /**
@@ -561,12 +427,15 @@ class AuthWebController extends Controller
      */
     public function passkeyEnrollOptions(Request $request): \Illuminate\Http\JsonResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return response()->json(['error' => 'Unauthenticated session'], 401);
         }
 
-        $user = User::findOrFail($userId);
+        if ($this->hasEnrolledFactor($user)) {
+            return response()->json(['error' => 'A second factor is already enrolled. Complete the MFA challenge instead.'], 403);
+        }
+
         $service = new WebAuthnService();
         $options = $service->getRegisterArgs($user);
 
@@ -578,12 +447,14 @@ class AuthWebController extends Controller
      */
     public function passkeyEnrollVerify(Request $request): \Illuminate\Http\JsonResponse
     {
-        $userId = session('mfa_pending_user_id');
-        if (!$userId) {
+        $user = $this->pendingUser();
+        if (!$user) {
             return response()->json(['success' => false, 'message' => 'Session expired. Please sign in again.'], 401);
         }
 
-        $user = User::findOrFail($userId);
+        if ($this->hasEnrolledFactor($user)) {
+            return response()->json(['success' => false, 'message' => 'A second factor is already enrolled. Complete the MFA challenge instead.'], 403);
+        }
 
         $request->validate([
             'clientDataJSON'    => 'required|string',
@@ -613,8 +484,8 @@ class AuthWebController extends Controller
                 ]
             );
 
-            // Generate 8 emergency recovery codes
-            $plainCodes = $this->generateRecoveryCodes($user);
+            // Generate emergency recovery codes (returned once, in this response)
+            $plainCodes = $this->recoveryCodes->generate($user);
 
             // Record this device as trusted
             [$device, $token] = UserDevice::recordDevice($user, $request, true);
@@ -624,19 +495,21 @@ class AuthWebController extends Controller
 
             UserSecurityLog::log($user->id, 'passkey_enrolled', 'success', "Biometric passkey '{$passkey->label}' enrolled on initial sign-in. Device bound.");
 
-            session()->forget(['mfa_pending_user_id', 'mfa_remember', 'mfa_pending_at', 'mfa_new_device_detected', 'mfa_device_summary']);
+            $this->forgetPendingMfa();
 
             return response()->json([
                 'success'        => true,
                 'redirect'       => url('/admin/users/settings#mfa'),
                 'recovery_codes' => $plainCodes,
                 'message'        => 'Passkey enrolled successfully! Device bound and authorized.',
-            ])->cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, false, true);
+            ])->withCookie($this->deviceCookie($token));
 
         } catch (\Throwable $e) {
+            report($e);
+
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => 'The passkey could not be registered. Please try again.',
             ], 422);
         }
     }
@@ -646,8 +519,12 @@ class AuthWebController extends Controller
      */
     public function passkeyLoginOptions(Request $request): \Illuminate\Http\JsonResponse
     {
-        $userId = session('mfa_pending_user_id');
-        $user = $userId ? User::find($userId) : null;
+        // Username-first: offer only the pending (or named) account's credentials.
+        // With neither, the browser falls back to discoverable passkeys.
+        $user = $this->pendingUser();
+        if (!$user && $request->filled('email')) {
+            $user = $this->attempts->findUser((string) $request->query('email'));
+        }
 
         $service = new WebAuthnService();
         $options = $service->getLoginArgs($user);
@@ -676,6 +553,15 @@ class AuthWebController extends Controller
                 $request->input('credentialId')
             );
 
+            $pending = $this->pendingUser();
+            if ($pending && $pending->id !== $user->id) {
+                return response()->json(['success' => false, 'message' => 'This passkey belongs to a different account.'], 403);
+            }
+
+            if (!$this->attempts->canSignIn($user)) {
+                return response()->json(['success' => false, 'message' => 'Your account is currently inactive or locked.'], 403);
+            }
+
             Auth::login($user, (bool) session('mfa_remember', false));
             $request->session()->regenerate();
             [$device, $token] = UserDevice::recordDevice($user, $request, true);
@@ -694,96 +580,59 @@ class AuthWebController extends Controller
                 'created_at'           => now(),
             ]);
 
-            session()->forget(['mfa_pending_user_id', 'mfa_remember', 'mfa_pending_at', 'mfa_new_device_detected', 'mfa_device_summary']);
+            $this->forgetPendingMfa();
 
             return response()->json([
                 'success'  => true,
                 'redirect' => url('/admin/users/settings'),
-            ])->cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, false, true);
+            ])->withCookie($this->deviceCookie($token));
 
         } catch (\Throwable $e) {
+            report($e);
+
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => 'Passkey verification failed. Please try again.',
             ], 422);
         }
     }
 
     /**
-     * Helper to generate 8 emergency recovery codes.
+     * The password-verified user awaiting MFA, if that step has not expired.
      */
-    protected function generateRecoveryCodes(User $user): array
+    protected function pendingUser(): ?User
     {
-        $user->recoveryCodes()->delete();
-        UserCode::where('user_id', $user->id)->delete();
+        $userId = session('mfa_pending_user_id');
+        $startedAt = (int) session('mfa_pending_at', 0);
 
-        $plainCodes = [];
-        for ($i = 0; $i < 8; $i++) {
-            $raw = strtoupper(bin2hex(random_bytes(4)));
-            $formatted = substr($raw, 0, 4) . '-' . substr($raw, 4, 4);
-            $plainCodes[] = $formatted;
+        if (!$userId || $startedAt < now()->timestamp - self::MFA_PENDING_TTL) {
+            if ($userId) {
+                $this->forgetPendingMfa();
+            }
 
-            $user->recoveryCodes()->create([
-                'code_hash'  => $raw,
-                'created_at' => now(),
-            ]);
-
-            UserCode::create([
-                'user_id'    => $user->id,
-                'code_hash'  => hash('sha256', $raw),
-                'created_at' => now(),
-            ]);
+            return null;
         }
 
-        return $plainCodes;
+        return User::find($userId);
+    }
+
+    protected function forgetPendingMfa(): void
+    {
+        session()->forget(self::MFA_SESSION_KEYS);
+    }
+
+    protected function hasEnrolledFactor(User $user): bool
+    {
+        return $user->passkeys()->whereNull('revoked_at')->exists()
+            || (!empty($user->mfa_confirmed_at) && !empty($user->mfa_secret));
     }
 
     /**
-     * Validate RFC-6238 TOTP with +/- 1 time step drift window.
+     * Long-lived, HTTP-only trusted-device cookie that follows the session "secure" setting.
      */
-    protected function validateTotpCode(string $secret, string $inputCode): bool
+    protected function deviceCookie(string $token): \Symfony\Component\HttpFoundation\Cookie
     {
-        if (strlen($inputCode) !== 6 || !ctype_digit($inputCode) || empty($secret)) {
-            return false;
-        }
-
-        $currentSlice = (int) floor(time() / 30);
-
-        for ($drift = -1; $drift <= 1; $drift++) {
-            if ($this->calculateTotp($secret, $currentSlice + $drift) === $inputCode) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function calculateTotp(string $secret, int $timeSlice): string
-    {
-        $base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $binaryString = '';
-        $secret = strtoupper($secret);
-
-        for ($i = 0; $i < strlen($secret); $i++) {
-            $pos = strpos($base32Chars, $secret[$i]);
-            if ($pos !== false) {
-                $binaryString .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
-            }
-        }
-
-        $secretBytes = '';
-        for ($i = 0; $i + 8 <= strlen($binaryString); $i += 8) {
-            $secretBytes .= chr(bindec(substr($binaryString, $i, 8)));
-        }
-
-        $timeBytes = pack('N*', 0) . pack('N*', $timeSlice);
-        $hmac = hash_hmac('sha1', $timeBytes, $secretBytes, true);
-        $offset = ord(substr($hmac, -1)) & 0x0F;
-        $hashPart = substr($hmac, $offset, 4);
-        $value = unpack('N', $hashPart)[1] & 0x7FFFFFFF;
-        $totp = $value % 1000000;
-
-        return str_pad((string)$totp, 6, '0', STR_PAD_LEFT);
+        return cookie('laraslice_device_token', $token, 60 * 24 * 365, null, null, config('session.secure'), true, false, config('session.same_site', 'lax'));
     }
 
     /**

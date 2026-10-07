@@ -9,15 +9,20 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
+use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
 
 abstract class BaseSliceApiController extends Controller
 {
+    use AuthorizesSliceActions;
+
     abstract protected function getService(): IFormDataService&IListingDataService;
     abstract protected function getFormClass(): string;
     abstract protected function getFilterClass(): string;
 
     public function getList(Request $request): JsonResponse
     {
+        $this->authorizeSlice('view');
+
         $filterClass = $this->getFilterClass();
         $filter = new $filterClass($request->all());
 
@@ -28,6 +33,8 @@ abstract class BaseSliceApiController extends Controller
 
     public function getItemById(string|int $id): JsonResponse
     {
+        $this->authorizeSlice('view');
+
         $item = $this->getService()->getItemById($id);
 
         if (!$item) {
@@ -39,10 +46,11 @@ abstract class BaseSliceApiController extends Controller
 
     public function save(Request $request): JsonResponse
     {
+        $isUpdate = ! empty($request->input('id'));
+        $this->authorizeSlice($isUpdate ? 'edit' : 'create');
+
         $formClass = $this->getFormClass();
         $form = $formClass::fromArray($request->all());
-
-        $isUpdate = ! empty($form->id);
 
         try {
             $id = $this->getService()->save($form);
@@ -64,6 +72,8 @@ abstract class BaseSliceApiController extends Controller
 
     public function delete(string|int $id): JsonResponse
     {
+        $this->authorizeSlice('delete');
+
         $deleted = $this->getService()->delete($id);
 
         if (!$deleted) {
@@ -74,5 +84,15 @@ abstract class BaseSliceApiController extends Controller
             'success' => true,
             'message' => 'Record deleted successfully',
         ]);
+    }
+
+    /**
+     * Permission base slug derived from the controller name, e.g. UserApiController -> "user".
+     */
+    protected function getPermissionBase(): string
+    {
+        $name = preg_replace('/ApiController$/', '', class_basename(static::class));
+
+        return \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($name));
     }
 }

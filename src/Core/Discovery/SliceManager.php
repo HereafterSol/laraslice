@@ -636,29 +636,7 @@ class SliceManager
         $nav = [];
         $currentUser = auth()->check() ? auth()->user() : null;
 
-        $isSuperAdmin = false;
-        if ($currentUser) {
-            if (method_exists($currentUser, 'hasRole') && $currentUser->hasRole('super-admin')) {
-                $isSuperAdmin = true;
-            } elseif (method_exists($currentUser, 'isSuperAdmin') && $currentUser->isSuperAdmin()) {
-                $isSuperAdmin = true;
-            } elseif (isset($currentUser->email) && $currentUser->email === config('laraslice.super_admin_email', 'admin@laraslice.com')) {
-                $isSuperAdmin = true;
-            } elseif (isset($currentUser->id)) {
-                try {
-                    if (\Illuminate\Support\Facades\Schema::hasTable('role_user') && \Illuminate\Support\Facades\Schema::hasTable('roles')) {
-                        $isSuperAdmin = \Illuminate\Support\Facades\DB::table('role_user')
-                            ->join('roles', 'role_user.role_id', '=', 'roles.id')
-                            ->where('role_user.user_id', $currentUser->id)
-                            ->where(function ($q) {
-                                $q->where('roles.slug', 'super-admin')
-                                  ->orWhere('roles.id', 1);
-                            })
-                            ->exists();
-                    }
-                } catch (\Throwable $e) {}
-            }
-        }
+        $isSuperAdmin = $currentUser && \LaraSlice\Core\Security\Access::isSuperAdmin($currentUser);
 
         foreach ($this->getActiveSlices() as $slice) {
             if (isset($slice->navigation['visible']) && $slice->navigation['visible'] === false) {
@@ -982,7 +960,7 @@ class SliceManager
         // Ensure super-admin role automatically receives all synced permissions by default
         try {
             $superAdminRole = \Illuminate\Support\Facades\Schema::hasTable('roles')
-                ? \Illuminate\Support\Facades\DB::table('roles')->where('slug', 'super-admin')->orWhere('id', 1)->first()
+                ? \Illuminate\Support\Facades\DB::table('roles')->where('slug', 'super-admin')->first()
                 : null;
 
             if ($superAdminRole && \Illuminate\Support\Facades\Schema::hasTable('permission_role')) {
@@ -1080,6 +1058,40 @@ class SliceManager
     /**
      * Discover all database tables associated with a slice.
      */
+    /**
+     * Core slices (Users, Roles, Settings, Auth, or any manifest with "core": true)
+     * and slices inside the package itself are never destroyed or wiped.
+     */
+    public function isProtectedSlice(SliceManifest $slice): bool
+    {
+        if (filter_var($slice->raw['core'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        $packageSlices = realpath(dirname(__DIR__, 2) . '/Slices');
+        $slicePath = realpath($slice->path);
+
+        return $packageSlices !== false && $slicePath !== false
+            && str_starts_with($slicePath . DIRECTORY_SEPARATOR, $packageSlices . DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * Tables owned by protected slices; these are never dropped or truncated.
+     *
+     * @return array<int, string>
+     */
+    public function protectedTables(): array
+    {
+        $tables = [];
+        foreach ($this->getAllSlices() as $slice) {
+            if ($this->isProtectedSlice($slice)) {
+                $tables = array_merge($tables, $this->getSliceTables($slice), $slice->tables ?? []);
+            }
+        }
+
+        return array_values(array_unique(array_filter($tables)));
+    }
+
     public function getSliceTables(SliceManifest $slice): array
     {
         $primary = $slice->name ? strtolower(\Illuminate\Support\Str::plural(\Illuminate\Support\Str::snake($slice->name))) : '';
@@ -1147,7 +1159,11 @@ class SliceManager
             throw new \InvalidArgumentException("Slice [{$sliceName}] not found.");
         }
 
-        $tables = $this->getSliceTables($slice);
+        if ($this->isProtectedSlice($slice)) {
+            throw new \RuntimeException("Slice [{$slice->name}] is a core LaraSlice slice and cannot be destroyed.");
+        }
+
+        $tables = array_values(array_diff($this->getSliceTables($slice), $this->protectedTables()));
 
         $droppedTables = [];
         $wipedTables = [];
@@ -1229,7 +1245,7 @@ class SliceManager
         $slices = [];
         foreach ($this->getAllSlices() as $s) {
             $sliceDomain = $s->domain ?? $s->navigation['group'] ?? $s->raw['domain'] ?? null;
-            if (strtolower(trim((string)$sliceDomain)) === strtolower(trim($domainName))) {
+            if (strtolower(trim((string)$sliceDomain)) === strtolower(trim($domainName)) && ! $this->isProtectedSlice($s)) {
                 $slices[] = $s;
             }
         }

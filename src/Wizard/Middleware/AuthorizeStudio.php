@@ -4,57 +4,36 @@ namespace LaraSlice\Wizard\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use LaraSlice\Core\Security\Access;
 use Symfony\Component\HttpFoundation\Response;
 
 class AuthorizeStudio
 {
     /**
-     * Handle an incoming request to Slice Studio & Architecture Wizard.
+     * Require the given studio permission (or the `studio.*` wildcard) for this route.
      */
-    public function handle(Request $request, Closure $next, ?string $permission = 'studio.access'): Response
+    public function handle(Request $request, Closure $next, string $permission = 'studio.access'): Response
     {
-        if (! auth()->check()) {
-            return redirect()->route('login');
+        $user = $request->user();
+
+        if (! $user) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            return redirect()->guest(\Illuminate\Support\Facades\Route::has('login') ? route('login') : '/');
         }
 
-        $user = auth()->user();
-
-        // 1. Super Administrator always has unrestricted access
-        if (method_exists($user, 'hasRole') && $user->hasRole('super-admin')) {
+        if (Access::allows($user, [$permission, 'studio.*'])) {
             return $next($request);
         }
 
-        // 2. Check candidate permissions for Slice Studio
-        $candidates = array_unique(array_filter([
-            $permission,
-            'studio.access',
-            'system.slices.view',
-            'system.*',
-            'studio.*',
-        ]));
+        $message = "Access Denied: You do not have the required permission [{$permission}] for Slice Studio.";
 
-        $hasAccess = false;
-        foreach ($candidates as $candidate) {
-            if (method_exists($user, 'hasPermission') && $user->hasPermission($candidate)) {
-                $hasAccess = true;
-                break;
-            } elseif (method_exists($user, 'can') && $user->can($candidate)) {
-                $hasAccess = true;
-                break;
-            }
+        if ($request->expectsJson()) {
+            return response()->json(['success' => false, 'message' => $message], 403);
         }
 
-        if (! $hasAccess) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Access Denied: You do not have the required permission [' . $permission . '] to access Slice Studio.',
-                ], 403);
-            }
-
-            abort(403, 'Access Denied: You do not have the required permission [' . $permission . '] to access Slice Studio.');
-        }
-
-        return $next($request);
+        abort(403, $message);
     }
 }

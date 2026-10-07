@@ -15,6 +15,9 @@ class FlutterSliceGenerator
 
     public function generate(string $name): string
     {
+        // The name becomes a directory and Dart identifiers; reject anything but a plain slice name
+        SliceName::canonical($name);
+
         $studly = Str::studly($name);
         $camel  = Str::camel($name);
         $snake  = Str::snake($name);

@@ -6,7 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
-use Illuminate\Support\Facades\DB;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Slices\Settings\Models\Setting;
 
 class AiChatController
 {
@@ -17,45 +18,38 @@ class AiChatController
         $this->aiEngine = $aiEngine;
     }
 
+    /** Providers whose API key is stored (encrypted) in the settings table. */
+    private const KEYED_PROVIDERS = ['opencode', 'openai', 'gemini', 'anthropic', 'openrouter'];
+
     /**
      * Display AI Copilot & Model Settings view.
      */
     public function settings(): View
     {
-        // Check permission if user is authenticated
-        if (auth()->check()) {
-            $user = auth()->user();
-            $canAccess = ($user->email === config('laraslice.super_admin_email', 'admin@laraslice.com')) ||
-                (method_exists($user, 'hasRole') && $user->hasRole('super-admin')) ||
-                (method_exists($user, 'hasPermission') && ($user->hasPermission('ai.settings.view') || $user->hasPermission('settings.view'))) ||
-                (method_exists($user, 'can') && ($user->can('ai.settings.view') || $user->can('settings.view')));
-
-            if (!$canAccess) {
-                abort(403, 'Unauthorized access to AI Copilot Settings.');
-            }
-        }
+        $this->authorizeAi(['ai.settings.view', 'ai.settings.edit', 'settings.view']);
 
         $providers = $this->aiEngine->getProviders();
         $activeProvider = $this->aiEngine->getActiveProvider();
-        
+
         $settings = [
             'default_provider' => $activeProvider,
-            'opencode_api_key' => $this->aiEngine->getSetting('ai.opencode_api_key', '') ?: env('OPENCODE_API_KEY', 'sk-5bR4ae9ul9VzQbUyQRzmBR7S7hkgIekoGhbhheJoH5G3eD5xH8WeJgP8Ld1nw6om'),
-            'opencode_model'   => $this->aiEngine->getSetting('ai.opencode_model', 'space-bunny-free') ?: env('OPENCODE_MODEL', 'space-bunny-free'),
-            'openai_api_key'   => $this->aiEngine->getSetting('ai.openai_api_key', ''),
-            'openai_model'     => $this->aiEngine->getSetting('ai.openai_model', 'gpt-4o-mini'),
-            'gemini_api_key'   => $this->aiEngine->getSetting('ai.gemini_api_key', ''),
-            'gemini_model'     => $this->aiEngine->getSetting('ai.gemini_model', 'gemini-2.5-flash'),
-            'anthropic_api_key'=> $this->aiEngine->getSetting('ai.anthropic_api_key', ''),
-            'anthropic_model'  => $this->aiEngine->getSetting('ai.anthropic_model', 'claude-3-5-sonnet-20241022'),
-            'openrouter_api_key'=> $this->aiEngine->getSetting('ai.openrouter_api_key', ''),
-            'openrouter_model' => $this->aiEngine->getSetting('ai.openrouter_model', 'meta-llama/llama-3.3-70b-instruct'),
+            'opencode_model'   => $this->aiEngine->providerModel('opencode', 'space-bunny-free'),
+            'openai_model'     => $this->aiEngine->providerModel('openai', 'gpt-4o-mini'),
+            'gemini_model'     => $this->aiEngine->providerModel('gemini', 'gemini-2.5-flash'),
+            'anthropic_model'  => $this->aiEngine->providerModel('anthropic', 'claude-3-5-sonnet-20241022'),
+            'openrouter_model' => $this->aiEngine->providerModel('openrouter', 'meta-llama/llama-3.3-70b-instruct'),
             'ollama_endpoint'  => $this->aiEngine->getSetting('ai.ollama_endpoint', 'http://localhost:11434'),
-            'ollama_model'     => $this->aiEngine->getSetting('ai.ollama_model', 'deepseek-r1:8b'),
+            'ollama_model'     => $this->aiEngine->providerModel('ollama', 'deepseek-r1:8b'),
             'allow_telemetry'  => $this->aiEngine->getSetting('ai.allow_telemetry', 'true') === 'true',
             'clarifying_wizard'=> $this->aiEngine->getSetting('ai.clarifying_wizard', 'true') === 'true',
             'floating_bubble'  => $this->aiEngine->getSetting('ai.floating_bubble', 'true') === 'true',
         ];
+
+        // Stored keys are never sent back to the browser; the form only learns whether one is set.
+        foreach (self::KEYED_PROVIDERS as $provider) {
+            $settings["{$provider}_api_key"] = '';
+            $settings["{$provider}_api_key_set"] = ! empty($this->aiEngine->providerKey($provider));
+        }
 
         $context = $this->aiEngine->getSystemContext('/admin/settings/ai');
 
@@ -64,39 +58,45 @@ class AiChatController
 
     /**
      * Save AI Copilot and provider settings into settings table.
+     * API keys are stored encrypted; a blank key field keeps the stored key.
      */
     public function updateSettings(Request $request): RedirectResponse
     {
+        $this->authorizeAi(['ai.settings.edit', 'settings.edit']);
+
         $validated = $request->validate([
-            'default_provider'   => 'required|string',
-            'opencode_api_key'   => 'nullable|string',
-            'opencode_model'     => 'nullable|string',
-            'openai_api_key'     => 'nullable|string',
-            'openai_model'       => 'nullable|string',
-            'gemini_api_key'     => 'nullable|string',
-            'gemini_model'       => 'nullable|string',
-            'anthropic_api_key'  => 'nullable|string',
-            'anthropic_model'    => 'nullable|string',
-            'openrouter_api_key' => 'nullable|string',
-            'openrouter_model'   => 'nullable|string',
-            'ollama_endpoint'    => 'nullable|string',
-            'ollama_model'       => 'nullable|string',
+            'default_provider'   => 'required|string|in:opencode,openai,gemini,anthropic,openrouter,ollama',
+            'opencode_api_key'   => 'nullable|string|max:500',
+            'opencode_model'     => 'nullable|string|max:150',
+            'openai_api_key'     => 'nullable|string|max:500',
+            'openai_model'       => 'nullable|string|max:150',
+            'gemini_api_key'     => 'nullable|string|max:500',
+            'gemini_model'       => 'nullable|string|max:150',
+            'anthropic_api_key'  => 'nullable|string|max:500',
+            'anthropic_model'    => 'nullable|string|max:150',
+            'openrouter_api_key' => 'nullable|string|max:500',
+            'openrouter_model'   => 'nullable|string|max:150',
+            'ollama_endpoint'    => ['nullable', 'string', 'max:255', 'regex:/^https?:\/\//i'],
+            'ollama_model'       => 'nullable|string|max:150',
             'allow_telemetry'    => 'nullable',
             'clarifying_wizard'  => 'nullable',
             'floating_bubble'    => 'nullable',
         ]);
 
-        $keys = [
+        foreach (self::KEYED_PROVIDERS as $provider) {
+            if (! empty($validated["{$provider}_api_key"])) {
+                Setting::set("ai.{$provider}_api_key", $validated["{$provider}_api_key"], 'ai', true);
+            } elseif ($request->boolean("{$provider}_api_key_clear")) {
+                Setting::set("ai.{$provider}_api_key", '', 'ai', true);
+            }
+        }
+
+        $plain = [
             'ai.default_provider'   => $validated['default_provider'],
-            'ai.opencode_api_key'   => $validated['opencode_api_key'] ?? '',
             'ai.opencode_model'     => $validated['opencode_model'] ?? 'space-bunny-free',
-            'ai.openai_api_key'     => $validated['openai_api_key'] ?? '',
             'ai.openai_model'       => $validated['openai_model'] ?? 'gpt-4o-mini',
-            'ai.gemini_api_key'     => $validated['gemini_api_key'] ?? '',
             'ai.gemini_model'       => $validated['gemini_model'] ?? 'gemini-2.5-flash',
-            'ai.anthropic_api_key'  => $validated['anthropic_api_key'] ?? '',
             'ai.anthropic_model'    => $validated['anthropic_model'] ?? 'claude-3-5-sonnet-20241022',
-            'ai.openrouter_api_key' => $validated['openrouter_api_key'] ?? '',
             'ai.openrouter_model'   => $validated['openrouter_model'] ?? 'meta-llama/llama-3.3-70b-instruct',
             'ai.ollama_endpoint'    => $validated['ollama_endpoint'] ?? 'http://localhost:11434',
             'ai.ollama_model'       => $validated['ollama_model'] ?? 'deepseek-r1:8b',
@@ -105,16 +105,8 @@ class AiChatController
             'ai.floating_bubble'    => $request->has('floating_bubble') ? 'true' : 'false',
         ];
 
-        foreach ($keys as $k => $v) {
-            DB::table('settings')->updateOrInsert(
-                ['key' => $k],
-                [
-                    'group'      => 'ai',
-                    'value'      => (string) $v,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            );
+        foreach ($plain as $k => $v) {
+            Setting::set($k, (string) $v, 'ai');
         }
 
         return redirect()->route('settings.ai')->with('success', "AI Settings successfully updated! Active provider: {$validated['default_provider']}");
@@ -184,37 +176,42 @@ class AiChatController
      */
     public function updateConfig(Request $request): JsonResponse
     {
-        $provider = $request->input('provider', 'opencode');
-        $apiKey = $request->input('api_key');
+        $validated = $request->validate([
+            'provider' => 'required|string|in:opencode,openai,gemini,anthropic,openrouter,ollama',
+            'api_key'  => 'nullable|string|max:500',
+        ]);
+        $provider = $validated['provider'];
 
-        if ($apiKey && in_array($provider, ['openai', 'gemini', 'anthropic', 'openrouter'], true)) {
-            $keyName = "ai.{$provider}_api_key";
-            DB::table('settings')->updateOrInsert(
-                ['key' => $keyName],
-                [
-                    'group'      => 'ai',
-                    'value'      => $apiKey,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            );
+        if (! empty($validated['api_key']) && in_array($provider, self::KEYED_PROVIDERS, true)) {
+            Setting::set("ai.{$provider}_api_key", $validated['api_key'], 'ai', true);
         }
 
-        DB::table('settings')->updateOrInsert(
-            ['key' => 'ai.default_provider'],
-            [
-                'group'      => 'ai',
-                'value'      => $provider,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        );
+        Setting::set('ai.default_provider', $provider, 'ai');
 
         return response()->json([
             'success' => true,
             'message' => "AI settings updated. Active provider: {$provider}",
         ]);
     }
+
+    /**
+     * Abort unless the signed-in user is a super-admin or holds one of the abilities.
+     *
+     * @param  array<int, string>  $abilities
+     */
+    private function authorizeAi(array $abilities): void
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        if (! Access::allows($user, $abilities)) {
+            abort(403, 'Unauthorized access to AI Copilot Settings.');
+        }
+    }
+
     /**
      * Get real-time 1-paragraph overview and data metrics for current page.
      */

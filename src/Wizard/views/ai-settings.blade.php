@@ -231,7 +231,7 @@ function aiSettingsApp() {
                     <div x-show="selectedProvider === 'openai'" class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/20 border border-border">
                         <div class="space-y-1.5">
                             <x-ui.label for="openai_api_key">OpenAI API Key</x-ui.label>
-                            <x-ui.input id="openai_api_key" name="openai_api_key" type="password" value="{{ old('openai_api_key', $settings['openai_api_key']) }}" placeholder="sk-..." />
+                            <x-ui.input id="openai_api_key" name="openai_api_key" type="password" value="" autocomplete="new-password" placeholder="{{ !empty($settings['openai_api_key_set']) ? 'Saved key hidden. Leave blank to keep it' : 'sk-...' }}" />
                         </div>
                         <div class="space-y-1.5">
                             <x-ui.label for="openai_model">Model Selection</x-ui.label>
@@ -247,7 +247,7 @@ function aiSettingsApp() {
                     <div x-show="selectedProvider === 'gemini'" class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/20 border border-border">
                         <div class="space-y-1.5">
                             <x-ui.label for="gemini_api_key">Google AI Studio API Key</x-ui.label>
-                            <x-ui.input id="gemini_api_key" name="gemini_api_key" type="password" value="{{ old('gemini_api_key', $settings['gemini_api_key']) }}" placeholder="AIzaSy..." />
+                            <x-ui.input id="gemini_api_key" name="gemini_api_key" type="password" value="" autocomplete="new-password" placeholder="{{ !empty($settings['gemini_api_key_set']) ? 'Saved key hidden. Leave blank to keep it' : 'AIzaSy...' }}" />
                         </div>
                         <div class="space-y-1.5">
                             <x-ui.label for="gemini_model">Model Selection</x-ui.label>
@@ -263,7 +263,7 @@ function aiSettingsApp() {
                     <div x-show="selectedProvider === 'anthropic'" class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/20 border border-border">
                         <div class="space-y-1.5">
                             <x-ui.label for="anthropic_api_key">Anthropic API Key</x-ui.label>
-                            <x-ui.input id="anthropic_api_key" name="anthropic_api_key" type="password" value="{{ old('anthropic_api_key', $settings['anthropic_api_key']) }}" placeholder="sk-ant-..." />
+                            <x-ui.input id="anthropic_api_key" name="anthropic_api_key" type="password" value="" autocomplete="new-password" placeholder="{{ !empty($settings['anthropic_api_key_set']) ? 'Saved key hidden. Leave blank to keep it' : 'sk-ant-...' }}" />
                         </div>
                         <div class="space-y-1.5">
                             <x-ui.label for="anthropic_model">Model Selection</x-ui.label>
@@ -278,7 +278,7 @@ function aiSettingsApp() {
                     <div x-show="selectedProvider === 'openrouter'" class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/20 border border-border">
                         <div class="space-y-1.5">
                             <x-ui.label for="openrouter_api_key">OpenRouter API Key</x-ui.label>
-                            <x-ui.input id="openrouter_api_key" name="openrouter_api_key" type="password" value="{{ old('openrouter_api_key', $settings['openrouter_api_key']) }}" placeholder="sk-or-..." />
+                            <x-ui.input id="openrouter_api_key" name="openrouter_api_key" type="password" value="" autocomplete="new-password" placeholder="{{ !empty($settings['openrouter_api_key_set']) ? 'Saved key hidden. Leave blank to keep it' : 'sk-or-...' }}" />
                         </div>
                         <div class="space-y-1.5">
                             <x-ui.label for="openrouter_model">Model Selection</x-ui.label>
@@ -311,7 +311,7 @@ function aiSettingsApp() {
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-1.5">
                                 <x-ui.label for="opencode_api_key">OpenCode API Key</x-ui.label>
-                                <x-ui.input id="opencode_api_key" name="opencode_api_key" type="password" value="{{ old('opencode_api_key', $settings['opencode_api_key'] ?? 'sk-5bR4ae9ul9VzQbUyQRzmBR7S7hkgIekoGhbhheJoH5G3eD5xH8WeJgP8Ld1nw6om') }}" placeholder="sk-5bR4ae9ul9VzQb..." />
+                                <x-ui.input id="opencode_api_key" name="opencode_api_key" type="password" value="" autocomplete="new-password" placeholder="{{ !empty($settings['opencode_api_key_set']) ? 'Saved key hidden. Leave blank to keep it' : 'sk-...' }}" />
                                 <p class="text-[10px] text-muted-foreground">Connected to official OpenCode Zen inference gateway.</p>
                             </div>
                             <div class="space-y-1.5">

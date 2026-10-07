@@ -6,6 +6,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Routing\Controller;
+use LaraSlice\Core\Security\Access;
 use LaraSlice\Slices\Settings\Services\SettingSliceService;
 
 class SettingWebController extends Controller
@@ -22,6 +23,8 @@ class SettingWebController extends Controller
      */
     public function smtp(): View
     {
+        $this->authorizeSettings(['settings.smtp.view', 'settings.smtp.edit', 'settings.view']);
+
         $settings = $this->settingService->getSmtpSettings();
         return view('settings::smtp', compact('settings'));
     }
@@ -31,12 +34,14 @@ class SettingWebController extends Controller
      */
     public function saveSmtp(Request $request): RedirectResponse
     {
+        $this->authorizeSettings(['settings.smtp.edit', 'settings.edit']);
+
         $validated = $request->validate([
             'mail_host' => 'required|string',
             'mail_port' => 'required|integer',
             'mail_username' => 'nullable|string',
             'mail_password' => 'nullable|string',
-            'mail_encryption' => 'required|string',
+            'mail_encryption' => 'required|string|in:tls,ssl,none',
             'mail_from_address' => 'required|email',
             'mail_from_name' => 'required|string',
         ]);
@@ -51,6 +56,8 @@ class SettingWebController extends Controller
      */
     public function testSmtp(Request $request): RedirectResponse
     {
+        $this->authorizeSettings(['settings.smtp.test', 'settings.smtp.edit']);
+
         $request->validate(['recipient' => 'required|email']);
 
         $res = $this->settingService->testSmtpConnection($request->input('recipient'));
@@ -77,5 +84,23 @@ class SettingWebController extends Controller
     public function saveAi(\Illuminate\Http\Request $request): \Illuminate\Http\RedirectResponse
     {
         return app(\LaraSlice\Core\Ai\AiChatController::class)->updateSettings($request);
+    }
+
+    /**
+     * Abort unless the signed-in user is a super-admin or holds one of the abilities.
+     *
+     * @param  array<int, string>  $abilities
+     */
+    private function authorizeSettings(array $abilities): void
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        if (! Access::allows($user, $abilities)) {
+            abort(403, 'Access Denied: you do not have permission to manage system settings.');
+        }
     }
 }

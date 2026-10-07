@@ -582,6 +582,14 @@ HTML;
     }
 
     /**
+     * Whether a route prefix is a plain URL path that is safe to write into a routes file.
+     */
+    public static function isSafeRoutePrefix(string $prefix): bool
+    {
+        return (bool) preg_match('#^[A-Za-z0-9][A-Za-z0-9/_-]{0,120}$#', $prefix) && !str_contains($prefix, '//');
+    }
+
+    /**
      * Update navigation settings in slice.json (October CMS Builder equivalent)
      */
     public function updateNavigation(string $sliceName, array $navConfig): array
@@ -600,6 +608,11 @@ HTML;
         $existingGroup = $manifest['navigation']['group'] ?? $manifest['domain'] ?? null;
         $newUrl = !empty($navConfig['url']) ? '/' . ltrim($navConfig['url'], '/') : ('/' . Str::snake($pluralName));
         $cleanPrefix = ltrim($newUrl, '/');
+
+        // The prefix is written into Routes/web.php, so only plain URL path characters are allowed
+        if (!self::isSafeRoutePrefix($cleanPrefix)) {
+            throw new \InvalidArgumentException('The navigation URL may only contain letters, numbers, "/", "_" and "-".');
+        }
 
         $oldUrl = $manifest['navigation']['url'] ?? ('/' . Str::snake($pluralName));
         $oldTitle = $manifest['navigation']['title'] ?? $manifest['navigation']['label'] ?? $manifest['title'] ?? $sliceName;
@@ -673,7 +686,7 @@ HTML;
                             : "\\App\\Slices\\{$pluralName}\\Controllers\\{$primaryController}");
 
                     $routeBlock = "\n\n// Custom Route URL alias from Navigation Studio\n" .
-                        "Route::prefix('{$cleanPrefix}')->name('" . Str::snake($pluralName) . ".')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n" .
+                        "Route::prefix(" . var_export($cleanPrefix, true) . ")->name('" . Str::snake($pluralName) . ".')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n" .
                         "    Route::get('/', [{$fullControllerClass}::class, 'index'])->name('index');\n" .
                         "    Route::get('/create', [{$fullControllerClass}::class, 'create'])->name('create');\n" .
                         "    Route::post('/', [{$fullControllerClass}::class, 'store'])->name('store');\n" .
@@ -684,8 +697,8 @@ HTML;
 
                     $redirectOld = !isset($navConfig['redirect_old']) || !empty($navConfig['redirect_old']);
                     $oldCleanPrefix = trim($oldUrl, '/');
-                    if ($redirectOld && !empty($oldCleanPrefix) && $oldCleanPrefix !== $cleanPrefix) {
-                        $redirectLine = "Route::redirect('{$oldCleanPrefix}', '{$newUrl}', 301);";
+                    if ($redirectOld && !empty($oldCleanPrefix) && $oldCleanPrefix !== $cleanPrefix && self::isSafeRoutePrefix($oldCleanPrefix)) {
+                        $redirectLine = 'Route::redirect(' . var_export($oldCleanPrefix, true) . ', ' . var_export($newUrl, true) . ', 301);';
                         if (!str_contains($webContent, $redirectLine)) {
                             $routeBlock .= "\n// Canonical 301 Permanent Redirect\n" . $redirectLine . "\n";
                         }
@@ -1496,14 +1509,23 @@ PHP;
 
         $cleanedRelations = [];
         foreach ($relations as $rel) {
-            $src = Str::snake($rel['source_model'] ?? '');
-            $type = $rel['type'] ?? 'belongsTo';
-            $target = $rel['model'] ?? '';
-            $fk = $rel['foreign_key'] ?? '';
-            $method = Str::camel($rel['method'] ?? $rel['name'] ?? $target);
+            $src = Str::snake((string) ($rel['source_model'] ?? ''));
+            $type = (string) ($rel['type'] ?? 'belongsTo');
+            $target = (string) ($rel['model'] ?? '');
+            $fk = (string) ($rel['foreign_key'] ?? '');
+            $method = Str::camel((string) ($rel['method'] ?? $rel['name'] ?? $target));
 
             if (!$src || !$target) {
                 continue;
+            }
+
+            // Every value below is written into PHP source, so accept identifiers only
+            if (!in_array($type, ['belongsTo', 'hasMany', 'hasOne', 'belongsToMany'], true)
+                || !preg_match('/^[a-z][a-z0-9_]{0,62}$/', $src)
+                || !preg_match('/^[A-Za-z][A-Za-z0-9_]{0,62}$/', $target)
+                || !preg_match('/^[a-z][A-Za-z0-9_]{0,62}$/', $method)
+                || ($fk !== '' && !preg_match('/^[a-z][a-z0-9_]{0,62}$/', $fk))) {
+                throw new \InvalidArgumentException('Relationships must use plain identifiers (letters, numbers and underscores) and a supported type.');
             }
 
             $cleanedRelations[] = [
@@ -1521,7 +1543,8 @@ PHP;
                 $sourceModelFile = $sliceDir . "/Models/" . Str::studly($src) . ".php";
             }
 
-            if (file_exists($sourceModelFile)) {
+            $modelsDir = realpath($sliceDir . '/Models');
+            if (file_exists($sourceModelFile) && $modelsDir !== false && dirname((string) realpath($sourceModelFile)) === $modelsDir) {
                 $content = file_get_contents($sourceModelFile);
 
                 $targetStudly = Str::studly(Str::singular($target));
@@ -1541,11 +1564,12 @@ PHP;
                     default         => '\Illuminate\Database\Eloquent\Relations\BelongsTo',
                 };
 
+                $fkArg = $fk !== '' ? ', ' . var_export($fk, true) : '';
                 $relationCall = match ($type) {
-                    'hasMany'       => "\$this->hasMany({$targetClass}" . ($fk ? ", '{$fk}'" : '') . ");",
-                    'hasOne'        => "\$this->hasOne({$targetClass}" . ($fk ? ", '{$fk}'" : '') . ");",
+                    'hasMany'       => "\$this->hasMany({$targetClass}{$fkArg});",
+                    'hasOne'        => "\$this->hasOne({$targetClass}{$fkArg});",
                     'belongsToMany' => "\$this->belongsToMany({$targetClass});",
-                    default         => "\$this->belongsTo({$targetClass}" . ($fk ? ", '{$fk}'" : '') . ");",
+                    default         => "\$this->belongsTo({$targetClass}{$fkArg});",
                 };
 
                 $snippet = <<<PHP

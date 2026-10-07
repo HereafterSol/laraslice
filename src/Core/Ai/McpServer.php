@@ -26,14 +26,15 @@ class McpServer
      */
     public function handle(Request $request): JsonResponse
     {
-        $payload = $request->json()->all();
-        if (empty($payload)) {
-            $payload = [
+        // JSON-RPC bodies only: never build a call from query strings or form fields,
+        // which a plain link or cross-site form could supply.
+        $payload = $request->isJson() ? $request->json()->all() : [];
+        if (empty($payload) || ! is_string($payload['method'] ?? null)) {
+            return response()->json([
                 'jsonrpc' => '2.0',
-                'id'      => 1,
-                'method'  => $request->input('method', 'tools/list'),
-                'params'  => $request->input('params', []),
-            ];
+                'id'      => null,
+                'error'   => ['code' => -32700, 'message' => 'Expected a JSON-RPC 2.0 request body.'],
+            ], 400);
         }
 
         $response = $this->handleRpc($payload);
@@ -99,7 +100,7 @@ class McpServer
                                 'text' => is_string($callResult) ? $callResult : json_encode($callResult, JSON_PRETTY_PRINT),
                             ],
                         ],
-                        'isError' => false,
+                        'isError' => is_array($callResult) && (isset($callResult['error']) || ($callResult['success'] ?? true) === false),
                     ],
                 ];
 
@@ -118,8 +119,55 @@ class McpServer
     /**
      * Execute an MCP tool.
      */
+    /**
+     * Tools that change code or data: the permissions they need over HTTP, and
+     * whether the caller must repeat the target's name in a "confirm" argument.
+     */
+    private const WRITE_TOOLS = [
+        'toggle_slice'     => ['abilities' => ['system.slices.toggle', 'slice.toggle'], 'confirm' => false],
+        'seed_slice'       => ['abilities' => ['system.slices.seed', 'slice.seed'], 'confirm' => false],
+        'scaffold_slice'   => ['abilities' => ['studio.create'], 'confirm' => false],
+        'wipe_slice_data'  => ['abilities' => ['system.slices.wipe', 'slice.wipe'], 'confirm' => true],
+        'destroy_slice'    => ['abilities' => ['system.slices.delete', 'slice.delete'], 'confirm' => true],
+        'prune_audit_logs' => ['abilities' => ['studio.wipe'], 'confirm' => true],
+    ];
+
+    /**
+     * Refusal message for a write tool, or null when the call may proceed.
+     */
+    protected function guardWriteTool(string $name, array $args): ?string
+    {
+        $rule = self::WRITE_TOOLS[$name] ?? null;
+        if ($rule === null) {
+            return null;
+        }
+
+        if (app()->environment('production') && ! config('laraslice.wizard.allow_in_production', false)) {
+            return "The {$name} tool is disabled in production.";
+        }
+
+        // Over HTTP the caller is a signed-in user; the local stdio server has none
+        $user = auth()->user();
+        if ($user && ! \LaraSlice\Core\Security\Access::allows($user, array_merge($rule['abilities'], ['studio.*']))) {
+            return "You do not have permission to use the {$name} tool.";
+        }
+
+        if ($rule['confirm']) {
+            $expected = $name === 'prune_audit_logs' ? 'prune' : (string) ($args['slice'] ?? $args['domain'] ?? '');
+            if ($expected === '' || ! is_string($args['confirm'] ?? null) || strcasecmp($args['confirm'], $expected) !== 0) {
+                return "Refusing {$name}: pass confirm=\"{$expected}\" to confirm this destructive action.";
+            }
+        }
+
+        return null;
+    }
+
     public function callTool(string $name, array $args): mixed
     {
+        if ($refusal = $this->guardWriteTool($name, $args)) {
+            return ['success' => false, 'error' => $refusal];
+        }
+
         switch ($name) {
             case 'list_slices':
                 $domain = $args['domain'] ?? null;

@@ -126,8 +126,13 @@ final class BlueprintValidator
 
                 if (isset($field['label']) && (! is_string($field['label']) || trim($field['label']) === '' || strlen($field['label']) > 160)) {
                     $errors[] = "{$fieldPath}.label must be a non-empty string of at most 160 characters.";
+                } elseif (isset($field['label']) && ($problem = \LaraSlice\Generator\BladeSafeText::problem($field['label'], "{$fieldPath}.label"))) {
+                    $errors[] = $problem;
                 }
 
+                if (isset($field['default']) && is_string($field['default']) && ($problem = \LaraSlice\Generator\BladeSafeText::problem($field['default'], "{$fieldPath}.default"))) {
+                    $errors[] = $problem;
+                }
                 if (isset($field['default']) && ! is_scalar($field['default']) && $field['default'] !== null) {
                     $errors[] = "{$fieldPath}.default must be scalar or null.";
                 }
@@ -138,7 +143,7 @@ final class BlueprintValidator
                         $errors[] = "{$fieldPath}.options must be a non-empty map for enum fields.";
                     } else {
                         foreach ($options as $value => $label) {
-                            if (! is_string($value) || $value === '' || ! is_string($label) || $label === '') {
+                            if (! is_string($value) || $value === '' || ! is_string($label) || $label === '' || ! \LaraSlice\Generator\BladeSafeText::isSafe($label)) {
                                 $errors[] = "{$fieldPath}.options must map non-empty string values to labels.";
                                 break;
                             }

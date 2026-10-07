@@ -6,9 +6,12 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
+use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
 
 abstract class BaseSliceWebController extends Controller
 {
+    use AuthorizesSliceActions;
+
     abstract protected function getService(): IFormDataService&IListingDataService;
     abstract protected function getFormClass(): string;
     abstract protected function getFilterClass(): string;
@@ -231,7 +234,8 @@ abstract class BaseSliceWebController extends Controller
         }
 
         $formClass = $this->getFormClass();
-        $form = $formClass::fromArray($request->all());
+        // A create must never target an existing record through a smuggled id
+        $form = $formClass::fromArray($request->except(['id']));
 
         $id = $this->getService()->save($form);
         try {
@@ -300,56 +304,5 @@ abstract class BaseSliceWebController extends Controller
             $prefix = end($parts);
         }
         return \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($prefix));
-    }
-
-    /**
-     * Authorize an action for the current slice.
-     */
-    protected function authorizeSlice(string $action): void
-    {
-        if (! auth()->check()) {
-            return;
-        }
-
-        $user = auth()->user();
-        if (method_exists($user, 'hasRole') && $user->hasRole('super-admin')) {
-            return;
-        }
-
-        $base = $this->getPermissionBase();
-        $pluralBase = \Illuminate\Support\Str::plural($base);
-
-        $candidates = [
-            "{$base}.{$action}",
-            "{$pluralBase}.{$action}",
-            "{$base}.*",
-            "{$pluralBase}.*",
-        ];
-
-        $hasAccess = false;
-        foreach ($candidates as $candidate) {
-            if (method_exists($user, 'hasPermission') && $user->hasPermission($candidate)) {
-                $hasAccess = true;
-                break;
-            } elseif (method_exists($user, 'can') && $user->can($candidate)) {
-                $hasAccess = true;
-                break;
-            }
-        }
-
-        // Only enforce if this permission exists in DB
-        $permExists = false;
-        try {
-            $permExists = \Illuminate\Support\Facades\Schema::hasTable('permissions')
-                && \Illuminate\Support\Facades\DB::table('permissions')
-                    ->whereIn('slug', [$candidates[0], $candidates[1]])
-                    ->exists();
-        } catch (\Throwable $e) {
-            // Fail-safe if DB schema not yet ready
-        }
-
-        if ($permExists && ! $hasAccess) {
-            abort(403, "Access Denied: You do not have the required permission [{$candidates[0]}] to perform this action.");
-        }
     }
 }

@@ -3,15 +3,19 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Console\ConfirmableTrait;
 use LaraSlice\Generator\SliceSeederService;
 use LaraSlice\Core\Discovery\SliceManager;
 
 class SliceSeedCommand extends Command
 {
+    use ConfirmableTrait;
+
     protected $signature = 'slice:seed 
                             {slice? : The name of the slice to seed} 
                             {--domain= : Seed all slices within a domain} 
-                            {--count=10 : Number of sample records to generate per model}';
+                            {--count=10 : Number of sample records to generate per model}
+                            {--force : Allow seeding demo data in production}';
 
     protected $description = 'Seed realistic demo and relational data into modular slice tables';
 
@@ -24,6 +28,11 @@ class SliceSeedCommand extends Command
         if (!$sliceName && !$domainName) {
             $this->error('Please specify either a slice name or --domain= option.');
             $this->line('Example: <fg=yellow>php artisan slice:seed Contacts</> or <fg=yellow>php artisan slice:seed --domain=CRM</>');
+            return Command::FAILURE;
+        }
+
+        // Demo data in a production database is almost never intended
+        if (! $this->confirmToProceed('Seeding fake demo records into a production database')) {
             return Command::FAILURE;
         }
 

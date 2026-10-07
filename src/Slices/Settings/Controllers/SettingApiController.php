@@ -5,6 +5,7 @@ namespace LaraSlice\Slices\Settings\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use LaraSlice\Core\Security\Access;
 use LaraSlice\Slices\Settings\Services\SettingSliceService;
 
 class SettingApiController extends Controller
@@ -21,6 +22,8 @@ class SettingApiController extends Controller
      */
     public function getSmtp(): JsonResponse
     {
+        $this->authorizeSettings(['settings.smtp.view', 'settings.smtp.edit', 'settings.view']);
+
         $settings = $this->settingService->getSmtpSettings();
         // Mask password before returning via API
         $data = (array) $settings;
@@ -37,6 +40,8 @@ class SettingApiController extends Controller
      */
     public function updateSmtp(Request $request): JsonResponse
     {
+        $this->authorizeSettings(['settings.smtp.edit', 'settings.edit']);
+
         $validated = $request->validate([
             'mail_host' => 'required|string',
             'mail_port' => 'required|integer',
@@ -60,6 +65,8 @@ class SettingApiController extends Controller
      */
     public function testSmtp(Request $request): JsonResponse
     {
+        $this->authorizeSettings(['settings.smtp.test', 'settings.smtp.edit']);
+
         $request->validate([
             'email' => 'required|email',
         ]);
@@ -67,5 +74,23 @@ class SettingApiController extends Controller
         $result = $this->settingService->testSmtpConnection($request->input('email'));
 
         return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
+    /**
+     * Abort unless the signed-in user is a super-admin or holds one of the abilities.
+     *
+     * @param  array<int, string>  $abilities
+     */
+    private function authorizeSettings(array $abilities): void
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        if (! Access::allows($user, $abilities)) {
+            abort(403, 'Access Denied: you do not have permission to manage system settings.');
+        }
     }
 }

@@ -27,8 +27,9 @@
         </div>
 
         <!-- Login Card -->
-        <div x-data="{ email: '{{ old('email', 'admin@laraslice.com') }}', password: 'password', fillDemo() { this.email = 'admin@laraslice.com'; this.password = 'password'; } }" class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-8 backdrop-blur-xl shadow-2xl">
-            <!-- Demo Credentials Helper Badge -->
+        <div x-data="{ email: @js(old('email', '')), password: '', fillDemo() { this.email = 'admin@laraslice.com'; this.password = 'password'; } }" class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-8 backdrop-blur-xl shadow-2xl">
+            <!-- Demo Credentials Helper Badge (local development only; matches `slice:install --password=password`) -->
+            @if (app()->isLocal())
             <div class="mb-5 p-3 bg-indigo-500/10 border border-indigo-500/25 rounded-xl flex items-center justify-between text-xs">
                 <div class="flex items-center gap-2">
                     <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">DEMO</span>
@@ -38,6 +39,7 @@
                     Auto Fill
                 </button>
             </div>
+            @endif
 
             @if(session('success'))
             <div class="mb-5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">

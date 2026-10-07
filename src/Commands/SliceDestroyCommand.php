@@ -40,12 +40,17 @@ class SliceDestroyCommand extends Command
             return Command::SUCCESS;
         }
 
-        if ($domainName) {
-            $this->warn("🚨 Destroying domain: [{$domainName}] with mode: {$mode}...");
-            $result = $manager->destroyDomain($domainName, $mode);
-        } else {
-            $this->warn("🚨 Destroying slice: [{$sliceName}] with mode: {$mode}...");
-            $result = $manager->destroySlice($sliceName, $mode);
+        try {
+            if ($domainName) {
+                $this->warn("🚨 Destroying domain: [{$domainName}] with mode: {$mode}...");
+                $result = $manager->destroyDomain($domainName, $mode);
+            } else {
+                $this->warn("🚨 Destroying slice: [{$sliceName}] with mode: {$mode}...");
+                $result = $manager->destroySlice($sliceName, $mode);
+            }
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            $this->error('❌ ' . $e->getMessage());
+            return Command::FAILURE;
         }
 
         if (!$result['success']) {

@@ -50,7 +50,7 @@
 
                     <div class="space-y-1.5">
                         <x-ui.label for="mail_password">Password</x-ui.label>
-                        <x-ui.input id="mail_password" name="mail_password" type="password" value="{{ old('mail_password', $settings->mail_password ?? '') }}" placeholder="••••••••" />
+                        <x-ui.input id="mail_password" name="mail_password" type="password" value="" autocomplete="new-password" placeholder="{{ !empty($settings->mail_password) ? 'Saved password hidden. Leave blank to keep it' : 'SMTP password' }}" />
                     </div>
                 </div>
 
