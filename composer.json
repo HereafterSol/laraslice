@@ -57,6 +57,9 @@
         "orchestra/testbench": "^9.0|^10.0|^11.0",
         "phpunit/phpunit": "^10.0|^11.0"
     },
+    "suggest": {
+        "bacon/bacon-qr-code": "^3.0 - render TOTP enrollment QR codes on the server instead of showing only the setup key"
+    },
     "autoload": {
         "psr-4": {
             "LaraSlice\\": "src/"

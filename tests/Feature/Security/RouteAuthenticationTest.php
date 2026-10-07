@@ -63,6 +63,18 @@ class RouteAuthenticationTest extends TestCase
         $this->assertSame(401, $response->getStatusCode(), "{$method} {$uri} returned {$response->getStatusCode()}");
     }
 
+    public function test_route_names_are_unique_so_route_cache_works(): void
+    {
+        $names = [];
+        foreach (app('router')->getRoutes() as $route) {
+            if ($name = $route->getName()) {
+                $names[$name] = ($names[$name] ?? 0) + 1;
+            }
+        }
+
+        $this->assertSame([], array_keys(array_filter($names, fn ($count) => $count > 1)));
+    }
+
     public function test_mcp_endpoint_rejects_guests_and_get_requests(): void
     {
         $this->get('/.well-known/mcp?method=tools/list')->assertStatus(405);
