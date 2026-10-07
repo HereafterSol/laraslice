@@ -26,6 +26,10 @@ final class BlueprintStudioController extends Controller
     public function show(Request $request): mixed
     {
         $requestedSlice = $request->query('slice');
+        // The value is used to build file paths and glob patterns, so allow plain slice names only
+        if (! is_string($requestedSlice) || ! preg_match('/^[A-Za-z][A-Za-z0-9 _-]{0,80}$/', $requestedSlice)) {
+            $requestedSlice = null;
+        }
         $requestedTemplate = $request->query('template', 'service-desk');
 
         $source = '';

@@ -980,6 +980,9 @@ BLADE;
             if (! is_string($label) || mb_strlen($label) > 120) {
                 throw new SliceFieldDefinitionException("Field '{$name}' must have a text label up to 120 characters.");
             }
+            if ($problem = BladeSafeText::problem($label, "Field '{$name}' label")) {
+                throw new SliceFieldDefinitionException($problem);
+            }
 
             $options = [];
             if ($type === 'select' && ! empty($definition['options'])) {
@@ -988,7 +991,7 @@ BLADE;
                     throw new SliceFieldDefinitionException("Select field '{$name}' requires between 1 and 50 options.");
                 }
                 foreach ($options as $value => $optionLabel) {
-                    if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($optionLabel)) {
+                    if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($optionLabel) || ! BladeSafeText::isSafe($optionLabel)) {
                         throw new SliceFieldDefinitionException("Select field '{$name}' has an invalid option.");
                     }
                 }
@@ -1011,6 +1014,9 @@ BLADE;
             $default = $definition['default'] ?? ($type === 'boolean' ? false : null);
             if (! is_null($default) && ! is_scalar($default)) {
                 throw new SliceFieldDefinitionException("Field '{$name}' default must be a scalar value or null.");
+            }
+            if (is_string($default) && ($problem = BladeSafeText::problem($default, "Field '{$name}' default"))) {
+                throw new SliceFieldDefinitionException($problem);
             }
             if ($default !== null && match ($type) {
                 'string', 'text', 'email', 'select', 'date', 'datetime' => ! is_string($default),
