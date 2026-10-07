@@ -515,7 +515,7 @@ function larasliceCopilot() {
             this.messages.push({
                 role: 'user',
                 content: query,
-                htmlContent: query.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                htmlContent: this.escapeHtml(query)
             });
 
             this.inputQuery = '';
@@ -666,9 +666,20 @@ function larasliceCopilot() {
             }, 60);
         },
 
+        escapeHtml(text) {
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+
+        // Replies can echo database values or text steered by prompt injection, so escape
+        // everything first; the markdown rules below only add their own fixed tags.
         formatMarkdown(text) {
             if (!text) return '';
-            let html = text;
+            let html = this.escapeHtml(text);
 
             // Markdown table parser
             if (html.includes('|')) {
@@ -719,11 +730,11 @@ function larasliceCopilot() {
             html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
             html = html.replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>');
 
-            // Inline Code
-            html = html.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-pink-300 font-mono text-[10px]">$1</code>');
-
             // Fenced code blocks
             html = html.replace(/```([a-z]*)\n([\s\S]*?)```/g, '<pre class="my-2 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-mono text-emerald-300 overflow-x-auto"><code>$2</code></pre>');
+
+            // Inline Code
+            html = html.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-pink-300 font-mono text-[10px]">$1</code>');
 
             // Bullet Lists
             html = html.replace(/^\s*[-*•]\s+(.*$)/gim, '<li class="ml-3 text-slate-300 list-disc">$1</li>');
