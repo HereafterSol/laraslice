@@ -2,60 +2,50 @@
 
 namespace LaraSlice\Slices\Auth\Services;
 
-use LaraSlice\Core\Base\BaseSliceService;
 use LaraSlice\Slices\Users\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use LaraSlice\Slices\Users\Services\RecoveryCodeService;
+use LaraSlice\Slices\Users\Services\SecurityPolicyService;
+use LaraSlice\Slices\Users\Services\TotpService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthSliceService
 {
-    /**
-     * Web login attempt with session creation.
-     */
-    public function attemptWebLogin(string $email, string $password, bool $remember = false): bool
-    {
-        $user = User::where('email', $email)->first();
-
-        if (!$user || !Hash::check($password, $user->password)) {
-            return false;
-        }
-
-        if ($user->status !== 'active') {
-            throw ValidationException::withMessages([
-                'email' => ['Your account is currently suspended or inactive.'],
-            ]);
-        }
-
-        return Auth::attempt(['email' => $email, 'password' => $password], $remember);
-    }
+    public function __construct(
+        protected LoginAttemptService $attempts,
+        protected TotpService $totp,
+        protected RecoveryCodeService $recoveryCodes,
+    ) {}
 
     /**
-     * Mobile/Flutter API token issuance (Sanctum or bearer string fallback).
+     * Mobile/Flutter API token issuance (Laravel Sanctum).
+     *
+     * Applies the same lockout policy as web sign-in. When the security policy
+     * requires MFA for this user, an authenticator or recovery code must be sent
+     * as `mfa_code`.
      */
-    public function issueApiToken(string $email, string $password, string $deviceName = 'Flutter Client'): array
+    public function issueApiToken(Request $request, string $email, string $password, string $deviceName = 'Flutter Client', ?string $mfaCode = null): array
     {
-        $user = User::where('email', $email)->first();
+        $user = $this->attempts->verify($email, $password, $request);
 
-        if (!$user || !Hash::check($password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials do not match our records.'],
-            ]);
+        if (SecurityPolicyService::requiresMfa($user)) {
+            $code = trim((string) $mfaCode);
+            $verified = $code !== '' && (
+                $this->totp->verify($user->mfa_secret, $code, $user->id)
+                || $this->recoveryCodes->consume($user, $code)
+            );
+
+            if (! $verified) {
+                throw ValidationException::withMessages([
+                    'mfa_code' => ['A valid authenticator or recovery code is required for this account.'],
+                ]);
+            }
         }
-
-        if ($user->status !== 'active') {
-            throw ValidationException::withMessages([
-                'email' => ['Your account is currently suspended or inactive.'],
-            ]);
-        }
-
-        // Support Laravel Sanctum if loaded, or standard secure token
-        $token = method_exists($user, 'createToken')
-            ? $user->createToken($deviceName)->plainTextToken
-            : base64_encode(hash_hmac('sha256', $user->id . '|' . now()->timestamp, config('app.key', 'laraslice_secret_key')));
 
         return [
-            'token' => $token,
+            'token' => $user->createToken($deviceName)->plainTextToken,
             'token_type' => 'Bearer',
             'user' => [
                 'id' => $user->id,

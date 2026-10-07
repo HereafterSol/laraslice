@@ -25,13 +25,16 @@ class AuthApiController extends Controller
         $validated = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
-            'device_name' => 'nullable|string',
+            'device_name' => 'nullable|string|max:100',
+            'mfa_code' => 'nullable|string|max:20',
         ]);
 
         $result = $this->authService->issueApiToken(
+            $request,
             $validated['email'],
             $validated['password'],
-            $validated['device_name'] ?? 'Flutter Device'
+            $validated['device_name'] ?? 'Flutter Device',
+            $validated['mfa_code'] ?? null
         );
 
         return response()->json([
@@ -46,6 +49,8 @@ class AuthApiController extends Controller
      */
     public function register(Request $request): JsonResponse
     {
+        abort_unless(config('laraslice.auth.api_registration', false), 404);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',

@@ -22,6 +22,9 @@ use LaraSlice\Slices\Users\Models\UserFactor;
 use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Roles\Models\Permission;
 use LaraSlice\Core\Security\Access;
+use LaraSlice\Slices\Users\Services\TotpService;
+use LaraSlice\Slices\Users\Services\RecoveryCodeService;
+use LaraSlice\Slices\Users\Services\QrCodeService;
 
 class UserWebController extends BaseSliceWebController
 {
@@ -286,11 +289,17 @@ class UserWebController extends BaseSliceWebController
 
         $defaultTab = ($request->routeIs('*security*') || str_contains($request->path(), 'security')) ? 'mfa' : 'profile';
 
+        $otpauthUri = $user->mfa_secret
+            ? app(TotpService::class)->provisioningUri($user->email, $user->mfa_secret, config('app.name', 'LaraSlice'))
+            : null;
+
         return view($this->getViewPrefix() . 'settings', [
             'user'         => $user,
             'securityLogs' => $securityLogs,
             'defaultTab'   => $defaultTab,
             'routePrefix'  => $this->getRoutePrefix(),
+            'otpauthUri'   => $otpauthUri,
+            'qrSvg'        => $otpauthUri ? app(QrCodeService::class)->svg($otpauthUri) : null,
         ]);
     }
 
@@ -370,12 +379,7 @@ class UserWebController extends BaseSliceWebController
                 ->with('success', 'Two-Factor Authentication has been disabled.');
         }
 
-        // Generate RFC-4648 Base32 compatible secret for TOTP apps
-        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $secret = '';
-        for ($i = 0; $i < 16; $i++) {
-            $secret .= $chars[random_int(0, 31)];
-        }
+        $secret = TotpService::generateSecret();
 
         $user->mfa_channel = 'totp';
         $user->mfa_secret = $secret;
@@ -384,40 +388,28 @@ class UserWebController extends BaseSliceWebController
         $user->two_factor_confirmed_at = now();
         $user->save();
 
-        $user->recoveryCodes()->delete();
-        for ($i = 0; $i < 8; $i++) {
-            $code = strtoupper(bin2hex(random_bytes(4)));
-            $user->recoveryCodes()->create([
-                'code_hash' => $code,
-                'created_at' => now(),
-            ]);
-        }
+        $codes = app(RecoveryCodeService::class)->generate($user);
 
-        UserSecurityLog::log($user->id, '2fa_enabled', 'success', 'Two-Factor Authentication (TOTP) enabled with 8 recovery codes.');
+        UserSecurityLog::log($user->id, '2fa_enabled', 'success', 'Two-Factor Authentication (TOTP) enabled with ' . count($codes) . ' recovery codes.');
 
         return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
             ->with('active_tab', 'mfa')
-            ->with('success', 'Two-Factor Authentication enabled! Scan the QR code and save your recovery codes.');
+            ->with('recovery_codes', $codes)
+            ->with('success', 'Two-Factor Authentication enabled! Scan the QR code and save your recovery codes; they will not be shown again.');
     }
 
     public function regenerateRecoveryCodes(Request $request)
     {
         $user = $this->requireUser();
 
-        $user->recoveryCodes()->delete();
-        for ($i = 0; $i < 8; $i++) {
-            $code = strtoupper(bin2hex(random_bytes(4)));
-            $user->recoveryCodes()->create([
-                'code_hash' => $code,
-                'created_at' => now(),
-            ]);
-        }
+        $codes = app(RecoveryCodeService::class)->generate($user);
 
-        UserSecurityLog::log($user->id, 'mfa_codes_regenerated', 'warning', 'New set of 8 recovery codes generated.');
+        UserSecurityLog::log($user->id, 'mfa_codes_regenerated', 'warning', 'New set of ' . count($codes) . ' recovery codes generated.');
 
         return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
             ->with('active_tab', 'mfa')
-            ->with('success', 'A fresh set of 8 emergency recovery codes has been generated.');
+            ->with('recovery_codes', $codes)
+            ->with('success', 'A fresh set of emergency recovery codes has been generated. Save them now; they will not be shown again.');
     }
 
     public function issueMyDeviceCode(Request $request)
@@ -647,20 +639,7 @@ class UserWebController extends BaseSliceWebController
         $user = $this->requireUser();
 
         $inputCode = trim($request->input('code'));
-        $secret = $user->mfa_secret ?? 'JBSWY3DPEHPK3PXP';
-
-        // Calculate current and adjacent TOTP codes (30s window tolerance)
-        $isValid = false;
-        $timeSlice = floor(time() / 30);
-
-        for ($offset = -1; $offset <= 1; $offset++) {
-            $slice = $timeSlice + $offset;
-            $calculatedCode = $this->calculateTotp($secret, $slice);
-            if ($calculatedCode === $inputCode) {
-                $isValid = true;
-                break;
-            }
-        }
+        $isValid = app(TotpService::class)->verify($user->mfa_secret, $inputCode, $user->id);
 
         if ($isValid) {
             UserSecurityLog::log($user->id, 'totp_verified_test', 'success', 'User successfully verified their TOTP authenticator app code.');
@@ -669,35 +648,6 @@ class UserWebController extends BaseSliceWebController
 
         return back()->with('totp_test_error', "Code {$inputCode} is invalid or has expired. Make sure your phone's clock is synced.");
     }
-
-    private function calculateTotp(string $secret, int $timeSlice): string
-    {
-        $base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $binaryString = '';
-        $secret = strtoupper($secret);
-
-        for ($i = 0; $i < strlen($secret); $i++) {
-            $pos = strpos($base32Chars, $secret[$i]);
-            if ($pos !== false) {
-                $binaryString .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
-            }
-        }
-
-        $secretBytes = '';
-        for ($i = 0; $i + 8 <= strlen($binaryString); $i += 8) {
-            $secretBytes .= chr(bindec(substr($binaryString, $i, 8)));
-        }
-
-        $timeBytes = pack('N*', 0) . pack('N*', $timeSlice);
-        $hmac = hash_hmac('sha1', $timeBytes, $secretBytes, true);
-        $offset = ord(substr($hmac, -1)) & 0x0F;
-        $hashPart = substr($hmac, $offset, 4);
-        $value = unpack('N', $hashPart)[1] & 0x7FFFFFFF;
-        $totp = $value % 1000000;
-
-        return str_pad((string)$totp, 6, '0', STR_PAD_LEFT);
-    }
-
 
     /**
      * Resolve the authenticated user as the slice User model.

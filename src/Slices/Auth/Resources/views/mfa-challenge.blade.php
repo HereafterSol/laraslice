@@ -231,7 +231,7 @@
                             Emergency Backup Code
                         </label>
                         <div class="flex items-center gap-2">
-                            <input type="text" name="recovery_code" maxlength="12" placeholder="e.g. A1B2C3D4" required
+                            <input type="text" name="recovery_code" maxlength="12" placeholder="e.g. A1B2C-3D4E5" required
                                 class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs tracking-widest uppercase focus:outline-none focus:border-indigo-500">
                             <button type="submit" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg transition shrink-0">
                                 Verify

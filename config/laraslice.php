@@ -83,6 +83,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Authentication
+    |--------------------------------------------------------------------------
+    |
+    | Self-service sign-up through POST /api/auth/register is off unless
+    | LARASLICE_API_REGISTRATION=true.
+    |
+    */
+    'auth' => [
+        'api_registration' => (bool) env('LARASLICE_API_REGISTRATION', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Web Wizard & Slice Studio
     |--------------------------------------------------------------------------
     |

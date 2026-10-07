@@ -52,6 +52,7 @@ abstract class TestCase extends Orchestra
     protected function defineDatabaseMigrations(): void
     {
         $this->loadLaravelMigrations();
+        $this->loadMigrationsFrom(dirname(__DIR__) . '/vendor/laravel/sanctum/database/migrations');
         $this->artisan('migrate')->run();
     }
 

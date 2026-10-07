@@ -2,7 +2,10 @@
 
 namespace LaraSlice\Slices\Users\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -26,7 +29,6 @@ class User extends Authenticatable
         'phone',
         'customised_permissions',
         'mfa_channel',
-        'mfa_secret',
         'mfa_confirmed_at',
         'last_login_at',
         'last_login_ip',
@@ -140,7 +142,29 @@ class User extends Authenticatable
 
     public function setTwoFactorSecretAttribute(?string $value): void
     {
-        $this->attributes['mfa_secret'] = $value;
+        $this->mfa_secret = $value;
+    }
+
+    /**
+     * The TOTP secret is encrypted at rest. Secrets stored in plain text before
+     * v1.4.0 are still readable and are encrypted the next time they are saved.
+     */
+    protected function mfaSecret(): Attribute
+    {
+        return Attribute::make(
+            get: function (?string $value): ?string {
+                if ($value === null || $value === '') {
+                    return null;
+                }
+
+                try {
+                    return Crypt::decryptString($value);
+                } catch (DecryptException) {
+                    return $value;
+                }
+            },
+            set: fn (?string $value): ?string => ($value === null || $value === '') ? null : Crypt::encryptString($value),
+        );
     }
 
     public function getTwoFactorConfirmedAtAttribute(): mixed
