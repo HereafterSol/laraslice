@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-10-07
+
+### Bug Fixes
+- **Passkey / WebAuthn:** Fixed `user not verificated during authentication` error during passkey sign-in and lockscreen verification. Passkey assertions now use `preferred` user verification by default, allowing authenticators that verify presence (UP) without the strict biometric UV flag to authenticate successfully. Configurable via `LARASLICE_PASSKEY_USER_VERIFICATION` and `LARASLICE_PASSKEY_REQUIRE_UV`.
+- **Starter Layout:** Guarded `route('laraslice.wizard')`, `route('laraslice.wizard.schema_studio')`, and `route('settings.ai')` with `Route::has(...)` in `resources/views/layouts/app.blade.php`. Prevents `RouteNotFoundException` when the Slice Studio or AI settings routes are disabled.
+- **Dashboard Redirect:** Added `Route::has('laraslice.wizard')` check before fallback dashboard redirect to prevent routing exceptions when Slice Studio is disabled.
+- **RBAC / User Trait:** Added `hasMfa()` method to `HasSlicePermissions` trait for compatibility with host applications using standard `App\Models\User`.
+- **MFA / TOTP Challenge Screen:** Authenticator App (TOTP) tab and alternative login options now only show if the user has actually scanned and verified their TOTP code. If a user only enrolled via Passkey, provisional or unverified TOTP credentials are not presented on the challenge screen or lockscreen.
+
 ## [1.4.0] - 2026-10-07
 
 This is a security release. Upgrade every installation that is reachable from a network. Several defaults change; read **Upgrading** before deploying.

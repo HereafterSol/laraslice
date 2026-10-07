@@ -53,7 +53,7 @@
             <div>
                 <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">MFA Status</span>
                 <p class="text-sm font-bold {{ $user->hasMfa() ? 'text-emerald-600' : 'text-amber-600' }}">
-                    {{ $user->hasMfa() ? 'Active (TOTP)' : 'Disabled' }}
+                    {{ $user->hasMfa() ? ($user->hasTotp() && $user->hasPasskey() ? 'Active (Passkey & TOTP)' : ($user->hasPasskey() ? 'Active (Passkey)' : 'Active (TOTP)')) : 'Disabled' }}
                 </p>
             </div>
         </div>
@@ -324,9 +324,9 @@
                     <x-ui.card-content class="p-6 space-y-6">
                         <!-- 2FA Status Card with Toggle Controls -->
                         <div x-data="{ showSetupDetails: false }" class="space-y-4">
-                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border {{ $user->hasMfa() ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-border bg-muted/20' }}">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border {{ $user->hasTotp() ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-border bg-muted/20' }}">
                                 <div class="flex items-start gap-3">
-                                    @if($user->hasMfa())
+                                    @if($user->hasTotp())
                                         <div class="size-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
                                             <x-lucide-shield-check class="size-5" />
                                         </div>
@@ -350,7 +350,7 @@
                                     @endif
                                 </div>
                                 <div class="flex items-center flex-wrap gap-2 shrink-0">
-                                    @if ($user->hasMfa())
+                                    @if ($user->hasTotp())
                                         <button type="button" @click="showSetupDetails = !showSetupDetails" class="px-3 py-1.5 rounded-lg border border-input hover:bg-muted text-xs font-semibold text-foreground transition-colors flex items-center gap-1.5 cursor-pointer">
                                             <x-lucide-qr-code class="size-3.5 text-purple-600" />
                                             <span x-text="showSetupDetails ? 'Hide Setup Key' : 'View Setup Key & QR'"></span>
@@ -395,7 +395,7 @@
                                 </div>
                             @endif
 
-                            @if ($user->hasMfa())
+                            @if ($user->hasTotp())
                             <!-- QR Code & Setup Key Container (Expandable on demand) -->
                             <div x-show="showSetupDetails" x-cloak x-transition class="p-5 rounded-2xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/20 flex flex-col md:flex-row items-center gap-6">
                                 <div class="shrink-0 flex flex-col items-center">

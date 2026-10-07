@@ -74,7 +74,7 @@ class WebAuthnService
             $excludeIds
         );
 
-        $challenge = $this->b64encode($webauthn->getChallenge()->getBinaryString());
+                $challenge = $this->b64encode($webauthn->getChallenge()->getBinaryString());
         session(['webauthn_challenge' => $challenge]);
 
         return [
@@ -105,8 +105,12 @@ class WebAuthnService
         session()->forget('webauthn_challenge');
 
         $credId = $this->b64encode($data->credentialId);
-        $user->mfa_channel = 'webauthn';
+        $hasTotpConfirmed = in_array($user->mfa_channel, ['totp', 'both']);
+        $user->mfa_channel = $hasTotpConfirmed ? 'both' : 'webauthn';
         $user->mfa_confirmed_at = now();
+        if (!$hasTotpConfirmed) {
+            $user->mfa_secret = null;
+        }
         $user->save();
 
         return UserPasskey::create([
@@ -134,7 +138,8 @@ class WebAuthnService
         // Without a known user the list stays empty and the browser offers discoverable passkeys;
         // never hand out every credential id in the system. User verification is required
         // because a passkey sign-in counts as a full second factor.
-        $args = $webauthn->getGetArgs($ids, 60, true, true, true, true, true, 'required');
+        $userVerification = config('laraslice.auth.passkey_user_verification', 'preferred');
+        $args = $webauthn->getGetArgs($ids, 60, true, true, true, true, true, $userVerification);
         $challenge = $this->b64encode($webauthn->getChallenge()->getBinaryString());
         session(['webauthn_login_challenge' => $challenge]);
 
@@ -166,7 +171,7 @@ class WebAuthnService
             $passkey->public_key,
             $challenge,
             (int) $passkey->sign_count,
-            true,
+            (bool) config('laraslice.auth.passkey_require_user_verification', false),
             true
         );
 

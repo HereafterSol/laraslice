@@ -89,9 +89,25 @@ class User extends Authenticatable
 
     public function hasMfa(): bool
     {
-        return (!empty($this->mfa_channel) && $this->mfa_channel !== 'none' && !empty($this->mfa_confirmed_at))
-            || !empty($this->two_factor_confirmed_at)
-            || $this->passkeys()->whereNull('revoked_at')->exists();
+        return $this->hasTotp()
+            || $this->hasPasskey()
+            || (!empty($this->mfa_channel) && $this->mfa_channel !== 'none' && !empty($this->mfa_confirmed_at))
+            || !empty($this->two_factor_confirmed_at);
+    }
+
+    public function hasTotp(): bool
+    {
+        return in_array($this->mfa_channel, ['totp', 'both'])
+            && !empty($this->mfa_secret)
+            && !empty($this->mfa_confirmed_at);
+    }
+
+    public function hasPasskey(): bool
+    {
+        if ($this->relationLoaded('passkeys')) {
+            return $this->passkeys->whereNull('revoked_at')->isNotEmpty();
+        }
+        return $this->passkeys()->whereNull('revoked_at')->exists();
     }
 
     public function genderLabel(): string

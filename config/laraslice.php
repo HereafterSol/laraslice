@@ -92,6 +92,8 @@ return [
     */
     'auth' => [
         'api_registration' => (bool) env('LARASLICE_API_REGISTRATION', false),
+        'passkey_user_verification' => env('LARASLICE_PASSKEY_USER_VERIFICATION', 'preferred'),
+        'passkey_require_user_verification' => (bool) env('LARASLICE_PASSKEY_REQUIRE_UV', false),
     ],
 
     /*

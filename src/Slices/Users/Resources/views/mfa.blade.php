@@ -282,7 +282,7 @@
 
                 $activePasskeys = $u->passkeys ? $u->passkeys->whereNull('revoked_at') : collect();
                 $passkeysCount = $activePasskeys->count();
-                $hasTotp = !empty($u->mfa_secret) || $u->mfa_channel === 'totp';
+                $hasTotp = in_array($u->mfa_channel, ['totp', 'both']);
 
                 if ($passkeysCount > 0 && $hasTotp) {
                     $methodLabel = 'Passkey + Authenticator';

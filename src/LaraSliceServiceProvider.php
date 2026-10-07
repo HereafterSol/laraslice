@@ -249,7 +249,7 @@ class LaraSliceServiceProvider extends ServiceProvider
             if (! $hasDashboard) {
                 Route::middleware(['web', 'auth'])->get('/dashboard', function () {
                     $user = auth()->user();
-                    if ($user && Access::allows($user, 'studio.access')) {
+                    if ($user && Access::allows($user, 'studio.access') && Route::has('laraslice.wizard')) {
                         return redirect()->route('laraslice.wizard');
                     }
                     if (Route::has('account.settings')) {

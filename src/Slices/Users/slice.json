@@ -1,7 +1,7 @@
 {
     "name": "Users",
     "title": "User Management",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": "Core Slice: Enterprise user administration, multi-persona profiles (Govt BPS/CNIC & Corporate EmpID), multi-device tracking, MFA, passkeys, and Enterprise security audit parity.",
     "author": "LaraSlice Core",
     "icon": "users",
@@ -114,6 +114,48 @@
             "description": "Backfilled session_id, device_label, and is_trusted on user_devices for installs where the v1.1.0 table pre-empted the v1.3.0 schema.",
             "author": "LaraSlice Contributors",
             "date": "2026-10-05 00:00:00"
+        },
+        {
+            "version": "1.4.1",
+            "created_at": "2026-10-07 13:38:16",
+            "description": "Fix passkey lockscreen user verification and guard wizard routes in starter layout.",
+            "fields_snapshot": {
+                "gender": {
+                    "type": "string",
+                    "length": 20,
+                    "nullable": true,
+                    "default": null,
+                    "hidden": false,
+                    "table": "users",
+                    "added_in": "1.1.0"
+                },
+                "phone": {
+                    "type": "string",
+                    "length": 30,
+                    "nullable": true,
+                    "default": null,
+                    "hidden": false,
+                    "table": "users",
+                    "added_in": "1.1.0"
+                },
+                "customised_permissions": {
+                    "type": "boolean",
+                    "nullable": false,
+                    "default": false,
+                    "hidden": true,
+                    "table": "users",
+                    "added_in": "1.1.0"
+                },
+                "mfa_channel": {
+                    "type": "string",
+                    "length": 20,
+                    "nullable": false,
+                    "default": "none",
+                    "hidden": false,
+                    "table": "users",
+                    "added_in": "1.1.0"
+                }
+            }
         }
     ],
     "child_tables": [

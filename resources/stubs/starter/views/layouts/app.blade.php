@@ -103,11 +103,14 @@
                 ], $s['children'] ?? []),
             ];
 
+            $workspaceItems = [
+                ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
+            ];
+            if (Route::has('laraslice.wizard')) {
+                $workspaceItems[] = ['title' => 'Slice Studio', 'icon' => 'wand-2', 'url' => route('laraslice.wizard'), 'isActive' => request()->routeIs('laraslice.wizard*')];
+            }
             $navMain = [
-                ['title' => 'Workspace', 'items' => [
-                    ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
-                    ['title' => 'Slice Studio', 'icon' => 'wand-2', 'url' => route('laraslice.wizard'), 'isActive' => request()->routeIs('laraslice.wizard*')],
-                ]],
+                ['title' => 'Workspace', 'items' => $workspaceItems],
             ];
 
             // Domain slices first, then ungrouped app slices, then LaraSlice's core slices under Administration.
@@ -276,10 +279,12 @@
                             </button>
 
                             <!-- Slice Wizard Quick Action -->
+                            @if (Route::has('laraslice.wizard'))
                             <x-ui.button href="{{ route('laraslice.wizard') }}" as="a" size="sm" class="hidden sm:inline-flex gap-1.5 shadow-xs">
                                 <x-lucide-wand-2 class="size-3.5" />
                                 <span>Studio</span>
                             </x-ui.button>
+                            @endif
                         </div>
                     </header>
 
@@ -308,18 +313,24 @@
                         </x-ui.command-group>
                         <x-ui.command-separator />
                         <x-ui.command-group heading="Quick Actions">
+                            @if (Route::has('laraslice.wizard'))
                             <x-ui.command-item href="{{ route('laraslice.wizard') }}">
                                 <x-lucide-wand-2 class="size-4 mr-2" />
                                 <span>Open Slice Studio & Architecture Wizard</span>
                             </x-ui.command-item>
+                            @endif
+                            @if (Route::has('laraslice.wizard.schema_studio'))
                               <x-ui.command-item href="{{ route('laraslice.wizard.schema_studio') }}">
                                   <x-lucide-columns-2 class="size-4 mr-2 text-emerald-400" />
                                   <span>Schema Studio (2-Column Visual Builder)</span>
                               </x-ui.command-item>
+                            @endif
+                            @if (Route::has('settings.ai'))
                               <x-ui.command-item href="{{ route('settings.ai') }}">
                                   <x-lucide-sparkles class="size-4 mr-2 text-indigo-400" />
                                   <span>AI Copilot & Model Settings</span>
                               </x-ui.command-item>
+                            @endif
 
                             <x-ui.command-item href="{{ (Route::has('dashboard') ? route('dashboard') : url('/')) }}">
                                 <x-lucide-layout-dashboard class="size-4 mr-2" />

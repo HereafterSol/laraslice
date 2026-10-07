@@ -363,30 +363,41 @@ class UserWebController extends BaseSliceWebController
     {
         $user = $this->requireUser();
 
-        if ($user->hasMfa()) {
-            $user->mfa_channel = 'none';
-            $user->mfa_confirmed_at = null;
+        if ($user->hasTotp()) {
+            $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
+            $user->mfa_channel = $hasPasskeys ? 'webauthn' : 'none';
+            $user->mfa_confirmed_at = $hasPasskeys ? $user->mfa_confirmed_at : null;
             $user->mfa_secret = null;
             $user->two_factor_secret = null;
             $user->two_factor_confirmed_at = null;
             $user->save();
+            UserFactor::where('user_id', $user->id)->delete();
             $user->recoveryCodes()->delete();
 
-            UserSecurityLog::log($user->id, '2fa_disabled', 'warning', 'Two-Factor Authentication was disabled by user.');
+            UserSecurityLog::log($user->id, '2fa_disabled', 'warning', 'Two-Factor Authentication (TOTP) was disabled by user.');
 
             return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
                 ->with('active_tab', 'mfa')
-                ->with('success', 'Two-Factor Authentication has been disabled.');
+                ->with('success', 'Authenticator App (TOTP) has been disabled.');
         }
 
         $secret = TotpService::generateSecret();
+        $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
 
-        $user->mfa_channel = 'totp';
+        $user->mfa_channel = $hasPasskeys ? 'both' : 'totp';
         $user->mfa_secret = $secret;
         $user->mfa_confirmed_at = now();
         $user->two_factor_secret = $secret;
         $user->two_factor_confirmed_at = now();
         $user->save();
+
+        UserFactor::updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'secret_enc'   => encrypt($secret),
+                'confirmed_at' => now(),
+            ]
+        );
 
         $codes = app(RecoveryCodeService::class)->generate($user);
 
@@ -450,7 +461,7 @@ class UserWebController extends BaseSliceWebController
         $enrolledCount = $users->filter(fn($u) => $u->hasMfa())->count();
         $needsEnrollment = max(0, $totalUsers - $enrolledCount);
         $passkeyEnrolled = $users->filter(fn($u) => $u->passkeys->whereNull('revoked_at')->count() > 0 || $u->mfa_channel === 'webauthn')->count();
-        $totpEnrolled = $users->filter(fn($u) => !empty($u->mfa_secret) || $u->mfa_channel === 'totp')->count();
+        $totpEnrolled = $users->filter(fn($u) => in_array($u->mfa_channel, ['totp', 'both']))->count();
         $totalPasskeys = \LaraSlice\Slices\Users\Models\UserPasskey::whereNull('revoked_at')->count();
 
         $stats = [
@@ -642,6 +653,19 @@ class UserWebController extends BaseSliceWebController
         $isValid = app(TotpService::class)->verify($user->mfa_secret, $inputCode, $user->id);
 
         if ($isValid) {
+            $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
+            $user->mfa_channel = $hasPasskeys ? 'both' : 'totp';
+            $user->mfa_confirmed_at = now();
+            $user->save();
+
+            UserFactor::updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'secret_enc'   => encrypt($user->mfa_secret),
+                    'confirmed_at' => now(),
+                ]
+            );
+
             UserSecurityLog::log($user->id, 'totp_verified_test', 'success', 'User successfully verified their TOTP authenticator app code.');
             return back()->with('totp_test_success', "Code {$inputCode} verified successfully! Your Google Authenticator is fully synced and working.");
         }

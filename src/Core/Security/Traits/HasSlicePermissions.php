@@ -128,4 +128,30 @@ trait HasSlicePermissions
             ->distinct()
             ->get();
     }
+
+    /**
+     * Determine if the user has multi-factor authentication active.
+     */
+    public function hasMfa(): bool
+    {
+        return $this->hasTotp()
+            || $this->hasPasskey()
+            || (!empty($this->mfa_channel) && $this->mfa_channel !== 'none' && !empty($this->mfa_confirmed_at))
+            || !empty($this->two_factor_confirmed_at);
+    }
+
+    public function hasTotp(): bool
+    {
+        return in_array($this->mfa_channel, ['totp', 'both'])
+            && !empty($this->mfa_secret)
+            && !empty($this->mfa_confirmed_at);
+    }
+
+    public function hasPasskey(): bool
+    {
+        if ($this->relationLoaded('passkeys')) {
+            return $this->passkeys->whereNull('revoked_at')->isNotEmpty();
+        }
+        return method_exists($this, 'passkeys') && $this->passkeys()->whereNull('revoked_at')->exists();
+    }
 }

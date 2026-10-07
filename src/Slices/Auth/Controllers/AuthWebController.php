@@ -99,7 +99,7 @@ class AuthWebController extends Controller
 
         // Check if user has an active, confirmed factor (Passkey OR Authenticator TOTP)
         $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
-        $hasTotp = (!empty($user->mfa_confirmed_at) && !empty($user->mfa_secret));
+        $hasTotp = in_array($user->mfa_channel, ['totp', 'both']) && !empty($user->mfa_confirmed_at) && !empty($user->mfa_secret);
         $isEnrolled = ($hasPasskeys || $hasTotp);
 
         if (!$isEnrolled) {
@@ -146,7 +146,7 @@ class AuthWebController extends Controller
         }
 
         $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
-        $hasTotp = (!empty($user->mfa_confirmed_at) && !empty($user->mfa_secret));
+        $hasTotp = in_array($user->mfa_channel, ['totp', 'both']) && !empty($user->mfa_confirmed_at) && !empty($user->mfa_secret);
 
         if (!$hasPasskeys && !$hasTotp) {
             return redirect()->route('login.mfa.enroll');
@@ -384,7 +384,8 @@ class AuthWebController extends Controller
         }
 
         // Lock in confirmation
-        $user->mfa_channel = 'totp';
+        $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
+        $user->mfa_channel = $hasPasskeys ? 'both' : 'totp';
         $user->mfa_confirmed_at = now();
         $user->save();
 
@@ -624,7 +625,7 @@ class AuthWebController extends Controller
     protected function hasEnrolledFactor(User $user): bool
     {
         return $user->passkeys()->whereNull('revoked_at')->exists()
-            || (!empty($user->mfa_confirmed_at) && !empty($user->mfa_secret));
+            || (in_array($user->mfa_channel, ['totp', 'both']) && !empty($user->mfa_confirmed_at) && !empty($user->mfa_secret));
     }
 
     /**
