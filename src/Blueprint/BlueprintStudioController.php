@@ -283,10 +283,13 @@ final class BlueprintStudioController extends Controller
             // Refresh installed slices list so the newly created slice appears immediately in the UI dropdown
             $installedSlices = $this->getInstalledSlices($slicesPath);
 
-            // Execute auto-migration if enabled (default: true from UI checkbox)
+            // Auto-migration is opt-in and needs the separate studio.migrate permission
             $migrated = false;
             $migrationMessage = null;
-            if ($request->boolean('auto_migrate', true)) {
+            $mayMigrate = \LaraSlice\Core\Security\Access::allows($request->user(), ['studio.migrate', 'studio.*']);
+            if ($request->boolean('auto_migrate', false) && ! $mayMigrate) {
+                $migrationMessage = 'Migrations were not run: running migrations requires the studio.migrate permission.';
+            } elseif ($request->boolean('auto_migrate', false)) {
                 try {
                     \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
                     $migrationOutput = trim(\Illuminate\Support\Facades\Artisan::output());

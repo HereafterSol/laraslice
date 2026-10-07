@@ -167,8 +167,20 @@ class WizardController extends Controller
     /**
      * Run all migrations including any slice-specific migration folders.
      */
+    /**
+     * Code generation and running migrations are separate permissions.
+     */
+    protected function mayRunMigrations(): bool
+    {
+        return \LaraSlice\Core\Security\Access::allows(auth()->user(), ['studio.migrate', 'studio.*']);
+    }
+
     protected function executeMigrations(): array
     {
+        if (! $this->mayRunMigrations()) {
+            return [false, 'Migrations were not run: running migrations requires the studio.migrate permission.'];
+        }
+
         $outputs = [];
         $migrated = false;
 
@@ -587,6 +599,10 @@ class WizardController extends Controller
 
     private function runGeneratedMigration(string $migrationFile): array
     {
+        if (! $this->mayRunMigrations()) {
+            return ['success' => false, 'output' => 'Migration was generated but not run: running migrations requires the studio.migrate permission.'];
+        }
+
         $absoluteBase = realpath(base_path());
         $absoluteMigration = realpath($migrationFile);
 

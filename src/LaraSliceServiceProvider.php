@@ -17,6 +17,7 @@ use LaraSlice\Commands\BlueprintApplyCommand;
 use LaraSlice\Blueprint\BlueprintStudioController;
 use LaraSlice\Wizard\WizardController;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
+use LaraSlice\Wizard\Middleware\GuardStudioWrites;
 use LaraSlice\Core\Ai\AiChatController;
 use LaraSlice\Core\Security\Access;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -134,7 +135,8 @@ class LaraSliceServiceProvider extends ServiceProvider
         if (config('laraslice.wizard.enabled', false)) {
             $wizardMiddleware = config('laraslice.wizard.middleware', ['web', 'auth']);
             $studio = AuthorizeStudio::class;
-            Route::prefix('laraslice/wizard')->middleware($wizardMiddleware)->group(function () use ($studio) {
+            $guard = GuardStudioWrites::class;
+            Route::prefix('laraslice/wizard')->middleware($wizardMiddleware)->group(function () use ($studio, $guard) {
                 Route::middleware("{$studio}:studio.access")->group(function () {
                     Route::get('/', [WizardController::class, 'show'])->name('laraslice.wizard');
                     Route::get('/studio', [WizardController::class, 'studio'])->name('laraslice.wizard.studio');
@@ -143,7 +145,10 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::get('/slices', [WizardController::class, 'listSlices'])->name('laraslice.wizard.slices');
                     Route::get('/audit-logs', [WizardController::class, 'getAuditLogs'])->name('laraslice.wizard.audit_logs');
                     Route::post('/copilot/chat', [WizardController::class, 'copilotChat'])->name('laraslice.wizard.copilot_chat');
-                    // Toggle / seed / wipe / destroy check their own fine-grained permissions in the controller
+                });
+
+                // Toggle / seed / wipe / destroy check their own fine-grained permissions in the controller
+                Route::middleware(["{$studio}:studio.access", $guard])->group(function () {
                     Route::post('/toggle-slice', [WizardController::class, 'toggleSlice'])->name('laraslice.wizard.toggle_slice');
                     Route::post('/toggle-domain', [WizardController::class, 'toggleDomain'])->name('laraslice.wizard.toggle_domain');
                     Route::post('/seed-slice', [WizardController::class, 'seedSlice'])->name('laraslice.wizard.seed_slice');
@@ -154,7 +159,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/destroy-domain', [WizardController::class, 'destroyDomain'])->name('laraslice.wizard.destroy_domain');
                 });
 
-                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.create"])->group(function () {
+                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.create", $guard])->group(function () {
                     Route::post('/generate', [WizardController::class, 'generate'])->name('laraslice.wizard.generate');
                     Route::post('/add-field', [WizardController::class, 'addField'])->name('laraslice.wizard.add_field');
                     Route::post('/add-fields-batch', [WizardController::class, 'addFieldsBatch'])->name('laraslice.wizard.add_fields_batch');
@@ -167,18 +172,18 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/domain-suite', [WizardController::class, 'generateDomainSuite'])->name('laraslice.wizard.domain_suite');
                 });
 
-                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.blueprint"])->group(function () {
+                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.blueprint", $guard])->group(function () {
                     Route::post('/blueprint/plan', [BlueprintStudioController::class, 'plan'])->name('laraslice.wizard.blueprint.plan');
                     Route::post('/blueprint/apply', [BlueprintStudioController::class, 'apply'])->name('laraslice.wizard.blueprint.apply');
                     Route::post('/blueprint/introspect', [BlueprintStudioController::class, 'introspect'])->name('laraslice.wizard.blueprint.introspect');
                 });
 
-                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.migrate"])->group(function () {
+                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.migrate", $guard])->group(function () {
                     Route::post('/migrate', [WizardController::class, 'runMigration'])->name('laraslice.wizard.migrate');
                     Route::post('/blueprint/migrate', [BlueprintStudioController::class, 'runMigrations'])->name('laraslice.wizard.blueprint.migrate');
                 });
 
-                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.wipe"])->group(function () {
+                Route::middleware(["{$studio}:studio.access", "{$studio}:studio.wipe", $guard])->group(function () {
                     Route::post('/audit-logs/prune', [WizardController::class, 'pruneAuditLogs'])->name('laraslice.wizard.audit_logs.prune');
                 });
             });

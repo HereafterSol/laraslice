@@ -125,7 +125,7 @@ class SliceFieldCommand extends Command
             $this->line("<fg=green>✓</> Incremented slice version to <comment>v{$result['version']}</comment> in slice.json");
             $this->line("<fg=green>✓</> Appended unified version history record: \"{$result['description']}\"");
 
-            if ($this->option('migrate') || $this->confirm('Would you like to run the consolidated migration now?', true)) {
+            if ($this->option('migrate') || $this->confirm('Would you like to run the consolidated migration now?', false)) {
                 $this->call('migrate');
                 $this->info("✓ Database table updated successfully in a single query pass!");
             } else {

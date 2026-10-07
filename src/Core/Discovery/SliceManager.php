@@ -1058,6 +1058,40 @@ class SliceManager
     /**
      * Discover all database tables associated with a slice.
      */
+    /**
+     * Core slices (Users, Roles, Settings, Auth, or any manifest with "core": true)
+     * and slices inside the package itself are never destroyed or wiped.
+     */
+    public function isProtectedSlice(SliceManifest $slice): bool
+    {
+        if (filter_var($slice->raw['core'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        $packageSlices = realpath(dirname(__DIR__, 2) . '/Slices');
+        $slicePath = realpath($slice->path);
+
+        return $packageSlices !== false && $slicePath !== false
+            && str_starts_with($slicePath . DIRECTORY_SEPARATOR, $packageSlices . DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * Tables owned by protected slices; these are never dropped or truncated.
+     *
+     * @return array<int, string>
+     */
+    public function protectedTables(): array
+    {
+        $tables = [];
+        foreach ($this->getAllSlices() as $slice) {
+            if ($this->isProtectedSlice($slice)) {
+                $tables = array_merge($tables, $this->getSliceTables($slice), $slice->tables ?? []);
+            }
+        }
+
+        return array_values(array_unique(array_filter($tables)));
+    }
+
     public function getSliceTables(SliceManifest $slice): array
     {
         $primary = $slice->name ? strtolower(\Illuminate\Support\Str::plural(\Illuminate\Support\Str::snake($slice->name))) : '';
@@ -1125,7 +1159,11 @@ class SliceManager
             throw new \InvalidArgumentException("Slice [{$sliceName}] not found.");
         }
 
-        $tables = $this->getSliceTables($slice);
+        if ($this->isProtectedSlice($slice)) {
+            throw new \RuntimeException("Slice [{$slice->name}] is a core LaraSlice slice and cannot be destroyed.");
+        }
+
+        $tables = array_values(array_diff($this->getSliceTables($slice), $this->protectedTables()));
 
         $droppedTables = [];
         $wipedTables = [];
@@ -1207,7 +1245,7 @@ class SliceManager
         $slices = [];
         foreach ($this->getAllSlices() as $s) {
             $sliceDomain = $s->domain ?? $s->navigation['group'] ?? $s->raw['domain'] ?? null;
-            if (strtolower(trim((string)$sliceDomain)) === strtolower(trim($domainName))) {
+            if (strtolower(trim((string)$sliceDomain)) === strtolower(trim($domainName)) && ! $this->isProtectedSlice($s)) {
                 $slices[] = $s;
             }
         }

@@ -89,7 +89,7 @@ class SliceUiPruneCommand extends Command
             return Command::SUCCESS;
         }
 
-        if ($this->option('force') || $this->confirm("Would you like to prune these " . count($unused) . " unused components?", true)) {
+        if ($this->option('force') || $this->confirm("Would you like to prune these " . count($unused) . " unused components?", false)) {
             $deleted = 0;
             foreach ($unused as $file) {
                 if (File::delete($file)) {
