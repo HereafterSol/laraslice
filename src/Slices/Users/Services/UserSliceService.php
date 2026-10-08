@@ -24,8 +24,8 @@ class UserSliceService extends BaseSliceService
 
     protected function newQuery(): Builder
     {
-        // Eager load detail and roles to avoid N+1 queries
-        return parent::newQuery()->with(['detail', 'roles']);
+        // Eager load detail, roles and their permissions: listings show both per row
+        return parent::newQuery()->with(['detail', 'roles.permissions']);
     }
 
     protected function mapToForm(Model $model): IBusinessObject
@@ -105,26 +105,8 @@ class UserSliceService extends BaseSliceService
         $listing->department = $detail?->department;
         $listing->designation = $detail?->designation;
 
-        $roleNames = [];
-        try {
-            if (method_exists($model, 'roles')) {
-                $roleNames = $model->roles ? $model->roles->pluck('name')->toArray() : [];
-            }
-        } catch (\Throwable $e) {}
-
-        if (empty($roleNames) && isset($model->id)) {
-            try {
-                if (\Illuminate\Support\Facades\Schema::hasTable('role_user') && \Illuminate\Support\Facades\Schema::hasTable('roles')) {
-                    $roleNames = \Illuminate\Support\Facades\DB::table('role_user')
-                        ->join('roles', 'role_user.role_id', '=', 'roles.id')
-                        ->where('role_user.user_id', $model->id)
-                        ->pluck('roles.name')
-                        ->toArray();
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        $listing->roles = $roleNames;
+        // roles is eager-loaded by newQuery(); an empty collection means the user has no roles
+        $listing->roles = $model->roles->pluck('name')->all();
 
         try {
             if (method_exists($model, 'getAllPermissions')) {

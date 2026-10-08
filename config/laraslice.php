@@ -81,6 +81,11 @@ return [
         'max_rows' => (int) env('LARASLICE_DATA_TABLE_MAX_ROWS', 1000),
     ],
 
+    'forms' => [
+        // Maximum rows loaded into a relationship <select>; the selected value is always included
+        'relationship_options_limit' => (int) env('LARASLICE_RELATIONSHIP_OPTIONS_LIMIT', 500),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Authentication
@@ -126,6 +131,11 @@ return [
     |
     */
     'ai' => [
+        // Outbound provider requests: seconds before giving up, and retries on connection errors, 429 and 5xx
+        'http' => [
+            'timeout' => (int) env('LARASLICE_AI_TIMEOUT', 60),
+            'retries' => (int) env('LARASLICE_AI_RETRIES', 2),
+        ],
         // Provider credentials are read from the environment here only; keys saved
         // from the AI settings page are stored encrypted in the settings table.
         'providers' => [

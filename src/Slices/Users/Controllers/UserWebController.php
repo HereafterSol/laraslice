@@ -136,17 +136,18 @@ class UserWebController extends BaseSliceWebController
             'mfa_enabled'     => User::where('mfa_channel', '!=', 'none')->whereNotNull('mfa_confirmed_at')->count(),
         ];
 
-        $activeSessions = UserDevice::with(['user', 'user.detail'])
-            ->orderByDesc('last_active_at')
-            ->get();
+        $maxRows = (int) config('laraslice.data_table.max_rows', 1000);
 
+        // One capped query serves both the sessions table and the device list
         $devices = UserDevice::with(['user', 'user.detail'])
             ->orderByDesc('last_active_at')
+            ->limit($maxRows)
             ->get();
+        $activeSessions = $devices;
 
         $logs = UserSecurityLog::with(['user', 'user.detail'])
             ->orderByDesc('created_at')
-            ->limit((int) config('laraslice.data_table.max_rows', 1000))
+            ->limit($maxRows)
             ->get();
 
         // Extract comprehensive location & telemetry history
@@ -235,7 +236,10 @@ class UserWebController extends BaseSliceWebController
     {
         $this->authorizeSlice('devices');
 
-        $devices = UserDevice::with('user')->orderByDesc('last_active_at')->get();
+        $devices = UserDevice::with('user')
+            ->orderByDesc('last_active_at')
+            ->limit((int) config('laraslice.data_table.max_rows', 1000))
+            ->get();
 
         return view($this->getViewPrefix() . 'devices', [
             'devices'     => $devices,
@@ -456,8 +460,11 @@ class UserWebController extends BaseSliceWebController
     {
         $this->authorizeSlice('mfa');
 
-        $users = User::with(['roles', 'detail', 'devices', 'recoveryCodes', 'securityLogs' => fn($q) => $q->latest(), 'passkeys'])->get();
-        $totalUsers = $users->count();
+        // The page shows the 15 latest logs per user; never load whole log histories
+        $users = User::with(['roles', 'detail', 'devices', 'recoveryCodes', 'securityLogs' => fn($q) => $q->latest()->limit(15), 'passkeys'])
+            ->limit((int) config('laraslice.data_table.max_rows', 1000))
+            ->get();
+        $totalUsers = User::count();
         $enrolledCount = $users->filter(fn($u) => $u->hasMfa())->count();
         $needsEnrollment = max(0, $totalUsers - $enrolledCount);
         $passkeyEnrolled = $users->filter(fn($u) => $u->passkeys->whereNull('revoked_at')->count() > 0 || $u->mfa_channel === 'webauthn')->count();

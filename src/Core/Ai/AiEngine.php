@@ -1624,26 +1624,57 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             'max_tokens'  => 1200,
         ];
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) LaraSlice/1.0');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            "Authorization: Bearer {$apiKey}",
-        ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        $res = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $data = $this->postJson($url, $payload, ['Authorization' => "Bearer {$apiKey}"]);
 
-        if ($code >= 200 && $code < 300 && $res) {
-            $data = json_decode($res, true);
-            return $data['choices'][0]['message']['content'] ?? null;
+        return $data['choices'][0]['message']['content'] ?? null;
+    }
+
+    /**
+     * POST a JSON payload to a provider and return the decoded response, or null on failure.
+     * Connection errors, 429 and 5xx responses are retried; failures are logged without secrets.
+     */
+    protected function postJson(string $url, array $payload, array $headers = [], ?int $timeout = null): ?array
+    {
+        $timeout ??= (int) config('laraslice.ai.http.timeout', 60);
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::acceptJson()
+                ->asJson()
+                ->withHeaders($headers)
+                ->withUserAgent('LaraSlice/' . \LaraSlice\LaraSliceServiceProvider::VERSION)
+                ->connectTimeout(min(10, $timeout))
+                ->timeout($timeout)
+                ->retry(
+                    (int) config('laraslice.ai.http.retries', 2),
+                    fn (int $attempt) => $attempt * 500,
+                    fn (\Throwable $e) => $e instanceof \Illuminate\Http\Client\ConnectionException
+                        || ($e instanceof \Illuminate\Http\Client\RequestException
+                            && ($e->response->status() === 429 || $e->response->serverError())),
+                    throw: false
+                )
+                ->post($url, $payload);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('LaraSlice AI request failed', [
+                'host' => parse_url($url, PHP_URL_HOST),
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
 
-        return null;
+        if (! $response->successful()) {
+            \Illuminate\Support\Facades\Log::warning('LaraSlice AI provider returned an error', [
+                'host' => parse_url($url, PHP_URL_HOST),
+                'status' => $response->status(),
+                'error' => mb_substr((string) $response->body(), 0, 500),
+            ]);
+
+            return null;
+        }
+
+        $data = $response->json();
+
+        return is_array($data) ? $data : null;
     }
 
     /**
@@ -1684,27 +1715,12 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             'max_tokens' => 4096,
         ];
 
-        $ch = curl_init('https://api.anthropic.com/v1/messages');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) LaraSlice/1.0');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            "x-api-key: {$apiKey}",
-            'anthropic-version: 2023-06-01',
+        $data = $this->postJson('https://api.anthropic.com/v1/messages', $payload, [
+            'x-api-key' => $apiKey,
+            'anthropic-version' => '2023-06-01',
         ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-        $res = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
-        if ($code >= 200 && $code < 300 && $res) {
-            $data = json_decode($res, true);
-            return self::anthropicText(is_array($data) ? $data : []);
-        }
-
-        return null;
+        return $data === null ? null : self::anthropicText($data);
     }
 
     /**
@@ -1729,10 +1745,8 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
     protected function callOllama(string $endpoint, string $model, string $systemPrompt, string $message, array $history = []): ?string
     {
         $url = rtrim($endpoint, '/') . '/api/chat';
-        $messages = [
-            ['role' => 'system', 'content' => $systemPrompt],
-            ['role' => 'user', 'content' => $message],
-        ];
+        $messages = [['role' => 'system', 'content' => $systemPrompt], ...$this->sanitizeHistory($history)];
+        $messages[] = ['role' => 'user', 'content' => $message];
 
         $payload = [
             'model'    => $model,
@@ -1740,23 +1754,9 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             'stream'   => false,
         ];
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) LaraSlice/1.0');
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        $res = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $data = $this->postJson($url, $payload);
 
-        if ($code === 200 && $res) {
-            $data = json_decode($res, true);
-            return $data['message']['content'] ?? null;
-        }
-
-        return null;
+        return $data['message']['content'] ?? null;
     }
 
     /**

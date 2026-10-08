@@ -97,7 +97,18 @@ abstract class BaseSliceWebController extends Controller
                             }
                         }
 
-                        $data = \Illuminate\Support\Facades\DB::table($tbl)->pluck($labelCol, 'id')->toArray();
+                        // Capped so a large related table can't blow up the form; the selected value always stays
+                        $data = \Illuminate\Support\Facades\DB::table($tbl)
+                            ->orderBy($labelCol)
+                            ->limit((int) config('laraslice.forms.relationship_options_limit', 500))
+                            ->pluck($labelCol, 'id')
+                            ->toArray();
+                        if (is_scalar($propVal) && $propVal !== '' && ! array_key_exists($propVal, $data)) {
+                            $selected = \Illuminate\Support\Facades\DB::table($tbl)->where('id', $propVal)->value($labelCol);
+                            if ($selected !== null) {
+                                $data[$propVal] = $selected;
+                            }
+                        }
 
                         $camelPlural = \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)) . 'Options';
                         $camelSingular = \Illuminate\Support\Str::camel($base) . 'Options';

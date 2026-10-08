@@ -195,6 +195,10 @@ class User extends Authenticatable
 
     public function getTwoFactorRecoveryCodesAttribute(): mixed
     {
+        if ($this->relationLoaded('recoveryCodes')) {
+            return $this->recoveryCodes->whereNull('used_at')->pluck('code_hash')->values()->all();
+        }
+
         return $this->recoveryCodes()->whereNull('used_at')->pluck('code_hash')->toArray();
     }
 

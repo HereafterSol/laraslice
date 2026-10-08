@@ -18,6 +18,12 @@ class RoleSliceService extends BaseSliceService
         return Role::class;
     }
 
+    protected function newQuery(): Builder
+    {
+        // Listing rows show both counts; load them in the listing query
+        return parent::newQuery()->withCount(['users', 'permissions'])->with('permissions');
+    }
+
     protected function mapToForm(Model $model): IBusinessObject
     {
         /** @var Role $model */
@@ -44,8 +50,8 @@ class RoleSliceService extends BaseSliceService
         $listing->name = $model->name;
         $listing->slug = $model->slug;
         $listing->description = $model->description;
-        $listing->usersCount = $model->users()->count();
-        $listing->permissionsCount = $model->permissions()->count();
+        $listing->usersCount = (int) ($model->users_count ?? $model->users()->count());
+        $listing->permissionsCount = (int) ($model->permissions_count ?? $model->permissions()->count());
         $listing->createdAt = $model->created_at ? $model->created_at->toIso8601String() : null;
         return $listing;
     }
