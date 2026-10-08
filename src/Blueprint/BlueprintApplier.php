@@ -124,6 +124,17 @@ final class BlueprintApplier
 
         $models = $blueprint['models'];
         $root = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
+        $belongsTo = [];
+        foreach ($root['relations'] ?? [] as $relation) {
+            if ($relation['type'] === 'belongsTo') {
+                $relatedModel = $this->findModel($models, $relation['model']);
+                $belongsTo[$relation['foreign_key']] = [
+                    'relation' => ['name' => $relation['name'], 'model' => $relation['model']],
+                    'references' => $relation['table'] ?? $relatedModel['table'] ?? null,
+                ];
+            }
+        }
+
         $rootFields = [];
         foreach ($root['fields'] ?? [] as $field) {
             $type = $field['type'] === 'enum' ? 'select' : $field['type'];
@@ -138,6 +149,8 @@ final class BlueprintApplier
                 'options' => $field['options'] ?? [],
                 'length' => $field['length'] ?? null,
                 'encrypted' => $field['encrypted'] ?? false,
+                'relation' => $belongsTo[$field['handle']]['relation'] ?? null,
+                'references' => $belongsTo[$field['handle']]['references'] ?? null,
             ];
         }
 
@@ -322,5 +335,17 @@ final class BlueprintApplier
         }
         closedir($dir);
         return true;
+    }
+
+    /** A model from this blueprint by handle, or null for external models. */
+    private function findModel(array $models, string $handle): ?array
+    {
+        foreach ($models as $model) {
+            if (($model['handle'] ?? null) === $handle) {
+                return $model;
+            }
+        }
+
+        return null;
     }
 }

@@ -11,6 +11,9 @@ class SliceManager
     /** @var array<string, SliceManifest> */
     protected array $slices = [];
 
+    /** @var array<string, string|null> Model classes already resolved by modelClass(). */
+    protected array $resolvedModels = [];
+
     public function __construct(Application $app)
     {
         $this->app = $app;
@@ -579,6 +582,42 @@ class SliceManager
         if (class_exists($providerClass)) {
             $this->app->register($providerClass);
         }
+    }
+
+    /**
+     * Find the Eloquent class for a model name (e.g. "ShopCategory") among discovered slices,
+     * then App\Models. Generated belongsTo relations use this instead of guessing namespaces.
+     */
+    public function modelClass(string $studlyName): ?string
+    {
+        if (array_key_exists($studlyName, $this->resolvedModels)) {
+            return $this->resolvedModels[$studlyName];
+        }
+
+        $packageSlices = realpath(dirname(__DIR__, 2) . '/Slices');
+        $candidates = [];
+        foreach ($this->slices as $slice) {
+            // Core slices and older manifests have no namespace; derive it from the location
+            $namespace = $slice->namespace;
+            if (empty($namespace)) {
+                $insidePackage = $packageSlices !== false && str_starts_with((string) realpath($slice->path), $packageSlices);
+                $namespace = $insidePackage
+                    ? 'LaraSlice\\Slices\\' . basename($slice->path)
+                    : rtrim((string) config('laraslice.slices_namespace', 'App\\Slices'), '\\')
+                        . (! empty($slice->domain) ? '\\' . \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($slice->domain)) : '')
+                        . '\\' . basename($slice->path);
+            }
+            $candidates[] = rtrim($namespace, '\\') . '\\Models\\' . $studlyName;
+        }
+        $candidates[] = 'App\\Models\\' . $studlyName;
+
+        foreach ($candidates as $class) {
+            if (class_exists($class) && is_subclass_of($class, \Illuminate\Database\Eloquent\Model::class)) {
+                return $this->resolvedModels[$studlyName] = $class;
+            }
+        }
+
+        return $this->resolvedModels[$studlyName] = null;
     }
 
     public function getAllSlices(): array

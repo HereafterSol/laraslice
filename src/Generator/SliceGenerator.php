@@ -291,30 +291,28 @@ PHP;
         }
 
         $modelRelations = '';
-        foreach ($manifestFields as $def) {
-            if (($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id')) {
-                $relName = Str::camel(Str::replaceLast('_id', '', $def['name']));
-                $targetClass = Str::studly(Str::replaceLast('_id', '', $def['name']));
-                $modelRelations .= <<<REL
+        foreach ($fields as $def) {
+            $isForeignKey = ($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id');
+            if (! $isForeignKey) {
+                continue;
+            }
+            $relation = $def['relation'] ?? [];
+            $relName = Str::camel($relation['name'] ?? Str::replaceLast('_id', '', $def['name']));
+            $targetModel = Str::studly(Str::singular($relation['model'] ?? Str::replaceLast('_id', '', $def['name'])));
+            $foreignKey = var_export($def['name'], true);
+            $targetExport = var_export($targetModel, true);
+            $modelRelations .= <<<REL
 
 
     public function {$relName}(): BelongsTo
     {
-        \$candidateClasses = [
-            "\\\\App\\\\Slices\\\\ECommerce\\\\ShopCategories\\\\Models\\\\{$targetClass}",
-            "\\\\App\\\\Slices\\\\ECommerce\\\\ShopProducts\\\\Models\\\\{$targetClass}",
-            "\\\\App\\\\Slices\\\\{$targetClass}s\\\\Models\\\\{$targetClass}",
-            "\\\\App\\\\Models\\\\{$targetClass}",
-        ];
-        foreach (\$candidateClasses as \$cls) {
-            if (class_exists(\$cls)) {
-                return \$this->belongsTo(\$cls, '{$def['name']}');
-            }
-        }
-        return \$this->belongsTo(Model::class, '{$def['name']}');
+        // Resolved among installed slices (and App\\Models) when first used
+        \$class = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$targetExport})
+            ?? throw new \\LogicException('No model class named {$targetModel} was found for {$def['name']}.');
+
+        return \$this->belongsTo(\$class, {$foreignKey});
     }
 REL;
-            }
         }
 
         $modelContent .= <<<PHP
@@ -1068,6 +1066,16 @@ BLADE;
             if ($default !== null) {
                 $columnExpression .= '->default(' . var_export($default, true) . ')';
             }
+            if ($type === 'foreign_id') {
+                $references = $definition['references'] ?? null;
+                if ($references !== null && ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', (string) $references)) {
+                    throw new SliceFieldDefinitionException("Field '{$name}' references an invalid table name.");
+                }
+                // A real constraint only when the referenced table is known; always an index
+                $columnExpression = $references !== null
+                    ? "\$table->foreignId('{$name}')" . ($nullable ? '->nullable()' : '') . "->constrained('{$references}')->" . ($nullable ? 'nullOnDelete()' : 'restrictOnDelete()')
+                    : $columnExpression . '->index()';
+            }
 
             $rules = array_values(array_filter([
                 $nullable ? 'nullable' : 'required',
@@ -1100,6 +1108,7 @@ BLADE;
                 'nullable' => $nullable,
                 'options' => $options,
                 'encrypted' => $encrypted,
+                'relation' => is_array($definition['relation'] ?? null) ? $definition['relation'] : null,
             ];
         }
 

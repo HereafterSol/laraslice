@@ -241,7 +241,13 @@ final class BlueprintValidator
                     $errors[] = "{$relationPath} must be a map.";
                     continue;
                 }
-                $this->checkKeys($relation, ['name', 'type', 'model', 'foreign_key', 'pivot_table'], $relationPath, $errors);
+                $this->checkKeys($relation, ['name', 'type', 'model', 'foreign_key', 'pivot_table', 'external', 'table'], $relationPath, $errors);
+                if (isset($relation['external']) && ! is_bool($relation['external'])) {
+                    $errors[] = "{$relationPath}.external must be a boolean.";
+                }
+                if (isset($relation['table']) && ! $this->isHandle($relation['table'])) {
+                    $errors[] = "{$relationPath}.table must be a lowercase snake_case table name.";
+                }
 
                 $relationName = $relation['name'] ?? null;
                 if (! $this->isHandle($relationName)) {
