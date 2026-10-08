@@ -167,9 +167,10 @@ class SliceGeneratorTest extends TestCase
         $this->assertSame('E-Commerce', $manifest['navigation']['group']);
         $this->assertSame('/e-commerce/orders', $manifest['navigation']['url']);
 
-        // Web routes: domain prefix, domain route alias, and legacy flat redirect
+        // Web routes: domain prefix and legacy flat redirect. No alias group with the same URIs:
+        // a compiled route cache would keep only one of the names.
         $this->assertStringContainsString("Route::prefix('e-commerce/orders')->name('orders.')", $webRoutes);
-        $this->assertStringContainsString("Route::prefix('e-commerce/orders')->name('e_commerce.orders.')", $webRoutes);
+        $this->assertStringNotContainsString("->name('e_commerce.orders.')", $webRoutes);
         $this->assertStringContainsString("Route::redirect('orders', '/e-commerce/orders');", $webRoutes);
         $this->assertStringContainsString("Route::redirect('orders/{any}', '/e-commerce/orders/{any}')", $webRoutes);
 
