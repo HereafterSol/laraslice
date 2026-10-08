@@ -38,87 +38,114 @@ class McpServer
         }
 
         $response = $this->handleRpc($payload);
-        return response()->json($response);
+
+        // Notifications get no JSON-RPC response
+        return $response === null ? response()->json(null, 202) : response()->json($response);
     }
 
+    /** Protocol versions this server implements, newest first. */
+    public const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+
     /**
-     * Process a JSON-RPC 2.0 request payload.
+     * Process a JSON-RPC 2.0 message. Returns null for notifications, which get no response.
      */
-    public function handleRpc(array $payload): array
+    public function handleRpc(array $payload): ?array
     {
+        $isNotification = ! array_key_exists('id', $payload);
         $id = $payload['id'] ?? null;
-        $method = $payload['method'] ?? '';
-        $params = $payload['params'] ?? [];
+        $method = is_string($payload['method'] ?? null) ? $payload['method'] : '';
+        $params = is_array($payload['params'] ?? null) ? $payload['params'] : [];
 
-        switch ($method) {
-            case 'initialize':
-                return [
-                    'jsonrpc' => '2.0',
-                    'id'      => $id,
-                    'result'  => [
-                        'protocolVersion' => '2024-11-05',
-                        'serverInfo'      => [
-                            'name'    => 'laraslice-mcp-server',
-                            'version' => '1.0.0',
-                        ],
-                        'capabilities'    => [
-                            'tools'     => ['listChanged' => true],
-                            'resources' => ['subscribe' => false],
-                            'prompts'   => ['listChanged' => false],
-                        ],
-                    ],
-                ];
-
-            case 'notifications/initialized':
-                return [
-                    'jsonrpc' => '2.0',
-                    'id'      => $id,
-                    'result'  => ['status' => 'ready'],
-                ];
-
-            case 'tools/list':
-                return [
-                    'jsonrpc' => '2.0',
-                    'id'      => $id,
-                    'result'  => [
-                        'tools' => $this->aiEngine->getAvailableTools(),
-                    ],
-                ];
-
-            case 'tools/call':
-                $toolName = $params['name'] ?? '';
-                $arguments = $params['arguments'] ?? [];
-                $callResult = $this->callTool($toolName, $arguments);
-
-                return [
-                    'jsonrpc' => '2.0',
-                    'id'      => $id,
-                    'result'  => [
-                        'content' => [
-                            [
-                                'type' => 'text',
-                                'text' => is_string($callResult) ? $callResult : json_encode($callResult, JSON_PRETTY_PRINT),
-                            ],
-                        ],
-                        'isError' => is_array($callResult) && (isset($callResult['error']) || ($callResult['success'] ?? true) === false),
-                    ],
-                ];
-
-            default:
-                return [
-                    'jsonrpc' => '2.0',
-                    'id'      => $id,
-                    'error'   => [
-                        'code'    => -32601,
-                        'message' => "Method not found: {$method}",
-                    ],
-                ];
+        if ($isNotification) {
+            // notifications/initialized, notifications/cancelled, ...: acknowledge silently
+            return null;
         }
+
+        try {
+            $result = match ($method) {
+                'initialize' => $this->initializeResult($params),
+                'ping' => (object) [],
+                'tools/list' => ['tools' => $this->toolDefinitions()],
+                'tools/call' => $this->toolCallResult($params),
+                'resources/list' => ['resources' => []],
+                'resources/templates/list' => ['resourceTemplates' => []],
+                'prompts/list' => ['prompts' => []],
+                default => null,
+            };
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->error($id, -32603, 'Internal error while handling ' . $method);
+        }
+
+        if ($result === null) {
+            return $this->error($id, -32601, "Method not found: {$method}");
+        }
+
+        return ['jsonrpc' => '2.0', 'id' => $id, 'result' => $result];
+    }
+
+    protected function initializeResult(array $params): array
+    {
+        $requested = $params['protocolVersion'] ?? null;
+
+        return [
+            'protocolVersion' => in_array($requested, self::PROTOCOL_VERSIONS, true) ? $requested : self::PROTOCOL_VERSIONS[0],
+            'serverInfo' => [
+                'name' => 'laraslice-mcp-server',
+                'version' => \LaraSlice\LaraSliceServiceProvider::VERSION,
+            ],
+            'capabilities' => [
+                'tools' => ['listChanged' => false],
+            ],
+        ];
     }
 
     /**
-     * Execute an MCP tool.
+     * Tool definitions in MCP form: the JSON schema goes under "inputSchema".
      */
+    protected function toolDefinitions(): array
+    {
+        return array_map(function (array $tool): array {
+            $definition = [
+                'name' => $tool['name'],
+                'description' => $tool['description'] ?? '',
+                'inputSchema' => $tool['inputSchema'] ?? $tool['parameters'] ?? ['type' => 'object', 'properties' => (object) []],
+            ];
+            if (! empty($tool['annotations'])) {
+                $definition['annotations'] = $tool['annotations'];
+            }
+
+            return $definition;
+        }, $this->aiEngine->getAvailableTools());
+    }
+
+    protected function toolCallResult(array $params): array
+    {
+        $name = is_string($params['name'] ?? null) ? $params['name'] : '';
+        $arguments = is_array($params['arguments'] ?? null) ? $params['arguments'] : [];
+
+        try {
+            $callResult = $this->callTool($name, $arguments);
+        } catch (\Throwable $e) {
+            report($e);
+            $callResult = ['success' => false, 'error' => "The {$name} tool failed: " . $e->getMessage()];
+        }
+
+        return [
+            'content' => [[
+                'type' => 'text',
+                'text' => is_string($callResult) ? $callResult : json_encode($callResult, JSON_PRETTY_PRINT),
+            ]],
+            'isError' => is_array($callResult) && (isset($callResult['error']) || ($callResult['success'] ?? true) === false),
+        ];
+    }
+
+    protected function error(mixed $id, int $code, string $message): array
+    {
+        return ['jsonrpc' => '2.0', 'id' => $id, 'error' => ['code' => $code, 'message' => $message]];
+    }
+
     /**
      * Tools that change code or data: the permissions they need over HTTP, and
      * whether the caller must repeat the target's name in a "confirm" argument.

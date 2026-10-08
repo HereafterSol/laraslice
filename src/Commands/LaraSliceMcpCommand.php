@@ -8,7 +8,6 @@ use LaraSlice\Core\Ai\McpServer;
 class LaraSliceMcpCommand extends Command
 {
     protected $signature = 'laraslice:mcp 
-                            {--transport=stdio : Transport mechanism: stdio or sse}
                             {--test : Run a self-test of the MCP server tool registry}';
 
     protected $description = 'Start the LaraSlice Model Context Protocol (MCP) server for Cursor, Antigravity, and Claude AI agents';
@@ -55,8 +54,10 @@ class LaraSliceMcpCommand extends Command
             }
 
             $response = $mcpServer->handleRpc($payload);
-            echo json_encode($response) . "\n";
-            flush();
+            if ($response !== null) {
+                echo json_encode($response) . "\n";
+                flush();
+            }
         }
 
         fclose($stdin);

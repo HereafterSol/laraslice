@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\RateLimiter;
 
 class LaraSliceServiceProvider extends ServiceProvider
 {
+    /** Package version reported to MCP clients and the AI copilot. Bump with each release. */
+    public const VERSION = '1.4.1';
+
     public function register(): void
     {
         // 1. Merge configuration

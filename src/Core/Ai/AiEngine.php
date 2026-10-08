@@ -274,7 +274,7 @@ class AiEngine
 
         return [
             'framework'           => 'LaraSlice Enterprise (Vertical Slice Architecture for Laravel)',
-            'version'             => '1.0.0',
+            'version'             => \LaraSlice\LaraSliceServiceProvider::VERSION,
             'current_page'        => $pagePath ?? '/',
             'active_slices'       => $slicesData,
             'database_metrics'    => $dbMetrics,
