@@ -41,13 +41,8 @@
         }
     ],
     "require": {
-        "php": "^8.2|^8.3|^8.4",
-        "illuminate/support": "^11.0|^12.0|^13.0",
-        "illuminate/database": "^11.0|^12.0|^13.0",
-        "illuminate/routing": "^11.0|^12.0|^13.0",
-        "illuminate/console": "^11.0|^12.0|^13.0",
-        "illuminate/view": "^11.0|^12.0|^13.0",
-        "illuminate/http": "^11.0|^12.0|^13.0",
+        "php": "^8.2",
+        "laravel/framework": "^11.0|^12.0|^13.0",
         "guzzlehttp/guzzle": "^7.8",
         "symfony/yaml": "^6.4|^7.0|^8.0",
         "mallardduck/blade-lucide-icons": "^2.0",
@@ -56,7 +51,9 @@
     },
     "require-dev": {
         "orchestra/testbench": "^9.0|^10.0|^11.0",
-        "phpunit/phpunit": "^10.0|^11.0"
+        "phpunit/phpunit": "^11.0|^12.0",
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18"
     },
     "suggest": {
         "bacon/bacon-qr-code": "^3.0 - render TOTP enrollment QR codes on the server instead of showing only the setup key"
@@ -71,6 +68,18 @@
             "LaraSlice\\Tests\\": "tests/"
         }
     },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "lint": [
+            "@format --test",
+            "@analyse"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    },
     "extra": {
         "laravel": {
             "providers": [
@@ -81,7 +90,7 @@
             }
         }
     },
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "prefer-stable": true,
     "homepage": "https://hereaftersol.com",
     "support": {
