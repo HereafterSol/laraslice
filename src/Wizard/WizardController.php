@@ -126,9 +126,16 @@ class WizardController extends Controller
         }
 
         $flutterDir = null;
+        $flutterError = null;
         if (!empty($validated['flutter'])) {
-            $flutterGen = new \LaraSlice\Generator\FlutterSliceGenerator();
-            $flutterDir = $flutterGen->generate($validated['projectName']);
+            try {
+                $flutterDir = (new \LaraSlice\Generator\FlutterSliceGenerator())->generate($validated['projectName'], [
+                    'fields' => $validated['fields'] ?? [],
+                ]);
+            } catch (\RuntimeException | \InvalidArgumentException $e) {
+                // The slice itself was generated; report the Flutter export problem alongside it
+                $flutterError = $e->getMessage();
+            }
         }
 
         $migrated = false;
@@ -149,6 +156,7 @@ class WizardController extends Controller
             'sliceName'       => $validated['projectName'],
             'path'            => $sliceDir,
             'flutterPath'     => $flutterDir,
+            'flutterError'    => $flutterError,
             'web_url'         => url("/{$plural}"),
             'api_url'         => $includeApi ? url("/api/{$plural}/list") : null,
             'migrated'        => $migrated,
