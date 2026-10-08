@@ -4,16 +4,31 @@ namespace LaraSlice\Wizard;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use LaraSlice\Generator\SliceGenerator;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+use LaraSlice\Core\Ai\AiEngine;
+use LaraSlice\Core\Audit\AuditLogger;
+use LaraSlice\Core\Discovery\ManifestRepository;
+use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Generator\FlutterSliceGenerator;
 use LaraSlice\Generator\SliceExistsException;
 use LaraSlice\Generator\SliceFieldDefinitionException;
-use InvalidArgumentException;
+use LaraSlice\Generator\SliceGenerator;
+use LaraSlice\Generator\SliceModifier;
+use LaraSlice\Generator\SliceSeederService;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class WizardController extends Controller
 {
     public function show(Request $request)
     {
         $initialTab = $request->query('tab', 'wizard');
+
         return view('laraslice::wizard', [
             'initialTab' => $initialTab,
         ]);
@@ -28,23 +43,24 @@ class WizardController extends Controller
 
     public function schemaStudio()
     {
-        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+        $manager = app(SliceManager::class);
         $slicesList = [];
         foreach ($manager->getAllSlices() as $slice) {
             $slicesList[] = [
-                'name'        => $slice->name,
-                'title'       => $slice->title ?? $slice->name,
-                'domain'      => $slice->domain ?? 'General',
+                'name' => $slice->name,
+                'title' => $slice->title ?? $slice->name,
+                'domain' => $slice->domain ?? 'General',
                 'description' => $slice->description ?? '',
-                'enabled'     => $slice->enabled ?? true,
-                'version'     => $slice->version ?? '1.0.0',
+                'enabled' => $slice->enabled ?? true,
+                'version' => $slice->version ?? '1.0.0',
             ];
         }
 
         $tables = [];
         try {
-            $tables = array_column(\Illuminate\Support\Facades\Schema::getTables(), 'name');
-        } catch (\Throwable $e) {}
+            $tables = array_column(Schema::getTables(), 'name');
+        } catch (\Throwable $e) {
+        }
 
         return view('laraslice::schema-studio', compact('slicesList', 'tables'));
     }
@@ -52,18 +68,18 @@ class WizardController extends Controller
     public function generate(Request $request)
     {
         $validated = $request->validate([
-            'projectName'  => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
-            'namespace'    => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*$/'],
-            'description'  => 'nullable|string|max:1000',
-            'author'       => 'nullable|string|max:120',
-            'domain'       => 'nullable|string|max:120',
-            'features'     => 'nullable|array',
-            'fields'       => 'nullable|array|max:50',
-            'childTables'  => 'nullable|array|max:20',
-            'permissions'  => 'nullable|array|max:50',
-            'workflow'     => 'nullable|boolean',
-            'includeApi'   => 'nullable|boolean',
-            'flutter'      => 'nullable|boolean',
+            'projectName' => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
+            'namespace' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*$/'],
+            'description' => 'nullable|string|max:1000',
+            'author' => 'nullable|string|max:120',
+            'domain' => 'nullable|string|max:120',
+            'features' => 'nullable|array',
+            'fields' => 'nullable|array|max:50',
+            'childTables' => 'nullable|array|max:20',
+            'permissions' => 'nullable|array|max:50',
+            'workflow' => 'nullable|boolean',
+            'includeApi' => 'nullable|boolean',
+            'flutter' => 'nullable|boolean',
             'runMigration' => 'nullable|boolean',
         ]);
         $includeApi = (bool) ($validated['includeApi'] ?? true);
@@ -76,22 +92,22 @@ class WizardController extends Controller
                 (bool) ($validated['workflow'] ?? false),
                 [
                     'description' => $validated['description'] ?? null,
-                    'author'      => $validated['author'] ?? null,
-                    'domain'      => $validated['domain'] ?? null,
+                    'author' => $validated['author'] ?? null,
+                    'domain' => $validated['domain'] ?? null,
                     'permissions' => $validated['permissions'] ?? null,
-                    'api'         => $includeApi,
+                    'api' => $includeApi,
                 ]
             );
 
             $childErrors = [];
             // Scaffold child tables and aggregate relationships if defined
-            if (!empty($validated['childTables'])) {
-                $modifier = new \LaraSlice\Generator\SliceModifier(
+            if (! empty($validated['childTables'])) {
+                $modifier = new SliceModifier(
                     dirname($sliceDir),
                     $validated['namespace'] ?? null
                 );
                 foreach ($validated['childTables'] as $child) {
-                    if (!empty($child['name'])) {
+                    if (! empty($child['name'])) {
                         $childName = $child['name'];
                         $relationType = $child['relation'] ?? 'hasMany';
                         $childFields = $child['fields'] ?? [];
@@ -127,12 +143,12 @@ class WizardController extends Controller
 
         $flutterDir = null;
         $flutterError = null;
-        if (!empty($validated['flutter'])) {
+        if (! empty($validated['flutter'])) {
             try {
-                $flutterDir = (new \LaraSlice\Generator\FlutterSliceGenerator())->generate($validated['projectName'], [
+                $flutterDir = (new FlutterSliceGenerator)->generate($validated['projectName'], [
                     'fields' => $validated['fields'] ?? [],
                 ]);
-            } catch (\RuntimeException | \InvalidArgumentException $e) {
+            } catch (\RuntimeException|InvalidArgumentException $e) {
                 // The slice itself was generated; report the Flutter export problem alongside it
                 $flutterError = $e->getMessage();
             }
@@ -140,26 +156,26 @@ class WizardController extends Controller
 
         $migrated = false;
         $migrationOutput = null;
-        if (!empty($validated['runMigration'])) {
+        if (! empty($validated['runMigration'])) {
             [$migrated, $migrationOutput] = $this->executeMigrations();
         }
 
-        $singular = strtolower(\Illuminate\Support\Str::snake($validated['projectName']));
-        $plural   = strtolower(\Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($validated['projectName'])));
+        $singular = strtolower(Str::snake($validated['projectName']));
+        $plural = strtolower(Str::snake(Str::plural($validated['projectName'])));
 
         return response()->json([
-            'success'         => true,
-            'message'         => $childErrors === []
+            'success' => true,
+            'message' => $childErrors === []
                 ? "Slice '{$validated['projectName']}' generated successfully!"
-                : "Slice '{$validated['projectName']}' generated, but " . count($childErrors) . ' child table(s) could not be added: ' . implode(', ', array_keys($childErrors)) . '.',
-            'childErrors'     => $childErrors,
-            'sliceName'       => $validated['projectName'],
-            'path'            => $sliceDir,
-            'flutterPath'     => $flutterDir,
-            'flutterError'    => $flutterError,
-            'web_url'         => url("/{$plural}"),
-            'api_url'         => $includeApi ? url("/api/{$plural}/list") : null,
-            'migrated'        => $migrated,
+                : "Slice '{$validated['projectName']}' generated, but ".count($childErrors).' child table(s) could not be added: '.implode(', ', array_keys($childErrors)).'.',
+            'childErrors' => $childErrors,
+            'sliceName' => $validated['projectName'],
+            'path' => $sliceDir,
+            'flutterPath' => $flutterDir,
+            'flutterError' => $flutterError,
+            'web_url' => url("/{$plural}"),
+            'api_url' => $includeApi ? url("/api/{$plural}/list") : null,
+            'migrated' => $migrated,
             'migrationOutput' => $migrationOutput,
         ]);
     }
@@ -170,8 +186,8 @@ class WizardController extends Controller
 
         return response()->json([
             'success' => $success,
-            'message' => $success ? 'Database migration completed successfully!' : 'Migration failed: ' . $output,
-            'output'  => $output,
+            'message' => $success ? 'Database migration completed successfully!' : 'Migration failed: '.$output,
+            'output' => $output,
         ], $success ? 200 : 500);
     }
 
@@ -183,7 +199,7 @@ class WizardController extends Controller
      */
     protected function mayRunMigrations(): bool
     {
-        return \LaraSlice\Core\Security\Access::allows(auth()->user(), ['studio.migrate', 'studio.*']);
+        return Access::allows(auth()->user(), ['studio.migrate', 'studio.*']);
     }
 
     protected function executeMigrations(): array
@@ -197,7 +213,7 @@ class WizardController extends Controller
 
         try {
             // Re-discover slices to include newly created ones
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $manager->discover();
 
             $migrationPaths = [];
@@ -221,7 +237,7 @@ class WizardController extends Controller
                 foreach ($rii as $item) {
                     if ($item->isDir() && strtolower($item->getFilename()) === 'migrations') {
                         $mp = $item->getRealPath();
-                        if ($mp && !in_array($mp, $migrationPaths, true)) {
+                        if ($mp && ! in_array($mp, $migrationPaths, true)) {
                             $migrationPaths[] = $mp;
                             if (app()->bound('migrator')) {
                                 app('migrator')->path($mp);
@@ -232,8 +248,8 @@ class WizardController extends Controller
             }
 
             // 1. Run standard migrate
-            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            $defaultOut = trim(\Illuminate\Support\Facades\Artisan::output());
+            Artisan::call('migrate', ['--force' => true]);
+            $defaultOut = trim(Artisan::output());
             if ($defaultOut) {
                 $outputs[] = $defaultOut;
             }
@@ -241,36 +257,37 @@ class WizardController extends Controller
             // 2. Explicitly migrate each discovered slice migration folder
             foreach (array_unique($migrationPaths) as $mp) {
                 if (is_dir($mp)) {
-                    $relative = str_replace([base_path() . DIRECTORY_SEPARATOR, base_path() . '/'], '', $mp);
+                    $relative = str_replace([base_path().DIRECTORY_SEPARATOR, base_path().'/'], '', $mp);
                     $relative = str_replace('\\', '/', $relative);
                     try {
-                        \Illuminate\Support\Facades\Artisan::call('migrate', [
+                        Artisan::call('migrate', [
                             '--force' => true,
-                            '--path'  => $relative,
+                            '--path' => $relative,
                         ]);
-                        $out = trim(\Illuminate\Support\Facades\Artisan::output());
-                        if ($out && !str_contains($out, 'Nothing to migrate')) {
+                        $out = trim(Artisan::output());
+                        if ($out && ! str_contains($out, 'Nothing to migrate')) {
                             $outputs[] = $out;
                         }
                     } catch (\Throwable $pe) {
                         try {
-                            \Illuminate\Support\Facades\Artisan::call('migrate', [
-                                '--force'    => true,
+                            Artisan::call('migrate', [
+                                '--force' => true,
                                 '--realpath' => true,
-                                '--path'     => $mp,
+                                '--path' => $mp,
                             ]);
-                            $out = trim(\Illuminate\Support\Facades\Artisan::output());
-                            if ($out && !str_contains($out, 'Nothing to migrate')) {
+                            $out = trim(Artisan::output());
+                            if ($out && ! str_contains($out, 'Nothing to migrate')) {
                                 $outputs[] = $out;
                             }
-                        } catch (\Throwable $pe2) {}
+                        } catch (\Throwable $pe2) {
+                        }
                     }
                 }
             }
 
             $migrated = true;
             $combined = implode("\n", array_filter(array_unique($outputs)));
-            $finalOutput = !empty($combined) ? $combined : 'All database tables created and verified successfully.';
+            $finalOutput = ! empty($combined) ? $combined : 'All database tables created and verified successfully.';
         } catch (\Throwable $e) {
             $migrated = false;
             $finalOutput = $e->getMessage();
@@ -281,46 +298,46 @@ class WizardController extends Controller
 
     public function listSlices()
     {
-        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+        $manager = app(SliceManager::class);
         $slices = [];
         foreach ($manager->getAllSlices() as $slice) {
-            $manifestFile = $slice->path . '/slice.json';
+            $manifestFile = $slice->path.'/slice.json';
             // Fields are always keyed by column name for the studio UI
-            $raw = file_exists($manifestFile) ? \LaraSlice\Core\Discovery\ManifestRepository::read($manifestFile) : \LaraSlice\Core\Discovery\ManifestRepository::normalize($slice->toArray());
+            $raw = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : ManifestRepository::normalize($slice->toArray());
 
             // Discover all tables belonging to this slice
-            $primaryTable = \Illuminate\Support\Str::plural(\Illuminate\Support\Str::snake($slice->name));
+            $primaryTable = Str::plural(Str::snake($slice->name));
             $tableNames = [$primaryTable];
 
             // Scan Models
-            $modelFiles = glob($slice->path . '/Models/*.php');
+            $modelFiles = glob($slice->path.'/Models/*.php');
             if ($modelFiles) {
                 foreach ($modelFiles as $mf) {
                     $mContent = file_get_contents($mf);
                     if (preg_match('/protected\s+\$table\s*=\s*[\'"]([^\'"]+)[\'"]/', $mContent, $mMatches)) {
                         $t = $mMatches[1];
-                        if (!in_array($t, $tableNames)) {
+                        if (! in_array($t, $tableNames)) {
                             $tableNames[] = $t;
                         }
                     } else {
-                        $t = \Illuminate\Support\Str::plural(\Illuminate\Support\Str::snake(basename($mf, '.php')));
-                        if (!in_array($t, $tableNames)) {
+                        $t = Str::plural(Str::snake(basename($mf, '.php')));
+                        if (! in_array($t, $tableNames)) {
                             $tableNames[] = $t;
                         }
                     }
                 }
             }
 
-                        if (!empty($raw['child_tables'])) {
+            if (! empty($raw['child_tables'])) {
                 foreach ($raw['child_tables'] as $t) {
-                    if (!in_array($t, $tableNames)) {
+                    if (! in_array($t, $tableNames)) {
                         $tableNames[] = $t;
                     }
                 }
             }
-            if (!empty($raw['tables'])) {
+            if (! empty($raw['tables'])) {
                 foreach ($raw['tables'] as $t) {
-                    if (!in_array($t, $tableNames)) {
+                    if (! in_array($t, $tableNames)) {
                         $tableNames[] = $t;
                     }
                 }
@@ -335,14 +352,14 @@ class WizardController extends Controller
                     if (preg_match('/protected\s+\$table\s*=\s*[\'"]([^\'"]+)[\'"]/', $mContent, $mMatches)) {
                         $mTable = $mMatches[1];
                     } else {
-                        $mTable = \Illuminate\Support\Str::plural(\Illuminate\Support\Str::snake($mClass));
+                        $mTable = Str::plural(Str::snake($mClass));
                     }
-                    $isRoot = ($mTable === $primaryTable) || str_contains($mClass, \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slice->name)));
+                    $isRoot = ($mTable === $primaryTable) || str_contains($mClass, Str::studly(Str::singular($slice->name)));
                     $models[] = [
-                        'class'  => $mClass,
-                        'handle' => \Illuminate\Support\Str::snake($mClass),
-                        'table'  => $mTable,
-                        'root'   => $isRoot,
+                        'class' => $mClass,
+                        'handle' => Str::snake($mClass),
+                        'table' => $mTable,
+                        'root' => $isRoot,
                     ];
                 }
             }
@@ -352,48 +369,48 @@ class WizardController extends Controller
             $tablesData = [];
             foreach ($tableNames as $t) {
                 $cols = [];
-                if (\Illuminate\Support\Facades\Schema::hasTable($t)) {
-                    foreach (\Illuminate\Support\Facades\Schema::getColumnListing($t) as $col) {
+                if (Schema::hasTable($t)) {
+                    foreach (Schema::getColumnListing($t) as $col) {
                         $cols[] = [
-                            'name'     => $col,
-                            'type'     => \Illuminate\Support\Facades\Schema::getColumnType($t, $col),
+                            'name' => $col,
+                            'type' => Schema::getColumnType($t, $col),
                             'nullable' => true,
                         ];
                     }
                 }
                 $tablesData[] = [
-                    'name'       => $t,
+                    'name' => $t,
                     'is_primary' => ($t === $primaryTable),
-                    'foreign_key' => \Illuminate\Support\Str::singular($primaryTable) . '_id',
-                    'columns'    => $cols,
+                    'foreign_key' => Str::singular($primaryTable).'_id',
+                    'columns' => $cols,
                 ];
             }
 
             // Calculate resolved Web UI URL for Open Slice UI button
             $uiUrl = null;
-            $snake = \Illuminate\Support\Str::snake($slice->name);
-            $pluralSnake = \Illuminate\Support\Str::plural($snake);
-            $singularSnake = \Illuminate\Support\Str::singular($snake);
+            $snake = Str::snake($slice->name);
+            $pluralSnake = Str::plural($snake);
+            $singularSnake = Str::singular($snake);
 
             $candidates = [
                 $raw['navigation']['route'] ?? null,
-                $snake . '.index',
-                $pluralSnake . '.index',
-                $singularSnake . '.index',
-                'admin.' . $snake . '.index',
-                'admin.' . $pluralSnake . '.index',
-                'admin.' . $singularSnake . '.index',
+                $snake.'.index',
+                $pluralSnake.'.index',
+                $singularSnake.'.index',
+                'admin.'.$snake.'.index',
+                'admin.'.$pluralSnake.'.index',
+                'admin.'.$singularSnake.'.index',
             ];
 
             foreach ($candidates as $cand) {
-                if ($cand && \Illuminate\Support\Facades\Route::has($cand)) {
+                if ($cand && Route::has($cand)) {
                     $uiUrl = route($cand);
                     break;
                 }
             }
 
-            if (!$uiUrl) {
-                $uiUrl = url('/' . $pluralSnake);
+            if (! $uiUrl) {
+                $uiUrl = url('/'.$pluralSnake);
             }
             $raw['ui_url'] = $uiUrl;
 
@@ -403,7 +420,7 @@ class WizardController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $slices,
+            'data' => $slices,
         ]);
     }
 
@@ -415,15 +432,15 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->addField(
                 sliceName: $validated['slice'], fieldName: $validated['field'], fieldType: $validated['type'],
                 nullable: (bool) ($validated['nullable'] ?? true), targetTable: $request->input('targetTable')
             );
-            $migrationResult = !empty($validated['migrate'])
+            $migrationResult = ! empty($validated['migrate'])
                 ? $this->runGeneratedMigration($result['migration'])
                 : ['success' => null, 'message' => 'Migration was generated but not run.'];
-        } catch (\InvalidArgumentException | \RuntimeException $exception) {
+        } catch (InvalidArgumentException|\RuntimeException $exception) {
             return response()->json(['success' => false, 'message' => $exception->getMessage()], 422);
         }
 
@@ -446,59 +463,61 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->addFieldsBatch(
                 $validated['slice'], $validated['fields'], 'Common User via Slice Studio',
                 $validated['note'] ?? null, $request->input('targetTable')
             );
-            $migrationResult = !empty($validated['migrate'])
+            $migrationResult = ! empty($validated['migrate'])
                 ? $this->runGeneratedMigration($result['migration'])
                 : ['success' => null, 'message' => 'Migration was generated but not run.'];
-        } catch (\InvalidArgumentException | \RuntimeException $exception) {
+        } catch (InvalidArgumentException|\RuntimeException $exception) {
             return response()->json(['success' => false, 'message' => $exception->getMessage()], 422);
         }
 
         return response()->json([
             'success' => true,
-            'message' => count($validated['fields']) . " fields added to '{$validated['slice']}' in a single consolidated migration!",
+            'message' => count($validated['fields'])." fields added to '{$validated['slice']}' in a single consolidated migration!",
             'data' => $result,
             'migration' => $migrationResult,
         ]);
     }
+
     public function updateNavigation(Request $request)
     {
         $validated = $request->validate([
-            'slice'        => 'required|string',
-            'title'        => 'required|string',
-            'icon'         => 'nullable|string',
-            'order'        => 'nullable|integer',
-            'permission'   => 'nullable|string',
-            'permissions'  => 'nullable|array',
-            'url'          => 'nullable|string',
-            'children'     => 'nullable|array',
+            'slice' => 'required|string',
+            'title' => 'required|string',
+            'icon' => 'nullable|string',
+            'order' => 'nullable|integer',
+            'permission' => 'nullable|string',
+            'permissions' => 'nullable|array',
+            'url' => 'nullable|string',
+            'children' => 'nullable|array',
             'redirect_old' => 'nullable|boolean',
         ]);
 
-        $modifier = new \LaraSlice\Generator\SliceModifier();
+        $modifier = new SliceModifier;
         $nav = $modifier->updateNavigation($validated['slice'], $validated);
 
         return response()->json([
             'success' => true,
             'message' => "Navigation updated for '{$validated['slice']}'!",
-            'data'    => $nav,
+            'data' => $nav,
         ]);
     }
 
     public function rollbackVersion(Request $request)
     {
         $validated = $request->validate([
-            'slice'          => 'required|string',
+            'slice' => 'required|string',
             'target_version' => 'required|string',
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->rollbackVersion($validated['slice'], $validated['target_version']);
+
             return response()->json($result);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -508,16 +527,16 @@ class WizardController extends Controller
     public function syncFields(Request $request)
     {
         $validated = $request->validate([
-            'slice'          => 'required|string',
-            'targetTable'    => 'required|string',
-            'new_fields'     => 'nullable|array',
+            'slice' => 'required|string',
+            'targetTable' => 'required|string',
+            'new_fields' => 'nullable|array',
             'deleted_fields' => 'nullable|array',
-            'all_fields'     => 'nullable|array',
-            'migrate'        => 'nullable|boolean',
+            'all_fields' => 'nullable|array',
+            'migrate' => 'nullable|boolean',
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->syncFields(
                 $validated['slice'],
                 $validated['targetTable'],
@@ -527,14 +546,14 @@ class WizardController extends Controller
                 'Developer via Slice Studio'
             );
 
-            $migrationResult = (!empty($validated['migrate']) && !empty($result['migration']))
+            $migrationResult = (! empty($validated['migrate']) && ! empty($result['migration']))
                 ? $this->runGeneratedMigration($result['migration'])
                 : ['success' => null, 'message' => 'Migration was generated but not run.'];
 
             return response()->json([
-                'success'   => true,
-                'message'   => $result['description'] ?? 'Schema synchronized successfully!',
-                'data'      => $result,
+                'success' => true,
+                'message' => $result['description'] ?? 'Schema synchronized successfully!',
+                'data' => $result,
                 'migration' => $migrationResult,
             ]);
         } catch (\Throwable $e) {
@@ -545,17 +564,18 @@ class WizardController extends Controller
     public function saveRelationships(Request $request)
     {
         $validated = $request->validate([
-            'slice'     => 'required|string',
+            'slice' => 'required|string',
             'relations' => 'nullable|array',
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->saveRelationships(
                 $validated['slice'],
                 $validated['relations'] ?? [],
                 'Developer via Slice Studio'
             );
+
             return response()->json($result);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -565,20 +585,20 @@ class WizardController extends Controller
     public function addChildTable(Request $request)
     {
         $validated = $request->validate([
-            'slice'        => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
-            'tableName'    => 'required|string|max:80',
+            'slice' => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
+            'tableName' => 'required|string|max:80',
             'relationType' => 'nullable|in:hasMany',
-            'foreignKey'   => ['nullable', 'string', 'max:64', 'regex:/^[a-z][a-z0-9_]*$/'],
-            'fields'       => 'nullable|array|max:50',
+            'foreignKey' => ['nullable', 'string', 'max:64', 'regex:/^[a-z][a-z0-9_]*$/'],
+            'fields' => 'nullable|array|max:50',
             'fields.*.name' => ['required', 'string', 'max:64', 'regex:/^[a-z][a-zA-Z0-9_]*$/'],
             'fields.*.type' => 'nullable|string|in:string,text,mediumText,longText,integer,int,bigInteger,smallInteger,tinyInteger,boolean,bool,decimal,float,double,date,dateTime,datetime,timestamp,time,json,uuid',
             'fields.*.nullable' => 'nullable|boolean',
             'fields.*.required' => 'nullable|boolean',
-            'migrate'      => 'nullable|boolean',
+            'migrate' => 'nullable|boolean',
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->addChildTable(
                 $validated['slice'],
                 $validated['tableName'],
@@ -586,7 +606,7 @@ class WizardController extends Controller
                 $validated['fields'] ?? [],
                 $validated['foreignKey'] ?? null
             );
-        } catch (\InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException $exception) {
             return response()->json([
                 'success' => false,
                 'message' => $exception->getMessage(),
@@ -595,16 +615,16 @@ class WizardController extends Controller
         }
 
         $migrationResult = null;
-        if (!empty($validated['migrate'])) {
+        if (! empty($validated['migrate'])) {
             $migrationResult = $this->runGeneratedMigration($result['migration_file']);
         }
 
         return response()->json([
             'success' => $migrationResult === null || $migrationResult['success'],
             'message' => $migrationResult !== null && ! $migrationResult['success']
-                ? 'The child slice files were generated, but its migration failed: ' . $migrationResult['output']
+                ? 'The child slice files were generated, but its migration failed: '.$migrationResult['output']
                 : "Child table '{$validated['tableName']}' created and linked to '{$validated['slice']}' successfully!",
-            'data'    => $result,
+            'data' => $result,
             'migration' => $migrationResult,
         ], $migrationResult !== null && ! $migrationResult['success'] ? 500 : 200);
     }
@@ -618,11 +638,11 @@ class WizardController extends Controller
         $absoluteBase = realpath(base_path());
         $absoluteMigration = realpath($migrationFile);
 
-        if ($absoluteBase === false || $absoluteMigration === false || ! str_starts_with($absoluteMigration, $absoluteBase . DIRECTORY_SEPARATOR)) {
+        if ($absoluteBase === false || $absoluteMigration === false || ! str_starts_with($absoluteMigration, $absoluteBase.DIRECTORY_SEPARATOR)) {
             return ['success' => false, 'output' => 'Generated migration path is outside the application.'];
         }
 
-        $status = \Illuminate\Support\Facades\Artisan::call('migrate', [
+        $status = Artisan::call('migrate', [
             '--path' => $absoluteMigration,
             '--realpath' => true,
             '--force' => true,
@@ -630,7 +650,7 @@ class WizardController extends Controller
 
         return [
             'success' => $status === 0,
-            'output' => trim(\Illuminate\Support\Facades\Artisan::output()),
+            'output' => trim(Artisan::output()),
         ];
     }
 
@@ -639,9 +659,9 @@ class WizardController extends Controller
      */
     public function copilotChat(Request $request)
     {
-        $message = trim((string)$request->input('message', ''));
+        $message = trim((string) $request->input('message', ''));
         $sliceContext = $request->input('slice', '');
-        $step = (int)$request->input('step', 1);
+        $step = (int) $request->input('step', 1);
 
         if (empty($message)) {
             return response()->json([
@@ -657,16 +677,16 @@ class WizardController extends Controller
             if ($step === 1) {
                 return response()->json([
                     'success' => true,
-                    'step'    => 2,
-                    'reply'   => "I can build a complete HR enterprise solution for you! I have designed a domain architecture with:\n\n" .
-                                 "• **Departments**: Manage organizational departments, codes, and budgets\n" .
-                                 "• **Positions**: Job designations linked to departments with salary bands\n" .
-                                 "• **Employees**: Master records linked to departments & positions\n" .
-                                 "• **LeaveRequests**: Employee leave tracking with status workflows\n" .
-                                 "• **AttendanceRecords**: Daily check-in/out records\n\n" .
+                    'step' => 2,
+                    'reply' => "I can build a complete HR enterprise solution for you! I have designed a domain architecture with:\n\n".
+                                 "• **Departments**: Manage organizational departments, codes, and budgets\n".
+                                 "• **Positions**: Job designations linked to departments with salary bands\n".
+                                 "• **Employees**: Master records linked to departments & positions\n".
+                                 "• **LeaveRequests**: Employee leave tracking with status workflows\n".
+                                 "• **AttendanceRecords**: Daily check-in/out records\n\n".
                                  "Would you like me to build all these modules or customize them? (Reply 'Build All' or specify modules)",
                     'options' => ['Build All', 'Employees & Departments Only', 'Include Payroll & Attendance'],
-                    'plan'    => [
+                    'plan' => [
                         'slice' => 'HumanResources',
                         'title' => 'Human Resources Suite',
                         'tables' => ['positions', 'employees', 'leave_requests'],
@@ -687,7 +707,7 @@ class WizardController extends Controller
                             ['name' => 'code', 'type' => 'string'],
                             ['name' => 'salary_min', 'type' => 'decimal'],
                             ['name' => 'salary_max', 'type' => 'decimal'],
-                        ]
+                        ],
                     ],
                     [
                         'name' => 'employees',
@@ -700,7 +720,7 @@ class WizardController extends Controller
                             ['name' => 'email', 'type' => 'string'],
                             ['name' => 'phone', 'type' => 'string'],
                             ['name' => 'hire_date', 'type' => 'date'],
-                        ]
+                        ],
                     ],
                     [
                         'name' => 'leave_requests',
@@ -712,17 +732,17 @@ class WizardController extends Controller
                             ['name' => 'end_date', 'type' => 'date'],
                             ['name' => 'reason', 'type' => 'text'],
                             ['name' => 'status', 'type' => 'string'],
-                        ]
+                        ],
                     ],
-                ]
+                ],
             ];
 
             return response()->json([
                 'success' => true,
-                'step'    => 3,
-                'reply'   => "Execution plan ready! I will generate 3 child entities with relational foreign keys, Eloquent models, BlatUI views, and database migrations for 'HumanResources'. Click 'Apply Plan' below to execute.",
+                'step' => 3,
+                'reply' => "Execution plan ready! I will generate 3 child entities with relational foreign keys, Eloquent models, BlatUI views, and database migrations for 'HumanResources'. Click 'Apply Plan' below to execute.",
                 'can_execute' => true,
-                'plan'    => $plan,
+                'plan' => $plan,
             ]);
         }
 
@@ -739,7 +759,7 @@ class WizardController extends Controller
                         'fields' => [
                             ['name' => 'slug', 'type' => 'string'],
                             ['name' => 'description', 'type' => 'text'],
-                        ]
+                        ],
                     ],
                     [
                         'name' => 'products',
@@ -749,7 +769,7 @@ class WizardController extends Controller
                             ['name' => 'sku', 'type' => 'string'],
                             ['name' => 'price', 'type' => 'decimal'],
                             ['name' => 'stock', 'type' => 'integer'],
-                        ]
+                        ],
                     ],
                     [
                         'name' => 'orders',
@@ -760,26 +780,27 @@ class WizardController extends Controller
                             ['name' => 'customer_name', 'type' => 'string'],
                             ['name' => 'total_amount', 'type' => 'decimal'],
                             ['name' => 'status', 'type' => 'string'],
-                        ]
-                    ]
-                ]
+                        ],
+                    ],
+                ],
             ];
 
             return response()->json([
                 'success' => true,
-                'step'    => 3,
-                'reply'   => "E-Commerce store architecture designed! Includes Categories, Products, and Orders with relationships. Click 'Apply Plan' to generate.",
+                'step' => 3,
+                'reply' => "E-Commerce store architecture designed! Includes Categories, Products, and Orders with relationships. Click 'Apply Plan' to generate.",
                 'can_execute' => true,
-                'plan'    => $plan,
+                'plan' => $plan,
             ]);
         }
 
         // Delegate to LaraSlice AiEngine for live intelligence, DB metrics, and Studio context
-        $aiResponse = app(\LaraSlice\Core\Ai\AiEngine::class)->chat($message, ['path' => '/laraslice/wizard']);
+        $aiResponse = app(AiEngine::class)->chat($message, ['path' => '/laraslice/wizard']);
+
         return response()->json([
             'success' => true,
-            'step'    => 1,
-            'reply'   => $aiResponse['reply'],
+            'step' => 1,
+            'reply' => $aiResponse['reply'],
             'options' => ['How many users do we have?', 'Show users schema', 'How to wipe domain data?', 'Build E-Commerce store'],
         ]);
     }
@@ -805,7 +826,7 @@ class WizardController extends Controller
 
         $sliceName = $validated['slice'];
         $tables = $validated['tables'];
-        $modifier = new \LaraSlice\Generator\SliceModifier();
+        $modifier = new SliceModifier;
         $results = [];
 
         foreach ($tables as $tbl) {
@@ -816,20 +837,20 @@ class WizardController extends Controller
 
             try {
                 $res = $modifier->addChildTable($sliceName, $tName, $rel, $fields, $fk);
-                $migration = !empty($validated['migrate'])
+                $migration = ! empty($validated['migrate'])
                     ? $this->runGeneratedMigration($res['migration_file'])
                     : null;
                 $results[] = [
-                    'table'   => $tName,
-                    'status'  => $migration !== null && ! $migration['success'] ? 'migration_failed' : 'created',
+                    'table' => $tName,
+                    'status' => $migration !== null && ! $migration['success'] ? 'migration_failed' : 'created',
                     'details' => $res,
                     'migration' => $migration,
                 ];
             } catch (\Throwable $e) {
                 $results[] = [
-                    'table'   => $tName,
-                    'status'  => 'skipped',
-                    'error'   => $e->getMessage(),
+                    'table' => $tName,
+                    'status' => 'skipped',
+                    'error' => $e->getMessage(),
                 ];
             }
         }
@@ -839,16 +860,16 @@ class WizardController extends Controller
         return response()->json([
             'success' => $failed === [],
             'message' => $failed === []
-                ? 'Generated and migrated ' . count($results) . " child entities for '{$sliceName}'."
-                : count($failed) . ' of ' . count($results) . ' child entities failed. Successful files and per-entity migration results are listed below.',
-            'data'    => $results,
+                ? 'Generated and migrated '.count($results)." child entities for '{$sliceName}'."
+                : count($failed).' of '.count($results).' child entities failed. Successful files and per-entity migration results are listed below.',
+            'data' => $results,
         ], $failed === [] ? 200 : 422);
     }
 
     /**
      * Fetch audit logs for a slice or recent system activity.
      */
-        public function pruneAuditLogs(Request $request)
+    public function pruneAuditLogs(Request $request)
     {
         $days = (int) $request->input('days', 90);
         $slice = $request->input('slice');
@@ -861,10 +882,10 @@ class WizardController extends Controller
         }
 
         $cutoff = now()->subDays($days);
-        $query = \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+        $query = DB::table(AuditLogger::TABLE_NAME)
             ->where('created_at', '<', $cutoff);
 
-        if (!empty($slice) && $slice !== 'all') {
+        if (! empty($slice) && $slice !== 'all') {
             $query->where('slice', $slice);
         }
 
@@ -872,7 +893,7 @@ class WizardController extends Controller
         if ($count === 0) {
             return response()->json([
                 'success' => true,
-                'pruned'  => 0,
+                'pruned' => 0,
                 'message' => "No audit logs older than {$days} days found to prune.",
             ]);
         }
@@ -881,10 +902,11 @@ class WizardController extends Controller
 
         return response()->json([
             'success' => true,
-            'pruned'  => $deleted,
+            'pruned' => $deleted,
             'message' => "Successfully pruned {$deleted} audit log records older than {$days} days.",
         ]);
     }
+
     public function getAuditLogs(Request $request)
     {
         $slice = $request->query('slice');
@@ -895,42 +917,42 @@ class WizardController extends Controller
         $dateTo = $request->query('date_to');
         $limit = min((int) ($request->query('limit', 50)), 200);
 
-        $query = \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+        $query = DB::table(AuditLogger::TABLE_NAME)
             ->latest('id');
 
-        if (!empty($slice) && $slice !== 'all') {
+        if (! empty($slice) && $slice !== 'all') {
             $sliceHandle = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $slice));
             $query->where(function ($q) use ($slice, $sliceHandle) {
                 $q->where('slice', $slice)
-                  ->orWhere('slice', $sliceHandle)
-                  ->orWhere('slice', strtolower($slice));
+                    ->orWhere('slice', $sliceHandle)
+                    ->orWhere('slice', strtolower($slice));
             });
         }
 
-        if (!empty($action) && $action !== 'all') {
+        if (! empty($action) && $action !== 'all') {
             $query->where('action', $action);
         }
 
-        if (!empty($actorId)) {
+        if (! empty($actorId)) {
             $query->where('actor_id', $actorId);
         }
 
-        if (!empty($dateFrom)) {
-            $query->where('created_at', '>=', $dateFrom . ' 00:00:00');
+        if (! empty($dateFrom)) {
+            $query->where('created_at', '>=', $dateFrom.' 00:00:00');
         }
 
-        if (!empty($dateTo)) {
-            $query->where('created_at', '<=', $dateTo . ' 23:59:59');
+        if (! empty($dateTo)) {
+            $query->where('created_at', '<=', $dateTo.' 23:59:59');
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('entity_id', 'LIKE', "%{$search}%")
-                  ->orWhere('actor_email', 'LIKE', "%{$search}%")
-                  ->orWhere('ip_address', 'LIKE', "%{$search}%")
-                  ->orWhere('entity_type', 'LIKE', "%{$search}%")
-                  ->orWhere('new_values', 'LIKE', "%{$search}%")
-                  ->orWhere('old_values', 'LIKE', "%{$search}%");
+                    ->orWhere('actor_email', 'LIKE', "%{$search}%")
+                    ->orWhere('ip_address', 'LIKE', "%{$search}%")
+                    ->orWhere('entity_type', 'LIKE', "%{$search}%")
+                    ->orWhere('new_values', 'LIKE', "%{$search}%")
+                    ->orWhere('old_values', 'LIKE', "%{$search}%");
             });
         }
 
@@ -938,35 +960,36 @@ class WizardController extends Controller
         $logs = $query->take($limit)->get()->map(function ($row) {
             $row->old_values = $row->old_values ? json_decode($row->old_values, true) : null;
             $row->new_values = $row->new_values ? json_decode($row->new_values, true) : null;
-            $row->metadata   = $row->metadata ? json_decode($row->metadata, true) : null;
+            $row->metadata = $row->metadata ? json_decode($row->metadata, true) : null;
+
             return $row;
         });
 
         // Get aggregate action counts for quick filters
         $counts = [
-            'all' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
-                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+            'all' => DB::table(AuditLogger::TABLE_NAME)
+                ->when(! empty($slice) && $slice !== 'all', fn ($q) => $q->where('slice', $slice))
                 ->count(),
-            'created' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+            'created' => DB::table(AuditLogger::TABLE_NAME)
                 ->where('action', 'created')
-                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->when(! empty($slice) && $slice !== 'all', fn ($q) => $q->where('slice', $slice))
                 ->count(),
-            'updated' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+            'updated' => DB::table(AuditLogger::TABLE_NAME)
                 ->where('action', 'updated')
-                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->when(! empty($slice) && $slice !== 'all', fn ($q) => $q->where('slice', $slice))
                 ->count(),
-            'deleted' => \Illuminate\Support\Facades\DB::table(\LaraSlice\Core\Audit\AuditLogger::TABLE_NAME)
+            'deleted' => DB::table(AuditLogger::TABLE_NAME)
                 ->whereIn('action', ['deleted', 'force_deleted'])
-                ->when(!empty($slice) && $slice !== 'all', fn($q) => $q->where('slice', $slice))
+                ->when(! empty($slice) && $slice !== 'all', fn ($q) => $q->where('slice', $slice))
                 ->count(),
         ];
 
         return response()->json([
             'success' => true,
-            'slice'   => $slice,
-            'total'   => $total,
-            'counts'  => $counts,
-            'logs'    => $logs,
+            'slice' => $slice,
+            'total' => $total,
+            'counts' => $counts,
+            'logs' => $logs,
         ]);
     }
 
@@ -976,22 +999,22 @@ class WizardController extends Controller
     public function generateDomainSuite(Request $request)
     {
         $validated = $request->validate([
-            'domain'       => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
-            'slices'       => ['required', 'array', 'min:1', 'max:20'],
-            'slices.*'     => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
+            'domain' => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
+            'slices' => ['required', 'array', 'min:1', 'max:20'],
+            'slices.*' => ['required', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9 _-]*$/'],
             'sliceSchemas' => 'nullable|array',
-            'namespace'    => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*$/'],
-            'author'       => 'nullable|string|max:120',
-            'workflow'     => 'nullable|boolean',
-            'includeApi'   => 'nullable|boolean',
-            'flutter'      => 'nullable|boolean',
+            'namespace' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*$/'],
+            'author' => 'nullable|string|max:120',
+            'workflow' => 'nullable|boolean',
+            'includeApi' => 'nullable|boolean',
+            'flutter' => 'nullable|boolean',
             'runMigration' => 'nullable|boolean',
         ]);
 
         $domain = trim($validated['domain']);
         $sliceNames = array_unique(array_filter(array_map('trim', $validated['slices'])));
         $generator = new SliceGenerator(null, $validated['namespace'] ?? null);
-        $flutterGen = !empty($validated['flutter']) ? new \LaraSlice\Generator\FlutterSliceGenerator() : null;
+        $flutterGen = ! empty($validated['flutter']) ? new FlutterSliceGenerator : null;
         $schemas = $validated['sliceSchemas'] ?? [];
 
         $created = [];
@@ -1007,18 +1030,18 @@ class WizardController extends Controller
                     [
                         'domain' => $domain,
                         'author' => $validated['author'] ?? null,
-                        'api'    => (bool) ($validated['includeApi'] ?? true),
+                        'api' => (bool) ($validated['includeApi'] ?? true),
                     ]
                 );
 
                 $childTables = $schemas[$sliceName]['childTables'] ?? [];
-                if (!empty($childTables)) {
-                    $modifier = new \LaraSlice\Generator\SliceModifier(
+                if (! empty($childTables)) {
+                    $modifier = new SliceModifier(
                         dirname($sliceDir),
                         $validated['namespace'] ?? null
                     );
                     foreach ($childTables as $child) {
-                        if (!empty($child['name'])) {
+                        if (! empty($child['name'])) {
                             $childFields = $child['fields'] ?? [];
                             $modifier->addChildEntity(
                                 $sliceName,
@@ -1034,12 +1057,13 @@ class WizardController extends Controller
                 if ($flutterGen) {
                     try {
                         $flutterGen->generate($sliceName);
-                    } catch (\Throwable $e) {}
+                    } catch (\Throwable $e) {
+                    }
                 }
 
                 $created[] = [
                     'name' => $sliceName,
-                    'dir'  => $sliceDir,
+                    'dir' => $sliceDir,
                 ];
             } catch (\Throwable $e) {
                 report($e);
@@ -1049,39 +1073,41 @@ class WizardController extends Controller
 
         $migrated = false;
         $migrationOutput = null;
-        if (!empty($validated['runMigration']) && count($created) > 0) {
+        if (! empty($validated['runMigration']) && count($created) > 0) {
             [$migrated, $migrationOutput] = $this->executeMigrations();
         }
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->syncPermissions();
+        } catch (\Throwable $e) {
+        }
 
-        $domainSlug = strtolower(\Illuminate\Support\Str::slug($domain));
+        $domainSlug = strtolower(Str::slug($domain));
         $createdWithRoutes = array_map(function ($c) use ($domainSlug) {
-            $pluralSnake = strtolower(\Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($c['name'])));
+            $pluralSnake = strtolower(Str::snake(Str::plural($c['name'])));
+
             return [
-                'name'    => $c['name'],
-                'dir'     => $c['dir'],
+                'name' => $c['name'],
+                'dir' => $c['dir'],
                 'web_url' => url("/{$domainSlug}/{$pluralSnake}"),
                 'api_url' => url("/api/{$domainSlug}/{$pluralSnake}/list"),
             ];
         }, $created);
 
         // The wizard only displays `message`, so surface per-slice failures there too
-        $message = count($created) . " slice(s) successfully generated in domain [{$domain}].";
+        $message = count($created)." slice(s) successfully generated in domain [{$domain}].";
         foreach ($errors as $failedSlice => $error) {
             $message .= " [{$failedSlice}] failed: {$error}";
         }
 
         return response()->json([
-            'success'         => count($errors) === 0,
-            'domain'          => $domain,
-            'created'         => $createdWithRoutes,
-            'errors'          => $errors,
-            'migrated'        => $migrated,
+            'success' => count($errors) === 0,
+            'domain' => $domain,
+            'created' => $createdWithRoutes,
+            'errors' => $errors,
+            'migrated' => $migrated,
             'migrationOutput' => $migrationOutput,
-            'message'         => $message,
+            'message' => $message,
         ], count($created) > 0 ? 200 : 422);
     }
 
@@ -1089,8 +1115,7 @@ class WizardController extends Controller
      * Authorize an administrative wizard action.
      * Super-admins always bypass. Authenticated users are checked against permission abilities.
      *
-     * @param string|array $abilities
-     * @return void
+     * @param  string|array  $abilities
      */
     protected function authorizeWizardAction($abilities): void
     {
@@ -1100,30 +1125,30 @@ class WizardController extends Controller
         }
 
         $abilities = (array) $abilities;
-        if (! \LaraSlice\Core\Security\Access::allows($user, $abilities)) {
-            abort(403, 'Unauthorized. Required permissions: [' . implode(', ', $abilities) . ']');
+        if (! Access::allows($user, $abilities)) {
+            abort(403, 'Unauthorized. Required permissions: ['.implode(', ', $abilities).']');
         }
     }
 
     public function toggleSlice(Request $request)
     {
         $validated = $request->validate([
-            'slice'  => 'required|string',
+            'slice' => 'required|string',
             'active' => 'nullable|boolean',
         ]);
 
         try {
             $this->authorizeWizardAction(['system.slices.toggle', 'slice.disable', 'slice.toggle', 'slice.manage']);
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $newActive = $manager->toggleSlice($validated['slice'], $validated['active'] ?? null);
 
             return response()->json([
                 'success' => true,
-                'slice'   => $validated['slice'],
-                'active'  => $newActive,
-                'message' => "Slice [{$validated['slice']}] is now " . ($newActive ? 'Enabled' : 'Disabled (Hidden from Navigation)'),
+                'slice' => $validated['slice'],
+                'active' => $newActive,
+                'message' => "Slice [{$validated['slice']}] is now ".($newActive ? 'Enabled' : 'Disabled (Hidden from Navigation)'),
             ]);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1138,18 +1163,18 @@ class WizardController extends Controller
         ]);
 
         try {
-            $dSlug = strtolower(\Illuminate\Support\Str::slug($validated['domain']));
+            $dSlug = strtolower(Str::slug($validated['domain']));
             $this->authorizeWizardAction(['system.slices.toggle', 'domain.manage', "{$dSlug}.manage"]);
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $updated = $manager->toggleDomain($validated['domain'], $validated['active'] ?? null);
 
             return response()->json([
                 'success' => true,
-                'domain'  => $validated['domain'],
+                'domain' => $validated['domain'],
                 'updated' => $updated,
                 'message' => "Domain [{$validated['domain']}] slices updated.",
             ]);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1164,18 +1189,18 @@ class WizardController extends Controller
         ]);
 
         try {
-            $sliceSlug = strtolower(\Illuminate\Support\Str::snake($validated['slice']));
+            $sliceSlug = strtolower(Str::snake($validated['slice']));
             $this->authorizeWizardAction(['system.slices.seed', 'slice.seed', "{$sliceSlug}.seed"]);
 
-            $seeder = new \LaraSlice\Generator\SliceSeederService();
-            $result = $seeder->seedSlice($validated['slice'], (int)($validated['count'] ?? 10));
+            $seeder = new SliceSeederService;
+            $result = $seeder->seedSlice($validated['slice'], (int) ($validated['count'] ?? 10));
 
-            if (!$request->expectsJson() && !$request->wantsJson()) {
+            if (! $request->expectsJson() && ! $request->wantsJson()) {
                 return back()->with('success', $result['message']);
             }
 
             return response()->json($result);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1186,22 +1211,22 @@ class WizardController extends Controller
     {
         $validated = $request->validate([
             'domain' => 'required|string',
-            'count'  => 'nullable|integer|min:1|max:50',
+            'count' => 'nullable|integer|min:1|max:50',
         ]);
 
         try {
-            $dSlug = strtolower(\Illuminate\Support\Str::slug($validated['domain']));
+            $dSlug = strtolower(Str::slug($validated['domain']));
             $this->authorizeWizardAction(['system.slices.seed', 'domain.seed', "{$dSlug}.seed", "{$dSlug}.manage"]);
 
-            $seeder = new \LaraSlice\Generator\SliceSeederService();
-            $result = $seeder->seedDomain($validated['domain'], (int)($validated['count'] ?? 10));
+            $seeder = new SliceSeederService;
+            $result = $seeder->seedDomain($validated['domain'], (int) ($validated['count'] ?? 10));
 
-            if (!$request->expectsJson() && !$request->wantsJson()) {
+            if (! $request->expectsJson() && ! $request->wantsJson()) {
                 return back()->with('success', $result['message']);
             }
 
             return response()->json($result);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1215,14 +1240,14 @@ class WizardController extends Controller
         ]);
 
         try {
-            $sliceSlug = strtolower(\Illuminate\Support\Str::snake($validated['slice']));
+            $sliceSlug = strtolower(Str::snake($validated['slice']));
             $this->authorizeWizardAction(['system.slices.wipe', 'slice.wipe', 'slice.delete', 'system.slices.delete']);
 
-            $seeder = new \LaraSlice\Generator\SliceSeederService();
+            $seeder = new SliceSeederService;
             $result = $seeder->wipeSlice($validated['slice']);
 
             return response()->json($result);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1236,14 +1261,14 @@ class WizardController extends Controller
         ]);
 
         try {
-            $dSlug = strtolower(\Illuminate\Support\Str::slug($validated['domain']));
+            $dSlug = strtolower(Str::slug($validated['domain']));
             $this->authorizeWizardAction(['system.slices.wipe', 'domain.wipe', 'domain.manage', 'system.slices.delete']);
 
-            $seeder = new \LaraSlice\Generator\SliceSeederService();
+            $seeder = new SliceSeederService;
             $result = $seeder->wipeDomain($validated['domain']);
 
             return response()->json($result);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1254,18 +1279,18 @@ class WizardController extends Controller
     {
         $validated = $request->validate([
             'slice' => 'required|string',
-            'mode'  => 'nullable|string|in:complete,code_only,db_only,wipe_data',
+            'mode' => 'nullable|string|in:complete,code_only,db_only,wipe_data',
         ]);
 
         try {
-            $sliceSlug = strtolower(\Illuminate\Support\Str::snake($validated['slice']));
+            $sliceSlug = strtolower(Str::snake($validated['slice']));
             $this->authorizeWizardAction(['system.slices.delete', 'slice.delete', 'slice.destroy']);
 
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $result = $manager->destroySlice($validated['slice'], $validated['mode'] ?? 'complete');
 
             return response()->json($result);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
@@ -1276,18 +1301,18 @@ class WizardController extends Controller
     {
         $validated = $request->validate([
             'domain' => 'required|string',
-            'mode'   => 'nullable|string|in:complete,code_only,db_only,wipe_data',
+            'mode' => 'nullable|string|in:complete,code_only,db_only,wipe_data',
         ]);
 
         try {
-            $dSlug = strtolower(\Illuminate\Support\Str::slug($validated['domain']));
+            $dSlug = strtolower(Str::slug($validated['domain']));
             $this->authorizeWizardAction(['system.slices.delete', 'domain.delete', "{$dSlug}.manage"]);
 
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $result = $manager->destroyDomain($validated['domain'], $validated['mode'] ?? 'complete');
 
             return response()->json($result);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);

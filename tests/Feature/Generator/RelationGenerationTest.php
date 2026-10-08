@@ -7,6 +7,8 @@ use LaraSlice\Blueprint\BlueprintPlanner;
 use LaraSlice\Blueprint\BlueprintValidator;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Generator\SliceGenerator;
+use LaraSlice\Slices\Roles\Models\Role;
+use LaraSlice\Slices\Users\Models\User;
 use LaraSlice\Tests\TestCase;
 
 class RelationGenerationTest extends TestCase
@@ -16,7 +18,7 @@ class RelationGenerationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-relations-' . bin2hex(random_bytes(6));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-relations-'.bin2hex(random_bytes(6));
     }
 
     protected function tearDown(): void
@@ -27,7 +29,7 @@ class RelationGenerationTest extends TestCase
 
     public function test_belongs_to_relations_use_the_blueprint_name_and_resolve_through_slices(): void
     {
-        $blueprint = (new BlueprintValidator())->validate([
+        $blueprint = (new BlueprintValidator)->validate([
             'schema_version' => 1,
             'name' => 'Shop Products',
             'handle' => 'shop_products',
@@ -44,16 +46,16 @@ class RelationGenerationTest extends TestCase
                 ],
             ]],
         ]);
-        $plan = (new BlueprintPlanner())->plan($blueprint, $this->slicesPath);
-        $target = (new BlueprintApplier())->apply($blueprint, $plan, $this->slicesPath, 'App\\Slices');
+        $plan = (new BlueprintPlanner)->plan($blueprint, $this->slicesPath);
+        $target = (new BlueprintApplier)->apply($blueprint, $plan, $this->slicesPath, 'App\\Slices');
 
-        $model = file_get_contents($target . '/Models/ShopProduct.php');
+        $model = file_get_contents($target.'/Models/ShopProduct.php');
         $this->assertStringContainsString('public function category(): BelongsTo', $model);
         $this->assertStringContainsString("modelClass('ShopCategory')", $model);
         $this->assertStringContainsString('public function owner(): BelongsTo', $model, 'unnamed *_id fields still get a relation');
         $this->assertStringNotContainsString('ECommerce', $model);
 
-        $migration = file_get_contents(glob($target . '/Migrations/*.php')[0]);
+        $migration = file_get_contents(glob($target.'/Migrations/*.php')[0]);
         $this->assertStringContainsString("\$table->foreignId('shop_category_id')->nullable()->constrained('shop_categories')->nullOnDelete()", $migration);
         $this->assertStringContainsString("\$table->unsignedBigInteger('owner_id')->nullable()->index()", $migration);
     }
@@ -62,8 +64,8 @@ class RelationGenerationTest extends TestCase
     {
         $manager = app(SliceManager::class);
 
-        $this->assertSame(\LaraSlice\Slices\Users\Models\User::class, $manager->modelClass('User'));
-        $this->assertSame(\LaraSlice\Slices\Roles\Models\Role::class, $manager->modelClass('Role'));
+        $this->assertSame(User::class, $manager->modelClass('User'));
+        $this->assertSame(Role::class, $manager->modelClass('Role'));
         $this->assertNull($manager->modelClass('NoSuchThing'));
     }
 
@@ -73,7 +75,7 @@ class RelationGenerationTest extends TestCase
             ['name' => 'customer_id', 'type' => 'foreign_id', 'references' => 'customers', 'required' => true],
         ]);
 
-        $migration = file_get_contents(glob($path . '/Migrations/*.php')[0]);
+        $migration = file_get_contents(glob($path.'/Migrations/*.php')[0]);
         $this->assertStringContainsString("\$table->foreignId('customer_id')->constrained('customers')->restrictOnDelete()", $migration);
     }
 }

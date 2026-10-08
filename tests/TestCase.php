@@ -2,11 +2,13 @@
 
 namespace LaraSlice\Tests;
 
+use BladeUI\Icons\BladeIconsServiceProvider;
 use LaraSlice\LaraSliceServiceProvider;
 use LaraSlice\Slices\Roles\Models\Permission;
 use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Users\Models\User;
 use Laravel\Sanctum\SanctumServiceProvider;
+use MallardDuck\LucideIcons\BladeLucideIconsServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 /**
@@ -18,8 +20,8 @@ abstract class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
-            \BladeUI\Icons\BladeIconsServiceProvider::class,
-            \MallardDuck\LucideIcons\BladeLucideIconsServiceProvider::class,
+            BladeIconsServiceProvider::class,
+            BladeLucideIconsServiceProvider::class,
             SanctumServiceProvider::class,
             LaraSliceServiceProvider::class,
         ];
@@ -32,15 +34,15 @@ abstract class TestCase extends Orchestra
     {
         parent::setUp();
 
-        $this->app['view']->addLocation(dirname(__DIR__) . '/resources/stubs/starter/views');
+        $this->app['view']->addLocation(dirname(__DIR__).'/resources/stubs/starter/views');
     }
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('app.key', 'base64:' . base64_encode(str_repeat('a', 32)));
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
         $app['config']->set('database.default', 'testing');
         $app['config']->set('auth.providers.users.model', User::class);
-        $app['config']->set('laraslice.slices_path', sys_get_temp_dir() . '/laraslice-test-app-slices');
+        $app['config']->set('laraslice.slices_path', sys_get_temp_dir().'/laraslice-test-app-slices');
         $app['config']->set('laraslice.wizard.enabled', true);
         $app['config']->set('laraslice.ai.mcp_server.enabled', true);
     }
@@ -52,7 +54,7 @@ abstract class TestCase extends Orchestra
     protected function defineDatabaseMigrations(): void
     {
         $this->loadLaravelMigrations();
-        $this->loadMigrationsFrom(dirname(__DIR__) . '/vendor/laravel/sanctum/database/migrations');
+        $this->loadMigrationsFrom(dirname(__DIR__).'/vendor/laravel/sanctum/database/migrations');
         $this->artisan('migrate')->run();
     }
 
@@ -75,7 +77,7 @@ abstract class TestCase extends Orchestra
     protected function makeUserWithPermissions(array $slugs): User
     {
         $user = $this->makeUser();
-        $role = Role::create(['name' => 'Role ' . $user->id, 'slug' => 'role-' . $user->id]);
+        $role = Role::create(['name' => 'Role '.$user->id, 'slug' => 'role-'.$user->id]);
 
         foreach ($slugs as $slug) {
             $permission = Permission::firstOrCreate(['slug' => $slug], ['name' => $slug]);

@@ -4,8 +4,9 @@ namespace LaraSlice\Slices\Settings\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Illuminate\Routing\Controller;
+use Illuminate\View\View;
+use LaraSlice\Core\Ai\AiChatController;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Slices\Settings\Services\SettingSliceService;
 
@@ -26,6 +27,7 @@ class SettingWebController extends Controller
         $this->authorizeSettings(['settings.smtp.view', 'settings.smtp.edit', 'settings.view']);
 
         $settings = $this->settingService->getSmtpSettings();
+
         return view('settings::smtp', compact('settings'));
     }
 
@@ -69,21 +71,20 @@ class SettingWebController extends Controller
         return back()->with('error', $res['message']);
     }
 
-
     /**
      * Display AI Copilot & Model configuration.
      */
-    public function ai(): \Illuminate\View\View
+    public function ai(): View
     {
-        return app(\LaraSlice\Core\Ai\AiChatController::class)->settings();
+        return app(AiChatController::class)->settings();
     }
 
     /**
      * Save AI Copilot configuration.
      */
-    public function saveAi(\Illuminate\Http\Request $request): \Illuminate\Http\RedirectResponse
+    public function saveAi(Request $request): RedirectResponse
     {
-        return app(\LaraSlice\Core\Ai\AiChatController::class)->updateSettings($request);
+        return app(AiChatController::class)->updateSettings($request);
     }
 
     /**

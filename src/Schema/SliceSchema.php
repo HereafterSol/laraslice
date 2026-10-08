@@ -14,6 +14,7 @@ abstract class SliceSchema
         if (method_exists(static::class, 'form')) {
             return static::form();
         }
+
         return [];
     }
 
@@ -27,6 +28,7 @@ abstract class SliceSchema
         if (method_exists(static::class, 'table')) {
             return static::table();
         }
+
         return [];
     }
 
@@ -49,6 +51,7 @@ abstract class SliceSchema
         foreach (static::fields() as $field) {
             $html[] = $field->renderBlatUi($form);
         }
+
         return implode("\n\n", $html);
     }
 
@@ -58,9 +61,9 @@ abstract class SliceSchema
     public static function toArray(): array
     {
         return [
-            'fields'    => array_map(fn(Field $f) => $f->toArray(), static::fields()),
-            'columns'   => array_map(fn(Column $c) => $c->toArray(), static::columns()),
-            'relations' => array_map(fn(Relation $r) => $r->toArray(), static::relations()),
+            'fields' => array_map(fn (Field $f) => $f->toArray(), static::fields()),
+            'columns' => array_map(fn (Column $c) => $c->toArray(), static::columns()),
+            'relations' => array_map(fn (Relation $r) => $r->toArray(), static::relations()),
         ];
     }
 

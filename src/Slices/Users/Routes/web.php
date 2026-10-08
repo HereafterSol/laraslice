@@ -19,7 +19,7 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('/security/settings/logout-others', [UserWebController::class, 'logoutOthers'])->name('security.settings.logout_others');
     Route::delete('/security/settings/devices/{id}', [UserWebController::class, 'destroyDevice'])->name('security.settings.devices.destroy')->whereNumber('id');
 
-        Route::get('/security/settings/passkey/options', [UserWebController::class, 'passkeyRegisterOptions'])->name('security.settings.passkey.options');
+    Route::get('/security/settings/passkey/options', [UserWebController::class, 'passkeyRegisterOptions'])->name('security.settings.passkey.options');
     Route::post('/security/settings/passkey/verify', [UserWebController::class, 'passkeyRegisterVerify'])->name('security.settings.passkey.verify');
     Route::match(['delete', 'post'], '/security/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('security.settings.passkey.destroy')->whereNumber('id');
 
@@ -37,7 +37,7 @@ Route::prefix('admin/users')->name('users.')->middleware(['web', 'auth'])->group
     Route::get('/', [UserWebController::class, 'index'])->name('index');
     Route::get('/create', [UserWebController::class, 'create'])->name('create');
     Route::post('/', [UserWebController::class, 'store'])->name('store');
-    
+
     // Telemetry & Security Hub (Enterprise Access Metrics match)
     Route::get('/metrics', [UserWebController::class, 'metrics'])->name('metrics');
 
@@ -53,7 +53,7 @@ Route::prefix('admin/users')->name('users.')->middleware(['web', 'auth'])->group
     // Devices & Active Sessions
     Route::get('/devices', [UserWebController::class, 'devices'])->name('devices');
     Route::delete('/devices/{id}', [UserWebController::class, 'destroyDevice'])->name('devices.destroy')->whereNumber('id');
-    
+
     // Security & Audit Logs
     Route::get('/security-logs', [UserWebController::class, 'securityLogs'])->name('security_logs');
 
@@ -71,7 +71,7 @@ Route::prefix('admin/users')->name('users.')->middleware(['web', 'auth'])->group
     Route::match(['delete', 'post'], '/settings/passkey/{id}', [UserWebController::class, 'destroyPasskey'])->name('settings.passkey.destroy')->whereNumber('id');
 
     // Session Lockscreen (Redirect admin prefix to clean unified /lockscreen)
-    Route::get('/lockscreen', fn() => redirect()->route('lockscreen'))->name('lockscreen');
+    Route::get('/lockscreen', fn () => redirect()->route('lockscreen'))->name('lockscreen');
     Route::match(['get', 'post'], '/lockscreen/unlock', [UserWebController::class, 'unlockScreen'])->middleware('throttle:laraslice-mfa')->name('lockscreen.unlock');
     Route::post('/lockscreen/lock', [UserWebController::class, 'lockSession'])->name('lockscreen.lock');
     Route::get('/lockscreen/passkey/options', [UserWebController::class, 'passkeyUnlockOptions'])->name('lockscreen.passkey.options');

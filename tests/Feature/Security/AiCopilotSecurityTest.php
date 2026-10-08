@@ -5,6 +5,7 @@ namespace LaraSlice\Tests\Feature\Security;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Ai\AiEngine;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Slices\Settings\Models\Setting;
 use LaraSlice\Tests\TestCase;
 
@@ -114,7 +115,8 @@ class AiCopilotSecurityTest extends TestCase
 
     public function test_client_history_cannot_inject_system_messages(): void
     {
-        $engine = new class(app(\LaraSlice\Core\Discovery\SliceManager::class)) extends AiEngine {
+        $engine = new class(app(SliceManager::class)) extends AiEngine
+        {
             public function exposeHistory(array $history): array
             {
                 return $this->sanitizeHistory($history);

@@ -5,8 +5,8 @@ namespace LaraSlice\Core\Security\Traits;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Roles\Models\Permission;
+use LaraSlice\Slices\Roles\Models\Role;
 
 /**
  * Trait HasSlicePermissions
@@ -118,7 +118,7 @@ trait HasSlicePermissions
 
         // Wildcard match (e.g. 'shop_product.*' satisfies 'shop_product.view')
         if (str_contains($permissionSlug, '.')) {
-            $wildcard = explode('.', $permissionSlug)[0] . '.*';
+            $wildcard = explode('.', $permissionSlug)[0].'.*';
             if ($allPermissions->contains('slug', $wildcard) || $allPermissions->contains('name', $wildcard)) {
                 return true;
             }
@@ -177,15 +177,15 @@ trait HasSlicePermissions
     {
         return $this->hasTotp()
             || $this->hasPasskey()
-            || (!empty($this->mfa_channel) && $this->mfa_channel !== 'none' && !empty($this->mfa_confirmed_at))
-            || !empty($this->two_factor_confirmed_at);
+            || (! empty($this->mfa_channel) && $this->mfa_channel !== 'none' && ! empty($this->mfa_confirmed_at))
+            || ! empty($this->two_factor_confirmed_at);
     }
 
     public function hasTotp(): bool
     {
         return in_array($this->mfa_channel, ['totp', 'both'])
-            && !empty($this->mfa_secret)
-            && !empty($this->mfa_confirmed_at);
+            && ! empty($this->mfa_secret)
+            && ! empty($this->mfa_confirmed_at);
     }
 
     public function hasPasskey(): bool
@@ -193,6 +193,7 @@ trait HasSlicePermissions
         if ($this->relationLoaded('passkeys')) {
             return $this->passkeys->whereNull('revoked_at')->isNotEmpty();
         }
+
         return method_exists($this, 'passkeys') && $this->passkeys()->whereNull('revoked_at')->exists();
     }
 }

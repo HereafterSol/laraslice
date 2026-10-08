@@ -5,10 +5,13 @@ namespace LaraSlice\Blueprint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Ai\JevDecisionService;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Wizard\Middleware\AuthorizeStudio;
 use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
@@ -17,7 +20,7 @@ final class BlueprintStudioController extends Controller
 {
     public function __construct()
     {
-        $this->middleware(\LaraSlice\Wizard\Middleware\AuthorizeStudio::class);
+        $this->middleware(AuthorizeStudio::class);
     }
 
     /**
@@ -37,9 +40,9 @@ final class BlueprintStudioController extends Controller
 
         // 1. If an existing slice is requested, try loading its slice.yaml
         if ($requestedSlice) {
-            $sliceFile = $slicesPath . '/' . $requestedSlice . '/slice.yaml';
+            $sliceFile = $slicesPath.'/'.$requestedSlice.'/slice.yaml';
             if (! File::exists($sliceFile)) {
-                $candidates = glob($slicesPath . '/*/' . $requestedSlice . '/slice.yaml') ?: [];
+                $candidates = glob($slicesPath.'/*/'.$requestedSlice.'/slice.yaml') ?: [];
                 if (! empty($candidates)) {
                     $sliceFile = $candidates[0];
                 }
@@ -57,9 +60,9 @@ final class BlueprintStudioController extends Controller
             if (File::exists($sliceFile)) {
                 $source = File::get($sliceFile);
             } else {
-                $jsonFile = $slicesPath . '/' . $requestedSlice . '/slice.json';
+                $jsonFile = $slicesPath.'/'.$requestedSlice.'/slice.json';
                 if (! File::exists($jsonFile)) {
-                    $candidates = glob($slicesPath . '/*/' . $requestedSlice . '/slice.json') ?: [];
+                    $candidates = glob($slicesPath.'/*/'.$requestedSlice.'/slice.json') ?: [];
                     if (! empty($candidates)) {
                         $jsonFile = $candidates[0];
                     }
@@ -101,15 +104,15 @@ final class BlueprintStudioController extends Controller
         $dbTables = $this->getDatabaseTables();
 
         return view('laraslice::blueprint-studio', [
-            'source'          => $source,
-            'format'          => 'yaml',
-            'blueprintData'   => $blueprintData,
+            'source' => $source,
+            'format' => 'yaml',
+            'blueprintData' => $blueprintData,
             'installedSlices' => $installedSlices,
-            'dbTables'        => $dbTables,
-            'currentSlice'    => $requestedSlice,
+            'dbTables' => $dbTables,
+            'currentSlice' => $requestedSlice,
             'currentTemplate' => $requestedTemplate,
-            'allSlicesJson'   => null,
-            'activeSliceIdx'  => 0,
+            'allSlicesJson' => null,
+            'activeSliceIdx' => 0,
         ]);
     }
 
@@ -147,18 +150,18 @@ final class BlueprintStudioController extends Controller
                 };
 
                 $fields[] = [
-                    'handle'   => $name,
-                    'label'    => Str::headline($name),
-                    'type'     => $type,
+                    'handle' => $name,
+                    'label' => Str::headline($name),
+                    'type' => $type,
                     'required' => ! ($column['nullable'] ?? false) && ($column['default'] === null),
-                    'default'  => $column['default'] ?? null,
-                    'width'    => in_array($type, ['text', 'json'], true) ? 100 : 50,
+                    'default' => $column['default'] ?? null,
+                    'width' => in_array($type, ['text', 'json'], true) ? 100 : 50,
                 ];
             }
 
             return response()->json([
-                'table'  => $table,
-                'model'  => Str::singular(Str::studly($table)),
+                'table' => $table,
+                'model' => Str::singular(Str::studly($table)),
                 'fields' => $fields,
             ]);
         } catch (Throwable $e) {
@@ -176,9 +179,9 @@ final class BlueprintStudioController extends Controller
         BlueprintPlanner $planner
     ): mixed {
         $input = $request->validate([
-            'source'           => ['required', 'string', 'max:1048576'],
-            'format'           => ['required', 'in:yaml,yml,json'],
-            'slices_json'      => ['nullable', 'string'],
+            'source' => ['required', 'string', 'max:1048576'],
+            'format' => ['required', 'in:yaml,yml,json'],
+            'slices_json' => ['nullable', 'string'],
             'active_slice_idx' => ['nullable', 'integer'],
         ]);
 
@@ -195,7 +198,7 @@ final class BlueprintStudioController extends Controller
             $supportMessage = null;
 
             try {
-                (new BlueprintApplier())->assertSupported($blueprint);
+                (new BlueprintApplier)->assertSupported($blueprint);
             } catch (Throwable $exception) {
                 $supported = false;
                 $supportMessage = $exception->getMessage();
@@ -209,7 +212,7 @@ final class BlueprintStudioController extends Controller
             }
 
             // Evaluate Migration Safety & Archetype via Jev Decision Service
-            $jev = new JevDecisionService();
+            $jev = new JevDecisionService;
             $archetypeDecision = $jev->classifyArchetype($blueprint['description'] ?? $blueprint['name']);
             $riskDecision = $jev->evaluateMigrationRisk(
                 $this->getDatabaseTables(),
@@ -217,29 +220,29 @@ final class BlueprintStudioController extends Controller
             );
 
             return view('laraslice::blueprint-studio', [
-                'source'            => $input['source'],
-                'format'            => $input['format'],
-                'blueprint'         => $blueprint,
-                'plan'              => $plan,
-                'supported'         => $supported,
-                'supportMessage'    => $supportMessage,
-                'existingTables'    => $existingTables,
-                'installedSlices'   => $installedSlices,
-                'dbTables'          => $dbTables,
+                'source' => $input['source'],
+                'format' => $input['format'],
+                'blueprint' => $blueprint,
+                'plan' => $plan,
+                'supported' => $supported,
+                'supportMessage' => $supportMessage,
+                'existingTables' => $existingTables,
+                'installedSlices' => $installedSlices,
+                'dbTables' => $dbTables,
                 'archetypeDecision' => $archetypeDecision,
-                'riskDecision'      => $riskDecision,
-                'allSlicesJson'     => $allSlicesJson,
-                'activeSliceIdx'    => $activeSliceIdx,
+                'riskDecision' => $riskDecision,
+                'allSlicesJson' => $allSlicesJson,
+                'activeSliceIdx' => $activeSliceIdx,
             ]);
         } catch (Throwable $exception) {
             return view('laraslice::blueprint-studio', [
-                'source'          => $input['source'],
-                'format'          => $input['format'],
-                'error'           => $exception->getMessage(),
+                'source' => $input['source'],
+                'format' => $input['format'],
+                'error' => $exception->getMessage(),
                 'installedSlices' => $installedSlices,
-                'dbTables'        => $dbTables,
-                'allSlicesJson'   => $allSlicesJson,
-                'activeSliceIdx'  => $activeSliceIdx,
+                'dbTables' => $dbTables,
+                'allSlicesJson' => $allSlicesJson,
+                'activeSliceIdx' => $activeSliceIdx,
             ]);
         }
     }
@@ -254,12 +257,12 @@ final class BlueprintStudioController extends Controller
         BlueprintPlanner $planner
     ): mixed {
         $input = $request->validate([
-            'source'           => ['required', 'string', 'max:1048576'],
-            'format'           => ['required', 'in:yaml,yml,json'],
-            'plan_hash'        => ['required', 'regex:/^[a-f0-9]{64}$/'],
-            'confirm_apply'    => ['accepted'],
-            'auto_migrate'     => ['nullable'],
-            'slices_json'      => ['nullable', 'string'],
+            'source' => ['required', 'string', 'max:1048576'],
+            'format' => ['required', 'in:yaml,yml,json'],
+            'plan_hash' => ['required', 'regex:/^[a-f0-9]{64}$/'],
+            'confirm_apply' => ['accepted'],
+            'auto_migrate' => ['nullable'],
+            'slices_json' => ['nullable', 'string'],
             'active_slice_idx' => ['nullable', 'integer'],
         ]);
 
@@ -286,17 +289,17 @@ final class BlueprintStudioController extends Controller
             // Auto-migration is opt-in and needs the separate studio.migrate permission
             $migrated = false;
             $migrationMessage = null;
-            $mayMigrate = \LaraSlice\Core\Security\Access::allows($request->user(), ['studio.migrate', 'studio.*']);
+            $mayMigrate = Access::allows($request->user(), ['studio.migrate', 'studio.*']);
             if ($request->boolean('auto_migrate', false) && ! $mayMigrate) {
                 $migrationMessage = 'Migrations were not run: running migrations requires the studio.migrate permission.';
             } elseif ($request->boolean('auto_migrate', false)) {
                 try {
-                    \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-                    $migrationOutput = trim(\Illuminate\Support\Facades\Artisan::output());
+                    Artisan::call('migrate', ['--force' => true]);
+                    $migrationOutput = trim(Artisan::output());
                     $migrated = true;
                     $migrationMessage = ! empty($migrationOutput) ? $migrationOutput : 'Database migrations applied.';
                 } catch (Throwable $e) {
-                    $migrationMessage = 'Migration warning: ' . $e->getMessage();
+                    $migrationMessage = 'Migration warning: '.$e->getMessage();
                 }
             }
 
@@ -305,37 +308,37 @@ final class BlueprintStudioController extends Controller
             $domainSlug = $domain ? Str::slug($domain) : null;
             $sliceSnake = Str::snake($blueprint['name']);
             $sliceRoutePath = ($domainSlug ? "{$domainSlug}/{$sliceSnake}" : $sliceSnake);
-            $sliceUrl = url('/' . $sliceRoutePath);
+            $sliceUrl = url('/'.$sliceRoutePath);
 
             $successMsg = "Successfully generated vertical slice at {$target} with persisted slice.yaml!";
             if ($migrated) {
-                $successMsg .= " Database migrations were automatically executed.";
+                $successMsg .= ' Database migrations were automatically executed.';
             } else {
                 $successMsg .= " Click '⚡ Run Migrations' or run 'php artisan migrate' to apply database tables.";
             }
 
             return view('laraslice::blueprint-studio', [
-                'source'           => $input['source'],
-                'format'           => $input['format'],
-                'success'          => $successMsg,
-                'sliceUrl'         => $sliceUrl,
-                'migrated'         => $migrated,
+                'source' => $input['source'],
+                'format' => $input['format'],
+                'success' => $successMsg,
+                'sliceUrl' => $sliceUrl,
+                'migrated' => $migrated,
                 'migrationMessage' => $migrationMessage,
-                'installedSlices'  => $installedSlices,
-                'dbTables'         => $this->getDatabaseTables(),
-                'currentSlice'     => basename($target),
-                'allSlicesJson'    => $allSlicesJson,
-                'activeSliceIdx'   => $activeSliceIdx,
+                'installedSlices' => $installedSlices,
+                'dbTables' => $this->getDatabaseTables(),
+                'currentSlice' => basename($target),
+                'allSlicesJson' => $allSlicesJson,
+                'activeSliceIdx' => $activeSliceIdx,
             ]);
         } catch (Throwable $exception) {
             return view('laraslice::blueprint-studio', [
-                'source'          => $input['source'],
-                'format'          => $input['format'],
-                'error'           => $exception->getMessage(),
+                'source' => $input['source'],
+                'format' => $input['format'],
+                'error' => $exception->getMessage(),
                 'installedSlices' => $installedSlices,
-                'dbTables'        => $dbTables,
-                'allSlicesJson'   => $allSlicesJson,
-                'activeSliceIdx'  => $activeSliceIdx,
+                'dbTables' => $dbTables,
+                'allSlicesJson' => $allSlicesJson,
+                'activeSliceIdx' => $activeSliceIdx,
             ]);
         }
     }
@@ -346,8 +349,8 @@ final class BlueprintStudioController extends Controller
     public function runMigrations(Request $request): mixed
     {
         try {
-            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            $output = trim(\Illuminate\Support\Facades\Artisan::output());
+            Artisan::call('migrate', ['--force' => true]);
+            $output = trim(Artisan::output());
             $message = ! empty($output) ? $output : 'Database migrations executed successfully.';
 
             if ($request->wantsJson()) {
@@ -362,7 +365,7 @@ final class BlueprintStudioController extends Controller
             }
 
             return redirect()->route('laraslice.wizard.blueprint')
-                ->with('error', 'Migration failed: ' . $e->getMessage());
+                ->with('error', 'Migration failed: '.$e->getMessage());
         }
     }
 
@@ -377,24 +380,24 @@ final class BlueprintStudioController extends Controller
         if (File::isDirectory($slicesPath)) {
             foreach (File::directories($slicesPath) as $dir) {
                 $sliceName = basename($dir);
-                $yamlPath = $dir . '/slice.yaml';
-                if (File::exists($yamlPath) || File::exists($dir . '/slice.json')) {
+                $yamlPath = $dir.'/slice.yaml';
+                if (File::exists($yamlPath) || File::exists($dir.'/slice.json')) {
                     $installedSlices[] = [
-                        'name'     => $sliceName,
+                        'name' => $sliceName,
                         'has_yaml' => File::exists($yamlPath),
-                        'path'     => $yamlPath,
+                        'path' => $yamlPath,
                     ];
                 } else {
                     $domainName = basename($dir);
                     foreach (File::directories($dir) as $subDir) {
                         $subSliceName = basename($subDir);
-                        $subYamlPath = $subDir . '/slice.yaml';
-                        if (File::exists($subYamlPath) || File::exists($subDir . '/slice.json')) {
+                        $subYamlPath = $subDir.'/slice.yaml';
+                        if (File::exists($subYamlPath) || File::exists($subDir.'/slice.json')) {
                             $installedSlices[] = [
-                                'name'     => $subSliceName,
-                                'domain'   => $domainName,
+                                'name' => $subSliceName,
+                                'domain' => $domainName,
                                 'has_yaml' => File::exists($subYamlPath),
-                                'path'     => $subYamlPath,
+                                'path' => $subYamlPath,
                             ];
                         }
                     }
@@ -413,7 +416,7 @@ final class BlueprintStudioController extends Controller
     private function getDatabaseTables(): array
     {
         try {
-            $currentDb = config('database.connections.' . config('database.default') . '.database');
+            $currentDb = config('database.connections.'.config('database.default').'.database');
             $tables = Schema::getTables();
             $result = [];
             foreach ($tables as $t) {
@@ -426,6 +429,7 @@ final class BlueprintStudioController extends Controller
                     $result[] = $name;
                 }
             }
+
             return array_values(array_unique($result));
         } catch (Throwable) {
             return [];
@@ -979,7 +983,8 @@ YAML;
         }
 
         // Default: service-desk example
-        $examplePath = dirname(__DIR__, 2) . '/blueprints/examples/service-desk.slice.yaml';
+        $examplePath = dirname(__DIR__, 2).'/blueprints/examples/service-desk.slice.yaml';
+
         return is_file($examplePath) ? (string) file_get_contents($examplePath) : '';
     }
 
@@ -996,9 +1001,9 @@ YAML;
             foreach ($manifest['fields'] ?? [] as $k => $f) {
                 $fHandle = is_string($k) ? $k : ($f['name'] ?? 'field');
                 $fields[] = [
-                    'handle'   => $fHandle,
-                    'label'    => $f['label'] ?? Str::headline($fHandle),
-                    'type'     => $f['type'] ?? 'string',
+                    'handle' => $fHandle,
+                    'label' => $f['label'] ?? Str::headline($fHandle),
+                    'type' => $f['type'] ?? 'string',
                     'required' => ! ($f['nullable'] ?? true),
                 ];
             }
@@ -1009,10 +1014,10 @@ YAML;
                 $targetModel = Str::singular(Str::snake($rel['model'] ?? $rel['table'] ?? ''));
                 $relName = $rel['method'] ?? $rel['name'] ?? Str::camel($rel['table'] ?? '');
                 $rootRelations[] = [
-                    'name'        => $relName,
-                    'type'        => $rel['type'] ?? 'hasMany',
-                    'model'       => $targetModel,
-                    'foreign_key' => $rel['foreign_key'] ?? ($rootHandle . '_id'),
+                    'name' => $relName,
+                    'type' => $rel['type'] ?? 'hasMany',
+                    'model' => $targetModel,
+                    'foreign_key' => $rel['foreign_key'] ?? ($rootHandle.'_id'),
                 ];
             }
 
@@ -1030,9 +1035,9 @@ YAML;
                     }
                     if (! $alreadyAdded) {
                         $rootRelations[] = [
-                            'name'        => $relName,
-                            'type'        => 'belongsTo',
-                            'model'       => $relModel,
+                            'name' => $relName,
+                            'type' => 'belongsTo',
+                            'model' => $relModel,
                             'foreign_key' => $f['handle'],
                         ];
                     }
@@ -1041,12 +1046,12 @@ YAML;
 
             $models = [
                 [
-                    'handle'     => $rootHandle,
-                    'table'      => $rootTable,
-                    'root'       => true,
+                    'handle' => $rootHandle,
+                    'table' => $rootTable,
+                    'root' => true,
                     'timestamps' => true,
-                    'fields'     => $fields,
-                    'relations'  => $rootRelations,
+                    'fields' => $fields,
+                    'relations' => $rootRelations,
                 ],
             ];
 
@@ -1058,9 +1063,9 @@ YAML;
                 $childFields = [];
                 $childRelations = [];
 
-                if (\Illuminate\Support\Facades\Schema::hasTable($childTable)) {
+                if (Schema::hasTable($childTable)) {
                     try {
-                        $columns = \Illuminate\Support\Facades\Schema::getColumns($childTable);
+                        $columns = Schema::getColumns($childTable);
                         foreach ($columns as $col) {
                             $cName = $col['name'] ?? '';
                             if (in_array($cName, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -1078,47 +1083,48 @@ YAML;
                             };
 
                             $childFields[] = [
-                                'handle'   => $cName,
-                                'label'    => Str::headline($cName),
-                                'type'     => $cType,
+                                'handle' => $cName,
+                                'label' => Str::headline($cName),
+                                'type' => $cType,
                                 'required' => ! ($col['nullable'] ?? true),
                             ];
 
                             if (str_ends_with($cName, '_id')) {
                                 $targetModel = Str::singular(Str::snake(preg_replace('/_id$/', '', $cName)));
                                 $childRelations[] = [
-                                    'name'        => Str::camel(preg_replace('/_id$/', '', $cName)),
-                                    'type'        => 'belongsTo',
-                                    'model'       => $targetModel,
+                                    'name' => Str::camel(preg_replace('/_id$/', '', $cName)),
+                                    'type' => 'belongsTo',
+                                    'model' => $targetModel,
                                     'foreign_key' => $cName,
                                 ];
                             }
                         }
-                    } catch (\Throwable) {}
+                    } catch (Throwable) {
+                    }
                 }
 
                 if (empty($childFields)) {
                     $childFields[] = [
-                        'handle'   => $rootHandle . '_id',
-                        'label'    => Str::headline($rootHandle),
-                        'type'     => 'foreign_id',
+                        'handle' => $rootHandle.'_id',
+                        'label' => Str::headline($rootHandle),
+                        'type' => 'foreign_id',
                         'required' => true,
                     ];
                     $childRelations[] = [
-                        'name'        => Str::camel($rootHandle),
-                        'type'        => 'belongsTo',
-                        'model'       => $rootHandle,
-                        'foreign_key' => $rootHandle . '_id',
+                        'name' => Str::camel($rootHandle),
+                        'type' => 'belongsTo',
+                        'model' => $rootHandle,
+                        'foreign_key' => $rootHandle.'_id',
                     ];
                 }
 
                 $models[] = [
-                    'handle'     => $childHandle,
-                    'table'      => $childTable,
-                    'root'       => false,
+                    'handle' => $childHandle,
+                    'table' => $childTable,
+                    'root' => false,
                     'timestamps' => true,
-                    'fields'     => $childFields,
-                    'relations'  => $childRelations,
+                    'fields' => $childFields,
+                    'relations' => $childRelations,
                 ];
             }
 
@@ -1134,18 +1140,18 @@ YAML;
 
             $bp = [
                 'schema_version' => 1,
-                'name'           => $manifest['name'] ?? Str::headline($sliceName),
-                'handle'         => Str::snake($sliceName),
-                'domain'         => $manifest['domain'] ?? null,
-                'author'         => $manifest['author'] ?? 'LaraSlice Team',
-                'version'        => $manifest['version'] ?? '1.0.0',
-                'description'    => $manifest['description'] ?? '',
-                'permissions'    => $perms,
-                'models'         => $models,
+                'name' => $manifest['name'] ?? Str::headline($sliceName),
+                'handle' => Str::snake($sliceName),
+                'domain' => $manifest['domain'] ?? null,
+                'author' => $manifest['author'] ?? 'LaraSlice Team',
+                'version' => $manifest['version'] ?? '1.0.0',
+                'description' => $manifest['description'] ?? '',
+                'permissions' => $perms,
+                'models' => $models,
             ];
 
             return Yaml::dump(array_filter($bp), 10, 2);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return '';
         }
     }

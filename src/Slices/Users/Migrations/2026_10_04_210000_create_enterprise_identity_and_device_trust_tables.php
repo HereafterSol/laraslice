@@ -4,11 +4,12 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         // 1. user_attempts: Security audit log for all authentication, lockscreen, and passkey attempts
-        if (!Schema::hasTable('user_attempts')) {
+        if (! Schema::hasTable('user_attempts')) {
             Schema::create('user_attempts', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable();
@@ -30,7 +31,7 @@ return new class extends Migration {
         }
 
         // 2. user_devices: Registered workstations, browsers, and trusted device fingerprints
-        if (!Schema::hasTable('user_devices')) {
+        if (! Schema::hasTable('user_devices')) {
             Schema::create('user_devices', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -54,7 +55,7 @@ return new class extends Migration {
         }
 
         // 3. user_connect: Single-use device pairing & enrollment codes (DEV-XXXXXX parity)
-        if (!Schema::hasTable('user_connect')) {
+        if (! Schema::hasTable('user_connect')) {
             Schema::create('user_connect', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -73,7 +74,7 @@ return new class extends Migration {
         }
 
         // 4. user_creds: FIDO2 / WebAuthn passkey public keys and signatures
-        if (!Schema::hasTable('user_creds')) {
+        if (! Schema::hasTable('user_creds')) {
             Schema::create('user_creds', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -92,7 +93,7 @@ return new class extends Migration {
         }
 
         // 5. user_factors: Multi-factor authentication factors (RFC-6238 TOTP secrets)
-        if (!Schema::hasTable('user_factors')) {
+        if (! Schema::hasTable('user_factors')) {
             Schema::create('user_factors', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -106,7 +107,7 @@ return new class extends Migration {
         }
 
         // 6. user_codes: Emergency MFA offline backup/recovery codes
-        if (!Schema::hasTable('user_codes')) {
+        if (! Schema::hasTable('user_codes')) {
             Schema::create('user_codes', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -120,7 +121,7 @@ return new class extends Migration {
         }
 
         // 7. user_checks: Ephemeral challenges, step-up verifications & MFA pending tickets
-        if (!Schema::hasTable('user_checks')) {
+        if (! Schema::hasTable('user_checks')) {
             Schema::create('user_checks', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable();
@@ -138,7 +139,7 @@ return new class extends Migration {
         }
 
         // 8. user_push_devices: FCM push notification targets for MFA approvals
-        if (!Schema::hasTable('user_push_devices')) {
+        if (! Schema::hasTable('user_push_devices')) {
             Schema::create('user_push_devices', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -152,7 +153,7 @@ return new class extends Migration {
         }
 
         // 9. user_resets: Self-service & admin password reset requests
-        if (!Schema::hasTable('user_resets')) {
+        if (! Schema::hasTable('user_resets')) {
             Schema::create('user_resets', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -173,7 +174,7 @@ return new class extends Migration {
         }
 
         // 10. user_tokens: Persistent login tokens & remember-me device authenticators
-        if (!Schema::hasTable('user_tokens')) {
+        if (! Schema::hasTable('user_tokens')) {
             Schema::create('user_tokens', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');

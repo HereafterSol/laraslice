@@ -111,20 +111,20 @@ class UserDevice extends Model
 
         $device = self::updateOrCreate(
             [
-                'user_id'      => $user->id,
+                'user_id' => $user->id,
                 'device_token' => $token,
             ],
             [
-                'session_id'     => session()->getId(),
-                'device_label'   => $details['deviceName'],
-                'device_name'    => $details['deviceName'],
-                'browser'        => $details['browser'],
-                'os'             => $details['os'],
-                'platform'       => $details['platform'],
-                'ip_address'     => $details['ip'],
+                'session_id' => session()->getId(),
+                'device_label' => $details['deviceName'],
+                'device_name' => $details['deviceName'],
+                'browser' => $details['browser'],
+                'os' => $details['os'],
+                'platform' => $details['platform'],
+                'ip_address' => $details['ip'],
                 'location_label' => $details['location'],
-                'is_current'     => true,
-                'is_trusted'     => $isTrusted,
+                'is_current' => true,
+                'is_trusted' => $isTrusted,
                 'last_active_at' => now(),
             ]
         );

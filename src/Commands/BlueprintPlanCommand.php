@@ -40,8 +40,8 @@ final class BlueprintPlanCommand extends Command
         }
 
         $this->components->info("Plan for [{$plan['blueprint']['handle']}]");
-        $this->line('Target: ' . $plan['target']);
-        $this->line('Root model: ' . $plan['root_model']);
+        $this->line('Target: '.$plan['target']);
+        $this->line('Root model: '.$plan['root_model']);
         $this->newLine();
 
         $this->table(
@@ -57,22 +57,22 @@ final class BlueprintPlanCommand extends Command
         $this->newLine();
         $this->components->twoColumnDetail('Files', (string) count($plan['files']));
         foreach ($plan['files'] as $file) {
-            $this->line('  ' . $file);
+            $this->line('  '.$file);
         }
         foreach ($plan['file_changes'] as $change) {
-            $this->line('  Update ' . $change['path'] . ': ' . $change['reason']);
+            $this->line('  Update '.$change['path'].': '.$change['reason']);
         }
 
         $this->newLine();
         $this->components->twoColumnDetail('Database operations', (string) count($plan['database_operations']));
         foreach ($plan['database_operations'] as $operation) {
             $description = match ($operation['kind']) {
-                'create_table' => "Create {$operation['table']} (" . implode(', ', array_column($operation['columns'], 'column')) . ')',
+                'create_table' => "Create {$operation['table']} (".implode(', ', array_column($operation['columns'], 'column')).')',
                 'foreign_key' => "Add {$operation['table']}.{$operation['column']} -> {$operation['references']}",
-                'pivot_table' => "Create {$operation['table']} pivot (" . implode(' <-> ', $operation['models']) . ')',
+                'pivot_table' => "Create {$operation['table']} pivot (".implode(' <-> ', $operation['models']).')',
                 default => json_encode($operation, JSON_UNESCAPED_SLASHES),
             };
-            $this->line('  ' . $description);
+            $this->line('  '.$description);
         }
 
         $this->newLine();
@@ -83,7 +83,7 @@ final class BlueprintPlanCommand extends Command
         }
 
         $this->comment('Read-only preview: no files or database tables were changed.');
-        $this->line('Apply hash: ' . $plan['plan_hash']);
+        $this->line('Apply hash: '.$plan['plan_hash']);
         $this->comment('Apply currently supports a root model with direct hasMany children and supported field types.');
         $this->line('Use slice:blueprint:apply with this hash after reviewing the file and database plan.');
 

@@ -2,8 +2,6 @@
 
 namespace LaraSlice\Core\Ai;
 
-use Illuminate\Support\Str;
-
 /**
  * TypeSafe AI / Jev System One Decision Service
  *
@@ -15,7 +13,7 @@ class JevDecisionService
     /**
      * Jev Choice Primitive: Classify a feature/module description into a vertical slice archetype.
      *
-     * @param string $description Natural language domain requirements
+     * @param  string  $description  Natural language domain requirements
      * @return array{archetype: string, confidence: float, distribution: array<string, float>, rationale: string}
      */
     public function classifyArchetype(string $description): array
@@ -24,9 +22,9 @@ class JevDecisionService
 
         $scores = [
             'parent_child_aggregate' => 0.10,
-            'independent_crud'       => 0.10,
-            'lookup_catalog'         => 0.10,
-            'workflow_ledger'        => 0.10,
+            'independent_crud' => 0.10,
+            'lookup_catalog' => 0.10,
+            'workflow_ledger' => 0.10,
         ];
 
         // Semantic heuristics calibrated against domain patterns
@@ -45,32 +43,32 @@ class JevDecisionService
 
         // Normalize to probability distribution sum = 1.0
         $sum = array_sum($scores);
-        $distribution = array_map(fn($v) => round($v / $sum, 3), $scores);
+        $distribution = array_map(fn ($v) => round($v / $sum, 3), $scores);
         arsort($distribution);
 
         $chosen = array_key_first($distribution);
         $confidence = $distribution[$chosen];
 
-        $rationale = match($chosen) {
-            'parent_child_aggregate' => "Domain contains sub-entities and relational work items (e.g. parent-scoped child CRUD).",
-            'workflow_ledger'        => "Domain requires multi-state transitions, audit history, and step-based lifecycles.",
-            'lookup_catalog'         => "Domain functions as a reference taxonomy or configuration catalog.",
-            default                  => "Domain is an autonomous, standalone CRUD vertical slice.",
+        $rationale = match ($chosen) {
+            'parent_child_aggregate' => 'Domain contains sub-entities and relational work items (e.g. parent-scoped child CRUD).',
+            'workflow_ledger' => 'Domain requires multi-state transitions, audit history, and step-based lifecycles.',
+            'lookup_catalog' => 'Domain functions as a reference taxonomy or configuration catalog.',
+            default => 'Domain is an autonomous, standalone CRUD vertical slice.',
         };
 
         return [
-            'archetype'    => $chosen,
-            'confidence'   => $confidence,
+            'archetype' => $chosen,
+            'confidence' => $confidence,
             'distribution' => $distribution,
-            'rationale'    => $rationale,
+            'rationale' => $rationale,
         ];
     }
 
     /**
      * Jev Noul Primitive: Evaluate probability of data loss for a schema alteration.
      *
-     * @param array $existingTables Currently deployed database tables
-     * @param array $proposedOperations Planned database migration operations
+     * @param  array  $existingTables  Currently deployed database tables
+     * @param  array  $proposedOperations  Planned database migration operations
      * @return array{data_loss_risk: bool, probability: float, warnings: array<string>}
      */
     public function evaluateMigrationRisk(array $existingTables, array $proposedOperations): array
@@ -103,16 +101,16 @@ class JevDecisionService
 
         return [
             'data_loss_risk' => $dataLossRisk,
-            'probability'    => $probability,
-            'warnings'       => $warnings,
+            'probability' => $probability,
+            'warnings' => $warnings,
         ];
     }
 
     /**
      * Jev Score Primitive: Recommend optimal BlatUI form component based on field characteristics.
      *
-     * @param string $type Field database/schema type
-     * @param array $field Field attributes (nullable, options, length, etc.)
+     * @param  string  $type  Field database/schema type
+     * @param  array  $field  Field attributes (nullable, options, length, etc.)
      * @return array{component: string, score: int, rationale: string}
      */
     public function recommendComponent(string $type, array $field = []): array
@@ -123,15 +121,15 @@ class JevDecisionService
         if ($type === 'relation' || str_ends_with($name, '_id')) {
             return [
                 'component' => 'x-ui.combobox-relationship',
-                'score'     => 6,
+                'score' => 6,
                 'rationale' => 'Searchable asynchronous select with quick-add parent modal.',
             ];
         }
 
-        if ($type === 'enum' || !empty($field['options'])) {
+        if ($type === 'enum' || ! empty($field['options'])) {
             return [
                 'component' => 'select',
-                'score'     => 4,
+                'score' => 4,
                 'rationale' => 'Discrete options dropdown with selected state binding.',
             ];
         }
@@ -139,7 +137,7 @@ class JevDecisionService
         if (in_array($type, ['text', 'mediumtext', 'longtext'], true)) {
             return [
                 'component' => 'x-ui.textarea',
-                'score'     => 5,
+                'score' => 5,
                 'rationale' => 'Multi-line flexible text area.',
             ];
         }
@@ -147,7 +145,7 @@ class JevDecisionService
         if (in_array($type, ['boolean', 'bool'], true)) {
             return [
                 'component' => 'x-ui.toggle',
-                'score'     => 3,
+                'score' => 3,
                 'rationale' => 'Accessible inline toggle switch with hidden fallback.',
             ];
         }
@@ -155,14 +153,14 @@ class JevDecisionService
         if (in_array($type, ['date', 'datetime', 'timestamp'], true)) {
             return [
                 'component' => 'x-ui.datepicker',
-                'score'     => 4,
+                'score' => 4,
                 'rationale' => 'Native ISO date/datetime input control.',
             ];
         }
 
         return [
             'component' => 'x-ui.input',
-            'score'     => 2,
+            'score' => 2,
             'rationale' => 'Standard styled text input with validation binding.',
         ];
     }

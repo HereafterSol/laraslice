@@ -2,14 +2,14 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        if (!Schema::hasTable('roles')) {
+        if (! Schema::hasTable('roles')) {
             Schema::create('roles', function (Blueprint $table) {
                 $table->id();
                 $table->string('name');
@@ -19,7 +19,7 @@ return new class extends Migration {
             });
         }
 
-        if (!Schema::hasTable('permissions')) {
+        if (! Schema::hasTable('permissions')) {
             Schema::create('permissions', function (Blueprint $table) {
                 $table->id();
                 $table->string('name');
@@ -30,7 +30,7 @@ return new class extends Migration {
             });
         }
 
-        if (!Schema::hasTable('role_user')) {
+        if (! Schema::hasTable('role_user')) {
             Schema::create('role_user', function (Blueprint $table) {
                 $table->unsignedBigInteger('role_id');
                 $table->unsignedBigInteger('user_id');
@@ -38,7 +38,7 @@ return new class extends Migration {
             });
         }
 
-        if (!Schema::hasTable('permission_role')) {
+        if (! Schema::hasTable('permission_role')) {
             Schema::create('permission_role', function (Blueprint $table) {
                 $table->unsignedBigInteger('permission_id');
                 $table->unsignedBigInteger('role_id');
@@ -50,25 +50,25 @@ return new class extends Migration {
         if (Schema::hasTable('roles') && DB::table('roles')->count() === 0) {
             DB::table('roles')->insert([
                 [
-                    'name'        => 'Super Administrator',
-                    'slug'        => 'super-admin',
+                    'name' => 'Super Administrator',
+                    'slug' => 'super-admin',
                     'description' => 'Full unrestricted system-wide access to all slices and settings',
-                    'created_at'  => now(),
-                    'updated_at'  => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ],
                 [
-                    'name'        => 'Manager',
-                    'slug'        => 'manager',
+                    'name' => 'Manager',
+                    'slug' => 'manager',
                     'description' => 'Can manage operational records, approvals, and reports',
-                    'created_at'  => now(),
-                    'updated_at'  => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ],
                 [
-                    'name'        => 'Standard User',
-                    'slug'        => 'user',
+                    'name' => 'Standard User',
+                    'slug' => 'user',
                     'description' => 'Standard member with basic read/create permissions',
-                    'created_at'  => now(),
-                    'updated_at'  => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ],
             ]);
         }

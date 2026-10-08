@@ -4,10 +4,15 @@ namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use LaraSlice\Slices\Users\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Slices\Roles\Models\Role;
+use LaraSlice\Slices\Users\Models\User;
+use Symfony\Component\Process\Process;
 
 class SliceInstallCommand extends Command
 {
@@ -32,16 +37,17 @@ class SliceInstallCommand extends Command
         // 1. Publish Configuration
         $this->components->task('Publishing LaraSlice configuration', function () {
             Artisan::call('vendor:publish', ['--tag' => 'laraslice-config', '--force' => true]);
+
             return true;
         });
 
         // 2. Publish Welcome Landing Page & BlatUI Starter Views
         $this->components->task('Publishing LaraSlice Starter Layout & BlatUI Components', function () {
-            $starterViewsDir = __DIR__ . '/../../resources/stubs/starter/views';
+            $starterViewsDir = __DIR__.'/../../resources/stubs/starter/views';
 
             if (File::isDirectory($starterViewsDir)) {
                 // Copy welcome page
-                $welcomeSource = $starterViewsDir . '/welcome.blade.php';
+                $welcomeSource = $starterViewsDir.'/welcome.blade.php';
                 $welcomeDest = resource_path('views/welcome.blade.php');
                 if (File::exists($welcomeSource)) {
                     File::ensureDirectoryExists(dirname($welcomeDest));
@@ -49,7 +55,7 @@ class SliceInstallCommand extends Command
                 }
 
                 // Copy dashboard-01 layouts
-                $layoutsSource = $starterViewsDir . '/layouts';
+                $layoutsSource = $starterViewsDir.'/layouts';
                 $layoutsDest = resource_path('views/layouts');
                 if (File::isDirectory($layoutsSource)) {
                     File::ensureDirectoryExists($layoutsDest);
@@ -57,7 +63,7 @@ class SliceInstallCommand extends Command
                 }
 
                 // Copy BlatUI UI components
-                $componentsSource = $starterViewsDir . '/components';
+                $componentsSource = $starterViewsDir.'/components';
                 $componentsDest = resource_path('views/components');
                 if (File::isDirectory($componentsSource)) {
                     File::ensureDirectoryExists($componentsDest);
@@ -66,7 +72,7 @@ class SliceInstallCommand extends Command
             }
 
             // Copy CSS assets (blatui.css, etc.)
-            $cssSource = __DIR__ . '/../../resources/stubs/starter/css';
+            $cssSource = __DIR__.'/../../resources/stubs/starter/css';
             $cssDest = resource_path('css');
             if (File::isDirectory($cssSource)) {
                 File::ensureDirectoryExists($cssDest);
@@ -74,31 +80,33 @@ class SliceInstallCommand extends Command
             }
 
             // Copy JS assets (blatui.js, blatui-core.js, etc.)
-            $jsSource = __DIR__ . '/../../resources/stubs/starter/js';
+            $jsSource = __DIR__.'/../../resources/stubs/starter/js';
             $jsDest = resource_path('js');
             if (File::isDirectory($jsSource)) {
                 File::ensureDirectoryExists($jsDest);
                 File::copyDirectory($jsSource, $jsDest);
             }
+
             return true;
         });
 
         // 3. Run Database Migrations (including Sanctum's token table for the API slices)
         $this->components->task('Running database migrations', function () {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('personal_access_tokens')) {
+            if (! Schema::hasTable('personal_access_tokens')) {
                 Artisan::call('vendor:publish', ['--tag' => 'sanctum-migrations']);
             }
             Artisan::call('migrate', ['--force' => true]);
+
             return true;
         });
 
         // 4. Seed Super Admin User, Role & Permissions
         $email = $this->option('email');
         $passwordGiven = filled($this->option('password'));
-        $password = $passwordGiven ? (string) $this->option('password') : \Illuminate\Support\Str::password(20);
+        $password = $passwordGiven ? (string) $this->option('password') : Str::password(20);
         $adminCreated = false;
 
-        $this->components->task('Seeding Super Admin user [' . $email . '] & RBAC permissions', function () use ($email, $password, $passwordGiven, &$adminCreated) {
+        $this->components->task('Seeding Super Admin user ['.$email.'] & RBAC permissions', function () use ($email, $password, $passwordGiven, &$adminCreated) {
             // Find or create role
             $role = null;
             if (class_exists(Role::class)) {
@@ -106,11 +114,11 @@ class SliceInstallCommand extends Command
                     ['slug' => 'super-admin'],
                     [
                         'name' => 'Super Administrator',
-                        'description' => 'Full unrestricted system-wide access to all slices and settings'
+                        'description' => 'Full unrestricted system-wide access to all slices and settings',
                     ]
                 );
-            } elseif (\Illuminate\Support\Facades\Schema::hasTable('roles')) {
-                \Illuminate\Support\Facades\DB::table('roles')->updateOrInsert(
+            } elseif (Schema::hasTable('roles')) {
+                DB::table('roles')->updateOrInsert(
                     ['slug' => 'super-admin'],
                     [
                         'name' => 'Super Administrator',
@@ -119,12 +127,12 @@ class SliceInstallCommand extends Command
                         'created_at' => now(),
                     ]
                 );
-                $role = \Illuminate\Support\Facades\DB::table('roles')->where('slug', 'super-admin')->first();
+                $role = DB::table('roles')->where('slug', 'super-admin')->first();
             }
 
             // Create admin user using standard User model or Slice User model
             $userModelClass = config('auth.providers.users.model', User::class);
-            if (!class_exists($userModelClass)) {
+            if (! class_exists($userModelClass)) {
                 $userModelClass = User::class;
             }
 
@@ -144,8 +152,8 @@ class SliceInstallCommand extends Command
             }
 
             // Ensure super-admin role is attached to user in role_user table
-            if (isset($role) && isset($user->id) && \Illuminate\Support\Facades\Schema::hasTable('role_user')) {
-                \Illuminate\Support\Facades\DB::table('role_user')->updateOrInsert(
+            if (isset($role) && isset($user->id) && Schema::hasTable('role_user')) {
+                DB::table('role_user')->updateOrInsert(
                     ['role_id' => $role->id, 'user_id' => $user->id],
                     ['role_id' => $role->id, 'user_id' => $user->id]
                 );
@@ -153,15 +161,16 @@ class SliceInstallCommand extends Command
 
             // Sync all permissions from active slices and assign to super-admin
             try {
-                $sliceManager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                $sliceManager = app(SliceManager::class);
                 $sliceManager->syncPermissions();
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
 
             // Inject HasSlicePermissions trait into app/Models/User.php if missing
             $userModelFile = app_path('Models/User.php');
             if (File::exists($userModelFile)) {
                 $userModelContent = File::get($userModelFile);
-                if (!str_contains($userModelContent, 'HasSlicePermissions')) {
+                if (! str_contains($userModelContent, 'HasSlicePermissions')) {
                     // Append to the first trait `use` in the class body, whatever traits it lists
                     // (e.g. `use HasApiTokens, HasFactory, Notifiable;`), else add a new one.
                     $classTraitPattern = '/(class\s+User\b[^{]*\{.*?^\s*use\s+)([^;]+);/ms';
@@ -190,7 +199,7 @@ class SliceInstallCommand extends Command
         });
 
         // 5. Ensure frontend dependencies & run npm install
-        if (!$this->option('skip-npm') && File::exists(base_path('package.json'))) {
+        if (! $this->option('skip-npm') && File::exists(base_path('package.json'))) {
             $needed = [
                 '@alpinejs/anchor' => '^3.14.8',
                 '@alpinejs/collapse' => '^3.14.8',
@@ -207,7 +216,7 @@ class SliceInstallCommand extends Command
                 if (is_array($pkg)) {
                     $changed = false;
                     foreach ($needed as $dep => $ver) {
-                        if (!isset($pkg['devDependencies'][$dep]) && !isset($pkg['dependencies'][$dep])) {
+                        if (! isset($pkg['devDependencies'][$dep]) && ! isset($pkg['dependencies'][$dep])) {
                             $pkg['devDependencies'][$dep] = $ver;
                             $changed = true;
                         }
@@ -216,6 +225,7 @@ class SliceInstallCommand extends Command
                         File::put($pkgPath, json_encode($pkg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                     }
                 }
+
                 return true;
             });
 
@@ -224,11 +234,12 @@ class SliceInstallCommand extends Command
                 ->map(fn ($file) => base_path($file))
                 ->first(fn ($path) => File::exists($path));
 
-            if ($viteConfigPath && !str_contains(File::get($viteConfigPath), '@tailwindcss/vite')) {
-                $this->components->task('Registering Tailwind CSS v4 plugin in ' . basename($viteConfigPath), function () use ($viteConfigPath) {
+            if ($viteConfigPath && ! str_contains(File::get($viteConfigPath), '@tailwindcss/vite')) {
+                $this->components->task('Registering Tailwind CSS v4 plugin in '.basename($viteConfigPath), function () use ($viteConfigPath) {
                     $viteConfig = File::get($viteConfigPath);
-                    if (!preg_match('/plugins\s*:\s*\[/', $viteConfig)) {
+                    if (! preg_match('/plugins\s*:\s*\[/', $viteConfig)) {
                         $this->components->warn("Add `tailwindcss()` from '@tailwindcss/vite' to the Vite plugins manually.");
+
                         return false;
                     }
 
@@ -241,17 +252,19 @@ class SliceInstallCommand extends Command
             }
 
             $missingNodeModules = collect(array_keys($needed))
-                ->contains(fn ($dep) => !File::exists(base_path('node_modules/' . $dep)));
+                ->contains(fn ($dep) => ! File::exists(base_path('node_modules/'.$dep)));
 
             if ($missingNodeModules) {
                 $this->components->task('Installing Node dependencies (npm install)', function () {
                     try {
-                        $process = \Symfony\Component\Process\Process::fromShellCommandline('npm install', base_path());
+                        $process = Process::fromShellCommandline('npm install', base_path());
                         $process->setTimeout(600);
                         $process->run();
+
                         return $process->isSuccessful();
                     } catch (\Throwable $e) {
-                        $this->components->warn('npm install skipped: ' . $e->getMessage());
+                        $this->components->warn('npm install skipped: '.$e->getMessage());
+
                         return false;
                     }
                 });
@@ -275,7 +288,7 @@ class SliceInstallCommand extends Command
             $this->components->warn('This generated password is shown only once. Store it now and change it after signing in.');
         }
 
-        $this->line('<fg=gray>Run <fg=yellow>php artisan serve</> and visit <fg=cyan>' . url('/login') . '</> to begin!</>');
+        $this->line('<fg=gray>Run <fg=yellow>php artisan serve</> and visit <fg=cyan>'.url('/login').'</> to begin!</>');
         $this->newLine();
 
         return self::SUCCESS;

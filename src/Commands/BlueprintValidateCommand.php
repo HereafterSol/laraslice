@@ -24,7 +24,7 @@ final class BlueprintValidateCommand extends Command
         }
 
         $this->components->info("Blueprint [{$blueprint['handle']}] is valid (schema v{$blueprint['schema_version']}).");
-        $this->line(count($blueprint['models']) . ' model(s), ' . $this->fieldCount($blueprint) . ' field(s), ' . $this->relationCount($blueprint) . ' relation(s).');
+        $this->line(count($blueprint['models']).' model(s), '.$this->fieldCount($blueprint).' field(s), '.$this->relationCount($blueprint).' relation(s).');
 
         return self::SUCCESS;
     }

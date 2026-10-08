@@ -4,6 +4,4 @@ namespace LaraSlice\Generator;
 
 use InvalidArgumentException;
 
-final class SliceExistsException extends InvalidArgumentException
-{
-}
+final class SliceExistsException extends InvalidArgumentException {}

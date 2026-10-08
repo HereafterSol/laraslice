@@ -7,6 +7,7 @@ use LaraSlice\Core\Base\BaseFilter;
 class UserFilterBusinessObject extends BaseFilter
 {
     public ?string $status = null;
+
     public ?string $role = null;
 
     public function __construct(array $params = [])

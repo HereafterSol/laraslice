@@ -2,15 +2,17 @@
 
 namespace LaraSlice\Tests\Unit\Audit;
 
-use PHPUnit\Framework\TestCase;
 use LaraSlice\Core\Audit\Traits\AuditableSlice;
+use PHPUnit\Framework\TestCase;
 
 class DummyAuditedModel
 {
     use AuditableSlice;
 
     public string $auditSlice = 'inventory';
+
     public array $auditExclude = ['internal_notes'];
+
     public array $hidden = ['password_hash'];
 
     public function getKey(): int
@@ -48,19 +50,19 @@ class AuditableSliceTest extends TestCase
 {
     public function test_get_audit_slice_from_property(): void
     {
-        $model = new DummyAuditedModel();
+        $model = new DummyAuditedModel;
         $this->assertSame('inventory', $model->getAuditSlice());
     }
 
     public function test_get_audit_slice_fallback_to_table(): void
     {
-        $model = new DummySliceNamespaceModel();
+        $model = new DummySliceNamespaceModel;
         $this->assertSame('customers', $model->getAuditSlice());
     }
 
     public function test_sensitive_attributes_are_excluded(): void
     {
-        $model = new DummyAuditedModel();
+        $model = new DummyAuditedModel;
 
         // Defaults
         $this->assertTrue($model->isAuditExcluded('password'));
@@ -83,7 +85,7 @@ class AuditableSliceTest extends TestCase
 
     public function test_filter_audit_attributes(): void
     {
-        $model = new DummyAuditedModel();
+        $model = new DummyAuditedModel;
 
         $attributes = [
             'id' => 55,
@@ -109,7 +111,7 @@ class AuditableSliceTest extends TestCase
 
     public function test_without_auditing_disables_auditing_temporarily(): void
     {
-        $model = new DummyAuditedModel();
+        $model = new DummyAuditedModel;
         $this->assertTrue($model->shouldAudit('updated'));
 
         $executed = false;

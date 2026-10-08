@@ -15,7 +15,7 @@ class FlutterSliceGeneratorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-flutter-' . bin2hex(random_bytes(6));
+        $this->dir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-flutter-'.bin2hex(random_bytes(6));
     }
 
     protected function tearDown(): void
@@ -48,7 +48,7 @@ class FlutterSliceGeneratorTest extends TestCase
 
     public function test_model_uses_an_integer_id_and_typed_custom_fields(): void
     {
-        $model = file_get_contents($this->generate() . '/models/invoice_model.dart');
+        $model = file_get_contents($this->generate().'/models/invoice_model.dart');
 
         $this->assertStringContainsString('final int? id;', $model);
         $this->assertStringContainsString("id: _toInt(json['id']),", $model);
@@ -61,7 +61,7 @@ class FlutterSliceGeneratorTest extends TestCase
 
     public function test_service_calls_the_real_api_path_with_a_bearer_token(): void
     {
-        $service = file_get_contents($this->generate() . '/services/invoice_api_service.dart');
+        $service = file_get_contents($this->generate().'/services/invoice_api_service.dart');
 
         $this->assertStringContainsString("Uri.parse('\$baseUrl/api/billing/invoices\$path')", $service);
         $this->assertStringContainsString("'Authorization': 'Bearer \$token'", $service);
@@ -70,7 +70,7 @@ class FlutterSliceGeneratorTest extends TestCase
 
     public function test_form_has_inputs_for_custom_fields_and_escapes_labels(): void
     {
-        $form = file_get_contents($this->generate() . '/views/invoice_form_view.dart');
+        $form = file_get_contents($this->generate().'/views/invoice_form_view.dart');
 
         $this->assertStringContainsString("labelText: 'Customer\\'s amount'", $form);
         $this->assertStringContainsString('_quantityCtrl', $form);
@@ -93,7 +93,7 @@ class FlutterSliceGeneratorTest extends TestCase
     public function test_existing_files_are_kept_unless_forced(): void
     {
         $dir = $this->generate();
-        file_put_contents($dir . '/models/invoice_model.dart', '// customised');
+        file_put_contents($dir.'/models/invoice_model.dart', '// customised');
 
         try {
             $this->generate();
@@ -101,9 +101,9 @@ class FlutterSliceGeneratorTest extends TestCase
         } catch (\RuntimeException $e) {
             $this->assertStringContainsString('--force', $e->getMessage());
         }
-        $this->assertSame('// customised', file_get_contents($dir . '/models/invoice_model.dart'));
+        $this->assertSame('// customised', file_get_contents($dir.'/models/invoice_model.dart'));
 
         $this->generate(['force' => true]);
-        $this->assertStringContainsString('class InvoiceModel', file_get_contents($dir . '/models/invoice_model.dart'));
+        $this->assertStringContainsString('class InvoiceModel', file_get_contents($dir.'/models/invoice_model.dart'));
     }
 }

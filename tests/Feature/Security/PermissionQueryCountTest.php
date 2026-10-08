@@ -2,9 +2,12 @@
 
 namespace LaraSlice\Tests\Feature\Security;
 
+use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Support\SchemaCache;
 use LaraSlice\Tests\TestCase;
 
@@ -44,7 +47,7 @@ class PermissionQueryCountTest extends TestCase
         $user = $this->makeUser();
         $this->assertFalse($user->hasRole('super-admin'));
 
-        $role = \LaraSlice\Slices\Roles\Models\Role::firstOrCreate(['slug' => 'super-admin'], ['name' => 'Super Admin']);
+        $role = Role::firstOrCreate(['slug' => 'super-admin'], ['name' => 'Super Admin']);
         $user->roles()->attach($role->id);
 
         $this->assertTrue($user->flushSlicePermissionCache()->hasRole('super-admin'));
@@ -69,8 +72,8 @@ class PermissionQueryCountTest extends TestCase
         $this->assertSame(0, $this->queriesDuring(fn () => [SchemaCache::hasTable('users'), SchemaCache::hasColumn('users', 'name')]));
 
         $this->assertFalse(SchemaCache::hasTable('late_table'));
-        \Illuminate\Support\Facades\Schema::create('late_table', fn ($t) => $t->id());
-        event(new \Illuminate\Database\Events\MigrationsEnded('up'));
+        Schema::create('late_table', fn ($t) => $t->id());
+        event(new MigrationsEnded('up'));
         $this->assertTrue(SchemaCache::hasTable('late_table'));
     }
 }

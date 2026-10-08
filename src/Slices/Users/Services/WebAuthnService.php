@@ -4,8 +4,8 @@ namespace LaraSlice\Slices\Users\Services;
 
 use LaraSlice\Slices\Users\Models\User;
 use LaraSlice\Slices\Users\Models\UserPasskey;
-use lbuchs\WebAuthn\WebAuthn;
 use lbuchs\WebAuthn\Binary\ByteBuffer;
+use lbuchs\WebAuthn\WebAuthn;
 
 class WebAuthnService
 {
@@ -20,7 +20,7 @@ class WebAuthnService
     {
         spl_autoload_register(function ($class) {
             $prefix = 'lbuchs\\WebAuthn\\';
-            $baseDir = __DIR__ . '/../WebAuthn/lbuchs/';
+            $baseDir = __DIR__.'/../WebAuthn/lbuchs/';
 
             $len = strlen($prefix);
             if (strncmp($prefix, $class, $len) !== 0) {
@@ -28,7 +28,7 @@ class WebAuthnService
             }
 
             $relativeClass = substr($class, $len);
-            $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
+            $file = $baseDir.str_replace('\\', '/', $relativeClass).'.php';
 
             if (file_exists($file)) {
                 require_once $file;
@@ -74,7 +74,7 @@ class WebAuthnService
             $excludeIds
         );
 
-                $challenge = $this->b64encode($webauthn->getChallenge()->getBinaryString());
+        $challenge = $this->b64encode($webauthn->getChallenge()->getBinaryString());
         session(['webauthn_challenge' => $challenge]);
 
         return [
@@ -86,7 +86,7 @@ class WebAuthnService
     public function processRegister(User $user, string $clientDataJSON, string $attestationObject, ?string $label = 'Passkey'): UserPasskey
     {
         $challengeB64 = session('webauthn_challenge');
-        if (!$challengeB64) {
+        if (! $challengeB64) {
             throw new \RuntimeException('WebAuthn registration challenge missing or expired.');
         }
 
@@ -108,19 +108,19 @@ class WebAuthnService
         $hasTotpConfirmed = in_array($user->mfa_channel, ['totp', 'both']);
         $user->mfa_channel = $hasTotpConfirmed ? 'both' : 'webauthn';
         $user->mfa_confirmed_at = now();
-        if (!$hasTotpConfirmed) {
+        if (! $hasTotpConfirmed) {
             $user->mfa_secret = null;
         }
         $user->save();
 
         return UserPasskey::create([
-            'user_id'       => $user->id,
+            'user_id' => $user->id,
             'credential_id' => $credId,
-            'public_key'    => $data->credentialPublicKey,
-            'sign_count'    => (int) ($data->signatureCounter ?? 0),
-            'aaguid'        => isset($data->AAGUID) ? bin2hex($data->AAGUID) : null,
-            'label'         => $label ?: 'Passkey',
-            'last_used_at'  => now(),
+            'public_key' => $data->credentialPublicKey,
+            'sign_count' => (int) ($data->signatureCounter ?? 0),
+            'aaguid' => isset($data->AAGUID) ? bin2hex($data->AAGUID) : null,
+            'label' => $label ?: 'Passkey',
+            'last_used_at' => now(),
         ]);
     }
 
@@ -152,12 +152,12 @@ class WebAuthnService
     public function processLogin(string $clientDataJSON, string $authenticatorData, string $signature, string $credentialIdB64): User
     {
         $challengeB64 = session('webauthn_login_challenge');
-        if (!$challengeB64) {
+        if (! $challengeB64) {
             throw new \RuntimeException('WebAuthn login challenge missing or expired.');
         }
 
         $passkey = UserPasskey::where('credential_id', $credentialIdB64)->whereNull('revoked_at')->first();
-        if (!$passkey) {
+        if (! $passkey) {
             throw new \RuntimeException('Unknown or revoked passkey credential.');
         }
 
@@ -177,7 +177,7 @@ class WebAuthnService
 
         $counter = $webauthn->getSignatureCounter();
         $passkey->update([
-            'sign_count'   => is_int($counter) ? $counter : $passkey->sign_count + 1,
+            'sign_count' => is_int($counter) ? $counter : $passkey->sign_count + 1,
             'last_used_at' => now(),
         ]);
 
@@ -193,6 +193,7 @@ class WebAuthnService
         if ($pad > 0) {
             $str .= str_repeat('=', 4 - $pad);
         }
+
         return base64_decode($str) ?: '';
     }
 

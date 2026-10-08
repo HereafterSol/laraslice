@@ -18,4 +18,3 @@ Route::middleware(['web', 'auth'])->prefix('admin/settings')->name('settings.')-
 Route::redirect('/settings/theme', '/admin/settings/theme');
 Route::redirect('/settings', '/admin/settings/smtp');
 Route::redirect('/admin/settings', '/admin/settings/smtp');
-

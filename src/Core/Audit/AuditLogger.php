@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use LaraSlice\Support\SchemaCache;
 use Throwable;
 
 /**
@@ -40,7 +41,7 @@ class AuditLogger
         }
 
         try {
-            return class_exists(Schema::class) && \LaraSlice\Support\SchemaCache::hasTable(self::TABLE_NAME);
+            return class_exists(Schema::class) && SchemaCache::hasTable(self::TABLE_NAME);
         } catch (Throwable) {
             return false;
         }
@@ -77,6 +78,7 @@ class AuditLogger
         } catch (Throwable) {
             return null;
         }
+
         return null;
     }
 
@@ -92,6 +94,7 @@ class AuditLogger
         } catch (Throwable) {
             return null;
         }
+
         return null;
     }
 
@@ -123,19 +126,19 @@ class AuditLogger
         $actorEmail = $data['actor_email'] ?? ($user && isset($user->email) ? $user->email : null);
 
         $payload = [
-            'slice'       => $data['slice'] ?? 'global',
-            'action'      => $data['action'] ?? 'unknown',
-            'actor_id'    => $actorId,
-            'actor_type'  => $actorType,
+            'slice' => $data['slice'] ?? 'global',
+            'action' => $data['action'] ?? 'unknown',
+            'actor_id' => $actorId,
+            'actor_type' => $actorType,
             'actor_email' => $actorEmail,
             'entity_type' => $data['entity_type'] ?? null,
-            'entity_id'   => isset($data['entity_id']) ? (string) $data['entity_id'] : null,
-            'old_values'  => isset($data['old_values']) ? json_encode($data['old_values']) : null,
-            'new_values'  => isset($data['new_values']) ? json_encode($data['new_values']) : null,
-            'ip_address'  => $data['ip_address'] ?? ($request && method_exists($request, 'ip') ? $request->ip() : null),
-            'user_agent'  => $data['user_agent'] ?? ($request && method_exists($request, 'userAgent') ? substr((string) $request->userAgent(), 0, 255) : null),
-            'metadata'    => isset($data['metadata']) ? json_encode($data['metadata']) : null,
-            'created_at'  => function_exists('now') ? now() : date('Y-m-d H:i:s'),
+            'entity_id' => isset($data['entity_id']) ? (string) $data['entity_id'] : null,
+            'old_values' => isset($data['old_values']) ? json_encode($data['old_values']) : null,
+            'new_values' => isset($data['new_values']) ? json_encode($data['new_values']) : null,
+            'ip_address' => $data['ip_address'] ?? ($request && method_exists($request, 'ip') ? $request->ip() : null),
+            'user_agent' => $data['user_agent'] ?? ($request && method_exists($request, 'userAgent') ? substr((string) $request->userAgent(), 0, 255) : null),
+            'metadata' => isset($data['metadata']) ? json_encode($data['metadata']) : null,
+            'created_at' => function_exists('now') ? now() : date('Y-m-d H:i:s'),
         ];
 
         try {
@@ -146,7 +149,7 @@ class AuditLogger
             }
         } catch (Throwable $e) {
             // Fail-safe logging so audit errors never crash business transaction
-            self::safeLog('warning', "[LaraSlice Audit Failure] " . $e->getMessage(), ['payload' => $payload]);
+            self::safeLog('warning', '[LaraSlice Audit Failure] '.$e->getMessage(), ['payload' => $payload]);
         }
     }
 
@@ -167,7 +170,8 @@ class AuditLogger
                 ->get()
                 ->map(fn ($row) => self::formatRow($row));
         } catch (Throwable $e) {
-            self::safeLog('warning', "[LaraSlice Audit Query Failure] " . $e->getMessage());
+            self::safeLog('warning', '[LaraSlice Audit Query Failure] '.$e->getMessage());
+
             return collect();
         }
     }
@@ -190,7 +194,8 @@ class AuditLogger
                 ->get()
                 ->map(fn ($row) => self::formatRow($row));
         } catch (Throwable $e) {
-            self::safeLog('warning', "[LaraSlice Audit Query Failure] " . $e->getMessage());
+            self::safeLog('warning', '[LaraSlice Audit Query Failure] '.$e->getMessage());
+
             return collect();
         }
     }
@@ -211,7 +216,8 @@ class AuditLogger
                 ->get()
                 ->map(fn ($row) => self::formatRow($row));
         } catch (Throwable $e) {
-            self::safeLog('warning', "[LaraSlice Audit Query Failure] " . $e->getMessage());
+            self::safeLog('warning', '[LaraSlice Audit Query Failure] '.$e->getMessage());
+
             return collect();
         }
     }
@@ -231,6 +237,7 @@ class AuditLogger
         if (isset($cloned->metadata) && is_string($cloned->metadata)) {
             $cloned->metadata = json_decode($cloned->metadata, true);
         }
+
         return $cloned;
     }
 }

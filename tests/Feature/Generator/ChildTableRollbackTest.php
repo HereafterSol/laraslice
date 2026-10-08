@@ -13,7 +13,7 @@ class ChildTableRollbackTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-child-rollback-' . bin2hex(random_bytes(6));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-child-rollback-'.bin2hex(random_bytes(6));
     }
 
     protected function tearDown(): void
@@ -49,7 +49,8 @@ class ChildTableRollbackTest extends TestCase
         $before = $this->snapshot($path);
 
         // Let every write happen, then fail at the end
-        $modifier = new class($this->slicesPath, 'App\\Slices') extends SliceModifier {
+        $modifier = new class($this->slicesPath, 'App\\Slices') extends SliceModifier
+        {
             protected function performAddChildTable(string $sliceName, string $tableName, string $relationType = 'hasMany', array $fields = [], ?string $foreignKey = null): array
             {
                 parent::performAddChildTable($sliceName, $tableName, $relationType, $fields, $foreignKey);
@@ -73,7 +74,7 @@ class ChildTableRollbackTest extends TestCase
 
         (new SliceModifier($this->slicesPath, 'App\\Slices'))->addChildTable('Invoice', 'invoice_lines', 'hasMany', [['name' => 'quantity', 'type' => 'integer']]);
 
-        $this->assertFileExists($path . '/Models/InvoiceLine.php');
-        $this->assertNotEmpty(glob($path . '/Migrations/*invoice_lines*'));
+        $this->assertFileExists($path.'/Models/InvoiceLine.php');
+        $this->assertNotEmpty(glob($path.'/Migrations/*invoice_lines*'));
     }
 }

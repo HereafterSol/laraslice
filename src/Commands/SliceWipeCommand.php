@@ -3,8 +3,8 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
-use LaraSlice\Generator\SliceSeederService;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Generator\SliceSeederService;
 
 class SliceWipeCommand extends Command
 {
@@ -21,16 +21,18 @@ class SliceWipeCommand extends Command
         $domainName = $this->option('domain');
         $force = $this->option('force');
 
-        if (!$sliceName && !$domainName) {
+        if (! $sliceName && ! $domainName) {
             $this->error('Please specify either a slice name or --domain= option.');
             $this->line('Example: <fg=yellow>php artisan slice:wipe Contacts --force</>');
+
             return Command::FAILURE;
         }
 
         $target = $domainName ? "all slices in domain [{$domainName}]" : "slice [{$sliceName}]";
 
-        if (!$force && !$this->confirm("⚠️ Are you sure you want to WIPE all records from {$target}? This cannot be undone!", false)) {
+        if (! $force && ! $this->confirm("⚠️ Are you sure you want to WIPE all records from {$target}? This cannot be undone!", false)) {
             $this->info('Operation cancelled.');
+
             return Command::SUCCESS;
         }
 
@@ -42,19 +44,21 @@ class SliceWipeCommand extends Command
                 $this->info("🧹 Wiping table data for slice: [{$sliceName}]...");
                 $result = $seeder->wipeSlice($sliceName);
             }
-        } catch (\InvalidArgumentException | \RuntimeException $e) {
-            $this->error('❌ ' . $e->getMessage());
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            $this->error('❌ '.$e->getMessage());
+
             return Command::FAILURE;
         }
 
-        if (!$result['success']) {
-            $this->error("❌ Wipe failed: " . ($result['message'] ?? 'Unknown error'));
+        if (! $result['success']) {
+            $this->error('❌ Wipe failed: '.($result['message'] ?? 'Unknown error'));
+
             return Command::FAILURE;
         }
 
-        $this->info("✅ " . $result['message']);
-        if (!empty($result['tables'])) {
-            $this->line("Truncated tables: <fg=cyan>" . implode(', ', $result['tables']) . "</>");
+        $this->info('✅ '.$result['message']);
+        if (! empty($result['tables'])) {
+            $this->line('Truncated tables: <fg=cyan>'.implode(', ', $result['tables']).'</>');
         }
 
         return Command::SUCCESS;

@@ -3,10 +3,14 @@
 namespace LaraSlice\Generator;
 
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
+use LaraSlice\Core\Discovery\SliceManager;
+use Symfony\Component\Yaml\Yaml;
 
 class SliceGenerator
 {
     protected string $slicesPath;
+
     protected string $namespace;
 
     public function __construct(?string $slicesPath = null, ?string $namespace = null)
@@ -19,22 +23,22 @@ class SliceGenerator
     {
         $studlyName = SliceName::canonical($name);
         $pluralName = Str::plural($studlyName);
-        $snakeName  = Str::snake($studlyName);
+        $snakeName = Str::snake($studlyName);
         $pluralSnake = Str::snake($pluralName);
-        $tableName  = $pluralSnake;
+        $tableName = $pluralSnake;
 
         $domain = isset($options['domain']) && is_string($options['domain']) && trim($options['domain']) !== ''
             ? trim($options['domain'])
             : null;
         $domainFolder = $domain ? SliceName::domainSegment($domain) : null;
         $domainSlug = $domain ? Str::slug($domain) : null;
-        $domainDot = $domainSlug ? str_replace('-', '_', $domainSlug) . '.' : '';
+        $domainDot = $domainSlug ? str_replace('-', '_', $domainSlug).'.' : '';
         $routePrefix = $domainSlug ? "{$domainSlug}/{$pluralSnake}" : $pluralSnake;
-        $navUrl = '/' . $routePrefix;
+        $navUrl = '/'.$routePrefix;
 
         $targetDir = $domainFolder
-            ? ($this->slicesPath . DIRECTORY_SEPARATOR . $domainFolder . DIRECTORY_SEPARATOR . $pluralName)
-            : ($this->slicesPath . DIRECTORY_SEPARATOR . $pluralName);
+            ? ($this->slicesPath.DIRECTORY_SEPARATOR.$domainFolder.DIRECTORY_SEPARATOR.$pluralName)
+            : ($this->slicesPath.DIRECTORY_SEPARATOR.$pluralName);
 
         $sliceNamespace = $domainFolder
             ? "{$this->namespace}\\{$domainFolder}\\{$pluralName}"
@@ -51,7 +55,7 @@ class SliceGenerator
         $encryptedColumns = array_column(array_filter($fields, fn (array $f) => $f['encrypted']), 'name');
         $modelCasts = $encryptedColumns === []
             ? ''
-            : "\n    protected \$casts = " . var_export(array_fill_keys($encryptedColumns, 'encrypted'), true) . ';';
+            : "\n    protected \$casts = ".var_export(array_fill_keys($encryptedColumns, 'encrypted'), true).';';
 
         $titleField = $fieldsByName['title'] ?? null;
         $descriptionField = $fieldsByName['description'] ?? null;
@@ -76,25 +80,25 @@ class SliceGenerator
         $dtoDesc = $this->dtoProperty('description', $descriptionField, '?string', null);
         $dtoStatus = $this->dtoProperty('status', $statusField, 'string', 'draft');
 
-        $dtoProperties = implode("\n", array_map(fn (array $field) => '    ' . $this->dtoProperty($field['name'], $field), $extraFields));
+        $dtoProperties = implode("\n", array_map(fn (array $field) => '    '.$this->dtoProperty($field['name'], $field), $extraFields));
         if ($dtoProperties !== '') {
-            $dtoProperties = "\n" . $dtoProperties;
+            $dtoProperties = "\n".$dtoProperties;
         }
 
         $migrationTitle = $titleField ? $titleField['migration'] : "\$table->string('title');";
         $migrationDesc = $descriptionField ? $descriptionField['migration'] : "\$table->text('description')->nullable();";
         $migrationStatus = $statusField ? $statusField['migration'] : "\$table->string('status')->default('draft');";
-        $migrationFields = implode("\n", array_map(fn (array $field) => '                ' . $field['migration'], $extraFields));
+        $migrationFields = implode("\n", array_map(fn (array $field) => '                '.$field['migration'], $extraFields));
         if ($migrationFields !== '') {
-            $migrationFields = "\n" . $migrationFields;
+            $migrationFields = "\n".$migrationFields;
         }
 
         $titleRulesExport = var_export($titleField['rules'] ?? ['required', 'string', 'max:255'], true);
         $descRulesExport = var_export($descriptionField['rules'] ?? ['nullable', 'string'], true);
         $statusRulesExport = var_export($statusField['rules'] ?? ['required', 'string', 'in:draft,active,archived'], true);
-        $validationRules = implode("\n", array_map(fn (array $field) => "            '{$field['name']}' => " . var_export($field['rules'], true) . ',', $extraFields));
+        $validationRules = implode("\n", array_map(fn (array $field) => "            '{$field['name']}' => ".var_export($field['rules'], true).',', $extraFields));
         if ($validationRules !== '') {
-            $validationRules = "\n" . $validationRules;
+            $validationRules = "\n".$validationRules;
         }
 
         $schemaTitle = $titleField ? $titleField['schema'] : "Field::make('title')->label('Title')->required()->autofocus()";
@@ -104,20 +108,20 @@ class SliceGenerator
         } else {
             $schemaStatus = "Field::make('status', 'select')->options([\n                'draft' => 'Draft',\n                'active' => 'Active',\n                'archived' => 'Archived',\n            ])->default('draft')";
         }
-        $schemaFields = implode("\n", array_map(fn (array $field) => '            ' . $field['schema'] . ',', $extraFields));
+        $schemaFields = implode("\n", array_map(fn (array $field) => '            '.$field['schema'].',', $extraFields));
         if ($schemaFields !== '') {
-            $schemaFields = "\n" . $schemaFields;
+            $schemaFields = "\n".$schemaFields;
         }
 
         $schemaTitleLabel = var_export($titleField['label'] ?? 'Title', true);
         $schemaStatusLabel = var_export($statusField['label'] ?? 'Status', true);
-        $schemaTableColumns = implode("\n", array_map(fn (array $field) => "            Column::make('{$field['name']}')->label(" . var_export($field['label'], true) . '),', $extraFields));
+        $schemaTableColumns = implode("\n", array_map(fn (array $field) => "            Column::make('{$field['name']}')->label(".var_export($field['label'], true).'),', $extraFields));
         if ($schemaTableColumns !== '') {
-            $schemaTableColumns = "\n" . $schemaTableColumns;
+            $schemaTableColumns = "\n".$schemaTableColumns;
         }
 
         // Column definitions for the index data-table; SliceModifier appends new fields before the marker
-        $dataTableColumn = fn (string $key, string $label): string => "            ['key' => " . var_export($key, true) . ", 'label' => " . var_export($label, true) . '],';
+        $dataTableColumn = fn (string $key, string $label): string => "            ['key' => ".var_export($key, true).", 'label' => ".var_export($label, true).'],';
         $dataTableColumns = implode("\n", array_merge(
             [
                 $dataTableColumn('id', 'ID'),
@@ -130,12 +134,12 @@ class SliceGenerator
         if ($titleField) {
             $formTitle = $titleField['form'];
         } else {
-            $formTitle = <<<BLADE
+            $formTitle = <<<'BLADE'
                 <div class="space-y-1.5">
                     <x-ui.label for="title">Title *</x-ui.label>
-                    <x-ui.input id="title" name="title" value="{{ old('title', \$form->title ?? '') }}" placeholder="Enter title..." required autofocus />
+                    <x-ui.input id="title" name="title" value="{{ old('title', $form->title ?? '') }}" placeholder="Enter title..." required autofocus />
                     @error('title')
-                        <p class="text-xs text-destructive font-medium">{{ \$message }}</p>
+                        <p class="text-xs text-destructive font-medium">{{ $message }}</p>
                     @enderror
                 </div>
 BLADE;
@@ -144,12 +148,12 @@ BLADE;
         if ($descriptionField) {
             $formDescription = $descriptionField['form'];
         } else {
-            $formDescription = <<<BLADE
+            $formDescription = <<<'BLADE'
                 <div class="space-y-1.5">
                     <x-ui.label for="description">Description</x-ui.label>
-                    <x-ui.textarea id="description" name="description" rows="3" placeholder="Enter description...">{{ old('description', \$form->description ?? '') }}</x-ui.textarea>
+                    <x-ui.textarea id="description" name="description" rows="3" placeholder="Enter description...">{{ old('description', $form->description ?? '') }}</x-ui.textarea>
                     @error('description')
-                        <p class="text-xs text-destructive font-medium">{{ \$message }}</p>
+                        <p class="text-xs text-destructive font-medium">{{ $message }}</p>
                     @enderror
                 </div>
 BLADE;
@@ -158,13 +162,13 @@ BLADE;
         if ($statusField) {
             $formStatus = $statusField['form'];
         } else {
-            $formStatus = <<<BLADE
+            $formStatus = <<<'BLADE'
                 <div class="space-y-1.5">
                     <x-ui.label for="status">Publication Status</x-ui.label>
                     <select id="status" name="status" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="draft" {{ old('status', \$form->status ?? '') === 'draft' ? 'selected' : '' }}>Draft</option>
-                        <option value="active" {{ old('status', \$form->status ?? '') === 'active' ? 'selected' : '' }}>Active</option>
-                        <option value="archived" {{ old('status', \$form->status ?? '') === 'archived' ? 'selected' : '' }}>Archived</option>
+                        <option value="draft" {{ old('status', $form->status ?? '') === 'draft' ? 'selected' : '' }}>Draft</option>
+                        <option value="active" {{ old('status', $form->status ?? '') === 'active' ? 'selected' : '' }}>Active</option>
+                        <option value="archived" {{ old('status', $form->status ?? '') === 'archived' ? 'selected' : '' }}>Archived</option>
                     </select>
                 </div>
 BLADE;
@@ -172,7 +176,7 @@ BLADE;
 
         $formFields = implode("\n\n", array_column($extraFields, 'form'));
         if ($formFields !== '') {
-            $formFields = "\n\n" . $formFields;
+            $formFields = "\n\n".$formFields;
         }
         $includeApi = (bool) ($options['api'] ?? true);
         $description = isset($options['description']) && is_string($options['description']) && trim($options['description']) !== ''
@@ -190,91 +194,91 @@ BLADE;
             throw new \RuntimeException("Unable to create slices directory: {$this->slicesPath}");
         }
 
-        $stagingDir = $this->slicesPath . DIRECTORY_SEPARATOR . '.laraslice-' . bin2hex(random_bytes(8));
+        $stagingDir = $this->slicesPath.DIRECTORY_SEPARATOR.'.laraslice-'.bin2hex(random_bytes(8));
         $sliceDir = $stagingDir;
 
         try {
-        if (! mkdir($sliceDir, 0755, true) && ! is_dir($sliceDir)) {
-            throw new \RuntimeException("Unable to create temporary slice directory: {$sliceDir}");
-        }
+            if (! mkdir($sliceDir, 0755, true) && ! is_dir($sliceDir)) {
+                throw new \RuntimeException("Unable to create temporary slice directory: {$sliceDir}");
+            }
 
-        foreach (['Contracts', 'Controllers', 'Migrations', 'Models', 'Resources/views', 'Routes', 'Schemas', 'Services'] as $sub) {
-            $path = $sliceDir . '/' . $sub;
-            if (!is_dir($path)) {
-                if (! mkdir($path, 0755, true) && ! is_dir($path)) {
-                    throw new \RuntimeException("Unable to create slice directory: {$path}");
+            foreach (['Contracts', 'Controllers', 'Migrations', 'Models', 'Resources/views', 'Routes', 'Schemas', 'Services'] as $sub) {
+                $path = $sliceDir.'/'.$sub;
+                if (! is_dir($path)) {
+                    if (! mkdir($path, 0755, true) && ! is_dir($path)) {
+                        throw new \RuntimeException("Unable to create slice directory: {$path}");
+                    }
                 }
             }
-        }
 
-        // 1. slice.json Manifest
-        $manifestData = [
-            'name'        => $pluralName,
-            'title'       => Str::title(Str::snake($pluralName, ' ')),
-            'version'     => '1.0.0',
-            'description' => $description,
-            'author'      => $author,
-            'active'      => true,
-            'workflow'    => $includeWorkflow,
-            'fields'      => \LaraSlice\Core\Discovery\ManifestRepository::fieldMap($manifestFields),
-            'permissions' => !empty($options['permissions']) && is_array($options['permissions'])
-                ? $options['permissions']
-                : [
-                    "{$snakeName}.view",
-                    "{$snakeName}.create",
-                    "{$snakeName}.edit",
-                    "{$snakeName}.delete",
+            // 1. slice.json Manifest
+            $manifestData = [
+                'name' => $pluralName,
+                'title' => Str::title(Str::snake($pluralName, ' ')),
+                'version' => '1.0.0',
+                'description' => $description,
+                'author' => $author,
+                'active' => true,
+                'workflow' => $includeWorkflow,
+                'fields' => ManifestRepository::fieldMap($manifestFields),
+                'permissions' => ! empty($options['permissions']) && is_array($options['permissions'])
+                    ? $options['permissions']
+                    : [
+                        "{$snakeName}.view",
+                        "{$snakeName}.create",
+                        "{$snakeName}.edit",
+                        "{$snakeName}.delete",
+                    ],
+                'namespace' => $sliceNamespace,
+                'navigation' => [
+                    'label' => Str::title(Str::snake($pluralName, ' ')),
+                    'url' => $navUrl,
+                    'icon' => 'package',
+                    'order' => 50,
                 ],
-            'namespace'   => $sliceNamespace,
-            'navigation'  => [
-                'label' => Str::title(Str::snake($pluralName, ' ')),
-                'url'   => $navUrl,
-                'icon'  => 'package',
-                'order' => 50,
-            ],
-        ];
-
-        if ($domain !== null) {
-            $manifestData['domain'] = $domain;
-            $manifestData['navigation']['group'] = $domain;
-        }
-
-        $this->writeFile($sliceDir . '/slice.json', json_encode($manifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-
-        // 1b. Canonical slice.yaml Blueprint
-        $yamlData = [
-            'schema_version' => 1,
-            'name'           => Str::title(Str::snake($pluralName, ' ')),
-            'handle'         => Str::snake(Str::singular($pluralName)),
-            'description'    => $description,
-        ];
-
-        if ($domain !== null) {
-            $yamlData['domain'] = $domain;
-            $yamlData['navigation'] = [
-                'group' => $domain,
-                'label' => Str::title(Str::snake($pluralName, ' ')),
-                'url'   => $navUrl,
             ];
-        }
 
-        $yamlData['models'] = [
-            [
+            if ($domain !== null) {
+                $manifestData['domain'] = $domain;
+                $manifestData['navigation']['group'] = $domain;
+            }
+
+            $this->writeFile($sliceDir.'/slice.json', json_encode($manifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+            // 1b. Canonical slice.yaml Blueprint
+            $yamlData = [
+                'schema_version' => 1,
+                'name' => Str::title(Str::snake($pluralName, ' ')),
                 'handle' => Str::snake(Str::singular($pluralName)),
-                'table'  => $tableName,
-                'root'   => true,
-                'fields' => array_map(static fn (array $f): array => [
-                    'handle'   => $f['name'],
-                    'label'    => $f['label'] ?? Str::headline($f['name']),
-                    'type'     => $f['type'],
-                    'required' => empty($f['nullable']),
-                ], $manifestFields),
-            ],
-        ];
-        $this->writeFile($sliceDir . '/slice.yaml', \Symfony\Component\Yaml\Yaml::dump($yamlData, 10, 2));
+                'description' => $description,
+            ];
 
-// 2. Model
-        $modelContent = <<<PHP
+            if ($domain !== null) {
+                $yamlData['domain'] = $domain;
+                $yamlData['navigation'] = [
+                    'group' => $domain,
+                    'label' => Str::title(Str::snake($pluralName, ' ')),
+                    'url' => $navUrl,
+                ];
+            }
+
+            $yamlData['models'] = [
+                [
+                    'handle' => Str::snake(Str::singular($pluralName)),
+                    'table' => $tableName,
+                    'root' => true,
+                    'fields' => array_map(static fn (array $f): array => [
+                        'handle' => $f['name'],
+                        'label' => $f['label'] ?? Str::headline($f['name']),
+                        'type' => $f['type'],
+                        'required' => empty($f['nullable']),
+                    ], $manifestFields),
+                ],
+            ];
+            $this->writeFile($sliceDir.'/slice.yaml', Yaml::dump($yamlData, 10, 2));
+
+            // 2. Model
+            $modelContent = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\Models;
@@ -283,25 +287,25 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LaraSlice\Core\Audit\Traits\AuditableSlice;
 PHP;
-        if ($softDeletes) {
-            $modelContent .= "\nuse Illuminate\\Database\\Eloquent\\SoftDeletes;";
-        }
-        if ($includeWorkflow) {
-            $modelContent .= "\nuse LaraSlice\\Core\\Workflow\\HasWorkflow;\n";
-        }
-
-        $modelRelations = '';
-        foreach ($fields as $def) {
-            $isForeignKey = ($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id');
-            if (! $isForeignKey) {
-                continue;
+            if ($softDeletes) {
+                $modelContent .= "\nuse Illuminate\\Database\\Eloquent\\SoftDeletes;";
             }
-            $relation = $def['relation'] ?? [];
-            $relName = Str::camel($relation['name'] ?? Str::replaceLast('_id', '', $def['name']));
-            $targetModel = Str::studly(Str::singular($relation['model'] ?? Str::replaceLast('_id', '', $def['name'])));
-            $foreignKey = var_export($def['name'], true);
-            $targetExport = var_export($targetModel, true);
-            $modelRelations .= <<<REL
+            if ($includeWorkflow) {
+                $modelContent .= "\nuse LaraSlice\\Core\\Workflow\\HasWorkflow;\n";
+            }
+
+            $modelRelations = '';
+            foreach ($fields as $def) {
+                $isForeignKey = ($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id');
+                if (! $isForeignKey) {
+                    continue;
+                }
+                $relation = $def['relation'] ?? [];
+                $relName = Str::camel($relation['name'] ?? Str::replaceLast('_id', '', $def['name']));
+                $targetModel = Str::studly(Str::singular($relation['model'] ?? Str::replaceLast('_id', '', $def['name'])));
+                $foreignKey = var_export($def['name'], true);
+                $targetExport = var_export($targetModel, true);
+                $modelRelations .= <<<REL
 
 
     public function {$relName}(): BelongsTo
@@ -313,31 +317,31 @@ PHP;
         return \$this->belongsTo(\$class, {$foreignKey});
     }
 REL;
-        }
+            }
 
-        $modelContent .= <<<PHP
+            $modelContent .= <<<PHP
 
 class {$studlyName} extends Model
 {
     use AuditableSlice;
 PHP;
-        if ($softDeletes) {
-            $modelContent .= "\n    use SoftDeletes;\n";
-        }
-        if ($includeWorkflow) {
-            $modelContent .= "\n    use HasWorkflow;\n";
-        }
-        $modelContent .= <<<PHP
+            if ($softDeletes) {
+                $modelContent .= "\n    use SoftDeletes;\n";
+            }
+            if ($includeWorkflow) {
+                $modelContent .= "\n    use HasWorkflow;\n";
+            }
+            $modelContent .= <<<PHP
 
     protected \$table = '{$tableName}';
     protected \$fillable = {$fillable};{$modelCasts}
 {$modelRelations}
 }
 PHP;
-        $this->writeFile($sliceDir . "/Models/{$studlyName}.php", $modelContent);
+            $this->writeFile($sliceDir."/Models/{$studlyName}.php", $modelContent);
 
-        // 3. Contracts (DTOs)
-        $formDto = <<<PHP
+            // 3. Contracts (DTOs)
+            $formDto = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Contracts;
@@ -351,9 +355,9 @@ class {$studlyName}FormBusinessObject extends BaseFormBusinessObject
     {$dtoStatus}{$dtoProperties}
 }
 PHP;
-        $this->writeFile($sliceDir . "/Contracts/{$studlyName}FormBusinessObject.php", $formDto);
+            $this->writeFile($sliceDir."/Contracts/{$studlyName}FormBusinessObject.php", $formDto);
 
-        $listingDto = <<<PHP
+            $listingDto = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Contracts;
@@ -366,9 +370,9 @@ class {$studlyName}ListingBusinessObject extends BaseListingBusinessObject
     {$dtoStatus}{$dtoProperties}
 }
 PHP;
-        $this->writeFile($sliceDir . "/Contracts/{$studlyName}ListingBusinessObject.php", $listingDto);
+            $this->writeFile($sliceDir."/Contracts/{$studlyName}ListingBusinessObject.php", $listingDto);
 
-        $filterDto = <<<PHP
+            $filterDto = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Contracts;
@@ -383,10 +387,10 @@ class {$studlyName}FilterBusinessObject extends BaseFilter
     }
 }
 PHP;
-        $this->writeFile($sliceDir . "/Contracts/{$studlyName}FilterBusinessObject.php", $filterDto);
+            $this->writeFile($sliceDir."/Contracts/{$studlyName}FilterBusinessObject.php", $filterDto);
 
-        // 4. Service
-        $service = <<<PHP
+            // 4. Service
+            $service = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Services;
@@ -432,10 +436,10 @@ class {$studlyName}SliceService extends BaseSliceService
     }
 }
 PHP;
-        $this->writeFile($sliceDir . "/Services/{$studlyName}SliceService.php", $service);
+            $this->writeFile($sliceDir."/Services/{$studlyName}SliceService.php", $service);
 
-        // 5. API Controller
-        $apiController = <<<PHP
+            // 5. API Controller
+            $apiController = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Controllers;
@@ -472,14 +476,14 @@ class {$studlyName}ApiController extends BaseSliceApiController
     }
 }
 PHP;
-        if ($includeApi) {
-            $this->writeFile($sliceDir . "/Controllers/{$studlyName}ApiController.php", $apiController);
-        }
+            if ($includeApi) {
+                $this->writeFile($sliceDir."/Controllers/{$studlyName}ApiController.php", $apiController);
+            }
 
-        $pluralSnake = Str::snake($pluralName);
+            $pluralSnake = Str::snake($pluralName);
 
-        // 6. Web Controller
-        $webController = <<<PHP
+            // 6. Web Controller
+            $webController = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Controllers;
@@ -526,33 +530,33 @@ class {$studlyName}WebController extends BaseSliceWebController
     }
 }
 PHP;
-        $this->writeFile($sliceDir . "/Controllers/{$studlyName}WebController.php", $webController);
+            $this->writeFile($sliceDir."/Controllers/{$studlyName}WebController.php", $webController);
 
-        $targetRedirect = $domainSlug ? "{$domainSlug}/{$pluralSnake}" : $pluralSnake;
-        $aliasRedirects = [];
-        $kebabPlural = Str::kebab($pluralName);
-        $lowerPlural = strtolower($pluralName);
-        $kebabSingular = Str::kebab($studlyName);
-        $lowerSingular = strtolower($studlyName);
+            $targetRedirect = $domainSlug ? "{$domainSlug}/{$pluralSnake}" : $pluralSnake;
+            $aliasRedirects = [];
+            $kebabPlural = Str::kebab($pluralName);
+            $lowerPlural = strtolower($pluralName);
+            $kebabSingular = Str::kebab($studlyName);
+            $lowerSingular = strtolower($studlyName);
 
-        if ($domainSlug) {
-            $aliasRedirects[] = "Route::redirect('{$pluralSnake}', '/{$targetRedirect}');";
-            $aliasRedirects[] = "Route::redirect('{$pluralSnake}/{any}', '/{$targetRedirect}/{any}')->where('any', '.*');";
-        }
-
-        foreach (array_unique([$snakeName, $kebabPlural, $lowerPlural, $kebabSingular, $lowerSingular]) as $altSlug) {
-            if ($altSlug !== $pluralSnake && $altSlug !== $targetRedirect) {
-                $aliasRedirects[] = "Route::redirect('{$altSlug}', '/{$targetRedirect}');";
+            if ($domainSlug) {
+                $aliasRedirects[] = "Route::redirect('{$pluralSnake}', '/{$targetRedirect}');";
+                $aliasRedirects[] = "Route::redirect('{$pluralSnake}/{any}', '/{$targetRedirect}/{any}')->where('any', '.*');";
             }
-        }
-        $aliasRedirectCode = implode("\n", $aliasRedirects);
 
-        // One named group only: identical URIs under several names collapse to the last one
-        // in a compiled route cache, which broke route('...') calls after `php artisan route:cache`.
-        $domainNamedRoutes = '';
-        $aliasRoutes = '';
+            foreach (array_unique([$snakeName, $kebabPlural, $lowerPlural, $kebabSingular, $lowerSingular]) as $altSlug) {
+                if ($altSlug !== $pluralSnake && $altSlug !== $targetRedirect) {
+                    $aliasRedirects[] = "Route::redirect('{$altSlug}', '/{$targetRedirect}');";
+                }
+            }
+            $aliasRedirectCode = implode("\n", $aliasRedirects);
 
-        $webRoutes = <<<PHP
+            // One named group only: identical URIs under several names collapse to the last one
+            // in a compiled route cache, which broke route('...') calls after `php artisan route:cache`.
+            $domainNamedRoutes = '';
+            $aliasRoutes = '';
+
+            $webRoutes = <<<PHP
 <?php
 
 use Illuminate\Support\Facades\Route;
@@ -573,10 +577,10 @@ Route::prefix('{$routePrefix}')->name('{$pluralSnake}.')->middleware(config('lar
 // URL slug alias redirects
 {$aliasRedirectCode}
 PHP;
-        $this->writeFile($sliceDir . "/Routes/web.php", $webRoutes);
+            $this->writeFile($sliceDir.'/Routes/web.php', $webRoutes);
 
-        $apiPrefix = $domainSlug ? "{$domainSlug}/{$pluralSnake}" : $pluralSnake;
-        $apiFlatAlias = $domainSlug ? <<<PHP
+            $apiPrefix = $domainSlug ? "{$domainSlug}/{$pluralSnake}" : $pluralSnake;
+            $apiFlatAlias = $domainSlug ? <<<PHP
 
 // Flat API alias fallback
 Route::prefix('{$pluralSnake}')->middleware(config('laraslice.generated_routes.api_middleware', ['api', 'auth:sanctum']))->group(function () {
@@ -587,7 +591,7 @@ Route::prefix('{$pluralSnake}')->middleware(config('laraslice.generated_routes.a
 });
 PHP : '';
 
-        $apiRoutes = <<<PHP
+            $apiRoutes = <<<PHP
 <?php
 
 use Illuminate\Support\Facades\Route;
@@ -601,13 +605,13 @@ Route::prefix('{$apiPrefix}')->middleware(config('laraslice.generated_routes.api
 });
 {$apiFlatAlias}
 PHP;
-        if ($includeApi) {
-            $this->writeFile($sliceDir . "/Routes/api.php", $apiRoutes);
-        }
+            if ($includeApi) {
+                $this->writeFile($sliceDir.'/Routes/api.php', $apiRoutes);
+            }
 
-        // 8. Migration
-        $timestamp = date('Y_m_d_His');
-        $migration = <<<PHP
+            // 8. Migration
+            $timestamp = date('Y_m_d_His');
+            $migration = <<<PHP
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -634,10 +638,10 @@ return new class extends Migration {
     }
 };
 PHP;
-        $this->writeFile($sliceDir . "/Migrations/{$timestamp}_create_{$tableName}_table.php", $migration);
+            $this->writeFile($sliceDir."/Migrations/{$timestamp}_create_{$tableName}_table.php", $migration);
 
-        // 9. Filament-inspired Declarative Schema
-        $schemaContent = <<<PHP
+            // 9. Filament-inspired Declarative Schema
+            $schemaContent = <<<PHP
 <?php
 
 namespace {$sliceNamespace}\\Schemas;
@@ -668,10 +672,10 @@ class {$studlyName}Schema extends SliceSchema
     }
 }
 PHP;
-        $this->writeFile($sliceDir . "/Schemas/{$studlyName}Schema.php", $schemaContent);
+            $this->writeFile($sliceDir."/Schemas/{$studlyName}Schema.php", $schemaContent);
 
-        // 10. Pure BlatUI Views with Universal Layout Integration
-        $bladeIndex = <<<BLADE
+            // 10. Pure BlatUI Views with Universal Layout Integration
+            $bladeIndex = <<<BLADE
 @extends('layouts.app')
 
 @section('content')
@@ -793,9 +797,9 @@ PHP;
 </div>
 @endsection
 BLADE;
-        $this->writeFile($sliceDir . "/Resources/views/index.blade.php", $bladeIndex);
+            $this->writeFile($sliceDir.'/Resources/views/index.blade.php', $bladeIndex);
 
-        $bladeForm = <<<BLADE
+            $bladeForm = <<<BLADE
 @extends('layouts.app')
 
 @section('content')
@@ -854,36 +858,37 @@ BLADE;
 </div>
 @endsection
 BLADE;
-        $this->writeFile($sliceDir . "/Resources/views/form.blade.php", $bladeForm);
-        $this->writeFile($sliceDir . "/Resources/views/create.blade.php", $bladeForm);
-        $this->writeFile($sliceDir . "/Resources/views/edit.blade.php", $bladeForm);
+            $this->writeFile($sliceDir.'/Resources/views/form.blade.php', $bladeForm);
+            $this->writeFile($sliceDir.'/Resources/views/create.blade.php', $bladeForm);
+            $this->writeFile($sliceDir.'/Resources/views/edit.blade.php', $bladeForm);
 
-        $renamed = false;
-        if (! file_exists($targetDir)) {
-            $parent = dirname($targetDir);
-            if (! is_dir($parent) && ! mkdir($parent, 0755, true) && ! is_dir($parent)) {
-                throw new \RuntimeException("Unable to create parent directory for slice: {$parent}");
-            }
-            for ($attempt = 0; $attempt < 5; $attempt++) {
-                if (@rename($stagingDir, $targetDir)) {
-                    $renamed = true;
-                    break;
+            $renamed = false;
+            if (! file_exists($targetDir)) {
+                $parent = dirname($targetDir);
+                if (! is_dir($parent) && ! mkdir($parent, 0755, true) && ! is_dir($parent)) {
+                    throw new \RuntimeException("Unable to create parent directory for slice: {$parent}");
                 }
-                usleep(25000);
+                for ($attempt = 0; $attempt < 5; $attempt++) {
+                    if (@rename($stagingDir, $targetDir)) {
+                        $renamed = true;
+                        break;
+                    }
+                    usleep(25000);
+                }
             }
-        }
 
-        if (! $renamed) {
-            throw new \RuntimeException("Unable to publish generated slice to {$targetDir}; no existing files were replaced.");
-        }
-
-        try {
-            if (function_exists('app') && app()->bound(\LaraSlice\Core\Discovery\SliceManager::class)) {
-                app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+            if (! $renamed) {
+                throw new \RuntimeException("Unable to publish generated slice to {$targetDir}; no existing files were replaced.");
             }
-        } catch (\Throwable) {}
 
-        return $targetDir;
+            try {
+                if (function_exists('app') && app()->bound(SliceManager::class)) {
+                    app(SliceManager::class)->syncPermissions();
+                }
+            } catch (\Throwable) {
+            }
+
+            return $targetDir;
         } catch (\Throwable $exception) {
             $this->removeDirectory($stagingDir);
 
@@ -898,7 +903,7 @@ BLADE;
             try {
                 token_get_all($contents, TOKEN_PARSE);
             } catch (\ParseError $e) {
-                throw new \RuntimeException('Generated ' . basename($path) . " is not valid PHP (line {$e->getLine()}): {$e->getMessage()}", 0, $e);
+                throw new \RuntimeException('Generated '.basename($path)." is not valid PHP (line {$e->getLine()}): {$e->getMessage()}", 0, $e);
             }
         }
 
@@ -1064,7 +1069,7 @@ BLADE;
                 $columnExpression .= '->nullable()';
             }
             if ($default !== null) {
-                $columnExpression .= '->default(' . var_export($default, true) . ')';
+                $columnExpression .= '->default('.var_export($default, true).')';
             }
             if ($type === 'foreign_id') {
                 $references = $definition['references'] ?? null;
@@ -1073,26 +1078,26 @@ BLADE;
                 }
                 // A real constraint only when the referenced table is known; always an index
                 $columnExpression = $references !== null
-                    ? "\$table->foreignId('{$name}')" . ($nullable ? '->nullable()' : '') . "->constrained('{$references}')->" . ($nullable ? 'nullOnDelete()' : 'restrictOnDelete()')
-                    : $columnExpression . '->index()';
+                    ? "\$table->foreignId('{$name}')".($nullable ? '->nullable()' : '')."->constrained('{$references}')->".($nullable ? 'nullOnDelete()' : 'restrictOnDelete()')
+                    : $columnExpression.'->index()';
             }
 
             $rules = array_values(array_filter([
                 $nullable ? 'nullable' : 'required',
                 $types[$type]['validation'],
-                in_array($type, ['string', 'email', 'select', 'url'], true) ? 'max:' . $maxLength : null,
-                $type === 'select' && ! empty($options) ? 'in:' . implode(',', array_keys($options)) : null,
+                in_array($type, ['string', 'email', 'select', 'url'], true) ? 'max:'.$maxLength : null,
+                $type === 'select' && ! empty($options) ? 'in:'.implode(',', array_keys($options)) : null,
             ]));
 
-            $schema = "Field::make('{$name}', '{$types[$type]['input']}')->label(" . var_export($label, true) . ')';
+            $schema = "Field::make('{$name}', '{$types[$type]['input']}')->label(".var_export($label, true).')';
             if ($required) {
                 $schema .= '->required()';
             }
             if ($default !== null) {
-                $schema .= '->default(' . var_export($default, true) . ')';
+                $schema .= '->default('.var_export($default, true).')';
             }
             if ($options) {
-                $schema .= '->options(' . var_export($options, true) . ')';
+                $schema .= '->options('.var_export($options, true).')';
             }
 
             $definitions[$name] = [
@@ -1103,7 +1108,7 @@ BLADE;
                 'type' => $type,
                 'schema' => $schema,
                 'form' => $this->renderFormField($name, $label, $types[$type]['input'], $required, $default, $options),
-                'migration' => $columnExpression . ';',
+                'migration' => $columnExpression.';',
                 'default' => $default,
                 'nullable' => $nullable,
                 'options' => $options,
@@ -1123,7 +1128,7 @@ BLADE;
     private function dtoProperty(string $name, ?array $field, string $fallbackType = '?string', mixed $fallbackDefault = null): string
     {
         if ($field === null) {
-            return "public {$fallbackType} \${$name} = " . var_export($fallbackDefault, true) . ';';
+            return "public {$fallbackType} \${$name} = ".var_export($fallbackDefault, true).';';
         }
 
         $default = $field['default'] ?? null;
@@ -1138,7 +1143,7 @@ BLADE;
             $default = '';
         }
 
-        return "public {$type} \${$name} = " . var_export($default, true) . ';';
+        return "public {$type} \${$name} = ".var_export($default, true).';';
     }
 
     private function renderFormField(string $name, string $label, string $type, bool $required, mixed $default, array $options): string
@@ -1151,8 +1156,8 @@ BLADE;
 
         if ($type === 'select' || $type === 'foreign_id' || str_ends_with($name, '_id')) {
             $baseRel = Str::replaceLast('_id', '', $name);
-            $optionsVar = Str::camel(Str::plural($baseRel)) . 'Options';
-            $quickStoreUrlVar = Str::camel(Str::plural($baseRel)) . 'QuickStoreUrl';
+            $optionsVar = Str::camel(Str::plural($baseRel)).'Options';
+            $quickStoreUrlVar = Str::camel(Str::plural($baseRel)).'QuickStoreUrl';
             $requiredBool = $required ? 'true' : 'false';
             $cleanTitle = str_ends_with($name, '_id') ? Str::headline($baseRel) : $safeLabel;
 
@@ -1174,7 +1179,7 @@ BLADE;
 BLADE;
             }
 
-            $optionHtml = '<option value="">Select ' . $safeLabel . '...</option>';
+            $optionHtml = '<option value="">Select '.$safeLabel.'...</option>';
             foreach ($options as $value => $optionLabel) {
                 $displayLabel = ($optionLabel === $value) ? Str::headline($optionLabel) : $optionLabel;
                 $safeValue = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');

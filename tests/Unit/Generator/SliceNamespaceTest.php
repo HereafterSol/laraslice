@@ -16,7 +16,7 @@ class SliceNamespaceTest extends TestCase
             'starts with B' => ['Brand\\Slices', 'Brand\\Slices'],
             'ends in n, nested' => ['App\\Domain\\Main', 'App\\Domain\\Main'],
             'ends in x' => ['App\\Inbox', 'App\\Inbox'],
-            'surrounding slashes and spaces' => [" \\App\\Slices\\ ", 'App\\Slices'],
+            'surrounding slashes and spaces' => [' \\App\\Slices\\ ', 'App\\Slices'],
             'trailing newline' => ["App\\Slices\n", 'App\\Slices'],
         ];
     }

@@ -2,6 +2,11 @@
 
 namespace LaraSlice\Slices\Users\Services;
 
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
+
 /**
  * Renders QR codes on the server so TOTP secrets never leave the application.
  *
@@ -12,7 +17,7 @@ class QrCodeService
 {
     public function available(): bool
     {
-        return class_exists(\BaconQrCode\Writer::class);
+        return class_exists(Writer::class);
     }
 
     public function svg(string $text, int $size = 192): ?string
@@ -21,11 +26,11 @@ class QrCodeService
             return null;
         }
 
-        $renderer = new \BaconQrCode\Renderer\ImageRenderer(
-            new \BaconQrCode\Renderer\RendererStyle\RendererStyle($size, 1),
-            new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+        $renderer = new ImageRenderer(
+            new RendererStyle($size, 1),
+            new SvgImageBackEnd
         );
 
-        return (new \BaconQrCode\Writer($renderer))->writeString($text);
+        return (new Writer($renderer))->writeString($text);
     }
 }

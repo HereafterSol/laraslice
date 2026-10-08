@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Tests\Feature\Generator;
 
+use App\Slices\Gadgets\Contracts\GadgetFormBusinessObject;
 use InvalidArgumentException;
 use LaraSlice\Core\Base\BaseFormBusinessObject;
 use LaraSlice\Generator\SliceGenerator;
@@ -16,7 +17,7 @@ class GeneratorCorrectnessTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-correctness-' . bin2hex(random_bytes(8));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-correctness-'.bin2hex(random_bytes(8));
     }
 
     protected function tearDown(): void
@@ -64,15 +65,15 @@ class GeneratorCorrectnessTest extends TestCase
             ['name' => 'stock', 'type' => 'integer', 'label' => 'Stock', 'default' => 3],
         ]);
 
-        $dto = file_get_contents($path . '/Contracts/GadgetFormBusinessObject.php');
+        $dto = file_get_contents($path.'/Contracts/GadgetFormBusinessObject.php');
         $this->assertStringContainsString('public bool $status = false;', $dto);
         $this->assertStringContainsString('public ?string $title = NULL;', $dto);
         $this->assertStringContainsString('public ?float $weight = 1.5;', $dto);
         $this->assertStringContainsString('public ?int $stock = 3;', $dto);
 
         // The generated class must load and accept typical form input
-        require_once $path . '/Contracts/GadgetFormBusinessObject.php';
-        $form = \App\Slices\Gadgets\Contracts\GadgetFormBusinessObject::fromArray([
+        require_once $path.'/Contracts/GadgetFormBusinessObject.php';
+        $form = GadgetFormBusinessObject::fromArray([
             'status' => '1', 'title' => null, 'weight' => '2.25', 'stock' => '7',
         ]);
         $this->assertTrue($form->status);
@@ -83,11 +84,11 @@ class GeneratorCorrectnessTest extends TestCase
     public function test_generated_schema_class_can_build_its_fields(): void
     {
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Widget');
-        $schemaFile = glob($path . '/Schemas/*.php')[0] ?? null;
+        $schemaFile = glob($path.'/Schemas/*.php')[0] ?? null;
         $this->assertNotNull($schemaFile);
 
         require_once $schemaFile;
-        $class = 'App\\Slices\\Widgets\\Schemas\\' . basename($schemaFile, '.php');
+        $class = 'App\\Slices\\Widgets\\Schemas\\'.basename($schemaFile, '.php');
         $fields = $class::fields();
 
         $this->assertNotEmpty($fields);
@@ -115,8 +116,12 @@ class GeneratorCorrectnessTest extends TestCase
 class TypedForm extends BaseFormBusinessObject
 {
     public string $name = 'default';
+
     public int $count = 1;
+
     public float $price = 0.0;
+
     public bool $active = false;
+
     public array $tags = [];
 }

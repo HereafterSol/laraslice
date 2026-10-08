@@ -23,7 +23,7 @@ class WorkflowEngine
         $transitions = static::getTransitions($class);
         $currentState = $model->getCurrentState();
 
-        return array_filter($transitions, fn(WorkflowTransition $t) => $t->canApply($currentState, $model));
+        return array_filter($transitions, fn (WorkflowTransition $t) => $t->canApply($currentState, $model));
     }
 
     public static function canTransition($model, string $transitionName): bool
@@ -31,7 +31,7 @@ class WorkflowEngine
         $class = get_class($model);
         $transitions = static::getTransitions($class);
 
-        if (!isset($transitions[$transitionName])) {
+        if (! isset($transitions[$transitionName])) {
             return false;
         }
 

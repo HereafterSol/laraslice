@@ -14,7 +14,7 @@ class ManifestRepositoryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-manifest-' . bin2hex(random_bytes(6));
+        $this->dir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-manifest-'.bin2hex(random_bytes(6));
         mkdir($this->dir);
     }
 
@@ -33,7 +33,7 @@ class ManifestRepositoryTest extends TestCase
 
     public function test_list_and_mixed_field_formats_become_a_name_keyed_map(): void
     {
-        $file = $this->dir . '/slice.json';
+        $file = $this->dir.'/slice.json';
         // What older versions produced: a generator list, later extended by the modifier with a keyed entry
         file_put_contents($file, json_encode([
             'name' => 'Products',
@@ -55,7 +55,7 @@ class ManifestRepositoryTest extends TestCase
         ]);
         (new SliceModifier($this->dir, 'App\\Slices'))->addFieldsBatch('Product', [['name' => 'barcode', 'type' => 'string']]);
 
-        $raw = json_decode(file_get_contents($path . '/slice.json'), true);
+        $raw = json_decode(file_get_contents($path.'/slice.json'), true);
         $this->assertSame(['sku', 'barcode'], array_keys($raw['fields']));
         $this->assertSame('SKU', $raw['fields']['sku']['label']);
     }
@@ -63,6 +63,6 @@ class ManifestRepositoryTest extends TestCase
     public function test_writes_fail_loudly_instead_of_silently(): void
     {
         $this->expectException(\JsonException::class);
-        ManifestRepository::write($this->dir . '/slice.json', ['name' => "\xB1\x31"]);
+        ManifestRepository::write($this->dir.'/slice.json', ['name' => "\xB1\x31"]);
     }
 }

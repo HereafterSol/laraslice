@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Schema;
  * "source" marks permissions synced from slice manifests ("laraslice"), which are
  * the only ones LaraSlice may prune; permissions created by the application stay.
  */
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::table('permissions', function (Blueprint $table) {

@@ -26,7 +26,7 @@ class RecoveryCodeService
         $plain = [];
         for ($i = 0; $i < self::COUNT; $i++) {
             $raw = strtoupper(bin2hex(random_bytes(5)));
-            $plain[] = substr($raw, 0, 5) . '-' . substr($raw, 5, 5);
+            $plain[] = substr($raw, 0, 5).'-'.substr($raw, 5, 5);
             $hash = self::hash($raw);
 
             $user->recoveryCodes()->create(['code_hash' => $hash, 'created_at' => now()]);

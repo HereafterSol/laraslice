@@ -2,10 +2,9 @@
 
 namespace LaraSlice\Slices\Settings\Services;
 
-use LaraSlice\Core\Base\BaseSliceService;
+use Illuminate\Support\Facades\Mail;
 use LaraSlice\Slices\Settings\Contracts\SmtpSettingsFormBusinessObject;
 use LaraSlice\Slices\Settings\Models\Setting;
-use Illuminate\Support\Facades\Mail;
 
 class SettingSliceService
 {
@@ -14,7 +13,7 @@ class SettingSliceService
      */
     public function getSmtpSettings(): SmtpSettingsFormBusinessObject
     {
-        $dto = new SmtpSettingsFormBusinessObject();
+        $dto = new SmtpSettingsFormBusinessObject;
         $dto->mail_host = Setting::get('mail_host', 'smtp.mailtrap.io');
         $dto->mail_port = (int) Setting::get('mail_port', 587);
         $dto->mail_username = Setting::get('mail_username', '');
@@ -36,7 +35,7 @@ class SettingSliceService
         Setting::set('mail_username', $data['mail_username'] ?? '', 'mail', false, 'SMTP Auth Username');
 
         // Only update password if a new one is supplied
-        if (!empty($data['mail_password'])) {
+        if (! empty($data['mail_password'])) {
             Setting::set('mail_password', $data['mail_password'], 'mail', true, 'SMTP Auth Password');
         }
 
@@ -58,9 +57,9 @@ class SettingSliceService
         try {
             Setting::applySmtpConfig();
 
-            Mail::raw("Hello,\n\nThis is a verification email sent from your LaraSlice Core SMTP service.\nConnection established successfully at " . now()->toIso8601String(), function ($message) use ($recipientEmail) {
+            Mail::raw("Hello,\n\nThis is a verification email sent from your LaraSlice Core SMTP service.\nConnection established successfully at ".now()->toIso8601String(), function ($message) use ($recipientEmail) {
                 $message->to($recipientEmail)
-                        ->subject('LaraSlice SMTP Diagnostic Test: Successful');
+                    ->subject('LaraSlice SMTP Diagnostic Test: Successful');
             });
 
             return [
@@ -70,7 +69,7 @@ class SettingSliceService
         } catch (\Throwable $e) {
             return [
                 'success' => false,
-                'message' => "SMTP Connection Failed: " . $e->getMessage(),
+                'message' => 'SMTP Connection Failed: '.$e->getMessage(),
             ];
         }
     }

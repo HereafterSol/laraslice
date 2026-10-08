@@ -49,7 +49,7 @@ class DataTableRows
             $value instanceof DateTimeInterface => $value->format('Y-m-d H:i'),
             $value instanceof BackedEnum => (string) $value->value,
             $value instanceof UnitEnum => $value->name,
-            is_array($value), is_object($value) && !method_exists($value, '__toString') => json_encode($value),
+            is_array($value), is_object($value) && ! method_exists($value, '__toString') => json_encode($value),
             default => (string) $value,
         };
     }

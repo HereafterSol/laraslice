@@ -2,15 +2,16 @@
 
 namespace LaraSlice\Tests\Unit\Security;
 
-use PHPUnit\Framework\TestCase;
-use LaraSlice\Core\Security\Traits\HasSlicePermissions;
 use Illuminate\Support\Collection;
+use LaraSlice\Core\Security\Traits\HasSlicePermissions;
+use PHPUnit\Framework\TestCase;
 
 class DummyUser
 {
     use HasSlicePermissions;
 
     public int $id = 1;
+
     public Collection $roles;
 
     public function __construct(array $roles = [])
@@ -22,6 +23,7 @@ class DummyUser
 class DummyRole
 {
     public string $slug;
+
     public Collection $permissions;
 
     public function __construct(string $slug, array $permissions = [])
@@ -34,7 +36,9 @@ class DummyRole
 class DummyPermission
 {
     public int $id;
+
     public string $slug;
+
     public string $name;
 
     public function __construct(int $id, string $slug, string $name = '')

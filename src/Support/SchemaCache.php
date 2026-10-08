@@ -36,7 +36,7 @@ final class SchemaCache
     /** @return array<int, string>|false */
     private static function columns(string $table): array|false
     {
-        $key = DB::getDefaultConnection() . ':' . $table;
+        $key = DB::getDefaultConnection().':'.$table;
         if (! array_key_exists($key, self::$tables)) {
             self::$tables[$key] = Schema::hasTable($table)
                 ? array_map('strtolower', Schema::getColumnListing($table))

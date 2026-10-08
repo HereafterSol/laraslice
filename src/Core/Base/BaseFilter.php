@@ -7,9 +7,13 @@ use LaraSlice\Core\Contracts\IFilterObject;
 class BaseFilter implements IFilterObject
 {
     public ?string $search = null;
+
     public int $page = 1;
+
     public int $limit = 20;
+
     public ?string $sortBy = 'created_at';
+
     public bool $sortDesc = true;
 
     public function __construct(array $params = [])
@@ -47,19 +51,38 @@ class BaseFilter implements IFilterObject
         return $this;
     }
 
-    public function getSearch(): ?string { return $this->search; }
-    public function getPage(): int { return $this->page; }
-    public function getLimit(): int { return $this->limit; }
-    public function getSortBy(): ?string { return $this->sortBy; }
-    public function isSortDesc(): bool { return $this->sortDesc; }
+    public function getSearch(): ?string
+    {
+        return $this->search;
+    }
+
+    public function getPage(): int
+    {
+        return $this->page;
+    }
+
+    public function getLimit(): int
+    {
+        return $this->limit;
+    }
+
+    public function getSortBy(): ?string
+    {
+        return $this->sortBy;
+    }
+
+    public function isSortDesc(): bool
+    {
+        return $this->sortDesc;
+    }
 
     public function toArray(): array
     {
         return [
-            'search'   => $this->search,
-            'page'     => $this->page,
-            'limit'    => $this->limit,
-            'sortBy'   => $this->sortBy,
+            'search' => $this->search,
+            'page' => $this->page,
+            'limit' => $this->limit,
+            'sortBy' => $this->sortBy,
             'sortDesc' => $this->sortDesc,
         ];
     }

@@ -2,26 +2,27 @@
 
 namespace LaraSlice\Tests\Feature\Generator;
 
-use LaraSlice\Generator\SliceModifier;
 use Illuminate\Support\Facades\Schema;
+use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Tests\TestCase;
 
 class SliceModifierStudioFeaturesTest extends TestCase
 {
     private string $slicesPath;
+
     private string $slicePath;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-studio-tests-' . bin2hex(random_bytes(8));
-        $this->slicePath = $this->slicesPath . DIRECTORY_SEPARATOR . 'ShopProducts';
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-studio-tests-'.bin2hex(random_bytes(8));
+        $this->slicePath = $this->slicesPath.DIRECTORY_SEPARATOR.'ShopProducts';
         foreach (['Contracts', 'Controllers', 'Migrations', 'Models', 'Resources/views', 'Routes', 'Services'] as $directory) {
-            mkdir($this->slicePath . DIRECTORY_SEPARATOR . $directory, 0755, true);
+            mkdir($this->slicePath.DIRECTORY_SEPARATOR.$directory, 0755, true);
         }
 
-        file_put_contents($this->slicePath . '/slice.json', json_encode([
+        file_put_contents($this->slicePath.'/slice.json', json_encode([
             'name' => 'ShopProducts',
             'version' => '1.0.0',
             'tables' => ['shop_products'],
@@ -39,15 +40,15 @@ class SliceModifierStudioFeaturesTest extends TestCase
                     'version' => '1.0.0',
                     'description' => 'Initial vertical slice scaffold for ShopProducts',
                     'date' => '2026-09-29 12:00:00',
-                ]
+                ],
             ],
         ], JSON_THROW_ON_ERROR));
 
         file_put_contents(
-            $this->slicePath . '/Models/ShopProduct.php',
+            $this->slicePath.'/Models/ShopProduct.php',
             "<?php\nnamespace App\\Slices\\ShopProducts\\Models;\nuse Illuminate\\Database\\Eloquent\\Model;\nclass ShopProduct extends Model\n{\n    protected \$table = 'shop_products';\n}\n"
         );
-        file_put_contents($this->slicePath . '/Routes/web.php', "<?php\nuse Illuminate\\Support\\Facades\\Route;\n");
+        file_put_contents($this->slicePath.'/Routes/web.php', "<?php\nuse Illuminate\\Support\\Facades\\Route;\n");
     }
 
     protected function tearDown(): void
@@ -98,7 +99,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
         $this->assertStringContainsString("\$table->decimal('price', 10,2)", $migrationContent);
         $this->assertStringContainsString("\$table->dropColumn('old_unused_column');", $migrationContent);
 
-        $manifest = json_decode(file_get_contents($this->slicePath . '/slice.json'), true);
+        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
         $this->assertSame('1.0.1', $manifest['version']);
         $this->assertArrayHasKey('sku', $manifest['fields']);
         $this->assertArrayHasKey('price', $manifest['fields']);
@@ -130,12 +131,12 @@ class SliceModifierStudioFeaturesTest extends TestCase
 
         $this->assertTrue($result['success']);
 
-        $manifest = json_decode(file_get_contents($this->slicePath . '/slice.json'), true);
+        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
         $this->assertCount(2, $manifest['relations']);
         $this->assertSame('belongsTo', $manifest['relations'][0]['type']);
         $this->assertSame('hasMany', $manifest['relations'][1]['type']);
 
-        $modelContent = file_get_contents($this->slicePath . '/Models/ShopProduct.php');
+        $modelContent = file_get_contents($this->slicePath.'/Models/ShopProduct.php');
         $this->assertStringContainsString('public function category(): \Illuminate\Database\Eloquent\Relations\BelongsTo', $modelContent);
         $this->assertStringContainsString("\$this->belongsTo(\\App\\Models\\Category::class, 'shop_category_id')", $modelContent);
         $this->assertStringContainsString('public function variants(): \Illuminate\Database\Eloquent\Relations\HasMany', $modelContent);
@@ -152,7 +153,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
             newFields: [['name' => 'barcode', 'type' => 'string', 'nullable' => true]],
         );
 
-        $manifest = json_decode(file_get_contents($this->slicePath . '/slice.json'), true);
+        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
         $this->assertSame('1.0.1', $manifest['version']);
         $this->assertArrayHasKey('barcode', $manifest['fields']);
 
@@ -169,7 +170,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
         $this->assertTrue($rollbackResult['success']);
         $this->assertSame('1.0.0', $rollbackResult['version']);
 
-        $updatedManifest = json_decode(file_get_contents($this->slicePath . '/slice.json'), true);
+        $updatedManifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
         $this->assertSame('1.0.0', $updatedManifest['version']);
         $this->assertArrayNotHasKey('barcode', $updatedManifest['fields']);
     }

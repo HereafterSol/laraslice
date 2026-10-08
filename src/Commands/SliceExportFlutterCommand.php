@@ -28,12 +28,12 @@ class SliceExportFlutterCommand extends Command
                 ? $fields
                 : array_map(fn ($key, $field) => ['name' => $key] + (array) $field, array_keys($fields), $fields);
             $plural = Str::plural(Str::snake(Str::singular($slice->name)));
-            $options['api_path'] = ! empty($slice->domain) ? Str::slug($slice->domain) . '/' . $plural : $plural;
+            $options['api_path'] = ! empty($slice->domain) ? Str::slug($slice->domain).'/'.$plural : $plural;
         }
 
         try {
-            $targetDir = (new FlutterSliceGenerator())->generate($name, $options);
-        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            $targetDir = (new FlutterSliceGenerator)->generate($name, $options);
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
             $this->error($e->getMessage());
 
             return Command::FAILURE;

@@ -2,14 +2,15 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         // 1. Create dedicated user_details table for extended enterprise profile details
-        if (!Schema::hasTable('user_details')) {
+        if (! Schema::hasTable('user_details')) {
             Schema::create('user_details', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->unique();
@@ -31,16 +32,16 @@ return new class extends Migration {
         $existingUsers = DB::table('users')->get();
         foreach ($existingUsers as $u) {
             $hasDetail = DB::table('user_details')->where('user_id', $u->id)->exists();
-            if (!$hasDetail) {
+            if (! $hasDetail) {
                 DB::table('user_details')->insert([
-                    'user_id'     => $u->id,
+                    'user_id' => $u->id,
                     'employee_id' => $u->employee_id ?? null,
-                    'department'  => $u->department ?? null,
+                    'department' => $u->department ?? null,
                     'designation' => $u->designation ?? null,
-                    'cnic'        => $u->cnic ?? null,
-                    'dob'         => $u->dob ?? null,
-                    'created_at'  => now(),
-                    'updated_at'  => now(),
+                    'cnic' => $u->cnic ?? null,
+                    'dob' => $u->dob ?? null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
         }
@@ -60,19 +61,19 @@ return new class extends Migration {
     {
         // Re-add columns to users table
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'employee_id')) {
+            if (! Schema::hasColumn('users', 'employee_id')) {
                 $table->string('employee_id', 50)->nullable();
             }
-            if (!Schema::hasColumn('users', 'department')) {
+            if (! Schema::hasColumn('users', 'department')) {
                 $table->string('department', 100)->nullable();
             }
-            if (!Schema::hasColumn('users', 'designation')) {
+            if (! Schema::hasColumn('users', 'designation')) {
                 $table->string('designation', 100)->nullable();
             }
-            if (!Schema::hasColumn('users', 'cnic')) {
+            if (! Schema::hasColumn('users', 'cnic')) {
                 $table->string('cnic', 20)->nullable();
             }
-            if (!Schema::hasColumn('users', 'dob')) {
+            if (! Schema::hasColumn('users', 'dob')) {
                 $table->date('dob')->nullable();
             }
         });
@@ -83,10 +84,10 @@ return new class extends Migration {
             foreach ($details as $d) {
                 DB::table('users')->where('id', $d->user_id)->update([
                     'employee_id' => $d->employee_id,
-                    'department'  => $d->department,
+                    'department' => $d->department,
                     'designation' => $d->designation,
-                    'cnic'        => $d->cnic,
-                    'dob'         => $d->dob,
+                    'cnic' => $d->cnic,
+                    'dob' => $d->dob,
                 ]);
             }
             Schema::dropIfExists('user_details');

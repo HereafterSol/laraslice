@@ -15,12 +15,13 @@ class LaraSliceMcpCommand extends Command
     public function handle(McpServer $mcpServer): int
     {
         if ($this->option('test')) {
-            $this->info("🔍 Running LaraSlice MCP Server Self-Test...");
+            $this->info('🔍 Running LaraSlice MCP Server Self-Test...');
             $tools = $mcpServer->callTool('list_slices', []);
             $metrics = $mcpServer->callTool('query_database_metrics', []);
-            $this->line("✅ Tools registered and active.");
-            $this->line("📊 Database Users: " . ($metrics['users_total'] ?? 0));
-            $this->line("📦 Slices Discovered: " . count($tools));
+            $this->line('✅ Tools registered and active.');
+            $this->line('📊 Database Users: '.($metrics['users_total'] ?? 0));
+            $this->line('📦 Slices Discovered: '.count($tools));
+
             return Command::SUCCESS;
         }
 
@@ -32,6 +33,7 @@ class LaraSliceMcpCommand extends Command
         $stdin = fopen('php://stdin', 'r');
         if (! $stdin) {
             $this->error('Failed to open STDIN for MCP server.');
+
             return Command::FAILURE;
         }
 
@@ -45,22 +47,24 @@ class LaraSliceMcpCommand extends Command
             if (! is_array($payload)) {
                 $err = [
                     'jsonrpc' => '2.0',
-                    'id'      => null,
-                    'error'   => ['code' => -32700, 'message' => 'Parse error'],
+                    'id' => null,
+                    'error' => ['code' => -32700, 'message' => 'Parse error'],
                 ];
-                echo json_encode($err) . "\n";
+                echo json_encode($err)."\n";
                 flush();
+
                 continue;
             }
 
             $response = $mcpServer->handleRpc($payload);
             if ($response !== null) {
-                echo json_encode($response) . "\n";
+                echo json_encode($response)."\n";
                 flush();
             }
         }
 
         fclose($stdin);
+
         return Command::SUCCESS;
     }
 }

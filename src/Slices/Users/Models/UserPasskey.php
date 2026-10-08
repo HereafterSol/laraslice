@@ -22,9 +22,9 @@ class UserPasskey extends Model
     ];
 
     protected $casts = [
-        'sign_count'   => 'integer',
+        'sign_count' => 'integer',
         'last_used_at' => 'datetime',
-        'revoked_at'   => 'datetime',
+        'revoked_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

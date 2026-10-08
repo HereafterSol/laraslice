@@ -2,17 +2,19 @@
 
 namespace LaraSlice\Core\Ai;
 
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Security\Access;
 use LaraSlice\Generator\SliceGenerator;
+use LaraSlice\LaraSliceServiceProvider;
 
 class McpServer
 {
     protected AiEngine $aiEngine;
+
     protected SliceManager $sliceManager;
 
     public function __construct(AiEngine $aiEngine, SliceManager $sliceManager)
@@ -32,8 +34,8 @@ class McpServer
         if (empty($payload) || ! is_string($payload['method'] ?? null)) {
             return response()->json([
                 'jsonrpc' => '2.0',
-                'id'      => null,
-                'error'   => ['code' => -32700, 'message' => 'Expected a JSON-RPC 2.0 request body.'],
+                'id' => null,
+                'error' => ['code' => -32700, 'message' => 'Expected a JSON-RPC 2.0 request body.'],
             ], 400);
         }
 
@@ -75,7 +77,7 @@ class McpServer
         } catch (\Throwable $e) {
             report($e);
 
-            return $this->error($id, -32603, 'Internal error while handling ' . $method);
+            return $this->error($id, -32603, 'Internal error while handling '.$method);
         }
 
         if ($result === null) {
@@ -93,7 +95,7 @@ class McpServer
             'protocolVersion' => in_array($requested, self::PROTOCOL_VERSIONS, true) ? $requested : self::PROTOCOL_VERSIONS[0],
             'serverInfo' => [
                 'name' => 'laraslice-mcp-server',
-                'version' => \LaraSlice\LaraSliceServiceProvider::VERSION,
+                'version' => LaraSliceServiceProvider::VERSION,
             ],
             'capabilities' => [
                 'tools' => ['listChanged' => false],
@@ -129,7 +131,7 @@ class McpServer
             $callResult = $this->callTool($name, $arguments);
         } catch (\Throwable $e) {
             report($e);
-            $callResult = ['success' => false, 'error' => "The {$name} tool failed: " . $e->getMessage()];
+            $callResult = ['success' => false, 'error' => "The {$name} tool failed: ".$e->getMessage()];
         }
 
         return [
@@ -151,11 +153,11 @@ class McpServer
      * whether the caller must repeat the target's name in a "confirm" argument.
      */
     private const WRITE_TOOLS = [
-        'toggle_slice'     => ['abilities' => ['system.slices.toggle', 'slice.toggle'], 'confirm' => false],
-        'seed_slice'       => ['abilities' => ['system.slices.seed', 'slice.seed'], 'confirm' => false],
-        'scaffold_slice'   => ['abilities' => ['studio.create'], 'confirm' => false],
-        'wipe_slice_data'  => ['abilities' => ['system.slices.wipe', 'slice.wipe'], 'confirm' => true],
-        'destroy_slice'    => ['abilities' => ['system.slices.delete', 'slice.delete'], 'confirm' => true],
+        'toggle_slice' => ['abilities' => ['system.slices.toggle', 'slice.toggle'], 'confirm' => false],
+        'seed_slice' => ['abilities' => ['system.slices.seed', 'slice.seed'], 'confirm' => false],
+        'scaffold_slice' => ['abilities' => ['studio.create'], 'confirm' => false],
+        'wipe_slice_data' => ['abilities' => ['system.slices.wipe', 'slice.wipe'], 'confirm' => true],
+        'destroy_slice' => ['abilities' => ['system.slices.delete', 'slice.delete'], 'confirm' => true],
         'prune_audit_logs' => ['abilities' => ['studio.wipe'], 'confirm' => true],
     ];
 
@@ -175,7 +177,7 @@ class McpServer
 
         // Over HTTP the caller is a signed-in user; the local stdio server has none
         $user = auth()->user();
-        if ($user && ! \LaraSlice\Core\Security\Access::allows($user, array_merge($rule['abilities'], ['studio.*']))) {
+        if ($user && ! Access::allows($user, array_merge($rule['abilities'], ['studio.*']))) {
             return "You do not have permission to use the {$name} tool.";
         }
 
@@ -205,13 +207,14 @@ class McpServer
                         continue;
                     }
                     $output[$sName] = [
-                        'title'        => $manifest->title ?? $sName,
-                        'domain'       => $manifest->domain ?? 'General',
-                        'enabled'      => $manifest->enabled ?? true,
-                        'version'      => $manifest->version ?? '1.0.0',
-                        'permissions'  => $manifest->permissions ?? [],
+                        'title' => $manifest->title ?? $sName,
+                        'domain' => $manifest->domain ?? 'General',
+                        'enabled' => $manifest->enabled ?? true,
+                        'version' => $manifest->version ?? '1.0.0',
+                        'permissions' => $manifest->permissions ?? [],
                     ];
                 }
+
                 return $output;
 
             case 'toggle_slice':
@@ -220,15 +223,24 @@ class McpServer
                 $action = $args['action'] ?? 'toggle';
 
                 $cmdArgs = [];
-                if ($slice) $cmdArgs['slice'] = $slice;
-                if ($domain) $cmdArgs['--domain'] = $domain;
-                if ($action === 'enable') $cmdArgs['--enable'] = true;
-                if ($action === 'disable') $cmdArgs['--disable'] = true;
+                if ($slice) {
+                    $cmdArgs['slice'] = $slice;
+                }
+                if ($domain) {
+                    $cmdArgs['--domain'] = $domain;
+                }
+                if ($action === 'enable') {
+                    $cmdArgs['--enable'] = true;
+                }
+                if ($action === 'disable') {
+                    $cmdArgs['--disable'] = true;
+                }
 
                 $exitCode = Artisan::call('slice:toggle', $cmdArgs);
+
                 return [
                     'success' => $exitCode === 0,
-                    'output'  => Artisan::output(),
+                    'output' => Artisan::output(),
                 ];
 
             case 'wipe_slice_data':
@@ -236,13 +248,18 @@ class McpServer
                 $domain = $args['domain'] ?? null;
 
                 $cmdArgs = ['--force' => true];
-                if ($slice) $cmdArgs['slice'] = $slice;
-                if ($domain) $cmdArgs['--domain'] = $domain;
+                if ($slice) {
+                    $cmdArgs['slice'] = $slice;
+                }
+                if ($domain) {
+                    $cmdArgs['--domain'] = $domain;
+                }
 
                 $exitCode = Artisan::call('slice:wipe', $cmdArgs);
+
                 return [
                     'success' => $exitCode === 0,
-                    'output'  => Artisan::output(),
+                    'output' => Artisan::output(),
                 ];
 
             case 'seed_slice':
@@ -251,13 +268,18 @@ class McpServer
                 $count = (int) ($args['count'] ?? 10);
 
                 $cmdArgs = ['--count' => $count];
-                if ($slice) $cmdArgs['slice'] = $slice;
-                if ($domain) $cmdArgs['--domain'] = $domain;
+                if ($slice) {
+                    $cmdArgs['slice'] = $slice;
+                }
+                if ($domain) {
+                    $cmdArgs['--domain'] = $domain;
+                }
 
                 $exitCode = Artisan::call('slice:seed', $cmdArgs);
+
                 return [
                     'success' => $exitCode === 0,
-                    'output'  => Artisan::output(),
+                    'output' => Artisan::output(),
                 ];
 
             case 'destroy_slice':
@@ -266,16 +288,21 @@ class McpServer
                 $mode = $args['mode'] ?? 'complete';
 
                 $cmdArgs = [
-                    '--mode'  => $mode,
+                    '--mode' => $mode,
                     '--force' => true,
                 ];
-                if ($slice) $cmdArgs['slice'] = $slice;
-                if ($domain) $cmdArgs['--domain'] = $domain;
+                if ($slice) {
+                    $cmdArgs['slice'] = $slice;
+                }
+                if ($domain) {
+                    $cmdArgs['--domain'] = $domain;
+                }
 
                 $exitCode = Artisan::call('slice:destroy', $cmdArgs);
+
                 return [
                     'success' => $exitCode === 0,
-                    'output'  => Artisan::output(),
+                    'output' => Artisan::output(),
                 ];
 
             case 'get_slice_schema':
@@ -291,7 +318,7 @@ class McpServer
                 }
 
                 return [
-                    'slice'  => $slice,
+                    'slice' => $slice,
                     'tables' => $tables,
                 ];
 
@@ -300,14 +327,14 @@ class McpServer
                 $workflow = (bool) ($args['workflow'] ?? false);
                 $flutter = (bool) ($args['flutter'] ?? false);
 
-                $generator = new SliceGenerator();
+                $generator = new SliceGenerator;
                 $dir = $generator->generate($name, [], $workflow);
 
                 return [
-                    'success'   => true,
-                    'slice'     => $name,
+                    'success' => true,
+                    'slice' => $name,
                     'directory' => $dir,
-                    'workflow'  => $workflow,
+                    'workflow' => $workflow,
                 ];
 
             case 'query_database_metrics':
@@ -316,17 +343,19 @@ class McpServer
             case 'prune_audit_logs':
                 $days = (int) ($args['days'] ?? 90);
                 $cmdArgs = ['--days' => $days, '--force' => true];
-                if (!empty($args['slice'])) {
+                if (! empty($args['slice'])) {
                     $cmdArgs['--slice'] = $args['slice'];
                 }
                 $exitCode = Artisan::call('laraslice:audit:prune', $cmdArgs);
+
                 return [
                     'success' => $exitCode === 0,
-                    'output'  => Artisan::output(),
+                    'output' => Artisan::output(),
                 ];
 
             case 'get_page_context':
                 $path = $args['path'] ?? '/';
+
                 return $this->aiEngine->getSystemContext($path);
 
             default:

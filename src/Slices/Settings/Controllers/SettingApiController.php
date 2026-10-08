@@ -27,7 +27,7 @@ class SettingApiController extends Controller
         $settings = $this->settingService->getSmtpSettings();
         // Mask password before returning via API
         $data = (array) $settings;
-        $data['mail_password'] = !empty($data['mail_password']) ? '********' : '';
+        $data['mail_password'] = ! empty($data['mail_password']) ? '********' : '';
 
         return response()->json([
             'success' => true,

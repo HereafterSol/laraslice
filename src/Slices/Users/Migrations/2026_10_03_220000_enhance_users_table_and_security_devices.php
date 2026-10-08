@@ -4,63 +4,64 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         // 1. Enhance users table with enterprise, government & security fields
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'cnic')) {
+            if (! Schema::hasColumn('users', 'cnic')) {
                 $table->string('cnic', 20)->nullable();
             } else {
                 $table->string('cnic', 20)->nullable()->change();
             }
-            if (!Schema::hasColumn('users', 'gender')) {
+            if (! Schema::hasColumn('users', 'gender')) {
                 $table->string('gender', 20)->nullable(); // 'male', 'female', 'other'
             }
-            if (!Schema::hasColumn('users', 'phone')) {
+            if (! Schema::hasColumn('users', 'phone')) {
                 $table->string('phone', 30)->nullable();
             }
-            if (!Schema::hasColumn('users', 'dob')) {
+            if (! Schema::hasColumn('users', 'dob')) {
                 $table->date('dob')->nullable();
             }
-            if (!Schema::hasColumn('users', 'employee_id')) {
+            if (! Schema::hasColumn('users', 'employee_id')) {
                 $table->string('employee_id', 50)->nullable();
             }
-            if (!Schema::hasColumn('users', 'department')) {
+            if (! Schema::hasColumn('users', 'department')) {
                 $table->string('department', 100)->nullable();
             }
-            if (!Schema::hasColumn('users', 'designation')) {
+            if (! Schema::hasColumn('users', 'designation')) {
                 $table->string('designation', 100)->nullable();
             }
 
-            if (!Schema::hasColumn('users', 'customised_permissions')) {
+            if (! Schema::hasColumn('users', 'customised_permissions')) {
                 $table->boolean('customised_permissions')->default(false);
             }
-            if (!Schema::hasColumn('users', 'mfa_channel')) {
+            if (! Schema::hasColumn('users', 'mfa_channel')) {
                 $table->string('mfa_channel', 20)->default('none'); // 'none', 'totp', 'webauthn'
             }
-            if (!Schema::hasColumn('users', 'mfa_secret')) {
+            if (! Schema::hasColumn('users', 'mfa_secret')) {
                 $table->text('mfa_secret')->nullable();
             }
-            if (!Schema::hasColumn('users', 'mfa_confirmed_at')) {
+            if (! Schema::hasColumn('users', 'mfa_confirmed_at')) {
                 $table->timestamp('mfa_confirmed_at')->nullable();
             }
-            if (!Schema::hasColumn('users', 'last_login_at')) {
+            if (! Schema::hasColumn('users', 'last_login_at')) {
                 $table->timestamp('last_login_at')->nullable();
             }
-            if (!Schema::hasColumn('users', 'last_login_ip')) {
+            if (! Schema::hasColumn('users', 'last_login_ip')) {
                 $table->string('last_login_ip', 45)->nullable();
             }
-            if (!Schema::hasColumn('users', 'failed_attempts')) {
+            if (! Schema::hasColumn('users', 'failed_attempts')) {
                 $table->integer('failed_attempts')->default(0);
             }
-            if (!Schema::hasColumn('users', 'locked_until')) {
+            if (! Schema::hasColumn('users', 'locked_until')) {
                 $table->timestamp('locked_until')->nullable();
             }
         });
 
         // 2. Multi-device & mobile push token tracking table
-        if (!Schema::hasTable('user_devices')) {
+        if (! Schema::hasTable('user_devices')) {
             Schema::create('user_devices', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -81,7 +82,7 @@ return new class extends Migration {
         }
 
         // 3. Emergency single-use recovery codes
-        if (!Schema::hasTable('user_recovery_codes')) {
+        if (! Schema::hasTable('user_recovery_codes')) {
             Schema::create('user_recovery_codes', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id');
@@ -95,7 +96,7 @@ return new class extends Migration {
         }
 
         // 4. Forensic security activity and login attempt logs
-        if (!Schema::hasTable('user_security_logs')) {
+        if (! Schema::hasTable('user_security_logs')) {
             Schema::create('user_security_logs', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable();
@@ -122,7 +123,7 @@ return new class extends Migration {
             $cols = [
                 'gender', 'phone', 'dob', 'employee_id', 'department', 'designation',
                 'customised_permissions', 'mfa_channel', 'mfa_secret',
-                'mfa_confirmed_at', 'last_login_at', 'last_login_ip', 'failed_attempts', 'locked_until'
+                'mfa_confirmed_at', 'last_login_at', 'last_login_ip', 'failed_attempts', 'locked_until',
             ];
             foreach ($cols as $col) {
                 if (Schema::hasColumn('users', $col)) {

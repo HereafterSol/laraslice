@@ -4,6 +4,7 @@ namespace LaraSlice\Wizard\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use LaraSlice\Core\Security\Access;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -21,7 +22,7 @@ class AuthorizeStudio
                 return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
             }
 
-            return redirect()->guest(\Illuminate\Support\Facades\Route::has('login') ? route('login') : '/');
+            return redirect()->guest(Route::has('login') ? route('login') : '/');
         }
 
         if (Access::allows($user, [$permission, 'studio.*'])) {

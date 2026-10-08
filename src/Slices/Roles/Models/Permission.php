@@ -3,11 +3,9 @@
 namespace LaraSlice\Slices\Roles\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class Permission extends Model
 {
-
     protected $table = 'permissions';
 
     protected $fillable = [

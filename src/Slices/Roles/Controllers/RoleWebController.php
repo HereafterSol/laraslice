@@ -2,13 +2,17 @@
 
 namespace LaraSlice\Slices\Roles\Controllers;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use LaraSlice\Core\Base\BaseSliceWebController;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
-use LaraSlice\Slices\Roles\Services\RoleSliceService;
-use LaraSlice\Slices\Roles\Contracts\RoleFormBusinessObject;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Slices\Roles\Contracts\RoleFilterBusinessObject;
+use LaraSlice\Slices\Roles\Contracts\RoleFormBusinessObject;
 use LaraSlice\Slices\Roles\Models\Permission;
+use LaraSlice\Slices\Roles\Services\RoleSliceService;
+use LaraSlice\Slices\Users\Services\SecurityPolicyService;
 
 class RoleWebController extends BaseSliceWebController
 {
@@ -49,15 +53,15 @@ class RoleWebController extends BaseSliceWebController
         $this->authorizeSlice('create');
 
         $formClass = $this->getFormClass();
-        $form = new $formClass();
-        app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissionsIfChanged();
+        $form = new $formClass;
+        app(SliceManager::class)->syncPermissionsIfChanged();
         $permissions = Permission::all()->groupBy('group');
 
-        return view($this->getViewPrefix() . 'form', [
-            'form'              => $form,
-            'isNew'             => true,
-            'routePrefix'       => $this->getRoutePrefix(),
-            'groupedPermissions'=> $permissions,
+        return view($this->getViewPrefix().'form', [
+            'form' => $form,
+            'isNew' => true,
+            'routePrefix' => $this->getRoutePrefix(),
+            'groupedPermissions' => $permissions,
         ]);
     }
 
@@ -67,38 +71,38 @@ class RoleWebController extends BaseSliceWebController
 
         $form = $this->getService()->getItemById($id);
 
-        if (!$form) {
-            return redirect()->route($this->getRoutePrefix() . 'index')->with('error', 'Role not found');
+        if (! $form) {
+            return redirect()->route($this->getRoutePrefix().'index')->with('error', 'Role not found');
         }
 
-        app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissionsIfChanged();
+        app(SliceManager::class)->syncPermissionsIfChanged();
         $permissions = Permission::all()->groupBy('group');
 
         $isMfaEnforced = false;
-        if (class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class) && !empty($form->slug)) {
-            $isMfaEnforced = in_array($form->slug, \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles());
+        if (class_exists(SecurityPolicyService::class) && ! empty($form->slug)) {
+            $isMfaEnforced = in_array($form->slug, SecurityPolicyService::getPrivilegedRoles());
         }
 
-        return view($this->getViewPrefix() . 'form', [
-            'form'              => $form,
-            'isNew'             => false,
-            'routePrefix'       => $this->getRoutePrefix(),
-            'groupedPermissions'=> $permissions,
-            'isMfaEnforced'     => $isMfaEnforced,
+        return view($this->getViewPrefix().'form', [
+            'form' => $form,
+            'isNew' => false,
+            'routePrefix' => $this->getRoutePrefix(),
+            'groupedPermissions' => $permissions,
+            'isMfaEnforced' => $isMfaEnforced,
         ]);
     }
 
-    public function store(\Illuminate\Http\Request $request)
+    public function store(Request $request)
     {
         $response = parent::store($request);
 
-        if (class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class)) {
-            $slug = $request->input('slug') ?: \Illuminate\Support\Str::slug($request->input('name'));
+        if (class_exists(SecurityPolicyService::class)) {
+            $slug = $request->input('slug') ?: Str::slug($request->input('name'));
             if ($slug && $request->boolean('enforce_mfa')) {
-                $privileged = \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles();
-                if (!in_array($slug, $privileged)) {
+                $privileged = SecurityPolicyService::getPrivilegedRoles();
+                if (! in_array($slug, $privileged)) {
                     $privileged[] = $slug;
-                    \LaraSlice\Slices\Users\Services\SecurityPolicyService::set(
+                    SecurityPolicyService::set(
                         'security.mfa_privileged_roles',
                         json_encode(array_values(array_unique($privileged))),
                         'Roles requiring mandatory MFA under Privileged Roles Only policy'
@@ -110,23 +114,23 @@ class RoleWebController extends BaseSliceWebController
         return $response;
     }
 
-    public function update(\Illuminate\Http\Request $request, string|int $id)
+    public function update(Request $request, string|int $id)
     {
         $response = parent::update($request, $id);
 
-        if (class_exists(\LaraSlice\Slices\Users\Services\SecurityPolicyService::class)) {
+        if (class_exists(SecurityPolicyService::class)) {
             $form = $this->getService()->getItemById($id);
             $slug = $request->input('slug') ?: ($form ? $form->slug : null);
             if ($slug) {
-                $privileged = \LaraSlice\Slices\Users\Services\SecurityPolicyService::getPrivilegedRoles();
+                $privileged = SecurityPolicyService::getPrivilegedRoles();
                 if ($request->boolean('enforce_mfa')) {
-                    if (!in_array($slug, $privileged)) {
+                    if (! in_array($slug, $privileged)) {
                         $privileged[] = $slug;
                     }
                 } else {
                     $privileged = array_values(array_diff($privileged, [$slug]));
                 }
-                \LaraSlice\Slices\Users\Services\SecurityPolicyService::set(
+                SecurityPolicyService::set(
                     'security.mfa_privileged_roles',
                     json_encode(array_values(array_unique($privileged))),
                     'Roles requiring mandatory MFA under Privileged Roles Only policy'

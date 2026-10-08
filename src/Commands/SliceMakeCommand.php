@@ -3,9 +3,9 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
-use LaraSlice\Generator\SliceGenerator;
-use LaraSlice\Generator\FlutterSliceGenerator;
 use InvalidArgumentException;
+use LaraSlice\Generator\FlutterSliceGenerator;
+use LaraSlice\Generator\SliceGenerator;
 use Throwable;
 
 class SliceMakeCommand extends Command
@@ -33,11 +33,11 @@ class SliceMakeCommand extends Command
 
         $count = count($names);
         if ($domain) {
-            $this->info("⚡ Scaffolding {$count} Slice(s) in Domain [{$domain}]: " . implode(', ', $names));
+            $this->info("⚡ Scaffolding {$count} Slice(s) in Domain [{$domain}]: ".implode(', ', $names));
         }
 
-        $generator = new SliceGenerator();
-        $flutterGen = $includeFlutter ? new FlutterSliceGenerator() : null;
+        $generator = new SliceGenerator;
+        $flutterGen = $includeFlutter ? new FlutterSliceGenerator : null;
         $failed = 0;
         $createdDirs = [];
 
@@ -51,12 +51,14 @@ class SliceMakeCommand extends Command
                 ]);
                 $createdDirs[] = $sliceDir;
             } catch (InvalidArgumentException $exception) {
-                $this->components->error("{$prefix}" . $exception->getMessage());
+                $this->components->error("{$prefix}".$exception->getMessage());
                 $failed++;
+
                 continue;
             } catch (Throwable $exception) {
-                $this->components->error("{$prefix}Slice generation failed: " . $exception->getMessage());
+                $this->components->error("{$prefix}Slice generation failed: ".$exception->getMessage());
                 $failed++;
+
                 continue;
             }
 
@@ -73,7 +75,7 @@ class SliceMakeCommand extends Command
                     $flutterDir = $flutterGen->generate($name);
                     $this->line("<fg=cyan>✓</> {$prefix}Generated Flutter Client Slice: <comment>{$flutterDir}</comment>");
                 } catch (Throwable $exception) {
-                    $this->components->warn("{$prefix}Flutter generation failed: " . $exception->getMessage());
+                    $this->components->warn("{$prefix}Flutter generation failed: ".$exception->getMessage());
                 }
             }
 
@@ -89,9 +91,8 @@ class SliceMakeCommand extends Command
 
         $this->newLine();
         $domainMsg = $domain ? " in domain [{$domain}]" : '';
-        $this->info("🎉 Successfully scaffolded " . ($count - $failed) . " slice(s){$domainMsg}! Run 'php artisan migrate' to apply database tables.");
+        $this->info('🎉 Successfully scaffolded '.($count - $failed)." slice(s){$domainMsg}! Run 'php artisan migrate' to apply database tables.");
 
         return Command::SUCCESS;
     }
 }
-

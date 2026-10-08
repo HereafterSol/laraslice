@@ -2,10 +2,10 @@
 
 namespace LaraSlice\Tests\Feature\Generator;
 
-use LaraSlice\Generator\SliceGenerator;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
 use InvalidArgumentException;
+use LaraSlice\Generator\SliceGenerator;
 use PHPUnit\Framework\TestCase;
 
 class SliceGeneratorTest extends TestCase
@@ -16,7 +16,7 @@ class SliceGeneratorTest extends TestCase
     {
         parent::setUp();
 
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-tests-' . bin2hex(random_bytes(8));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-tests-'.bin2hex(random_bytes(8));
     }
 
     protected function tearDown(): void
@@ -42,12 +42,12 @@ class SliceGeneratorTest extends TestCase
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Purchase Order');
 
         $this->assertDirectoryExists($path);
-        $this->assertFileExists($path . '/slice.json');
-        $this->assertFileExists($path . '/Models/PurchaseOrder.php');
-        $this->assertDirectoryExists($path . '/Migrations');
-        $this->assertFileExists($path . '/Resources/views/index.blade.php');
-        $this->assertFileExists($path . '/Routes/web.php');
-        $this->assertSame([], glob($this->slicesPath . '/.laraslice-*') ?: []);
+        $this->assertFileExists($path.'/slice.json');
+        $this->assertFileExists($path.'/Models/PurchaseOrder.php');
+        $this->assertDirectoryExists($path.'/Migrations');
+        $this->assertFileExists($path.'/Resources/views/index.blade.php');
+        $this->assertFileExists($path.'/Routes/web.php');
+        $this->assertSame([], glob($this->slicesPath.'/.laraslice-*') ?: []);
 
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS)) as $file) {
             if ($file->getExtension() === 'php') {
@@ -68,16 +68,16 @@ class SliceGeneratorTest extends TestCase
             ], 'default' => 'pending'],
         ]);
 
-        $migration = file_get_contents(glob($path . '/Migrations/*.php')[0]);
-        $form = file_get_contents($path . '/Resources/views/form.blade.php');
-        $model = file_get_contents($path . '/Models/PurchaseOrder.php');
-        $service = file_get_contents($path . '/Services/PurchaseOrderSliceService.php');
-        $schema = file_get_contents($path . '/Schemas/PurchaseOrderSchema.php');
-        $manifest = json_decode(file_get_contents($path . '/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $migration = file_get_contents(glob($path.'/Migrations/*.php')[0]);
+        $form = file_get_contents($path.'/Resources/views/form.blade.php');
+        $model = file_get_contents($path.'/Models/PurchaseOrder.php');
+        $service = file_get_contents($path.'/Services/PurchaseOrderSliceService.php');
+        $schema = file_get_contents($path.'/Schemas/PurchaseOrderSchema.php');
+        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
 
         $this->assertStringContainsString("\$table->string('sku');", $migration);
         $this->assertStringContainsString("\$table->decimal('unit_price', 12, 2);", $migration);
-        $this->assertStringContainsString("name=\"fulfillment_status\"", $form);
+        $this->assertStringContainsString('name="fulfillment_status"', $form);
         foreach (['sku', 'unit_price', 'is_taxable', 'fulfillment_status'] as $fieldName) {
             $this->assertStringContainsString("'{$fieldName}'", $model);
         }
@@ -85,7 +85,7 @@ class SliceGeneratorTest extends TestCase
         $this->assertStringContainsString("Column::make('unit_price')", $schema);
         $this->assertSame(['sku', 'unit_price', 'is_taxable', 'fulfillment_status'], array_column($manifest['fields'], 'name'));
 
-        $blade = new BladeCompiler(new Filesystem(), $this->slicesPath . '/compiled');
+        $blade = new BladeCompiler(new Filesystem, $this->slicesPath.'/compiled');
         $viewWithoutComponents = preg_replace('~</?x-[A-Za-z0-9_.:-]+[^>]*>~', '', $form);
         $compiledView = $blade->compileString($viewWithoutComponents);
         $this->assertStringContainsString('fulfillment_status', $compiledView);
@@ -98,7 +98,7 @@ class SliceGeneratorTest extends TestCase
                 ['name' => 'sku; drop table users', 'type' => 'string'],
             ]);
             $this->fail('Expected invalid field definition to be rejected.');
-        } catch (\InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException $exception) {
             $this->assertStringContainsString('Invalid field name', $exception->getMessage());
         }
 
@@ -113,27 +113,27 @@ class SliceGeneratorTest extends TestCase
             'api' => false,
         ]);
 
-        $manifest = json_decode(file_get_contents($path . '/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
 
         $this->assertSame('Security audit entries', $manifest['description']);
         $this->assertSame('QA Team', $manifest['author']);
-        $this->assertFileDoesNotExist($path . '/Controllers/AuditRecordApiController.php');
-        $this->assertFileDoesNotExist($path . '/Routes/api.php');
-        $this->assertStringContainsString('namespace Example\\Features\\AuditRecords', file_get_contents($path . '/Models/AuditRecord.php'));
+        $this->assertFileDoesNotExist($path.'/Controllers/AuditRecordApiController.php');
+        $this->assertFileDoesNotExist($path.'/Routes/api.php');
+        $this->assertStringContainsString('namespace Example\\Features\\AuditRecords', file_get_contents($path.'/Models/AuditRecord.php'));
     }
 
     public function test_invalid_namespace_is_rejected_without_creating_the_slices_directory(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         new SliceGenerator($this->slicesPath, 'App\\Slices; phpinfo()');
     }
 
     public function test_it_refuses_to_overwrite_an_existing_slice(): void
     {
-        $path = $this->slicesPath . DIRECTORY_SEPARATOR . 'Products';
+        $path = $this->slicesPath.DIRECTORY_SEPARATOR.'Products';
         mkdir($path, 0755, true);
-        file_put_contents($path . '/keep.txt', 'user content');
+        file_put_contents($path.'/keep.txt', 'user content');
 
         try {
             (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Product');
@@ -142,7 +142,7 @@ class SliceGeneratorTest extends TestCase
             $this->assertStringContainsString('already exists', $exception->getMessage());
         }
 
-        $this->assertSame('user content', file_get_contents($path . '/keep.txt'));
+        $this->assertSame('user content', file_get_contents($path.'/keep.txt'));
     }
 
     public function test_it_generates_domain_scoped_urls_manifest_and_alias_redirects(): void
@@ -152,14 +152,14 @@ class SliceGeneratorTest extends TestCase
             'description' => 'Online orders module',
         ]);
 
-        $manifest = json_decode(file_get_contents($path . '/slice.json'), true, flags: JSON_THROW_ON_ERROR);
-        $webRoutes = file_get_contents($path . '/Routes/web.php');
-        $apiRoutes = file_get_contents($path . '/Routes/api.php');
+        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $webRoutes = file_get_contents($path.'/Routes/web.php');
+        $apiRoutes = file_get_contents($path.'/Routes/api.php');
 
         // Directory and namespace assertions
-        $this->assertStringEndsWith('ECommerce' . DIRECTORY_SEPARATOR . 'Orders', $path);
+        $this->assertStringEndsWith('ECommerce'.DIRECTORY_SEPARATOR.'Orders', $path);
         $this->assertSame('App\\Slices\\ECommerce\\Orders', $manifest['namespace']);
-        $this->assertStringContainsString('namespace App\\Slices\\ECommerce\\Orders\\Models;', file_get_contents($path . '/Models/Order.php'));
+        $this->assertStringContainsString('namespace App\\Slices\\ECommerce\\Orders\\Models;', file_get_contents($path.'/Models/Order.php'));
         $this->assertStringContainsString('use App\\Slices\\ECommerce\\Orders\\Controllers\\OrderWebController;', $webRoutes);
 
         // Manifest assertions
@@ -191,7 +191,7 @@ class SliceGeneratorTest extends TestCase
             ],
         ]);
 
-        $manifest = json_decode(file_get_contents($path . '/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame([
             'shipment.view',
             'shipment.create',
@@ -219,11 +219,11 @@ class SliceGeneratorTest extends TestCase
         ]);
 
         $this->assertDirectoryExists($path);
-        $migration = file_get_contents(glob($path . '/Migrations/*.php')[0]);
-        $form = file_get_contents($path . '/Resources/views/form.blade.php');
-        $model = file_get_contents($path . '/Models/Ticket.php');
-        $service = file_get_contents($path . '/Services/TicketSliceService.php');
-        $formDto = file_get_contents($path . '/Contracts/TicketFormBusinessObject.php');
+        $migration = file_get_contents(glob($path.'/Migrations/*.php')[0]);
+        $form = file_get_contents($path.'/Resources/views/form.blade.php');
+        $model = file_get_contents($path.'/Models/Ticket.php');
+        $service = file_get_contents($path.'/Services/TicketSliceService.php');
+        $formDto = file_get_contents($path.'/Contracts/TicketFormBusinessObject.php');
 
         // Check migration has custom default and no duplicate status column
         $this->assertStringContainsString("\$table->string('status')->default('open');", $migration);
@@ -231,7 +231,7 @@ class SliceGeneratorTest extends TestCase
 
         // Check Form DTO has custom status default and no duplicate property
         $this->assertStringContainsString("public string \$status = 'open';", $formDto);
-        $this->assertSame(1, substr_count($formDto, "\$status"));
+        $this->assertSame(1, substr_count($formDto, '$status'));
 
         // Check Service validation has custom options
         $this->assertStringContainsString("'in:open,in_progress,resolved,closed'", $service);
@@ -259,17 +259,17 @@ class SliceGeneratorTest extends TestCase
         $this->assertDirectoryExists($companyPath);
         $this->assertDirectoryExists($contactPath);
 
-        $this->assertStringContainsString('Crm' . DIRECTORY_SEPARATOR . 'Companies', $companyPath);
-        $this->assertStringContainsString('Crm' . DIRECTORY_SEPARATOR . 'Contacts', $contactPath);
+        $this->assertStringContainsString('Crm'.DIRECTORY_SEPARATOR.'Companies', $companyPath);
+        $this->assertStringContainsString('Crm'.DIRECTORY_SEPARATOR.'Contacts', $contactPath);
 
-        $companyWebRoutes = file_get_contents($companyPath . '/Routes/web.php');
-        $contactWebRoutes = file_get_contents($contactPath . '/Routes/web.php');
+        $companyWebRoutes = file_get_contents($companyPath.'/Routes/web.php');
+        $contactWebRoutes = file_get_contents($contactPath.'/Routes/web.php');
 
         $this->assertStringContainsString("Route::prefix('crm/companies')", $companyWebRoutes);
         $this->assertStringContainsString("Route::prefix('crm/contacts')", $contactWebRoutes);
 
-        $companyManifest = json_decode(file_get_contents($companyPath . '/slice.json'), true);
-        $contactManifest = json_decode(file_get_contents($contactPath . '/slice.json'), true);
+        $companyManifest = json_decode(file_get_contents($companyPath.'/slice.json'), true);
+        $contactManifest = json_decode(file_get_contents($contactPath.'/slice.json'), true);
 
         $this->assertSame('CRM', $companyManifest['domain']);
         $this->assertSame('CRM', $contactManifest['domain']);

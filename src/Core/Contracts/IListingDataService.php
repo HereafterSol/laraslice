@@ -8,9 +8,6 @@ interface IListingDataService
 {
     /**
      * Retrieve a paginated and filtered list of items.
-     *
-     * @param IFilterObject $filter
-     * @return PagedDataList
      */
     public function getList(IFilterObject $filter): PagedDataList;
 }

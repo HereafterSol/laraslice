@@ -5,6 +5,7 @@ namespace LaraSlice\Tests\Feature\Performance;
 use Illuminate\Support\Facades\DB;
 use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * Admin pages must issue the same number of queries whether they show 2 rows or 12.
@@ -26,7 +27,7 @@ class ListingQueryCountTest extends TestCase
     {
         for ($i = 0; $i < $count; $i++) {
             $user = $this->makeUser();
-            $role = Role::create(['name' => 'Team ' . $user->id, 'slug' => 'team-' . $user->id]);
+            $role = Role::create(['name' => 'Team '.$user->id, 'slug' => 'team-'.$user->id]);
             $user->roles()->attach($role->id);
         }
     }
@@ -42,7 +43,7 @@ class ListingQueryCountTest extends TestCase
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('pages')]
+    #[DataProvider('pages')]
     public function test_query_count_does_not_grow_with_rows(string $uri): void
     {
         $this->actingAs($this->makeSuperAdmin());

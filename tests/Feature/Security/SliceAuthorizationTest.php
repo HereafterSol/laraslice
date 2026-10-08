@@ -5,6 +5,7 @@ namespace LaraSlice\Tests\Feature\Security;
 use Illuminate\Support\Facades\Hash;
 use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Users\Models\User;
+use LaraSlice\Slices\Users\Models\UserDevice;
 use LaraSlice\Tests\TestCase;
 use Laravel\Sanctum\Sanctum;
 
@@ -143,7 +144,7 @@ class SliceAuthorizationTest extends TestCase
     public function test_users_cannot_revoke_other_users_devices_through_self_service(): void
     {
         $owner = $this->makeUser();
-        $device = \LaraSlice\Slices\Users\Models\UserDevice::create([
+        $device = UserDevice::create([
             'user_id' => $owner->id,
             'device_name' => 'Chrome on Windows',
             'ip_address' => '10.0.0.5',
@@ -153,6 +154,6 @@ class SliceAuthorizationTest extends TestCase
 
         $other = $this->makeUser();
         $this->actingAs($other)->delete("/security/settings/devices/{$device->id}")->assertNotFound();
-        $this->assertNotNull(\LaraSlice\Slices\Users\Models\UserDevice::find($device->id));
+        $this->assertNotNull(UserDevice::find($device->id));
     }
 }

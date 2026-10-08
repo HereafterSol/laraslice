@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 class UserAttempt extends Model
 {
     public $timestamps = false;
+
     protected $table = 'user_attempts';
 
     protected $fillable = [
@@ -92,17 +93,17 @@ class UserAttempt extends Model
         $locationLabel = ($ip === '127.0.0.1' || $ip === 'localhost') ? 'Local Workstation' : 'Remote Client';
 
         return static::create([
-            'user_id'              => $userId,
+            'user_id' => $userId,
             'identifier_attempted' => $identifier ?: 'unknown',
-            'channel'              => $channel,
-            'ip_address'           => $ip,
-            'user_agent'           => substr($ua, 0, 500),
-            'browser'              => $browser,
-            'os'                   => $os,
-            'device_type'          => $deviceType,
-            'location_label'       => $locationLabel,
-            'reason'               => $reason,
-            'created_at'           => now(),
+            'channel' => $channel,
+            'ip_address' => $ip,
+            'user_agent' => substr($ua, 0, 500),
+            'browser' => $browser,
+            'os' => $os,
+            'device_type' => $deviceType,
+            'location_label' => $locationLabel,
+            'reason' => $reason,
+            'created_at' => now(),
         ]);
     }
 

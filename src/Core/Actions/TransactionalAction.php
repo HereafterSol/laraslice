@@ -22,8 +22,8 @@ abstract class TransactionalAction
     /**
      * Execute the action inside a verified database transaction.
      *
-     * @param mixed ...$arguments
-     * @return mixed
+     * @param  mixed  ...$arguments
+     *
      * @throws Throwable
      */
     public function execute(...$arguments): mixed
@@ -35,7 +35,7 @@ abstract class TransactionalAction
             $auditPayload = $this->auditData($result, $arguments);
             if ($auditPayload !== null) {
                 AuditLogger::record(array_merge([
-                    'slice'  => $this->slice,
+                    'slice' => $this->slice,
                     'action' => class_basename(static::class),
                 ], $auditPayload));
             }
@@ -51,19 +51,15 @@ abstract class TransactionalAction
 
     /**
      * Prepare data payload for audit log. Can be overridden by child actions.
-     *
-     * @param mixed $result
-     * @param array $arguments
-     * @return array|null
      */
     protected function auditData(mixed $result, array $arguments): ?array
     {
         return [
             'entity_type' => is_object($result) ? get_class($result) : null,
-            'entity_id'   => is_object($result) && isset($result->id) ? $result->id : null,
-            'metadata'    => [
+            'entity_id' => is_object($result) && isset($result->id) ? $result->id : null,
+            'metadata' => [
                 'action_class' => static::class,
-                'status'       => 'success',
+                'status' => 'success',
             ],
         ];
     }

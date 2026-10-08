@@ -38,7 +38,7 @@ final class BlueprintLoader
                 throw $exception;
             }
 
-            throw new RuntimeException('Unable to parse blueprint: ' . $exception->getMessage(), previous: $exception);
+            throw new RuntimeException('Unable to parse blueprint: '.$exception->getMessage(), previous: $exception);
         }
 
         if (! is_array($data) || array_is_list($data)) {

@@ -36,7 +36,7 @@ abstract class BaseFormBusinessObject implements IBusinessObject
 
     public static function fromArray(array $data): static
     {
-        $instance = new static();
+        $instance = new static;
         $instance->providedFields = [];
         foreach ($data as $key => $value) {
             if (! is_string($key)) {
@@ -54,15 +54,15 @@ abstract class BaseFormBusinessObject implements IBusinessObject
         }
 
         // Seamless bridge between name and title for quick-add drawers & API contracts
-        if (property_exists($instance, 'title') && (empty($instance->title) || !isset($data['title']))) {
+        if (property_exists($instance, 'title') && (empty($instance->title) || ! isset($data['title']))) {
             $candidate = $data['name'] ?? $data['label'] ?? null;
-            if (!empty($candidate)) {
+            if (! empty($candidate)) {
                 $instance->title = (string) $candidate;
             }
         }
-        if (property_exists($instance, 'name') && (empty($instance->name) || !isset($data['name']))) {
+        if (property_exists($instance, 'name') && (empty($instance->name) || ! isset($data['name']))) {
             $candidate = $data['title'] ?? $data['label'] ?? null;
-            if (!empty($candidate)) {
+            if (! empty($candidate)) {
                 $instance->name = (string) $candidate;
             }
         }
@@ -79,12 +79,14 @@ abstract class BaseFormBusinessObject implements IBusinessObject
         $type = (new \ReflectionProperty($instance, $property))->getType();
         if (! $type instanceof \ReflectionNamedType || $type->getName() === 'mixed') {
             $coerced = $value;
+
             return true;
         }
 
         if ($value === null) {
             if ($type->allowsNull()) {
                 $coerced = null;
+
                 return true;
             }
             // Empty form inputs arrive as null; treat them as empty values
@@ -94,6 +96,7 @@ abstract class BaseFormBusinessObject implements IBusinessObject
                 'array' => [],
                 default => null,
             };
+
             return $coerced !== null;
         }
 

@@ -3,6 +3,7 @@
 namespace LaraSlice\Tests\Feature\Generator;
 
 use InvalidArgumentException;
+use LaraSlice\Blueprint\BlueprintValidationException;
 use LaraSlice\Blueprint\BlueprintValidator;
 use LaraSlice\Generator\BladeSafeText;
 use LaraSlice\Generator\FlutterSliceGenerator;
@@ -23,7 +24,7 @@ class GeneratorInjectionTest extends TestCase
     {
         parent::setUp();
 
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-injection-' . bin2hex(random_bytes(8));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-injection-'.bin2hex(random_bytes(8));
     }
 
     protected function tearDown(): void
@@ -88,20 +89,20 @@ class GeneratorInjectionTest extends TestCase
     public function test_blueprint_validator_rejects_blade_syntax(): void
     {
         try {
-            (new BlueprintValidator())->validate([
-            'schema_version' => 1,
-            'name' => 'Tickets',
-            'handle' => 'tickets',
-            'models' => [[
-                'handle' => 'ticket',
-                'fields' => [
-                    ['handle' => 'subject', 'type' => 'string', 'label' => '{{ system("id") }}'],
-                    ['handle' => 'note', 'type' => 'string', 'default' => '@php echo 1; @endphp'],
-                ],
-            ]],
+            (new BlueprintValidator)->validate([
+                'schema_version' => 1,
+                'name' => 'Tickets',
+                'handle' => 'tickets',
+                'models' => [[
+                    'handle' => 'ticket',
+                    'fields' => [
+                        ['handle' => 'subject', 'type' => 'string', 'label' => '{{ system("id") }}'],
+                        ['handle' => 'note', 'type' => 'string', 'default' => '@php echo 1; @endphp'],
+                    ],
+                ]],
             ]);
             $this->fail('The blueprint must be rejected.');
-        } catch (\LaraSlice\Blueprint\BlueprintValidationException $e) {
+        } catch (BlueprintValidationException $e) {
             $this->assertStringContainsString('.label cannot contain Blade', $e->getMessage());
             $this->assertStringContainsString('.default cannot contain Blade', $e->getMessage());
         }
@@ -110,7 +111,7 @@ class GeneratorInjectionTest extends TestCase
     public function test_navigation_urls_cannot_inject_php_into_route_files(): void
     {
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Invoice');
-        $routes = file_get_contents($path . '/Routes/web.php');
+        $routes = file_get_contents($path.'/Routes/web.php');
 
         $modifier = new SliceModifier($this->slicesPath, 'App\\Slices');
 
@@ -120,10 +121,10 @@ class GeneratorInjectionTest extends TestCase
         } catch (InvalidArgumentException) {
         }
 
-        $this->assertSame($routes, file_get_contents($path . '/Routes/web.php'));
+        $this->assertSame($routes, file_get_contents($path.'/Routes/web.php'));
 
         $modifier->updateNavigation('Invoice', ['url' => '/billing/invoices-2026']);
-        $updated = file_get_contents($path . '/Routes/web.php');
+        $updated = file_get_contents($path.'/Routes/web.php');
         $this->assertStringContainsString("Route::prefix('billing/invoices-2026')", $updated);
         token_get_all($updated, TOKEN_PARSE);
     }
@@ -143,7 +144,7 @@ class GeneratorInjectionTest extends TestCase
     public function test_relationships_only_accept_identifiers(array $override): void
     {
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Invoice');
-        $model = file_get_contents($path . '/Models/Invoice.php');
+        $model = file_get_contents($path.'/Models/Invoice.php');
 
         $relation = array_merge([
             'source_model' => 'invoice',
@@ -159,13 +160,13 @@ class GeneratorInjectionTest extends TestCase
         } catch (InvalidArgumentException) {
         }
 
-        $this->assertSame($model, file_get_contents($path . '/Models/Invoice.php'));
+        $this->assertSame($model, file_get_contents($path.'/Models/Invoice.php'));
     }
 
     public function test_flutter_generator_rejects_path_traversal_names(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        (new FlutterSliceGenerator($this->slicesPath . '/flutter'))->generate('../../outside');
+        (new FlutterSliceGenerator($this->slicesPath.'/flutter'))->generate('../../outside');
     }
 }

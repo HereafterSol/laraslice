@@ -4,8 +4,8 @@ namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Console\ConfirmableTrait;
-use LaraSlice\Generator\SliceSeederService;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Generator\SliceSeederService;
 
 class SliceSeedCommand extends Command
 {
@@ -25,9 +25,10 @@ class SliceSeedCommand extends Command
         $domainName = $this->option('domain');
         $count = (int) $this->option('count');
 
-        if (!$sliceName && !$domainName) {
+        if (! $sliceName && ! $domainName) {
             $this->error('Please specify either a slice name or --domain= option.');
             $this->line('Example: <fg=yellow>php artisan slice:seed Contacts</> or <fg=yellow>php artisan slice:seed --domain=CRM</>');
+
             return Command::FAILURE;
         }
 
@@ -44,14 +45,15 @@ class SliceSeedCommand extends Command
             $result = $seeder->seedSlice($sliceName, $count);
         }
 
-        if (!$result['success']) {
-            $this->error("❌ Seeding failed: " . ($result['message'] ?? 'Unknown error'));
+        if (! $result['success']) {
+            $this->error('❌ Seeding failed: '.($result['message'] ?? 'Unknown error'));
+
             return Command::FAILURE;
         }
 
-        $this->info("✅ " . $result['message']);
+        $this->info('✅ '.$result['message']);
 
-        if (!empty($result['records'])) {
+        if (! empty($result['records'])) {
             $rows = [];
             foreach ($result['records'] as $model => $cnt) {
                 $rows[] = [$model, "<fg=green>{$cnt}</>"];

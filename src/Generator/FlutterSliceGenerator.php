@@ -18,9 +18,9 @@ class FlutterSliceGenerator
 
     /**
      * @param  array{fields?: array<int, array{name: string, type?: string, label?: string}>, api_path?: string, force?: bool}  $options
-     *   fields   - the slice's custom fields (title, description and status are always included)
-     *   api_path - API route prefix without "api/", e.g. "billing/invoices" (default: plural snake name)
-     *   force    - overwrite files that already exist
+     *                                                                                                                                    fields   - the slice's custom fields (title, description and status are always included)
+     *                                                                                                                                    api_path - API route prefix without "api/", e.g. "billing/invoices" (default: plural snake name)
+     *                                                                                                                                    force    - overwrite files that already exist
      */
     public function generate(string $name, array $options = []): string
     {
@@ -33,7 +33,7 @@ class FlutterSliceGenerator
         }
 
         $fields = $this->dartFields($options['fields'] ?? []);
-        $targetDir = $this->flutterPath . '/lib/slices/' . $snake;
+        $targetDir = $this->flutterPath.'/lib/slices/'.$snake;
 
         $files = [
             "models/{$snake}_model.dart" => $this->model($studly, $fields),
@@ -43,16 +43,16 @@ class FlutterSliceGenerator
         ];
 
         if (empty($options['force'])) {
-            $existing = array_filter(array_keys($files), fn ($file) => file_exists($targetDir . '/' . $file));
+            $existing = array_filter(array_keys($files), fn ($file) => file_exists($targetDir.'/'.$file));
             if ($existing !== []) {
-                throw new \RuntimeException('Flutter files already exist (' . implode(', ', $existing) . '); use --force to overwrite them.');
+                throw new \RuntimeException('Flutter files already exist ('.implode(', ', $existing).'); use --force to overwrite them.');
             }
         }
 
         foreach ($files as $file => $contents) {
-            $path = $targetDir . '/' . $file;
+            $path = $targetDir.'/'.$file;
             if (! is_dir(dirname($path)) && ! mkdir(dirname($path), 0755, true) && ! is_dir(dirname($path))) {
-                throw new \RuntimeException('Unable to create ' . dirname($path));
+                throw new \RuntimeException('Unable to create '.dirname($path));
             }
             if (file_put_contents($path, $contents, LOCK_EX) === false) {
                 throw new \RuntimeException("Unable to write {$path}");
@@ -106,12 +106,12 @@ class FlutterSliceGenerator
     {
         $declarations = implode("\n", array_map(fn ($f) => "  final {$f['dart']}? {$f['camel']};", $fields));
         $params = implode("\n", array_map(fn ($f) => "    this.{$f['camel']},", $fields));
-        $fromJson = implode("\n", array_map(fn ($f) => "      {$f['camel']}: " . match ($f['dart']) {
+        $fromJson = implode("\n", array_map(fn ($f) => "      {$f['camel']}: ".match ($f['dart']) {
             'int' => "_toInt(json['{$f['name']}'])",
             'double' => "_toDouble(json['{$f['name']}'])",
             'bool' => "_toBool(json['{$f['name']}'])",
             default => "json['{$f['name']}']?.toString()",
-        } . ',', $fields));
+        }.',', $fields));
         $toJson = implode("\n", array_map(fn ($f) => "      '{$f['name']}': {$f['camel']},", $fields));
 
         return <<<DART
@@ -306,26 +306,26 @@ DART;
         ));
         $dispose = implode("\n", array_map(fn ($f) => "    _{$f['camel']}Ctrl.dispose();", $textFields));
         $build = implode("\n", array_merge(
-            array_map(fn ($f) => "      {$f['camel']}: " . match ($f['dart']) {
+            array_map(fn ($f) => "      {$f['camel']}: ".match ($f['dart']) {
                 'int' => "int.tryParse(_{$f['camel']}Ctrl.text.trim())",
                 'double' => "double.tryParse(_{$f['camel']}Ctrl.text.trim())",
                 default => "_{$f['camel']}Ctrl.text.trim()",
-            } . ',', $textFields),
+            }.',', $textFields),
             array_map(fn ($f) => "      {$f['camel']}: _{$f['camel']},", $boolFields),
         ));
         $inputs = implode("\n", array_merge(
             array_map(fn ($f) => "                    TextFormField(\n"
-                . "                      controller: _{$f['camel']}Ctrl,\n"
-                . "                      decoration: const InputDecoration(labelText: '{$f['label']}', border: OutlineInputBorder()),\n"
-                . ($f['dart'] === 'String' ? '' : "                      keyboardType: TextInputType.number,\n")
-                . ($f['name'] === 'title' ? "                      validator: (val) => (val == null || val.isEmpty) ? 'Title required' : null,\n" : '')
-                . ($f['name'] === 'description' ? "                      maxLines: 4,\n" : '')
-                . "                    ),\n                    const SizedBox(height: 16),", $textFields),
+                ."                      controller: _{$f['camel']}Ctrl,\n"
+                ."                      decoration: const InputDecoration(labelText: '{$f['label']}', border: OutlineInputBorder()),\n"
+                .($f['dart'] === 'String' ? '' : "                      keyboardType: TextInputType.number,\n")
+                .($f['name'] === 'title' ? "                      validator: (val) => (val == null || val.isEmpty) ? 'Title required' : null,\n" : '')
+                .($f['name'] === 'description' ? "                      maxLines: 4,\n" : '')
+                ."                    ),\n                    const SizedBox(height: 16),", $textFields),
             array_map(fn ($f) => "                    SwitchListTile(\n"
-                . "                      title: const Text('{$f['label']}'),\n"
-                . "                      value: _{$f['camel']},\n"
-                . "                      onChanged: (val) => setState(() => _{$f['camel']} = val),\n"
-                . '                    ),', $boolFields),
+                ."                      title: const Text('{$f['label']}'),\n"
+                ."                      value: _{$f['camel']},\n"
+                ."                      onChanged: (val) => setState(() => _{$f['camel']} = val),\n"
+                .'                    ),', $boolFields),
         ));
 
         return <<<DART

@@ -8,35 +8,35 @@ use LaraSlice\Generator\SliceName;
 final class BlueprintPlanner
 {
     /** @param array<string, mixed> $blueprint
-     *  @return array<string, mixed>
+     * @return array<string, mixed>
      */
     public function plan(array $blueprint, string $slicesPath): array
     {
-        $blueprint = (new BlueprintValidator())->validate($blueprint);
+        $blueprint = (new BlueprintValidator)->validate($blueprint);
         $sliceClass = SliceName::canonical((string) $blueprint['name']);
         $domain = isset($blueprint['domain']) && is_string($blueprint['domain']) && trim($blueprint['domain']) !== ''
             ? trim($blueprint['domain'])
             : null;
         $domainFolder = $domain ? SliceName::domainSegment($domain) : null;
         $sliceDirectory = $domainFolder
-            ? ($domainFolder . DIRECTORY_SEPARATOR . Str::plural($sliceClass))
+            ? ($domainFolder.DIRECTORY_SEPARATOR.Str::plural($sliceClass))
             : Str::plural($sliceClass);
-        $sliceTarget = rtrim($slicesPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $sliceDirectory;
+        $sliceTarget = rtrim($slicesPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$sliceDirectory;
         $models = $blueprint['models'];
         $root = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
 
         $files = [
             'slice.json',
             'slice.yaml',
-            'Models/' . $sliceClass . '.php',
-            'Schemas/' . $sliceClass . 'Schema.php',
-            'Migrations/{timestamp}_create_' . Str::plural(Str::snake($sliceClass)) . '_table.php',
-            'Contracts/' . $sliceClass . 'FormBusinessObject.php',
-            'Contracts/' . $sliceClass . 'ListingBusinessObject.php',
-            'Contracts/' . $sliceClass . 'FilterBusinessObject.php',
-            'Services/' . $sliceClass . 'SliceService.php',
-            'Controllers/' . $sliceClass . 'WebController.php',
-            'Controllers/' . $sliceClass . 'ApiController.php',
+            'Models/'.$sliceClass.'.php',
+            'Schemas/'.$sliceClass.'Schema.php',
+            'Migrations/{timestamp}_create_'.Str::plural(Str::snake($sliceClass)).'_table.php',
+            'Contracts/'.$sliceClass.'FormBusinessObject.php',
+            'Contracts/'.$sliceClass.'ListingBusinessObject.php',
+            'Contracts/'.$sliceClass.'FilterBusinessObject.php',
+            'Services/'.$sliceClass.'SliceService.php',
+            'Controllers/'.$sliceClass.'WebController.php',
+            'Controllers/'.$sliceClass.'ApiController.php',
             'Routes/web.php',
             'Routes/api.php',
             'Resources/views/index.blade.php',
@@ -109,7 +109,7 @@ final class BlueprintPlanner
                         'kind' => 'foreign_key',
                         'table' => $targetModel['table'],
                         'column' => $relation['foreign_key'],
-                        'references' => $table . '.id',
+                        'references' => $table.'.id',
                     ];
                 } elseif ($relation['type'] === 'belongsTo') {
                     if (! in_array($relation['foreign_key'], array_column($columns, 'column'), true)) {
@@ -124,7 +124,7 @@ final class BlueprintPlanner
                         'kind' => 'foreign_key',
                         'table' => $table,
                         'column' => $relation['foreign_key'],
-                        'references' => $this->findModel($models, $relation['model'])['table'] . '.id',
+                        'references' => $this->findModel($models, $relation['model'])['table'].'.id',
                     ];
                 } elseif ($relation['type'] === 'belongsToMany') {
                     $operations[] = [
@@ -161,6 +161,7 @@ final class BlueprintPlanner
             $order = ['create_table' => 0, 'pivot_table' => 1, 'foreign_key' => 2];
             $aOrder = $modelOrder[$a['table']] ?? PHP_INT_MAX;
             $bOrder = $modelOrder[$b['table']] ?? PHP_INT_MAX;
+
             return [$order[$a['kind']] ?? 99, $aOrder, $a['table']] <=> [$order[$b['kind']] ?? 99, $bOrder, $b['table']];
         });
 
@@ -173,14 +174,14 @@ final class BlueprintPlanner
             foreach ($model['relations'] ?? [] as $relation) {
                 if (in_array($relation['type'], ['hasOne', 'hasMany', 'belongsToMany'], true)) {
                     $fileChanges[] = [
-                        'path' => $sliceDirectory . DIRECTORY_SEPARATOR . 'Models/' . $sourceClass . '.php',
+                        'path' => $sliceDirectory.DIRECTORY_SEPARATOR.'Models/'.$sourceClass.'.php',
                         'reason' => "Add {$relation['type']} relation '{$relation['name']}'.",
                     ];
                 }
                 if (in_array($relation['type'], ['hasOne', 'hasMany'], true)) {
                     $childClass = Str::studly(Str::singular($this->findModel($models, $relation['model'])['table']));
                     $fileChanges[] = [
-                        'path' => $sliceDirectory . DIRECTORY_SEPARATOR . 'Models/' . $childClass . '.php',
+                        'path' => $sliceDirectory.DIRECTORY_SEPARATOR.'Models/'.$childClass.'.php',
                         'reason' => 'Add inverse belongsTo relation and parent foreign key.',
                     ];
                 }
@@ -188,6 +189,7 @@ final class BlueprintPlanner
         }
         $fileChanges = array_map(static function (array $change): array {
             $change['path'] = str_replace('/', DIRECTORY_SEPARATOR, $change['path']);
+
             return $change;
         }, $fileChanges);
 
@@ -207,7 +209,7 @@ final class BlueprintPlanner
                 'relation_count' => count($model['relations'] ?? []),
             ], $models),
             'database_operations' => $operations,
-            'files' => array_map(static fn (string $file): string => $sliceDirectory . DIRECTORY_SEPARATOR . $file, $files),
+            'files' => array_map(static fn (string $file): string => $sliceDirectory.DIRECTORY_SEPARATOR.$file, $files),
             'file_changes' => $fileChanges,
             'execution' => 'plan_only_no_files_or_database_changes',
             'generation_status' => 'requires_apply_capability_check',
@@ -227,7 +229,7 @@ final class BlueprintPlanner
 
         return [
             'handle' => $handle,
-            'table'  => Str::plural(Str::snake($handle)),
+            'table' => Str::plural(Str::snake($handle)),
         ];
     }
 }

@@ -29,7 +29,7 @@ class SliceRepairCommand extends Command
         $changed = 0;
         foreach ($slices as $slice) {
             foreach ($manager->repairSlice($slice, $dryRun) as $file) {
-                $this->line(($dryRun ? '<fg=yellow>would update</> ' : '<fg=green>updated</> ') . $file);
+                $this->line(($dryRun ? '<fg=yellow>would update</> ' : '<fg=green>updated</> ').$file);
                 $changed++;
             }
         }

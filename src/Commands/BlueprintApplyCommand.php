@@ -34,7 +34,8 @@ final class BlueprintApplyCommand extends Command
             $providedHash = (string) $this->option('plan-hash');
             if ($providedHash === '' || ! hash_equals($plan['plan_hash'], $providedHash)) {
                 $this->components->error('The plan hash is missing or stale. Review the current plan before applying.');
-                $this->line('Current plan hash: ' . $plan['plan_hash']);
+                $this->line('Current plan hash: '.$plan['plan_hash']);
+
                 return self::FAILURE;
             }
             if (! $this->option('yes') && ! $this->confirm('Generate the reviewed files? Database migrations will not run.', false)) {
@@ -44,9 +45,11 @@ final class BlueprintApplyCommand extends Command
             $target = $applier->apply($blueprint, $plan, $slicesPath, config('laraslice.slices_namespace', 'App\\Slices'));
             $this->components->info("Generated slice at [{$target}].");
             $this->comment('Files were written atomically. Database migrations were not run.');
+
             return self::SUCCESS;
         } catch (Throwable $exception) {
             $this->components->error($exception->getMessage());
+
             return self::FAILURE;
         }
     }

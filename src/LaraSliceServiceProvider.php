@@ -2,27 +2,50 @@
 
 namespace LaraSlice;
 
-use Illuminate\Support\ServiceProvider;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
-use LaraSlice\Core\Discovery\SliceManager;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\View\ComponentAttributeBag;
+use LaraSlice\Blueprint\BlueprintStudioController;
+use LaraSlice\Commands\AuditPruneCommand;
+use LaraSlice\Commands\BlueprintApplyCommand;
+use LaraSlice\Commands\BlueprintPlanCommand;
+use LaraSlice\Commands\BlueprintValidateCommand;
+use LaraSlice\Commands\LaraSliceMcpCommand;
+use LaraSlice\Commands\SkillPublishCommand;
+use LaraSlice\Commands\SliceAiCommand;
+use LaraSlice\Commands\SliceCacheCommand;
+use LaraSlice\Commands\SliceClearCommand;
+use LaraSlice\Commands\SliceDestroyCommand;
+use LaraSlice\Commands\SliceExportFlutterCommand;
+use LaraSlice\Commands\SliceFieldCommand;
+use LaraSlice\Commands\SliceInstallCommand;
+use LaraSlice\Commands\SliceListCommand;
+use LaraSlice\Commands\SliceMakeCommand;
+use LaraSlice\Commands\SlicePublishCommand;
+use LaraSlice\Commands\SliceRepairCommand;
+use LaraSlice\Commands\SliceSeedCommand;
+use LaraSlice\Commands\SliceToggleCommand;
+use LaraSlice\Commands\SliceUiPruneCommand;
+use LaraSlice\Commands\SliceWipeCommand;
+use LaraSlice\Commands\SliceWizardCommand;
+use LaraSlice\Console\Commands\SliceSyncCommand;
+use LaraSlice\Core\Ai\AiChatController;
 use LaraSlice\Core\Ai\AiEngine;
 use LaraSlice\Core\Ai\McpServer;
-use LaraSlice\Commands\SliceMakeCommand;
-use LaraSlice\Commands\SliceListCommand;
-use LaraSlice\Commands\SliceExportFlutterCommand;
-use LaraSlice\Commands\SliceAiCommand;
-use LaraSlice\Commands\BlueprintValidateCommand;
-use LaraSlice\Commands\BlueprintPlanCommand;
-use LaraSlice\Commands\BlueprintApplyCommand;
-use LaraSlice\Blueprint\BlueprintStudioController;
-use LaraSlice\Wizard\WizardController;
+use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Support\SchemaCache;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
 use LaraSlice\Wizard\Middleware\GuardStudioWrites;
-use LaraSlice\Core\Ai\AiChatController;
-use LaraSlice\Core\Security\Access;
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
+use LaraSlice\Wizard\WizardController;
+use TailwindMerge\TailwindMerge;
 
 class LaraSliceServiceProvider extends ServiceProvider
 {
@@ -32,7 +55,7 @@ class LaraSliceServiceProvider extends ServiceProvider
     public function register(): void
     {
         // 1. Merge configuration
-        $this->mergeConfigFrom(__DIR__ . '/../config/laraslice.php', 'laraslice');
+        $this->mergeConfigFrom(__DIR__.'/../config/laraslice.php', 'laraslice');
 
         // 2. Register SliceManager Singleton
         $this->app->singleton(SliceManager::class, function ($app) {
@@ -55,35 +78,35 @@ class LaraSliceServiceProvider extends ServiceProvider
         // Register the twMerge attribute macro used by the published BlatUI components,
         // unless the host app already provides one (e.g. via gehrisandro/tailwind-merge-laravel)
         // The binding is per application; macros are static and outlive it (tests, Octane), so bind every boot.
-        $this->app->singletonIf(\TailwindMerge\TailwindMerge::class, fn () => \TailwindMerge\TailwindMerge::instance());
+        $this->app->singletonIf(TailwindMerge::class, fn () => TailwindMerge::instance());
 
-        if (!\Illuminate\View\ComponentAttributeBag::hasMacro('twMerge')) {
-            \Illuminate\View\ComponentAttributeBag::macro('twMerge', function (...$args) {
-                $this->attributes['class'] = app(\TailwindMerge\TailwindMerge::class)->merge($args, $this->attributes['class'] ?? '');
+        if (! ComponentAttributeBag::hasMacro('twMerge')) {
+            ComponentAttributeBag::macro('twMerge', function (...$args) {
+                $this->attributes['class'] = app(TailwindMerge::class)->merge($args, $this->attributes['class'] ?? '');
 
                 return $this;
             });
         }
 
         // 0. Register Blueprint userstamps & auditStamps macros for enterprise auditability
-        \Illuminate\Database\Schema\Blueprint::macro('userstamps', function () {
+        Blueprint::macro('userstamps', function () {
             $this->unsignedBigInteger('created_by')->nullable()->index();
             $this->unsignedBigInteger('updated_by')->nullable()->index();
         });
 
-        \Illuminate\Database\Schema\Blueprint::macro('dropUserstamps', function () {
+        Blueprint::macro('dropUserstamps', function () {
             $this->dropColumn(['created_by', 'updated_by']);
         });
 
-        \Illuminate\Database\Schema\Blueprint::macro('softUserstamps', function () {
+        Blueprint::macro('softUserstamps', function () {
             $this->unsignedBigInteger('deleted_by')->nullable()->index();
         });
 
-        \Illuminate\Database\Schema\Blueprint::macro('dropSoftUserstamps', function () {
+        Blueprint::macro('dropSoftUserstamps', function () {
             $this->dropColumn(['deleted_by']);
         });
 
-        \Illuminate\Database\Schema\Blueprint::macro('auditStamps', function () {
+        Blueprint::macro('auditStamps', function () {
             $this->timestamps();
             $this->unsignedBigInteger('created_by')->nullable()->index();
             $this->unsignedBigInteger('updated_by')->nullable()->index();
@@ -94,48 +117,48 @@ class LaraSliceServiceProvider extends ServiceProvider
         // 1. Register Artisan CLI Commands
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__ . '/../config/laraslice.php' => config_path('laraslice.php'),
+                __DIR__.'/../config/laraslice.php' => config_path('laraslice.php'),
             ], 'laraslice-config');
 
             $this->publishes([
-                __DIR__ . '/../resources/stubs/starter/views/welcome.blade.php' => resource_path('views/welcome.blade.php'),
+                __DIR__.'/../resources/stubs/starter/views/welcome.blade.php' => resource_path('views/welcome.blade.php'),
             ], 'laraslice-starter');
 
             $this->commands([
-                \LaraSlice\Commands\SliceInstallCommand::class,
+                SliceInstallCommand::class,
                 SliceMakeCommand::class,
-                \LaraSlice\Commands\SliceWizardCommand::class,
-                \LaraSlice\Commands\SliceFieldCommand::class,
-                \LaraSlice\Commands\SliceUiPruneCommand::class,
+                SliceWizardCommand::class,
+                SliceFieldCommand::class,
+                SliceUiPruneCommand::class,
                 SliceListCommand::class,
-                \LaraSlice\Commands\SliceSeedCommand::class,
-                \LaraSlice\Commands\SliceToggleCommand::class,
-                \LaraSlice\Commands\SliceWipeCommand::class,
-                \LaraSlice\Commands\SliceDestroyCommand::class,
+                SliceSeedCommand::class,
+                SliceToggleCommand::class,
+                SliceWipeCommand::class,
+                SliceDestroyCommand::class,
                 SliceExportFlutterCommand::class,
                 SliceAiCommand::class,
                 BlueprintValidateCommand::class,
                 BlueprintPlanCommand::class,
                 BlueprintApplyCommand::class,
-                \LaraSlice\Console\Commands\SliceSyncCommand::class,
-                \LaraSlice\Commands\SliceCacheCommand::class,
-                \LaraSlice\Commands\SliceRepairCommand::class,
-                \LaraSlice\Commands\SliceClearCommand::class,
-                \LaraSlice\Commands\SlicePublishCommand::class,
-                \LaraSlice\Commands\AuditPruneCommand::class,
-                \LaraSlice\Commands\LaraSliceMcpCommand::class,
-                \LaraSlice\Commands\SkillPublishCommand::class,
+                SliceSyncCommand::class,
+                SliceCacheCommand::class,
+                SliceRepairCommand::class,
+                SliceClearCommand::class,
+                SlicePublishCommand::class,
+                AuditPruneCommand::class,
+                LaraSliceMcpCommand::class,
+                SkillPublishCommand::class,
             ]);
         }
 
         // 2. Load Core Migrations & Views
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
-        $this->loadViewsFrom(__DIR__ . '/Wizard/views', 'laraslice');
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadViewsFrom(__DIR__.'/Wizard/views', 'laraslice');
 
         $this->registerRateLimiters();
 
         // Schema checks are cached per process; forget them whenever the schema changes
-        \Illuminate\Support\Facades\Event::listen(\Illuminate\Database\Events\MigrationsEnded::class, fn () => \LaraSlice\Support\SchemaCache::flush());
+        Event::listen(MigrationsEnded::class, fn () => SchemaCache::flush());
 
         // 3. Register Wizard Routes. Every route needs studio.access; writes need the
         // matching studio.* permission so read access never unlocks code generation.
@@ -217,8 +240,8 @@ class LaraSliceServiceProvider extends ServiceProvider
         // accepts JSON-RPC over POST only and authenticates with a Sanctum bearer token.
         if (config('laraslice.ai.mcp_server.enabled', false)) {
             Route::middleware(config('laraslice.ai.mcp_server.middleware', ['api', 'auth:sanctum']))
-                ->middleware(AuthorizeStudio::class . ':studio.access')
-                ->post(config('laraslice.ai.mcp_server.route', '/.well-known/mcp'), function (\Illuminate\Http\Request $request) {
+                ->middleware(AuthorizeStudio::class.':studio.access')
+                ->post(config('laraslice.ai.mcp_server.route', '/.well-known/mcp'), function (Request $request) {
                     return app(McpServer::class)->handle($request);
                 })->name('laraslice.mcp');
         }
@@ -239,13 +262,14 @@ class LaraSliceServiceProvider extends ServiceProvider
         });
 
         // 7. Register Native Slice RBAC Gate Bridge
-        \Illuminate\Support\Facades\Gate::before(function ($user, string $ability) {
+        Gate::before(function ($user, string $ability) {
             if (Access::isSuperAdmin($user)) {
                 return true;
             }
             if (method_exists($user, 'hasPermission')) {
                 return $user->hasPermission($ability) ? true : null;
             }
+
             return null;
         });
 
@@ -262,6 +286,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                     if (Route::has('account.settings')) {
                         return redirect()->route('account.settings');
                     }
+
                     return redirect('/');
                 })->name('dashboard');
             }
@@ -277,22 +302,22 @@ class LaraSliceServiceProvider extends ServiceProvider
             $identity = strtolower((string) ($request->input('email') ?? $request->input('identifier') ?? ''));
 
             return [
-                Limit::perMinute(5)->by('login|' . $identity . '|' . $request->ip()),
-                Limit::perMinute(20)->by('login-ip|' . $request->ip()),
+                Limit::perMinute(5)->by('login|'.$identity.'|'.$request->ip()),
+                Limit::perMinute(20)->by('login-ip|'.$request->ip()),
             ];
         });
 
-        RateLimiter::for('laraslice-register', fn (Request $request) => Limit::perMinute(3)->by('register|' . $request->ip()));
+        RateLimiter::for('laraslice-register', fn (Request $request) => Limit::perMinute(3)->by('register|'.$request->ip()));
 
         RateLimiter::for('laraslice-mfa', function (Request $request) {
             $subject = ($request->hasSession() ? $request->session()->get('mfa_pending_user_id') : null) ?? $request->user()?->getAuthIdentifier() ?? 'guest';
 
             return [
-                Limit::perMinute(5)->by('mfa|' . $subject),
-                Limit::perMinute(20)->by('mfa-ip|' . $request->ip()),
+                Limit::perMinute(5)->by('mfa|'.$subject),
+                Limit::perMinute(20)->by('mfa-ip|'.$request->ip()),
             ];
         });
 
-        RateLimiter::for('laraslice-ai', fn (Request $request) => Limit::perMinute(30)->by('ai|' . ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        RateLimiter::for('laraslice-ai', fn (Request $request) => Limit::perMinute(30)->by('ai|'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 }

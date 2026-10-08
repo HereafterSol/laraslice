@@ -4,10 +4,11 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        if (!Schema::hasTable('laraslice_audit_logs')) {
+        if (! Schema::hasTable('laraslice_audit_logs')) {
             Schema::create('laraslice_audit_logs', function (Blueprint $table) {
                 $table->bigIncrements('id');
                 $table->string('slice', 100)->index()->default('global');

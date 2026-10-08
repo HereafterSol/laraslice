@@ -4,10 +4,11 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        if (!Schema::hasTable('users')) {
+        if (! Schema::hasTable('users')) {
             Schema::create('users', function (Blueprint $table) {
                 // Integer keys: every related table (role_user, user_devices, ...) uses unsignedBigInteger user_id
                 $table->id();
@@ -22,10 +23,10 @@ return new class extends Migration {
             });
         } else {
             Schema::table('users', function (Blueprint $table) {
-                if (!Schema::hasColumn('users', 'status')) {
+                if (! Schema::hasColumn('users', 'status')) {
                     $table->string('status')->default('active')->after('password');
                 }
-                if (!Schema::hasColumn('users', 'avatar_url')) {
+                if (! Schema::hasColumn('users', 'avatar_url')) {
                     $table->string('avatar_url')->nullable()->after('status');
                 }
             });

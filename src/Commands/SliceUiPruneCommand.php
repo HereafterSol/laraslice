@@ -16,12 +16,13 @@ class SliceUiPruneCommand extends Command
     public function handle(): int
     {
         $uiPath = resource_path('views/components/ui');
-        if (!is_dir($uiPath)) {
+        if (! is_dir($uiPath)) {
             $this->warn("No BlatUI components directory found at: {$uiPath}");
+
             return Command::SUCCESS;
         }
 
-        $this->info("🔍 Scanning project for BlatUI component usage...");
+        $this->info('🔍 Scanning project for BlatUI component usage...');
 
         // 1. Gather all installed UI component files (top-level components)
         $installedFiles = File::files($uiPath);
@@ -40,13 +41,19 @@ class SliceUiPruneCommand extends Command
 
         $usedComponents = [];
         foreach ($scanPaths as $path) {
-            if (!is_dir($path)) continue;
+            if (! is_dir($path)) {
+                continue;
+            }
 
             $allFiles = File::allFiles($path);
             foreach ($allFiles as $file) {
-                if ($file->getExtension() !== 'php') continue;
+                if ($file->getExtension() !== 'php') {
+                    continue;
+                }
                 // Skip the components/ui folder itself
-                if (str_starts_with($file->getPathname(), $uiPath)) continue;
+                if (str_starts_with($file->getPathname(), $uiPath)) {
+                    continue;
+                }
 
                 $content = file_get_contents($file->getPathname());
                 foreach (array_keys($installedComponents) as $comp) {
@@ -66,30 +73,32 @@ class SliceUiPruneCommand extends Command
 
         $unused = [];
         foreach ($installedComponents as $comp => $filepath) {
-            if (!isset($usedComponents[$comp])) {
+            if (! isset($usedComponents[$comp])) {
                 $unused[$comp] = $filepath;
             }
         }
 
         $this->newLine();
-        $this->line("Total installed UI components: <comment>" . count($installedComponents) . "</comment>");
-        $this->line("Actively used in slices:        <fg=green>" . count($usedComponents) . "</>");
-        $this->line("Unused candidate components:    <fg=yellow>" . count($unused) . "</>");
+        $this->line('Total installed UI components: <comment>'.count($installedComponents).'</comment>');
+        $this->line('Actively used in slices:        <fg=green>'.count($usedComponents).'</>');
+        $this->line('Unused candidate components:    <fg=yellow>'.count($unused).'</>');
         $this->newLine();
 
         if (empty($unused)) {
-            $this->info("✨ Clean tree! All installed BlatUI components are actively utilized.");
+            $this->info('✨ Clean tree! All installed BlatUI components are actively utilized.');
+
             return Command::SUCCESS;
         }
 
-        $this->table(['Unused Component', 'File Path'], array_map(fn($k, $v) => [$k, basename($v)], array_keys($unused), $unused));
+        $this->table(['Unused Component', 'File Path'], array_map(fn ($k, $v) => [$k, basename($v)], array_keys($unused), $unused));
 
         if ($this->option('dry-run')) {
-            $this->comment("Dry-run mode active. No files were removed.");
+            $this->comment('Dry-run mode active. No files were removed.');
+
             return Command::SUCCESS;
         }
 
-        if ($this->option('force') || $this->confirm("Would you like to prune these " . count($unused) . " unused components?", false)) {
+        if ($this->option('force') || $this->confirm('Would you like to prune these '.count($unused).' unused components?', false)) {
             $deleted = 0;
             foreach ($unused as $file) {
                 if (File::delete($file)) {

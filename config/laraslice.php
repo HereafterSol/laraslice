@@ -18,9 +18,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'audit' => [
-        'enabled'        => env('LARASLICE_AUDIT_ENABLED', true),
+        'enabled' => env('LARASLICE_AUDIT_ENABLED', true),
         'retention_days' => (int) env('LARASLICE_AUDIT_RETENTION_DAYS', 90),
-        'auto_prune'     => env('LARASLICE_AUDIT_AUTO_PRUNE', false),
+        'auto_prune' => env('LARASLICE_AUDIT_AUTO_PRUNE', false),
     ],
 
     /*

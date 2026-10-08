@@ -3,8 +3,8 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
-use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\FlutterSliceGenerator;
+use LaraSlice\Generator\SliceGenerator;
 
 class SliceAiCommand extends Command
 {
@@ -36,15 +36,15 @@ class SliceAiCommand extends Command
                        str_contains(strtolower($prompt), 'state');
 
         $this->line("<fg=cyan>→</> Inferred Slice Name:</> <comment>{$sliceName}</comment>");
-        $this->line("<fg=cyan>→</> Workflow Engine:</> <comment>" . ($hasWorkflow ? 'Enabled' : 'Disabled') . "</comment>");
+        $this->line('<fg=cyan>→</> Workflow Engine:</> <comment>'.($hasWorkflow ? 'Enabled' : 'Disabled').'</comment>');
 
-        $generator = new SliceGenerator();
+        $generator = new SliceGenerator;
         $sliceDir = $generator->generate($sliceName, [], $hasWorkflow);
 
         $this->line("<fg=green>✓</> AI Scaffolded Vertical Slice: <comment>{$sliceDir}</comment>");
 
         if ($includeFlutter) {
-            $flutterGen = new FlutterSliceGenerator();
+            $flutterGen = new FlutterSliceGenerator;
             $flutterDir = $flutterGen->generate($sliceName);
             $this->line("<fg=cyan>✓</> AI Scaffolded Flutter Views: <comment>{$flutterDir}</comment>");
         }

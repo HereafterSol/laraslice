@@ -4,6 +4,11 @@ namespace LaraSlice\Core\Base;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
@@ -13,9 +18,13 @@ abstract class BaseSliceWebController extends Controller
     use AuthorizesSliceActions;
 
     abstract protected function getService(): IFormDataService&IListingDataService;
+
     abstract protected function getFormClass(): string;
+
     abstract protected function getFilterClass(): string;
+
     abstract protected function getViewPrefix(): string; // e.g. "sample_product::"
+
     abstract protected function getRoutePrefix(): string; // e.g. "products."
 
     public function index(Request $request)
@@ -32,9 +41,9 @@ abstract class BaseSliceWebController extends Controller
 
         $pagedList = $this->getService()->getList($filter);
 
-        return view($this->getViewPrefix() . 'index', [
-            'pagedList'   => $pagedList,
-            'filter'      => $filter,
+        return view($this->getViewPrefix().'index', [
+            'pagedList' => $pagedList,
+            'filter' => $filter,
             'routePrefix' => $this->getRoutePrefix(),
             'routeParameters' => $this->routeParameters(),
             'parentId' => request()->route('parentId'),
@@ -46,21 +55,21 @@ abstract class BaseSliceWebController extends Controller
         $this->authorizeSlice('create');
 
         $formClass = $this->getFormClass();
-        $form = new $formClass();
+        $form = new $formClass;
 
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
             $this->getFormViewData($form, true),
             [
-                'form'        => $form,
-                'isNew'       => true,
+                'form' => $form,
+                'isNew' => true,
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(),
                 'parentId' => request()->route('parentId'),
             ]
         );
 
-        return view($this->getViewPrefix() . 'form', $viewData);
+        return view($this->getViewPrefix().'form', $viewData);
     }
 
     protected function getFormViewData(mixed $form, bool $isNew): array
@@ -76,19 +85,19 @@ abstract class BaseSliceWebController extends Controller
             $props = is_object($form) ? get_object_vars($form) : (is_array($form) ? $form : []);
 
             foreach ($props as $propName => $propVal) {
-                if (!str_ends_with($propName, '_id') || $propName === 'parent_id') {
+                if (! str_ends_with($propName, '_id') || $propName === 'parent_id') {
                     continue;
                 }
 
                 $base = substr($propName, 0, -3);
                 $tablesToTry = [
-                    \Illuminate\Support\Str::plural($base),
+                    Str::plural($base),
                     $base,
                 ];
 
                 foreach ($tablesToTry as $tbl) {
-                    if (\Illuminate\Support\Facades\Schema::hasTable($tbl)) {
-                        $columns = \Illuminate\Support\Facades\Schema::getColumnListing($tbl);
+                    if (Schema::hasTable($tbl)) {
+                        $columns = Schema::getColumnListing($tbl);
                         $labelCol = 'id';
                         foreach (['name', 'title', 'label', 'order_number', 'sku'] as $candidate) {
                             if (in_array($candidate, $columns, true)) {
@@ -98,23 +107,23 @@ abstract class BaseSliceWebController extends Controller
                         }
 
                         // Capped so a large related table can't blow up the form; the selected value always stays
-                        $data = \Illuminate\Support\Facades\DB::table($tbl)
+                        $data = DB::table($tbl)
                             ->orderBy($labelCol)
                             ->limit((int) config('laraslice.forms.relationship_options_limit', 500))
                             ->pluck($labelCol, 'id')
                             ->toArray();
                         if (is_scalar($propVal) && $propVal !== '' && ! array_key_exists($propVal, $data)) {
-                            $selected = \Illuminate\Support\Facades\DB::table($tbl)->where('id', $propVal)->value($labelCol);
+                            $selected = DB::table($tbl)->where('id', $propVal)->value($labelCol);
                             if ($selected !== null) {
                                 $data[$propVal] = $selected;
                             }
                         }
 
-                        $camelPlural = \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)) . 'Options';
-                        $camelSingular = \Illuminate\Support\Str::camel($base) . 'Options';
-                        $studlyPlural = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)) . 'Options';
-                        $snakePlural = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($base)) . 'Options';
-                        $snakeSingular = \Illuminate\Support\Str::snake($base) . 'Options';
+                        $camelPlural = Str::camel(Str::plural($base)).'Options';
+                        $camelSingular = Str::camel($base).'Options';
+                        $studlyPlural = Str::studly(Str::plural($base)).'Options';
+                        $snakePlural = Str::snake(Str::plural($base)).'Options';
+                        $snakeSingular = Str::snake($base).'Options';
 
                         $options[$camelPlural] = $data;
                         $options[$camelSingular] = $data;
@@ -124,27 +133,27 @@ abstract class BaseSliceWebController extends Controller
 
                         // Resolve quick-add store URL for dialog/drawer
                         $quickStoreUrl = null;
-                        $pluralBase = \Illuminate\Support\Str::plural($base);
-                        foreach ([$base . '.store', $pluralBase . '.store'] as $rName) {
-                            if (\Illuminate\Support\Facades\Route::has($rName)) {
+                        $pluralBase = Str::plural($base);
+                        foreach ([$base.'.store', $pluralBase.'.store'] as $rName) {
+                            if (Route::has($rName)) {
                                 $quickStoreUrl = route($rName);
                                 break;
                             }
                         }
-                        if (!$quickStoreUrl) {
+                        if (! $quickStoreUrl) {
                             foreach (['crm.', 'e_commerce.', 'ecommerce.', 'billing.', 'content.', 'admin.'] as $dPrefix) {
-                                if (\Illuminate\Support\Facades\Route::has($dPrefix . $base . '.store')) {
-                                    $quickStoreUrl = route($dPrefix . $base . '.store');
+                                if (Route::has($dPrefix.$base.'.store')) {
+                                    $quickStoreUrl = route($dPrefix.$base.'.store');
                                     break;
                                 }
-                                if (\Illuminate\Support\Facades\Route::has($dPrefix . $pluralBase . '.store')) {
-                                    $quickStoreUrl = route($dPrefix . $pluralBase . '.store');
+                                if (Route::has($dPrefix.$pluralBase.'.store')) {
+                                    $quickStoreUrl = route($dPrefix.$pluralBase.'.store');
                                     break;
                                 }
                             }
                         }
-                        if (!$quickStoreUrl) {
-                            foreach (\Illuminate\Support\Facades\Route::getRoutes()->getRoutesByName() as $rName => $routeObj) {
+                        if (! $quickStoreUrl) {
+                            foreach (Route::getRoutes()->getRoutesByName() as $rName => $routeObj) {
                                 if ($rName === "{$base}.store" || $rName === "{$pluralBase}.store"
                                     || str_ends_with($rName, ".{$base}.store")
                                     || str_ends_with($rName, ".{$pluralBase}.store")) {
@@ -155,11 +164,11 @@ abstract class BaseSliceWebController extends Controller
                         }
 
                         if ($quickStoreUrl) {
-                            $options[\Illuminate\Support\Str::camel($base) . 'QuickStoreUrl'] = $quickStoreUrl;
-                            $options[\Illuminate\Support\Str::camel($pluralBase) . 'QuickStoreUrl'] = $quickStoreUrl;
-                            $options[\Illuminate\Support\Str::studly($pluralBase) . 'QuickStoreUrl'] = $quickStoreUrl;
-                            $options[\Illuminate\Support\Str::snake($base) . 'QuickStoreUrl'] = $quickStoreUrl;
-                            $options[\Illuminate\Support\Str::snake($pluralBase) . 'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[Str::camel($base).'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[Str::camel($pluralBase).'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[Str::studly($pluralBase).'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[Str::snake($base).'QuickStoreUrl'] = $quickStoreUrl;
+                            $options[Str::snake($pluralBase).'QuickStoreUrl'] = $quickStoreUrl;
                         }
                         break;
                     }
@@ -175,16 +184,16 @@ abstract class BaseSliceWebController extends Controller
     protected function resolveRouteName(string $action): string
     {
         $prefix = rtrim($this->getRoutePrefix(), '.');
-        $singular = \Illuminate\Support\Str::singular($prefix);
-        $plural = \Illuminate\Support\Str::plural($prefix);
+        $singular = Str::singular($prefix);
+        $plural = Str::plural($prefix);
 
-        if (\Illuminate\Support\Facades\Route::has("{$prefix}.{$action}")) {
+        if (Route::has("{$prefix}.{$action}")) {
             return "{$prefix}.{$action}";
         }
-        if (\Illuminate\Support\Facades\Route::has("{$singular}.{$action}")) {
+        if (Route::has("{$singular}.{$action}")) {
             return "{$singular}.{$action}";
         }
-        if (\Illuminate\Support\Facades\Route::has("{$plural}.{$action}")) {
+        if (Route::has("{$plural}.{$action}")) {
             return "{$plural}.{$action}";
         }
 
@@ -205,7 +214,7 @@ abstract class BaseSliceWebController extends Controller
 
         $form = $this->getService()->getItemById($id);
 
-        if (!$form) {
+        if (! $form) {
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
         }
 
@@ -213,15 +222,15 @@ abstract class BaseSliceWebController extends Controller
             $this->resolveRelationshipOptions($form),
             $this->getFormViewData($form, false),
             [
-                'form'        => $form,
-                'isNew'       => false,
+                'form' => $form,
+                'isNew' => false,
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(['id' => $id]),
                 'parentId' => request()->route('parentId'),
             ]
         );
 
-        return view($this->getViewPrefix() . 'form', $viewData);
+        return view($this->getViewPrefix().'form', $viewData);
     }
 
     public function store(Request $request)
@@ -229,18 +238,19 @@ abstract class BaseSliceWebController extends Controller
         $this->authorizeSlice('create');
 
         // Prevent accidental rapid duplicate submissions (within 3 seconds)
-        $fingerprint = 'slice_sub_' . sha1(
-            ($request->user()?->id ?? $request->ip()) . '|' .
-            $request->path() . '|' .
+        $fingerprint = 'slice_sub_'.sha1(
+            ($request->user()?->id ?? $request->ip()).'|'.
+            $request->path().'|'.
             json_encode($request->except(['_token', '_method']))
         );
 
-        if (\Illuminate\Support\Facades\Cache::has($fingerprint)) {
-            $prevId = \Illuminate\Support\Facades\Cache::get($fingerprint);
+        if (Cache::has($fingerprint)) {
+            $prevId = Cache::get($fingerprint);
             $msg = 'Record created successfully.';
             if ($request->wantsJson() || $request->ajax() || $request->header('Accept') === 'application/json') {
                 return response()->json(['success' => true, 'id' => $prevId, 'message' => $msg], 200);
             }
+
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('success', $msg);
         }
 
@@ -250,20 +260,21 @@ abstract class BaseSliceWebController extends Controller
 
         $id = $this->getService()->save($form);
         try {
-            \Illuminate\Support\Facades\Cache::put($fingerprint, $id, now()->addSeconds(3));
-        } catch (\Throwable $e) {}
+            Cache::put($fingerprint, $id, now()->addSeconds(3));
+        } catch (\Throwable $e) {
+        }
 
         $msg = 'Record created successfully.';
 
         if ($request->wantsJson() || $request->ajax() || $request->header('Accept') === 'application/json') {
             $createdModel = $this->getService()->getItemById($id);
-            $label = $createdModel->name ?? $createdModel->title ?? $createdModel->label ?? ('#' . $id);
+            $label = $createdModel->name ?? $createdModel->title ?? $createdModel->label ?? ('#'.$id);
 
             return response()->json([
                 'success' => true,
-                'id'      => $id,
-                'label'   => $label,
-                'item'    => $createdModel,
+                'id' => $id,
+                'label' => $label,
+                'item' => $createdModel,
                 'message' => $msg,
             ], 201);
         }
@@ -314,6 +325,7 @@ abstract class BaseSliceWebController extends Controller
             $parts = explode('.', $prefix);
             $prefix = end($parts);
         }
-        return \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($prefix));
+
+        return Str::snake(Str::singular($prefix));
     }
 }

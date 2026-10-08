@@ -15,16 +15,16 @@ class SliceBoundaryTest extends TestCase
 {
     public function test_slices_do_not_import_internal_models_of_other_slices(): void
     {
-        $slicesDir = realpath(__DIR__ . '/../../src/Slices');
+        $slicesDir = realpath(__DIR__.'/../../src/Slices');
         if (! $slicesDir || ! is_dir($slicesDir)) {
             $this->markTestSkipped('Slices directory not found for boundary testing.');
         }
 
-        $sliceNames = array_map('basename', glob($slicesDir . '/*', GLOB_ONLYDIR) ?: []);
+        $sliceNames = array_map('basename', glob($slicesDir.'/*', GLOB_ONLYDIR) ?: []);
         $violations = [];
 
         foreach ($sliceNames as $sliceName) {
-            $slicePath = $slicesDir . '/' . $sliceName;
+            $slicePath = $slicesDir.'/'.$sliceName;
             $phpFiles = $this->getPhpFiles($slicePath);
 
             foreach ($phpFiles as $file) {
@@ -50,22 +50,22 @@ class SliceBoundaryTest extends TestCase
 
                         // Check for forbidden import of other slice's internal Models
                         // e.g. use LaraSlice\Slices\Products\Models\Product;
-                        if (preg_match('/use\s+[\\\\A-Za-z0-9_]*Slices\\\\' . preg_quote($otherSlice, '/') . '\\\\Models\\\\/i', $trimmed)) {
-                            $relPath = str_replace(realpath($slicesDir) . DIRECTORY_SEPARATOR, '', $file);
-                            $violations[] = "[Boundary Violation] {$relPath}:" . ($lineNum + 1) . " imports internal Model from '{$otherSlice}': {$trimmed}";
+                        if (preg_match('/use\s+[\\\\A-Za-z0-9_]*Slices\\\\'.preg_quote($otherSlice, '/').'\\\\Models\\\\/i', $trimmed)) {
+                            $relPath = str_replace(realpath($slicesDir).DIRECTORY_SEPARATOR, '', $file);
+                            $violations[] = "[Boundary Violation] {$relPath}:".($lineNum + 1)." imports internal Model from '{$otherSlice}': {$trimmed}";
                         }
                     }
                 }
             }
         }
 
-        $this->assertEmpty($violations, "Cross-slice boundary violations detected:\n" . implode("\n", $violations) . "\n\nUse Contracts (DTOs) or public Services instead.");
+        $this->assertEmpty($violations, "Cross-slice boundary violations detected:\n".implode("\n", $violations)."\n\nUse Contracts (DTOs) or public Services instead.");
     }
 
     protected function getPhpFiles(string $dir): array
     {
         $files = [];
-        $items = glob($dir . '/*') ?: [];
+        $items = glob($dir.'/*') ?: [];
         foreach ($items as $item) {
             if (is_dir($item)) {
                 $files = array_merge($files, $this->getPhpFiles($item));
@@ -73,6 +73,7 @@ class SliceBoundaryTest extends TestCase
                 $files[] = $item;
             }
         }
+
         return $files;
     }
 }

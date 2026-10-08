@@ -7,6 +7,7 @@ trait HasWorkflow
     public function getCurrentState(): string
     {
         $stateField = $this->getWorkflowStateField();
+
         return (string) ($this->{$stateField} ?? 'draft');
     }
 
@@ -25,13 +26,13 @@ trait HasWorkflow
         $class = get_class($this);
         $transitions = WorkflowEngine::getTransitions($class);
 
-        if (!isset($transitions[$transitionName])) {
+        if (! isset($transitions[$transitionName])) {
             throw new \InvalidArgumentException("Undefined workflow transition: {$transitionName}");
         }
 
         $transition = $transitions[$transitionName];
 
-        if (!$transition->canApply($this->getCurrentState(), $this)) {
+        if (! $transition->canApply($this->getCurrentState(), $this)) {
             throw new \LogicException("Cannot apply transition '{$transitionName}' from state '{$this->getCurrentState()}'");
         }
 

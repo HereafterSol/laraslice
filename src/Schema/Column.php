@@ -7,12 +7,19 @@ use Illuminate\Support\Str;
 class Column
 {
     protected string $name;
+
     protected ?string $label = null;
+
     protected string $type = 'text';
+
     protected bool $sortable = false;
+
     protected bool $searchable = false;
+
     protected array $badgeTones = [];
+
     protected ?string $prefix = null;
+
     protected ?string $suffix = null;
 
     public function __construct(string $name, string $type = 'text')
@@ -36,11 +43,12 @@ class Column
     {
         $col = new static($name, 'badge');
         $col->badgeTones = $tones ?: [
-            'active'    => 'success',
+            'active' => 'success',
             'published' => 'success',
-            'draft'     => 'warning',
-            'archived'  => 'secondary',
+            'draft' => 'warning',
+            'archived' => 'secondary',
         ];
+
         return $col;
     }
 
@@ -48,6 +56,7 @@ class Column
     {
         $col = new static($name, 'money');
         $col->prefix = $currency;
+
         return $col;
     }
 
@@ -59,29 +68,40 @@ class Column
     public function label(string $label): static
     {
         $this->label = $label;
+
         return $this;
     }
 
     public function sortable(bool $sortable = true): static
     {
         $this->sortable = $sortable;
+
         return $this;
     }
 
     public function searchable(bool $searchable = true): static
     {
         $this->searchable = $searchable;
+
         return $this;
     }
 
     public function prefix(string $prefix): static
     {
         $this->prefix = $prefix;
+
         return $this;
     }
 
-    public function getName(): string { return $this->name; }
-    public function getLabel(): string { return $this->label ?? Str::title($this->name); }
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function getLabel(): string
+    {
+        return $this->label ?? Str::title($this->name);
+    }
 
     public function renderHeader(): string
     {
@@ -105,6 +125,7 @@ BLADE;
 
         if ($this->type === 'money') {
             $prefix = $this->prefix ?? '$';
+
             return "<x-ui.table-cell class=\"font-mono text-sm\">{{ \$item->{$name} !== null ? '{$prefix}' . number_format(\$item->{$name}, 2) : '—' }}</x-ui.table-cell>";
         }
 
@@ -114,10 +135,10 @@ BLADE;
     public function toArray(): array
     {
         return [
-            'name'       => $this->name,
-            'label'      => $this->getLabel(),
-            'type'       => $this->type,
-            'sortable'   => $this->sortable,
+            'name' => $this->name,
+            'label' => $this->getLabel(),
+            'type' => $this->type,
+            'sortable' => $this->sortable,
             'searchable' => $this->searchable,
         ];
     }

@@ -2,17 +2,20 @@
 
 namespace LaraSlice\Tests\Feature\Core;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\ServiceProvider;
 use LaraSlice\Core\Discovery\SliceManifest;
 use LaraSlice\Core\Workflow\HasWorkflow;
 use LaraSlice\Core\Workflow\WorkflowEngine;
 use LaraSlice\Core\Workflow\WorkflowTransition;
+use LaraSlice\LaraSliceServiceProvider;
 use LaraSlice\Tests\TestCase;
 
 class PackageWiringTest extends TestCase
 {
     public function test_every_composer_facade_alias_points_to_an_existing_class(): void
     {
-        $composer = json_decode(file_get_contents(dirname(__DIR__, 3) . '/composer.json'), true);
+        $composer = json_decode(file_get_contents(dirname(__DIR__, 3).'/composer.json'), true);
 
         foreach ($composer['extra']['laravel']['aliases'] as $alias => $class) {
             $this->assertTrue(class_exists($class), "Alias {$alias} points to missing class {$class}");
@@ -21,7 +24,7 @@ class PackageWiringTest extends TestCase
 
     public function test_publishable_starter_files_exist(): void
     {
-        foreach (\Illuminate\Support\ServiceProvider::pathsToPublish(\LaraSlice\LaraSliceServiceProvider::class) as $from => $to) {
+        foreach (ServiceProvider::pathsToPublish(LaraSliceServiceProvider::class) as $from => $to) {
             $this->assertFileExists($from);
         }
     }
@@ -33,7 +36,7 @@ class PackageWiringTest extends TestCase
 
         try {
             $this->artisan('laraslice:skill:publish')->assertSuccessful();
-            $this->assertFileEquals(dirname(__DIR__, 3) . '/skills/laraslice/SKILL.md', $target);
+            $this->assertFileEquals(dirname(__DIR__, 3).'/skills/laraslice/SKILL.md', $target);
         } finally {
             // Leave the Testbench skeleton as it was
             foreach ($created as $dir) {
@@ -44,16 +47,16 @@ class PackageWiringTest extends TestCase
 
     public function test_manifest_active_flag_accepts_string_booleans(): void
     {
-        $dir = sys_get_temp_dir() . '/laraslice-manifest-' . bin2hex(random_bytes(4));
+        $dir = sys_get_temp_dir().'/laraslice-manifest-'.bin2hex(random_bytes(4));
         mkdir($dir);
 
         try {
             foreach (['"false"' => false, '"no"' => false, 'false' => false, '"true"' => true, '1' => true] as $raw => $expected) {
-                file_put_contents($dir . '/slice.json', '{"name": "Things", "active": ' . $raw . '}');
-                $this->assertSame($expected, (new SliceManifest($dir . '/slice.json'))->active, "active: {$raw}");
+                file_put_contents($dir.'/slice.json', '{"name": "Things", "active": '.$raw.'}');
+                $this->assertSame($expected, (new SliceManifest($dir.'/slice.json'))->active, "active: {$raw}");
             }
         } finally {
-            @unlink($dir . '/slice.json');
+            @unlink($dir.'/slice.json');
             @rmdir($dir);
         }
     }
@@ -94,7 +97,7 @@ class PackageWiringTest extends TestCase
     }
 }
 
-class WorkflowDummy extends \Illuminate\Database\Eloquent\Model
+class WorkflowDummy extends Model
 {
     use HasWorkflow;
 

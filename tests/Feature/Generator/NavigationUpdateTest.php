@@ -4,6 +4,10 @@ namespace LaraSlice\Tests\Feature\Generator;
 
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
+use LaraSlice\Blueprint\BlueprintApplier;
+use LaraSlice\Blueprint\BlueprintLoader;
+use LaraSlice\Blueprint\BlueprintPlanner;
+use LaraSlice\Blueprint\BlueprintValidator;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Tests\TestCase;
@@ -15,7 +19,7 @@ class NavigationUpdateTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-nav-' . bin2hex(random_bytes(6));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-nav-'.bin2hex(random_bytes(6));
     }
 
     protected function tearDown(): void
@@ -58,14 +62,14 @@ class NavigationUpdateTest extends TestCase
         $modifier->updateNavigation('Invoice', ['url' => '/finance/invoices']);
         $modifier->updateNavigation('Invoice', ['url' => '/accounts/invoices']);
 
-        [$names, $uris] = $this->loadRoutes($path . '/Routes/web.php');
+        [$names, $uris] = $this->loadRoutes($path.'/Routes/web.php');
 
         $this->assertSame(array_unique($names), $names, 'route names must stay unique for route:cache');
         $this->assertContains('invoices.index', $names);
         $this->assertContains('accounts/invoices', $uris);
         $this->assertNotContains('finance/invoices/create', $uris, 'the intermediate prefix is gone');
 
-        $routes = file_get_contents($path . '/Routes/web.php');
+        $routes = file_get_contents($path.'/Routes/web.php');
         $this->assertSame(1, substr_count($routes, '// laraslice:navigation-redirect'));
         $this->assertStringContainsString("Route::redirect('finance/invoices', '/accounts/invoices', 301);", $routes);
         $this->assertStringContainsString("Route::redirect('invoices', '/accounts/invoices');", $routes);
@@ -74,13 +78,13 @@ class NavigationUpdateTest extends TestCase
 
     public function test_generated_routes_survive_route_caching(): void
     {
-        $blueprint = (new \LaraSlice\Blueprint\BlueprintValidator())->validate(
-            (new \LaraSlice\Blueprint\BlueprintLoader())->load(dirname(__DIR__, 3) . '/blueprints/examples/service-desk.slice.yaml')
+        $blueprint = (new BlueprintValidator)->validate(
+            (new BlueprintLoader)->load(dirname(__DIR__, 3).'/blueprints/examples/service-desk.slice.yaml')
         );
-        $plan = (new \LaraSlice\Blueprint\BlueprintPlanner())->plan($blueprint, $this->slicesPath);
-        $target = (new \LaraSlice\Blueprint\BlueprintApplier())->apply($blueprint, $plan, $this->slicesPath, 'App\Slices');
+        $plan = (new BlueprintPlanner)->plan($blueprint, $this->slicesPath);
+        $target = (new BlueprintApplier)->apply($blueprint, $plan, $this->slicesPath, 'App\Slices');
 
-        [$names] = $this->loadRoutes($target . '/Routes/web.php');
+        [$names] = $this->loadRoutes($target.'/Routes/web.php');
 
         foreach (['service_desks.index', 'service_desks.edit', 'tickets.index', 'service_desks.tickets.index'] as $name) {
             $this->assertContains($name, $names);
@@ -91,7 +95,7 @@ class NavigationUpdateTest extends TestCase
     public function test_children_and_unspecified_settings_are_kept(): void
     {
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Invoice');
-        $manifestFile = $path . '/slice.json';
+        $manifestFile = $path.'/slice.json';
         $manifest = json_decode(file_get_contents($manifestFile), true);
         $manifest['navigation']['children'] = [['label' => 'Overdue', 'route' => 'invoices.index']];
         $manifest['navigation']['icon'] = 'receipt';
@@ -110,7 +114,7 @@ class NavigationUpdateTest extends TestCase
 
         (new SliceModifier($this->slicesPath, 'App\\Slices'))->updateNavigation('Invoice', ['icon' => 'receipt', 'order' => 3]);
 
-        $history = json_decode(file_get_contents($path . '/slice.json'), true)['version_history'];
+        $history = json_decode(file_get_contents($path.'/slice.json'), true)['version_history'];
         $last = end($history)['description'];
         $this->assertStringContainsString("Icon changed to 'receipt'", $last);
         $this->assertStringContainsString('Menu order set to 3', $last);

@@ -2,11 +2,12 @@
 
 namespace LaraSlice\Core\Base;
 
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Routing\Controller;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
@@ -16,7 +17,9 @@ abstract class BaseSliceApiController extends Controller
     use AuthorizesSliceActions;
 
     abstract protected function getService(): IFormDataService&IListingDataService;
+
     abstract protected function getFormClass(): string;
+
     abstract protected function getFilterClass(): string;
 
     public function getList(Request $request): JsonResponse
@@ -37,7 +40,7 @@ abstract class BaseSliceApiController extends Controller
 
         $item = $this->getService()->getItemById($id);
 
-        if (!$item) {
+        if (! $item) {
             return response()->json(['error' => 'Record not found'], 404);
         }
 
@@ -54,16 +57,17 @@ abstract class BaseSliceApiController extends Controller
 
         try {
             $id = $this->getService()->save($form);
+
             return response()->json([
                 'success' => true,
-                'id'      => $id,
+                'id' => $id,
                 'message' => 'Record saved successfully',
             ], $isUpdate ? 200 : 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'The given data was invalid.',
-                'errors'  => $e->errors(),
+                'errors' => $e->errors(),
             ], 422);
         } catch (ModelNotFoundException $e) {
             return response()->json(['success' => false, 'message' => 'Record not found.'], 404);
@@ -76,7 +80,7 @@ abstract class BaseSliceApiController extends Controller
 
         $deleted = $this->getService()->delete($id);
 
-        if (!$deleted) {
+        if (! $deleted) {
             return response()->json(['error' => 'Record not found or could not be deleted'], 404);
         }
 
@@ -93,6 +97,6 @@ abstract class BaseSliceApiController extends Controller
     {
         $name = preg_replace('/ApiController$/', '', class_basename(static::class));
 
-        return \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($name));
+        return Str::snake(Str::singular($name));
     }
 }

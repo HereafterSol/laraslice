@@ -5,9 +5,9 @@ namespace LaraSlice\Slices\Roles\Controllers;
 use LaraSlice\Core\Base\BaseSliceApiController;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
-use LaraSlice\Slices\Roles\Services\RoleSliceService;
-use LaraSlice\Slices\Roles\Contracts\RoleFormBusinessObject;
 use LaraSlice\Slices\Roles\Contracts\RoleFilterBusinessObject;
+use LaraSlice\Slices\Roles\Contracts\RoleFormBusinessObject;
+use LaraSlice\Slices\Roles\Services\RoleSliceService;
 
 class RoleApiController extends BaseSliceApiController
 {

@@ -3,17 +3,19 @@
 namespace LaraSlice\Blueprint;
 
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
+use LaraSlice\Generator\SliceName;
 use RuntimeException;
+use Symfony\Component\Yaml\Yaml;
 use Throwable;
 
 /** Applies the deliberately narrow first version of validated blueprints. */
 final class BlueprintApplier
 {
-    public function __construct(private readonly ?\Closure $tableExists = null)
-    {
-    }
+    public function __construct(private readonly ?\Closure $tableExists = null) {}
 
     public function assertSupported(array $blueprint): void
     {
@@ -26,12 +28,11 @@ final class BlueprintApplier
         if ($root === null) {
             throw new RuntimeException('The blueprint has no root model.');
         }
-        $rootClass = \LaraSlice\Generator\SliceName::canonical($blueprint['name']);
+        $rootClass = SliceName::canonical($blueprint['name']);
         $rootTable = Str::plural(Str::snake($rootClass));
         if ($root['table'] !== $rootTable) {
             throw new RuntimeException("Blueprint apply v1 requires the root model table to match the slice name ({$rootTable}).");
         }
-
 
         foreach ($blueprint['models'] as $model) {
             if (($model['root'] ?? false) === true) {
@@ -57,7 +58,7 @@ final class BlueprintApplier
                 }
             } elseif ($relation['type'] === 'belongsTo') {
                 if (empty($relation['name']) || ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $relation['name'])) {
-                    throw new RuntimeException("Blueprint apply requires a valid snake_case relation name for belongsTo relation.");
+                    throw new RuntimeException('Blueprint apply requires a valid snake_case relation name for belongsTo relation.');
                 }
             } else {
                 throw new RuntimeException("Blueprint apply does not support root relation type [{$relation['type']}].");
@@ -154,7 +155,7 @@ final class BlueprintApplier
             ];
         }
 
-        $staging = $slicesPath . DIRECTORY_SEPARATOR . '.laraslice-blueprint-' . bin2hex(random_bytes(8));
+        $staging = $slicesPath.DIRECTORY_SEPARATOR.'.laraslice-blueprint-'.bin2hex(random_bytes(8));
         $stagingSlices = $staging;
         try {
             $generatedSliceDir = (new SliceGenerator($stagingSlices, $namespace))->generate($blueprint['name'], $rootFields, false, [
@@ -228,6 +229,7 @@ final class BlueprintApplier
     private function hashPlan(array $plan): string
     {
         unset($plan['plan_hash']);
+
         return hash('sha256', json_encode($plan, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
 
@@ -243,7 +245,7 @@ final class BlueprintApplier
 
     private function normalizeManifest(string $sliceDirectory, array $blueprint, array $models): void
     {
-        $manifestPath = $sliceDirectory . DIRECTORY_SEPARATOR . 'slice.json';
+        $manifestPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.json';
         $manifest = json_decode((string) file_get_contents($manifestPath), true, flags: JSON_THROW_ON_ERROR);
         $root = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
         $manifest['blueprint'] = ['schema_version' => 1, 'handle' => $blueprint['handle']];
@@ -254,7 +256,7 @@ final class BlueprintApplier
             $manifest['navigation']['group'] = $blueprint['domain'];
             $domainSlug = Str::slug($blueprint['domain']);
             $pluralSnake = Str::snake($blueprint['name']);
-            $manifest['navigation']['url'] ??= '/' . $domainSlug . '/' . $pluralSnake;
+            $manifest['navigation']['url'] ??= '/'.$domainSlug.'/'.$pluralSnake;
         }
         if (! empty($blueprint['navigation']) && is_array($blueprint['navigation'])) {
             $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $blueprint['navigation']);
@@ -263,7 +265,7 @@ final class BlueprintApplier
             $manifest['permissions'] = $blueprint['permissions'];
         }
         $manifest['tables'] = array_values(array_map(static fn (array $model): string => $model['table'], $models));
-        $manifest['fields'] = \LaraSlice\Core\Discovery\ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
+        $manifest['fields'] = ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
             'name' => $field['handle'],
             'label' => $field['label'] ?? Str::headline($field['handle']),
             'type' => $field['type'],
@@ -273,14 +275,15 @@ final class BlueprintApplier
         ], $root['fields'] ?? []));
         file_put_contents($manifestPath, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
 
-        $yamlPath = $sliceDirectory . DIRECTORY_SEPARATOR . 'slice.yaml';
-        file_put_contents($yamlPath, \Symfony\Component\Yaml\Yaml::dump($blueprint, 10, 2), LOCK_EX);
+        $yamlPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.yaml';
+        file_put_contents($yamlPath, Yaml::dump($blueprint, 10, 2), LOCK_EX);
 
         try {
-            if (function_exists('app') && app()->bound(\LaraSlice\Core\Discovery\SliceManager::class)) {
-                app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+            if (function_exists('app') && app()->bound(SliceManager::class)) {
+                app(SliceManager::class)->syncPermissions();
             }
-        } catch (\Throwable) {}
+        } catch (Throwable) {
+        }
     }
 
     private function lintPhpFiles(string $directory): void
@@ -293,7 +296,7 @@ final class BlueprintApplier
             try {
                 token_get_all((string) file_get_contents($file->getPathname()), TOKEN_PARSE);
             } catch (\ParseError $exception) {
-                throw new RuntimeException('Generated invalid PHP in ' . $file->getPathname() . ': ' . $exception->getMessage(), previous: $exception);
+                throw new RuntimeException('Generated invalid PHP in '.$file->getPathname().': '.$exception->getMessage(), previous: $exception);
             }
         }
     }
@@ -325,8 +328,8 @@ final class BlueprintApplier
             if ($file === '.' || $file === '..') {
                 continue;
             }
-            $srcPath = $source . DIRECTORY_SEPARATOR . $file;
-            $dstPath = $destination . DIRECTORY_SEPARATOR . $file;
+            $srcPath = $source.DIRECTORY_SEPARATOR.$file;
+            $dstPath = $destination.DIRECTORY_SEPARATOR.$file;
             if (is_dir($srcPath)) {
                 $this->copyDirectory($srcPath, $dstPath);
             } else {
@@ -334,6 +337,7 @@ final class BlueprintApplier
             }
         }
         closedir($dir);
+
         return true;
     }
 

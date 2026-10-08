@@ -22,21 +22,24 @@ class SliceDestroyCommand extends Command
         $mode = $this->option('mode') ?: 'complete';
         $force = $this->option('force');
 
-        if (!in_array($mode, ['complete', 'code_only', 'db_only', 'wipe_data'])) {
+        if (! in_array($mode, ['complete', 'code_only', 'db_only', 'wipe_data'])) {
             $this->error("Invalid mode [{$mode}]. Allowed modes: complete, code_only, db_only, wipe_data");
+
             return Command::FAILURE;
         }
 
-        if (!$sliceName && !$domainName) {
+        if (! $sliceName && ! $domainName) {
             $this->error('Please specify either a slice name or --domain= option.');
             $this->line('Example: <fg=yellow>php artisan slice:destroy Tests --mode=complete --force</>');
+
             return Command::FAILURE;
         }
 
         $target = $domainName ? "all slices in domain [{$domainName}]" : "slice [{$sliceName}]";
 
-        if (!$force && !$this->confirm("🚨 DANGER: Are you sure you want to DESTROY {$target} (Mode: {$mode})?", false)) {
+        if (! $force && ! $this->confirm("🚨 DANGER: Are you sure you want to DESTROY {$target} (Mode: {$mode})?", false)) {
             $this->info('Operation cancelled.');
+
             return Command::SUCCESS;
         }
 
@@ -48,17 +51,20 @@ class SliceDestroyCommand extends Command
                 $this->warn("🚨 Destroying slice: [{$sliceName}] with mode: {$mode}...");
                 $result = $manager->destroySlice($sliceName, $mode);
             }
-        } catch (\InvalidArgumentException | \RuntimeException $e) {
-            $this->error('❌ ' . $e->getMessage());
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            $this->error('❌ '.$e->getMessage());
+
             return Command::FAILURE;
         }
 
-        if (!$result['success']) {
-            $this->error("❌ Destruction failed: " . ($result['message'] ?? 'Unknown error'));
+        if (! $result['success']) {
+            $this->error('❌ Destruction failed: '.($result['message'] ?? 'Unknown error'));
+
             return Command::FAILURE;
         }
 
-        $this->info("✅ " . $result['message']);
+        $this->info('✅ '.$result['message']);
+
         return Command::SUCCESS;
     }
 }

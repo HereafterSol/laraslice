@@ -28,11 +28,11 @@ class Setting extends Model
     public static function get(string $key, mixed $default = null): mixed
     {
         $setting = static::where('key', $key)->first();
-        if (!$setting) {
+        if (! $setting) {
             return $default;
         }
 
-        if ($setting->is_secret && !empty($setting->value)) {
+        if ($setting->is_secret && ! empty($setting->value)) {
             try {
                 return Crypt::decryptString($setting->value);
             } catch (\Exception $e) {
@@ -49,7 +49,7 @@ class Setting extends Model
     public static function set(string $key, mixed $value, string $group = 'general', bool $isSecret = false, ?string $description = null): self
     {
         $storedValue = $value;
-        if ($isSecret && !empty($value)) {
+        if ($isSecret && ! empty($value)) {
             $storedValue = Crypt::encryptString((string) $value);
         }
 
@@ -70,7 +70,7 @@ class Setting extends Model
     public static function applySmtpConfig(): void
     {
         $host = self::get('mail_host');
-        if (!$host) {
+        if (! $host) {
             return; // No custom database SMTP configured
         }
 

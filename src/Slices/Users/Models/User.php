@@ -5,17 +5,16 @@ namespace LaraSlice\Slices\Users\Models;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Support\Facades\Crypt;
 use LaraSlice\Core\Security\Traits\HasSlicePermissions;
-use LaraSlice\Slices\Roles\Models\Role;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, Notifiable, HasSlicePermissions;
+    use HasApiTokens, HasSlicePermissions, Notifiable;
 
     protected $table = 'users';
 
@@ -91,15 +90,15 @@ class User extends Authenticatable
     {
         return $this->hasTotp()
             || $this->hasPasskey()
-            || (!empty($this->mfa_channel) && $this->mfa_channel !== 'none' && !empty($this->mfa_confirmed_at))
-            || !empty($this->two_factor_confirmed_at);
+            || (! empty($this->mfa_channel) && $this->mfa_channel !== 'none' && ! empty($this->mfa_confirmed_at))
+            || ! empty($this->two_factor_confirmed_at);
     }
 
     public function hasTotp(): bool
     {
         return in_array($this->mfa_channel, ['totp', 'both'])
-            && !empty($this->mfa_secret)
-            && !empty($this->mfa_confirmed_at);
+            && ! empty($this->mfa_secret)
+            && ! empty($this->mfa_confirmed_at);
     }
 
     public function hasPasskey(): bool
@@ -107,6 +106,7 @@ class User extends Authenticatable
         if ($this->relationLoaded('passkeys')) {
             return $this->passkeys->whereNull('revoked_at')->isNotEmpty();
         }
+
         return $this->passkeys()->whereNull('revoked_at')->exists();
     }
 

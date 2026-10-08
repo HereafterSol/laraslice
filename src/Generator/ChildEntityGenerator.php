@@ -3,25 +3,26 @@
 namespace LaraSlice\Generator;
 
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
 
 class ChildEntityGenerator
 {
     public function generate(string $sliceDir, string $sliceNamespace, string $pluralSlice, string $childTable, string $parentTable, string $foreignKey, array $fields = []): void
     {
-        $childStudly    = Str::studly(Str::singular($childTable));
-        $childPlural    = Str::plural($childStudly);
+        $childStudly = Str::studly(Str::singular($childTable));
+        $childPlural = Str::plural($childStudly);
         $childSingularLabel = Str::headline(Str::singular($childTable));
         $childPluralLabel = Str::plural($childSingularLabel);
-        $childSnake     = Str::snake($childStudly);
+        $childSnake = Str::snake($childStudly);
         $childPluralSnake = Str::snake($childPlural);
 
-        $parentStudly   = Str::studly(Str::singular($parentTable));
-        $parentSnake    = Str::snake($parentStudly);
+        $parentStudly = Str::studly(Str::singular($parentTable));
+        $parentSnake = Str::snake($parentStudly);
         $parentRouteName = Str::snake($parentTable);
         $parentModelClass = "{$sliceNamespace}\\{$pluralSlice}\\Models\\{$parentStudly}";
 
         $manifestFile = "{$sliceDir}/slice.json";
-        $manifest = file_exists($manifestFile) ? \LaraSlice\Core\Discovery\ManifestRepository::read($manifestFile) : [];
+        $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
         $domain = $manifest['domain'] ?? $manifest['navigation']['group'] ?? null;
         $domainSlug = $domain ? Str::slug($domain) : null;
 
@@ -43,7 +44,7 @@ class ChildEntityGenerator
         foreach ($fields as $f) {
             $fName = $f['name'];
             $fType = strtolower($f['type']);
-            $phpType = match($fType) {
+            $phpType = match ($fType) {
                 'integer', 'biginteger', 'unsignedbiginteger', 'smallinteger', 'tinyinteger', 'foreign_id' => '?int',
                 'boolean' => '?bool',
                 'decimal', 'float', 'double' => '?float',
@@ -85,12 +86,12 @@ class ChildEntityGenerator
                     default => null,
                 },
                 in_array($inputType, ['string', 'uuid', 'enum'], true) ? 'max:255' : null,
-                $inputType === 'enum' ? 'in:' . implode(',', array_keys($field['options'] ?? [])) : null,
+                $inputType === 'enum' ? 'in:'.implode(',', array_keys($field['options'] ?? [])) : null,
             ]));
         }
         $rules[$foreignKey] = ['required', 'integer', "exists:{$parentTable},id"];
         $validationRules = implode("\n", array_map(
-            fn (string $field, array $fieldRules) => '            ' . var_export($field, true) . ' => ' . var_export($fieldRules, true) . ',',
+            fn (string $field, array $fieldRules) => '            '.var_export($field, true).' => '.var_export($fieldRules, true).',',
             array_keys($rules),
             array_values($rules)
         ));
@@ -329,14 +330,14 @@ PHP;
 
         // 5. Views
         $viewsDir = "{$sliceDir}/Resources/views/{$childPluralSnake}";
-        if (!is_dir($viewsDir)) {
+        if (! is_dir($viewsDir)) {
             mkdir($viewsDir, 0755, true);
         }
 
         // Column definitions for the index data-table
-        $dataTableColumn = fn (string $key, string $label): string => "            ['key' => " . var_export($key, true) . ", 'label' => " . var_export($label, true) . '],';
+        $dataTableColumn = fn (string $key, string $label): string => "            ['key' => ".var_export($key, true).", 'label' => ".var_export($label, true).'],';
         $columnLines = [$dataTableColumn('id', 'ID')];
-        if (!empty($fields)) {
+        if (! empty($fields)) {
             foreach ($fields as $f) {
                 $columnLines[] = $dataTableColumn($f['name'], Str::headline($f['name']));
             }
@@ -408,7 +409,7 @@ BLADE;
 
         // Build Dynamic Form Inputs
         $formInputs = [];
-        if (!empty($fields)) {
+        if (! empty($fields)) {
             foreach ($fields as $f) {
                 $fName = $f['name'];
                 $fLabel = htmlspecialchars($f['label'] ?? Str::headline($fName), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -422,7 +423,7 @@ BLADE;
                         $safeValue = htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                         $safeLabel = htmlspecialchars($optionLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                         $expression = var_export((string) $value, true);
-                        $optionsHtml .= "                    <option value=\"{$safeValue}\" @selected(old('{$fName}', \$form->{$fName} ?? " . var_export($f['default'] ?? '', true) . ") === {$expression})>{$safeLabel}</option>\n";
+                        $optionsHtml .= "                    <option value=\"{$safeValue}\" @selected(old('{$fName}', \$form->{$fName} ?? ".var_export($f['default'] ?? '', true).") === {$expression})>{$safeLabel}</option>\n";
                     }
                     $formInputs[] = <<<HTML
                 <div class="space-y-1.5">
@@ -457,8 +458,8 @@ HTML;
 HTML;
                 } elseif ($fType === 'foreign_id' || str_ends_with($fName, '_id')) {
                     $relModel = Str::camel(Str::plural(preg_replace('/_id$/', '', $fName)));
-                    $optVar = '$' . $relModel . 'Options';
-                    $storeVar = '$' . $relModel . 'QuickStoreUrl';
+                    $optVar = '$'.$relModel.'Options';
+                    $storeVar = '$'.$relModel.'QuickStoreUrl';
                     $reqBool = $required ? 'true' : 'false';
                     $formInputs[] = <<<HTML
                 <div class="space-y-1.5">
@@ -501,17 +502,17 @@ HTML;
                 }
             }
         } else {
-            $formInputs[] = <<<HTML
+            $formInputs[] = <<<'HTML'
                 <div class="space-y-1.5">
                     <x-ui.label for="name">Name *</x-ui.label>
-                    <x-ui.input id="name" name="name" value="{{ old('name', \$form->name ?? '') }}" required autofocus />
+                    <x-ui.input id="name" name="name" value="{{ old('name', $form->name ?? '') }}" required autofocus />
                 </div>
 HTML;
         }
 
         $formInputsStr = implode("\n\n", $formInputs);
 
-        $optParentVar = Str::camel(Str::plural($parentTable)) . 'Options';
+        $optParentVar = Str::camel(Str::plural($parentTable)).'Options';
 
         $formBlade = <<<BLADE
 @extends('layouts.app')
@@ -593,29 +594,27 @@ BLADE;
                 file_put_contents($webRoutesFile, $webRoutes);
             }
 
-            if (!str_contains($webRoutes, "Route::resource('{$childPluralSnake}'")) {
+            if (! str_contains($webRoutes, "Route::resource('{$childPluralSnake}'")) {
                 $useStatement = "use {$namespace}\Controllers\\{$childStudly}WebController;\n";
-                if (!str_contains($webRoutes, $useStatement)) {
-                    $webRoutes = preg_replace('/(use Illuminate\\\\Support\\\\Facades\\\\Route;)/', "$1\n" . $useStatement, $webRoutes);
+                if (! str_contains($webRoutes, $useStatement)) {
+                    $webRoutes = preg_replace('/(use Illuminate\\\\Support\\\\Facades\\\\Route;)/', "$1\n".$useStatement, $webRoutes);
                 }
-                
+
                 $childUrlPrefix = $domainSlug ? "{$domainSlug}/{$childPluralSnake}" : $childPluralSnake;
 
                 $routeDef = "Route::prefix('{$parentUrlPrefix}/{parentId}')->name('{$parentRouteName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n    Route::resource('{$childPluralSnake}', {$childStudly}WebController::class)->parameters(['{$childPluralSnake}' => 'id'])->except(['show']);\n});\n";
 
-
                 // Global top-level routes: /crm/contacts or /contacts
                 $routeDef .= "\nRoute::prefix('{$childUrlPrefix}')->name('{$childPluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n"
-                    . "    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
-                    . "    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
-                    . "    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
-                    . "    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
-                    . "    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
-                    . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"
-                    . "});\n";
+                    ."    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
+                    ."    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
+                    ."    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
+                    ."    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
+                    ."    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
+                    ."    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"
+                    ."});\n";
 
-
-                $webRoutes .= "\n" . $routeDef;
+                $webRoutes .= "\n".$routeDef;
                 file_put_contents($webRoutesFile, $webRoutes);
             }
         }
@@ -624,9 +623,9 @@ BLADE;
         $providerFile = "{$sliceDir}/Providers/{$pluralSlice}ServiceProvider.php";
         if (file_exists($providerFile)) {
             $provider = file_get_contents($providerFile);
-            if (!str_contains($provider, "\$this->loadViewsFrom(__DIR__.'/../Resources/views/{$childPluralSnake}'")) {
+            if (! str_contains($provider, "\$this->loadViewsFrom(__DIR__.'/../Resources/views/{$childPluralSnake}'")) {
                 $loadViews = "\$this->loadViewsFrom(__DIR__.'/../Resources/views/{$childPluralSnake}', '{$childPluralSnake}');";
-                $provider = preg_replace('/(\$this->loadViewsFrom\([^;]+;)/', "$1\n        " . $loadViews, $provider);
+                $provider = preg_replace('/(\$this->loadViewsFrom\([^;]+;)/', "$1\n        ".$loadViews, $provider);
                 file_put_contents($providerFile, $provider);
             }
         }

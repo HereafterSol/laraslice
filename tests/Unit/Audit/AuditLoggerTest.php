@@ -2,8 +2,9 @@
 
 namespace LaraSlice\Tests\Unit\Audit;
 
-use PHPUnit\Framework\TestCase;
+use Illuminate\Support\Collection;
 use LaraSlice\Core\Audit\AuditLogger;
+use PHPUnit\Framework\TestCase;
 
 class AuditLoggerTest extends TestCase
 {
@@ -25,24 +26,24 @@ class AuditLoggerTest extends TestCase
             $error = $e->getMessage();
         }
 
-        $this->assertNull($error, 'AuditLogger::record threw: ' . $error);
+        $this->assertNull($error, 'AuditLogger::record threw: '.$error);
     }
 
     public function test_for_slice_query_returns_collection_gracefully(): void
     {
         $logs = AuditLogger::forSlice('orders');
-        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $logs);
+        $this->assertInstanceOf(Collection::class, $logs);
     }
 
     public function test_for_entity_query_returns_collection_gracefully(): void
     {
         $logs = AuditLogger::forEntity('Order', 101);
-        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $logs);
+        $this->assertInstanceOf(Collection::class, $logs);
     }
 
     public function test_recent_query_returns_collection_gracefully(): void
     {
         $logs = AuditLogger::recent(10);
-        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $logs);
+        $this->assertInstanceOf(Collection::class, $logs);
     }
 }

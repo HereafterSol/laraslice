@@ -13,7 +13,7 @@ class SliceModifierFieldsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-modifier-' . bin2hex(random_bytes(8));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-modifier-'.bin2hex(random_bytes(8));
     }
 
     protected function tearDown(): void
@@ -48,27 +48,27 @@ class SliceModifierFieldsTest extends TestCase
             ['name' => 'desc', 'type' => 'text', 'nullable' => true],
         ]);
 
-        $model = file_get_contents($path . '/Models/Invoice.php');
+        $model = file_get_contents($path.'/Models/Invoice.php');
         foreach (['reference', 'amount', 'desc', 'title'] as $column) {
             $this->assertStringContainsString("'{$column}'", $model);
         }
-        $this->assertParses($path . '/Models/Invoice.php');
+        $this->assertParses($path.'/Models/Invoice.php');
 
-        $service = file_get_contents($path . '/Services/InvoiceSliceService.php');
+        $service = file_get_contents($path.'/Services/InvoiceSliceService.php');
         $this->assertMatchesRegularExpression("/'reference' =>\s*array \(\s*0 => 'required',\s*1 => 'string',\s*2 => 'max:40',/", $service);
         $this->assertStringContainsString("'amount' =>", $service);
-        $this->assertParses($path . '/Services/InvoiceSliceService.php');
+        $this->assertParses($path.'/Services/InvoiceSliceService.php');
 
         // "desc" must be added even though the DTO already declares $description
-        $dto = file_get_contents($path . '/Contracts/InvoiceFormBusinessObject.php');
+        $dto = file_get_contents($path.'/Contracts/InvoiceFormBusinessObject.php');
         $this->assertMatchesRegularExpression('/public \?string \$desc = null;/', $dto);
-        $this->assertParses($path . '/Contracts/InvoiceFormBusinessObject.php');
+        $this->assertParses($path.'/Contracts/InvoiceFormBusinessObject.php');
     }
 
     public function test_child_models_written_with_long_array_syntax_get_new_fillable_columns(): void
     {
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Invoice');
-        $childModel = $path . '/Models/InvoiceLine.php';
+        $childModel = $path.'/Models/InvoiceLine.php';
         file_put_contents($childModel, "<?php\nnamespace App\\Slices\\Invoices\\Models;\nclass InvoiceLine extends \\Illuminate\\Database\\Eloquent\\Model\n{\n    protected \$fillable = array (\n  0 => 'invoice_id',\n  1 => 'quantity',\n);\n}\n");
 
         (new SliceModifier($this->slicesPath, 'App\\Slices'))->addFieldsBatch('Invoice', [

@@ -17,7 +17,7 @@ class GuardStudioWrites
     {
         if (app()->environment('production') && ! config('laraslice.wizard.allow_in_production', false)) {
             $message = 'Slice Studio cannot change code, migrations or data in production. '
-                . 'Make the change in development and deploy it, or set LARASLICE_WIZARD_ALLOW_IN_PRODUCTION=true.';
+                .'Make the change in development and deploy it, or set LARASLICE_WIZARD_ALLOW_IN_PRODUCTION=true.';
 
             if ($request->expectsJson()) {
                 return response()->json(['success' => false, 'message' => $message], 403);

@@ -2,25 +2,38 @@
 
 namespace LaraSlice\Schema;
 
+use BadMethodCallException;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use BadMethodCallException;
 
 class Field
 {
     protected string $name;
+
     protected string $type = 'text';
+
     protected ?string $label = null;
+
     protected ?string $placeholder = null;
+
     protected bool $required = false;
+
     protected mixed $default = null;
+
     protected ?string $helperText = null;
+
     protected ?string $prefix = null;
+
     protected ?string $suffix = null;
+
     protected string $step = 'any';
+
     protected array $options = [];
+
     protected int $columnSpan = 1;
+
     protected bool $autofocus = false;
+
     protected int $rows = 3;
 
     public function __construct(string $name, string $type = 'text')
@@ -71,18 +84,21 @@ class Field
         }
 
         $this->step = $step;
+
         return $this;
     }
 
     public function autofocus(bool $condition = true): static
     {
         $this->autofocus = $condition;
+
         return $this;
     }
 
     public function rows(int $rows): static
     {
         $this->rows = max(1, min(20, $rows));
+
         return $this;
     }
 
@@ -90,10 +106,12 @@ class Field
     {
         if ($method === 'number') {
             $this->type = 'number';
+
             return $this;
         }
         if ($method === 'textarea') {
             $this->type = 'textarea';
+
             return $this;
         }
         if ($method === 'select') {
@@ -101,10 +119,12 @@ class Field
             if (isset($arguments[0])) {
                 $this->options($arguments[0]);
             }
+
             return $this;
         }
         if ($method === 'boolean' || $method === 'toggle') {
             $this->type = 'boolean';
+
             return $this;
         }
 
@@ -115,6 +135,7 @@ class Field
     {
         $field = new static($name, 'select');
         $field->options($options);
+
         return $field;
     }
 
@@ -136,18 +157,21 @@ class Field
     public function label(string $label): static
     {
         $this->label = $label;
+
         return $this;
     }
 
     public function placeholder(string $placeholder): static
     {
         $this->placeholder = $placeholder;
+
         return $this;
     }
 
     public function required(bool $required = true): static
     {
         $this->required = $required;
+
         return $this;
     }
 
@@ -158,24 +182,28 @@ class Field
         }
 
         $this->default = $default;
+
         return $this;
     }
 
     public function helperText(string $text): static
     {
         $this->helperText = $text;
+
         return $this;
     }
 
     public function prefix(string $prefix): static
     {
         $this->prefix = $prefix;
+
         return $this;
     }
 
     public function suffix(string $suffix): static
     {
         $this->suffix = $suffix;
+
         return $this;
     }
 
@@ -188,20 +216,41 @@ class Field
         }
 
         $this->options = $options;
+
         return $this;
     }
 
     public function columnSpan(int $span): static
     {
         $this->columnSpan = max(1, min(12, $span));
+
         return $this;
     }
 
-    public function getName(): string { return $this->name; }
-    public function getType(): string { return $this->type; }
-    public function getLabel(): string { return $this->label ?? Str::title($this->name); }
-    public function isRequired(): bool { return $this->required; }
-    public function getOptions(): array { return $this->options; }
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function getType(): string
+    {
+        return $this->type;
+    }
+
+    public function getLabel(): string
+    {
+        return $this->label ?? Str::title($this->name);
+    }
+
+    public function isRequired(): bool
+    {
+        return $this->required;
+    }
+
+    public function getOptions(): array
+    {
+        return $this->options;
+    }
 
     /**
      * Render pure BlatUI HTML component for this field
@@ -236,6 +285,7 @@ HTML;
                 $optionExpression = var_export((string) $optVal, true);
                 $optionsHtml .= "<option value=\"{$optionValue}\" @selected(old('{$name}', \$form->{$name} ?? {$defaultExpression}) == {$optionExpression})>{$optionLabel}</option>\n";
             }
+
             return <<<HTML
             <div class="space-y-1.5">
                 <x-ui.label for="{$name}">{$label}{$reqStar}</x-ui.label>
@@ -251,6 +301,7 @@ HTML;
 
         if ($this->type === 'boolean') {
             $helper = htmlspecialchars($this->helperText ?? "Enable or disable {$label}");
+
             return <<<HTML
             <div class="flex items-center justify-between p-3 rounded-xl border bg-card/60">
                 <div>
@@ -272,7 +323,7 @@ HTML;
             default => 'text',
         };
         $stepAttribute = in_array($this->type, ['number', 'decimal'], true)
-            ? ' step="' . htmlspecialchars($this->step, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"'
+            ? ' step="'.htmlspecialchars($this->step, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'"'
             : '';
 
         return <<<HTML
@@ -316,13 +367,13 @@ DART;
     public function toArray(): array
     {
         return [
-            'name'        => $this->name,
-            'type'        => $this->type,
-            'label'       => $this->getLabel(),
-            'required'    => $this->required,
-            'default'     => $this->default,
+            'name' => $this->name,
+            'type' => $this->type,
+            'label' => $this->getLabel(),
+            'required' => $this->required,
+            'default' => $this->default,
             'placeholder' => $this->placeholder,
-            'options'     => $this->options,
+            'options' => $this->options,
         ];
     }
 }

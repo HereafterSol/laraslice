@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserReset extends Model
 {
     protected $table = 'user_resets';
+
     protected $fillable = ['user_id', 'email', 'token_hash', 'channel', 'ip_address', 'user_agent', 'requested_at', 'expired_at', 'used_at', 'status'];
+
     protected $casts = ['requested_at' => 'datetime', 'expired_at' => 'datetime', 'used_at' => 'datetime'];
 
     public function user(): BelongsTo

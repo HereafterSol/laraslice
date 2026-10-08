@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Tests\Feature\Security;
 
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use LaraSlice\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -35,7 +36,7 @@ class RouteAuthenticationTest extends TestCase
     #[DataProvider('guardedWebRoutes')]
     public function test_guests_cannot_reach_protected_web_routes(string $method, string $uri): void
     {
-        $response = $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class)
+        $response = $this->withoutMiddleware(ValidateCsrfToken::class)
             ->json($method, $uri, ['table' => 'users', 'data' => ['email' => 'x@y.z']]);
 
         $this->assertContains($response->getStatusCode(), [401, 403], "{$method} {$uri} returned {$response->getStatusCode()}");

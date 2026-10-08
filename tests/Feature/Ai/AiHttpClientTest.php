@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Tests\Feature\Ai;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use LaraSlice\Core\Ai\AiEngine;
@@ -55,7 +56,7 @@ class AiHttpClientTest extends TestCase
     public function test_connection_failures_return_null(): void
     {
         config(['laraslice.ai.http.retries' => 1]);
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('down'));
+        Http::fake(fn () => throw new ConnectionException('down'));
 
         $this->assertNull($this->invoke('callOllama', ['http://localhost:11434', 'llama', 'sys', 'hi']));
     }

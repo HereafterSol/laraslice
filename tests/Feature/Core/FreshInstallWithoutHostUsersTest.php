@@ -12,7 +12,7 @@ class FreshInstallWithoutHostUsersTest extends TestCase
 {
     protected function defineDatabaseMigrations(): void
     {
-        $this->loadMigrationsFrom(dirname(__DIR__, 3) . '/vendor/laravel/sanctum/database/migrations');
+        $this->loadMigrationsFrom(dirname(__DIR__, 3).'/vendor/laravel/sanctum/database/migrations');
         $this->artisan('migrate')->run();
     }
 

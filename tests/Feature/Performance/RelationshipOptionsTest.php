@@ -5,6 +5,8 @@ namespace LaraSlice\Tests\Feature\Performance;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Base\BaseSliceWebController;
+use LaraSlice\Core\Contracts\IFormDataService;
+use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Tests\TestCase;
 
 class RelationshipOptionsTest extends TestCase
@@ -20,19 +22,32 @@ class RelationshipOptionsTest extends TestCase
         }
         config(['laraslice.forms.relationship_options_limit' => 10]);
 
-        $controller = new class extends BaseSliceWebController {
-            protected function getService(): \LaraSlice\Core\Contracts\IFormDataService&\LaraSlice\Core\Contracts\IListingDataService
+        $controller = new class extends BaseSliceWebController
+        {
+            protected function getService(): IFormDataService&IListingDataService
             {
                 throw new \LogicException('unused');
             }
 
-            protected function getFormClass(): string { return ''; }
+            protected function getFormClass(): string
+            {
+                return '';
+            }
 
-            protected function getFilterClass(): string { return ''; }
+            protected function getFilterClass(): string
+            {
+                return '';
+            }
 
-            protected function getViewPrefix(): string { return ''; }
+            protected function getViewPrefix(): string
+            {
+                return '';
+            }
 
-            protected function getRoutePrefix(): string { return ''; }
+            protected function getRoutePrefix(): string
+            {
+                return '';
+            }
 
             public function options(mixed $form): array
             {

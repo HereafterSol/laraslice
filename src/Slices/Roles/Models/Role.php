@@ -3,12 +3,10 @@
 namespace LaraSlice\Slices\Roles\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use LaraSlice\Slices\Users\Models\User;
 
 class Role extends Model
 {
-
     protected $table = 'roles';
 
     protected $fillable = [

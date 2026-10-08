@@ -2,6 +2,9 @@
 
 namespace LaraSlice\Tests\Feature\Security;
 
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Generator\SliceSeederService;
@@ -30,7 +33,7 @@ class DestructiveOperationsTest extends TestCase
         } finally {
             $this->assertTrue(Schema::hasTable('users'));
             $this->assertNotNull($user->fresh());
-            $this->assertDirectoryExists(dirname(__DIR__, 3) . '/src/Slices/Users');
+            $this->assertDirectoryExists(dirname(__DIR__, 3).'/src/Slices/Users');
         }
     }
 
@@ -49,9 +52,9 @@ class DestructiveOperationsTest extends TestCase
             $this->app['env'] = 'production';
             // Laravel only skips CSRF checks in the "testing" environment
             $this->withoutMiddleware([
-                \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
-                \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-                \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+                PreventRequestForgery::class,
+                ValidateCsrfToken::class,
+                VerifyCsrfToken::class,
             ]);
             $admin = $this->makeSuperAdmin();
 
@@ -80,7 +83,7 @@ class DestructiveOperationsTest extends TestCase
 
     public function test_wizard_and_mcp_endpoint_are_disabled_by_default(): void
     {
-        $config = require dirname(__DIR__, 3) . '/config/laraslice.php';
+        $config = require dirname(__DIR__, 3).'/config/laraslice.php';
 
         $this->assertFalse($config['wizard']['enabled']);
         $this->assertFalse($config['wizard']['allow_in_production']);

@@ -2,8 +2,11 @@
 
 namespace LaraSlice\Core\Audit\Traits;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use LaraSlice\Core\Audit\AuditLogger;
+use LaraSlice\Support\SchemaCache;
 
 /**
  * Trait AuditableSlice
@@ -51,7 +54,7 @@ trait AuditableSlice
         static::deleting(function ($model) {
             if (auth()->check() && $model->hasAuditColumn('deleted_by')) {
                 // If the model uses SoftDeletes, stamp deleted_by
-                if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($model), true) || method_exists($model, 'isForceDeleting') && ! $model->isForceDeleting()) {
+                if (in_array(SoftDeletes::class, class_uses_recursive($model), true) || method_exists($model, 'isForceDeleting') && ! $model->isForceDeleting()) {
                     $model->deleted_by = auth()->id();
                     $model->saveQuietly();
                 }
@@ -76,13 +79,13 @@ trait AuditableSlice
             $newValues = $model->filterAuditAttributes($model->getAttributes());
 
             AuditLogger::record([
-                'slice'       => $model->getAuditSlice(),
-                'action'      => 'created',
+                'slice' => $model->getAuditSlice(),
+                'action' => 'created',
                 'entity_type' => get_class($model),
-                'entity_id'   => $model->getKey(),
-                'old_values'  => null,
-                'new_values'  => $newValues,
-                'metadata'    => $model->getAuditMetadata('created'),
+                'entity_id' => $model->getKey(),
+                'old_values' => null,
+                'new_values' => $newValues,
+                'metadata' => $model->getAuditMetadata('created'),
             ]);
         });
 
@@ -115,13 +118,13 @@ trait AuditableSlice
             }
 
             AuditLogger::record([
-                'slice'       => $model->getAuditSlice(),
-                'action'      => 'updated',
+                'slice' => $model->getAuditSlice(),
+                'action' => 'updated',
                 'entity_type' => get_class($model),
-                'entity_id'   => $model->getKey(),
-                'old_values'  => $oldValues,
-                'new_values'  => $newValues,
-                'metadata'    => $model->getAuditMetadata('updated'),
+                'entity_id' => $model->getKey(),
+                'old_values' => $oldValues,
+                'new_values' => $newValues,
+                'metadata' => $model->getAuditMetadata('updated'),
             ]);
         });
 
@@ -130,20 +133,20 @@ trait AuditableSlice
                 return;
             }
 
-            $rawAttributes = method_exists($model, 'getOriginal') && !empty($model->getOriginal())
+            $rawAttributes = method_exists($model, 'getOriginal') && ! empty($model->getOriginal())
                 ? $model->getOriginal()
                 : $model->getAttributes();
 
             $oldValues = $model->filterAuditAttributes($rawAttributes);
 
             AuditLogger::record([
-                'slice'       => $model->getAuditSlice(),
-                'action'      => method_exists($model, 'isForceDeleting') && $model->isForceDeleting() ? 'force_deleted' : 'deleted',
+                'slice' => $model->getAuditSlice(),
+                'action' => method_exists($model, 'isForceDeleting') && $model->isForceDeleting() ? 'force_deleted' : 'deleted',
                 'entity_type' => get_class($model),
-                'entity_id'   => $model->getKey(),
-                'old_values'  => $oldValues,
-                'new_values'  => null,
-                'metadata'    => $model->getAuditMetadata('deleted'),
+                'entity_id' => $model->getKey(),
+                'old_values' => $oldValues,
+                'new_values' => null,
+                'metadata' => $model->getAuditMetadata('deleted'),
             ]);
         });
 
@@ -154,13 +157,13 @@ trait AuditableSlice
                 }
 
                 AuditLogger::record([
-                    'slice'       => $model->getAuditSlice(),
-                    'action'      => 'restored',
+                    'slice' => $model->getAuditSlice(),
+                    'action' => 'restored',
                     'entity_type' => get_class($model),
-                    'entity_id'   => $model->getKey(),
-                    'old_values'  => null,
-                    'new_values'  => $model->filterAuditAttributes($model->getAttributes()),
-                    'metadata'    => $model->getAuditMetadata('restored'),
+                    'entity_id' => $model->getKey(),
+                    'old_values' => null,
+                    'new_values' => $model->filterAuditAttributes($model->getAttributes()),
+                    'metadata' => $model->getAuditMetadata('restored'),
                 ]);
             });
         }
@@ -171,7 +174,8 @@ trait AuditableSlice
      */
     public function creator(): BelongsTo
     {
-        $userModel = config('auth.providers.users.model', \App\Models\User::class);
+        $userModel = config('auth.providers.users.model', User::class);
+
         return $this->belongsTo($userModel, 'created_by');
     }
 
@@ -180,7 +184,8 @@ trait AuditableSlice
      */
     public function updater(): BelongsTo
     {
-        $userModel = config('auth.providers.users.model', \App\Models\User::class);
+        $userModel = config('auth.providers.users.model', User::class);
+
         return $this->belongsTo($userModel, 'updated_by');
     }
 
@@ -189,7 +194,8 @@ trait AuditableSlice
      */
     public function deleter(): BelongsTo
     {
-        $userModel = config('auth.providers.users.model', \App\Models\User::class);
+        $userModel = config('auth.providers.users.model', User::class);
+
         return $this->belongsTo($userModel, 'deleted_by');
     }
 
@@ -203,7 +209,7 @@ trait AuditableSlice
         }
 
         try {
-            return \LaraSlice\Support\SchemaCache::hasColumn($this->getTable(), $column);
+            return SchemaCache::hasColumn($this->getTable(), $column);
         } catch (\Throwable $e) {
             return false;
         }
@@ -245,7 +251,7 @@ trait AuditableSlice
      */
     public function getAuditSlice(): string
     {
-        if (isset($this->auditSlice) && !empty($this->auditSlice)) {
+        if (isset($this->auditSlice) && ! empty($this->auditSlice)) {
             return (string) $this->auditSlice;
         }
 
@@ -273,6 +279,7 @@ trait AuditableSlice
                 $filtered[$key] = $value;
             }
         }
+
         return $filtered;
     }
 

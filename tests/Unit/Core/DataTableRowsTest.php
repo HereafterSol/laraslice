@@ -24,13 +24,13 @@ class DataTableRowsTest extends TestCase
     public function test_formats_values_for_text_cells(): void
     {
         $item = (object) [
-            'empty'  => null,
-            'blank'  => '',
-            'flag'   => true,
-            'off'    => false,
+            'empty' => null,
+            'blank' => '',
+            'flag' => true,
+            'off' => false,
             'amount' => 99.5,
-            'when'   => new DateTimeImmutable('2026-10-06 14:30:00'),
-            'tags'   => ['a', 'b'],
+            'when' => new DateTimeImmutable('2026-10-06 14:30:00'),
+            'tags' => ['a', 'b'],
         ];
         $columns = array_map(fn ($key) => ['key' => $key], array_keys((array) $item));
 
@@ -50,7 +50,7 @@ class DataTableRowsTest extends TestCase
         $rows = DataTableRows::from(
             [(object) ['id' => 7]],
             [['key' => 'id']],
-            fn ($item) => ['edit_url' => '/things/' . $item->id . '/edit']
+            fn ($item) => ['edit_url' => '/things/'.$item->id.'/edit']
         );
 
         $this->assertSame([['id' => 7, 'edit_url' => '/things/7/edit']], $rows);

@@ -2,24 +2,29 @@
 
 namespace LaraSlice\Slices\Users\Services;
 
-use LaraSlice\Slices\Users\Models\User;
 use App\Models\User as AppUser;
 use Illuminate\Contracts\Auth\Authenticatable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Slices\Users\Models\User;
 
 class SecurityPolicyService
 {
     public const MFA_OFF = 'off';
+
     public const MFA_OPTIONAL = 'optional';
+
     public const MFA_PRIVILEGED = 'privileged_only';
+
     public const MFA_ALL = 'all';
 
     public static function get(string $key, mixed $default = null): mixed
     {
         try {
-            return Cache::remember('sec_pol_' . $key, 120, function () use ($key, $default) {
+            return Cache::remember('sec_pol_'.$key, 120, function () use ($key, $default) {
                 $row = DB::table('settings')->where('key', $key)->first();
+
                 return $row ? $row->value : $default;
             });
         } catch (\Throwable $e) {
@@ -32,13 +37,13 @@ class SecurityPolicyService
         DB::table('settings')->updateOrInsert(
             ['key' => $key],
             [
-                'value'       => (string) $value,
-                'group'       => 'security',
+                'value' => (string) $value,
+                'group' => 'security',
                 'description' => $description,
-                'updated_at'  => now(),
+                'updated_at' => now(),
             ]
         );
-        Cache::forget('sec_pol_' . $key);
+        Cache::forget('sec_pol_'.$key);
     }
 
     public static function getPrivilegedRoles(): array
@@ -48,23 +53,24 @@ class SecurityPolicyService
             return $raw;
         }
         $decoded = json_decode((string) $raw, true);
+
         return is_array($decoded) ? $decoded : ['super-admin', 'admin', 'it-security', 'manager'];
     }
 
     public static function getAll(): array
     {
         return [
-            'privileged_roles'    => self::getPrivilegedRoles(),
-            'mfa_enforcement'     => self::get('security.mfa_enforcement', self::MFA_PRIVILEGED),
-            'allow_passkeys'      => filter_var(self::get('security.allow_passkeys', 'true'), FILTER_VALIDATE_BOOLEAN),
-            'allow_totp'          => filter_var(self::get('security.allow_totp', 'true'), FILTER_VALIDATE_BOOLEAN),
-            'allow_device_code'   => filter_var(self::get('security.allow_device_code', 'true'), FILTER_VALIDATE_BOOLEAN),
-            'allow_recovery_codes'=> filter_var(self::get('security.allow_recovery_codes', 'true'), FILTER_VALIDATE_BOOLEAN),
+            'privileged_roles' => self::getPrivilegedRoles(),
+            'mfa_enforcement' => self::get('security.mfa_enforcement', self::MFA_PRIVILEGED),
+            'allow_passkeys' => filter_var(self::get('security.allow_passkeys', 'true'), FILTER_VALIDATE_BOOLEAN),
+            'allow_totp' => filter_var(self::get('security.allow_totp', 'true'), FILTER_VALIDATE_BOOLEAN),
+            'allow_device_code' => filter_var(self::get('security.allow_device_code', 'true'), FILTER_VALIDATE_BOOLEAN),
+            'allow_recovery_codes' => filter_var(self::get('security.allow_recovery_codes', 'true'), FILTER_VALIDATE_BOOLEAN),
             'max_failed_attempts' => (int) self::get('security.max_failed_attempts', 5),
-            'lockout_minutes'          => (int) self::get('security.lockout_minutes', 15),
+            'lockout_minutes' => (int) self::get('security.lockout_minutes', 15),
             'lockout_duration_minutes' => (int) self::get('security.lockout_minutes', 15),
-            'idle_lock_minutes'        => (int) self::get('security.idle_lock_minutes', 15),
-            'remember_device_days'=> (int) self::get('security.remember_device_days', 30),
+            'idle_lock_minutes' => (int) self::get('security.idle_lock_minutes', 15),
+            'remember_device_days' => (int) self::get('security.remember_device_days', 30),
         ];
     }
 
@@ -76,11 +82,11 @@ class SecurityPolicyService
         $policy = self::get('security.mfa_enforcement', self::MFA_PRIVILEGED);
 
         return match ($policy) {
-            self::MFA_OFF        => false,
-            self::MFA_ALL        => true,
+            self::MFA_OFF => false,
+            self::MFA_ALL => true,
             self::MFA_PRIVILEGED => self::isPrivilegedUser($user),
-            self::MFA_OPTIONAL   => $user->hasMfa(),
-            default              => false,
+            self::MFA_OPTIONAL => $user->hasMfa(),
+            default => false,
         };
     }
 
@@ -104,7 +110,7 @@ class SecurityPolicyService
     public static function isPrivilegedUser(User|AppUser|Authenticatable $user): bool
     {
         // 1. Super Admin universal check
-        if (\LaraSlice\Core\Security\Access::isSuperAdmin($user)) {
+        if (Access::isSuperAdmin($user)) {
             return true;
         }
 
@@ -118,12 +124,15 @@ class SecurityPolicyService
                 ->exists()) {
                 return true;
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         // 3. Check model method if exists
         if (method_exists($user, 'hasRole')) {
             foreach ($configuredRoles as $slug) {
-                if ($user->hasRole($slug)) return true;
+                if ($user->hasRole($slug)) {
+                    return true;
+                }
             }
         }
 

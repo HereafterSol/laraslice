@@ -107,13 +107,13 @@ class LoginAttemptService
             UserAttempt::record(identifier: $identifier, request: $request, reason: $reason, userId: $user?->id);
 
             UserSecurityLog::create([
-                'user_id'              => $user?->id,
+                'user_id' => $user?->id,
                 'identifier_attempted' => $identifier,
-                'event_type'           => str_starts_with($reason, 'invalid_password') ? 'login_failed' : $reason,
-                'ip_address'           => $request->ip() ?: '127.0.0.1',
-                'user_agent'           => $request->userAgent(),
-                'payload'              => $description ? ['description' => $description] : null,
-                'created_at'           => now(),
+                'event_type' => str_starts_with($reason, 'invalid_password') ? 'login_failed' : $reason,
+                'ip_address' => $request->ip() ?: '127.0.0.1',
+                'user_agent' => $request->userAgent(),
+                'payload' => $description ? ['description' => $description] : null,
+                'created_at' => now(),
             ]);
         } catch (\Throwable $e) {
             report($e);

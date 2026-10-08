@@ -13,7 +13,7 @@ use LaraSlice\Core\Discovery\SliceManager;
  * @method static int syncPermissions(bool $prune = false)
  * @method static int syncPermissionsIfChanged()
  *
- * @see \LaraSlice\Core\Discovery\SliceManager
+ * @see SliceManager
  */
 class LaraSlice extends Facade
 {

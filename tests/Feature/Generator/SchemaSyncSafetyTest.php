@@ -9,13 +9,15 @@ use PHPUnit\Framework\TestCase;
 class SchemaSyncSafetyTest extends TestCase
 {
     private string $slicesPath;
+
     private string $slicePath;
+
     private SliceModifier $modifier;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->slicesPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laraslice-sync-' . bin2hex(random_bytes(6));
+        $this->slicesPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'laraslice-sync-'.bin2hex(random_bytes(6));
         $this->slicePath = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Invoice', [
             ['name' => 'reference', 'type' => 'string', 'label' => 'Reference'],
             ['name' => 'notes', 'type' => 'text', 'label' => 'Notes'],
@@ -48,25 +50,25 @@ class SchemaSyncSafetyTest extends TestCase
             }
         }
 
-        $this->assertSame([], glob($this->slicePath . '/Migrations/*sync_schema*'));
+        $this->assertSame([], glob($this->slicePath.'/Migrations/*sync_schema*'));
     }
 
     public function test_dropping_a_column_writes_a_restoring_down_and_updates_model_and_rules(): void
     {
         $this->modifier->syncFields('Invoice', 'invoices', [], ['notes', 'amount']);
 
-        $migration = file_get_contents(glob($this->slicePath . '/Migrations/*sync_schema*')[0]);
+        $migration = file_get_contents(glob($this->slicePath.'/Migrations/*sync_schema*')[0]);
         $this->assertStringContainsString("dropColumn('notes')", $migration);
         $this->assertStringContainsString("\$table->text('notes')->nullable()", $migration, 'down() recreates the column');
         $this->assertStringNotContainsString('definition unknown', $migration);
         $this->assertStringContainsString("\$table->integer('amount')->nullable()", $migration);
         token_get_all($migration, TOKEN_PARSE);
 
-        $model = file_get_contents($this->slicePath . '/Models/Invoice.php');
+        $model = file_get_contents($this->slicePath.'/Models/Invoice.php');
         $this->assertStringNotContainsString("'notes'", $model);
         $this->assertStringContainsString("'reference'", $model);
 
-        $service = file_get_contents($this->slicePath . '/Services/InvoiceSliceService.php');
+        $service = file_get_contents($this->slicePath.'/Services/InvoiceSliceService.php');
         $this->assertStringNotContainsString("'notes' =>", $service);
         $this->assertStringContainsString("'reference' =>", $service);
         token_get_all($service, TOKEN_PARSE);
@@ -74,7 +76,7 @@ class SchemaSyncSafetyTest extends TestCase
 
     public function test_rollback_refuses_migration_paths_outside_the_slice(): void
     {
-        $manifestFile = $this->slicePath . '/slice.json';
+        $manifestFile = $this->slicePath.'/slice.json';
         $manifest = json_decode(file_get_contents($manifestFile), true);
         $manifest['version'] = '1.0.1';
         $manifest['version_history'][] = ['version' => '1.0.1', 'migration' => '../../../evil.php', 'description' => 'x'];
@@ -87,12 +89,12 @@ class SchemaSyncSafetyTest extends TestCase
 
     public function test_a_failing_down_stops_the_rollback_and_keeps_the_manifest(): void
     {
-        $manifestFile = $this->slicePath . '/slice.json';
+        $manifestFile = $this->slicePath.'/slice.json';
         $manifest = json_decode(file_get_contents($manifestFile), true);
         $manifest['version'] = '1.0.1';
         $manifest['version_history'][] = ['version' => '1.0.1', 'migration' => '2026_01_01_000000_broken.php', 'description' => 'broken'];
         file_put_contents($manifestFile, json_encode($manifest));
-        file_put_contents($this->slicePath . '/Migrations/2026_01_01_000000_broken.php', "<?php\nreturn new class { public function down(): void { throw new \\RuntimeException('cannot drop'); } };\n");
+        file_put_contents($this->slicePath.'/Migrations/2026_01_01_000000_broken.php', "<?php\nreturn new class { public function down(): void { throw new \\RuntimeException('cannot drop'); } };\n");
         $before = file_get_contents($manifestFile);
 
         try {

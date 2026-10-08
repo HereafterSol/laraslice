@@ -22,7 +22,7 @@ class SliceFieldCommand extends Command
     {
         $slice = $this->argument('slice');
         $field = $this->argument('field');
-        $type  = $this->argument('type');
+        $type = $this->argument('type');
         $batch = $this->option('batch');
 
         $fieldsToAdd = [];
@@ -33,7 +33,7 @@ class SliceFieldCommand extends Command
             $this->line("Add as many columns as you want. When finished, ONE consolidated migration will be generated.\n");
 
             do {
-                $colName = $this->ask("Field column name (leave empty to finish)");
+                $colName = $this->ask('Field column name (leave empty to finish)');
                 if (empty($colName)) {
                     break;
                 }
@@ -45,25 +45,26 @@ class SliceFieldCommand extends Command
                 );
 
                 $nullable = $this->confirm("Make '{$colName}' nullable?", true);
-                $default = $this->ask("Default value (press Enter for none)", null);
+                $default = $this->ask('Default value (press Enter for none)', null);
 
                 $fieldsToAdd[] = [
-                    'name'     => $colName,
-                    'type'     => $colType,
+                    'name' => $colName,
+                    'type' => $colType,
                     'nullable' => $nullable,
-                    'default'  => $this->castDefault($default, $colType),
+                    'default' => $this->castDefault($default, $colType),
                 ];
 
-                $this->line("<fg=green>✓</> Added [{$colName}: {$colType}] to batch list. (" . count($fieldsToAdd) . " field(s) queued)\n");
+                $this->line("<fg=green>✓</> Added [{$colName}: {$colType}] to batch list. (".count($fieldsToAdd)." field(s) queued)\n");
             } while (true);
 
             if (empty($fieldsToAdd)) {
-                $this->warn("No fields specified. Aborting.");
+                $this->warn('No fields specified. Aborting.');
+
                 return Command::SUCCESS;
             }
         }
         // 2. Comma-separated list passed in argument: "sku:string,stock:integer:default=0,notes:text"
-        elseif (!empty($field) && str_contains($field, ',')) {
+        elseif (! empty($field) && str_contains($field, ',')) {
             $parts = explode(',', $field);
             foreach ($parts as $part) {
                 $subParts = explode(':', trim($part));
@@ -82,10 +83,10 @@ class SliceFieldCommand extends Command
                 }
 
                 $fieldsToAdd[] = [
-                    'name'     => $colName,
-                    'type'     => $colType,
+                    'name' => $colName,
+                    'type' => $colType,
                     'nullable' => $nullable,
-                    'default'  => $this->castDefault($default, $colType),
+                    'default' => $this->castDefault($default, $colType),
                 ];
             }
         }
@@ -94,7 +95,7 @@ class SliceFieldCommand extends Command
             if (empty($field)) {
                 $field = $this->ask("What field name would you like to add to [{$slice}]? (e.g. price, sku, category)");
                 while (empty($field)) {
-                    $field = $this->ask("Field name is required");
+                    $field = $this->ask('Field name is required');
                 }
             }
 
@@ -107,8 +108,8 @@ class SliceFieldCommand extends Command
             }
 
             $fieldsToAdd[] = [
-                'name'     => $field,
-                'type'     => $type,
+                'name' => $field,
+                'type' => $type,
                 'nullable' => ! $this->option('required'),
             ];
         }
@@ -117,18 +118,18 @@ class SliceFieldCommand extends Command
         $this->info("⚡ Applying batch schema evolution ({$fieldCount} column(s)) to Slice [{$slice}]...");
 
         try {
-            $modifier = new SliceModifier();
+            $modifier = new SliceModifier;
             $result = $modifier->addFieldsBatch($slice, $fieldsToAdd, 'Developer via CLI');
 
-            $this->line("<fg=green>✓</> Generated <comment>1 consolidated migration</comment>: <comment>" . basename($result['migration']) . "</comment>");
+            $this->line('<fg=green>✓</> Generated <comment>1 consolidated migration</comment>: <comment>'.basename($result['migration']).'</comment>');
             $this->line("<fg=green>✓</> Updated Form and Listing DTOs for all {$fieldCount} field(s)");
-            $this->line("<fg=green>✓</> Updated BlatUI Blade Form & Table views");
+            $this->line('<fg=green>✓</> Updated BlatUI Blade Form & Table views');
             $this->line("<fg=green>✓</> Incremented slice version to <comment>v{$result['version']}</comment> in slice.json");
             $this->line("<fg=green>✓</> Appended unified version history record: \"{$result['description']}\"");
 
             if ($this->option('migrate') || $this->confirm('Would you like to run the consolidated migration now?', false)) {
                 $this->call('migrate');
-                $this->info("✓ Database table updated successfully in a single query pass!");
+                $this->info('✓ Database table updated successfully in a single query pass!');
             } else {
                 $this->comment("Reminder: Run 'php artisan migrate' to apply changes to the database.");
             }
@@ -138,7 +139,8 @@ class SliceFieldCommand extends Command
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
-            $this->error("Failed to add field(s): " . $e->getMessage());
+            $this->error('Failed to add field(s): '.$e->getMessage());
+
             return Command::FAILURE;
         }
     }

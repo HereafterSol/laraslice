@@ -2,18 +2,20 @@
 
 namespace LaraSlice\Slices\Users\Services;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
-use LaraSlice\Core\Security\Access;
 use LaraSlice\Core\Base\BaseSliceService;
 use LaraSlice\Core\Contracts\IBusinessObject;
 use LaraSlice\Core\Contracts\IFilterObject;
-use LaraSlice\Slices\Users\Models\User;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Slices\Users\Contracts\UserFilterBusinessObject;
 use LaraSlice\Slices\Users\Contracts\UserFormBusinessObject;
 use LaraSlice\Slices\Users\Contracts\UserListingBusinessObject;
-use LaraSlice\Slices\Users\Contracts\UserFilterBusinessObject;
+use LaraSlice\Slices\Users\Models\User;
 
 class UserSliceService extends BaseSliceService
 {
@@ -31,7 +33,7 @@ class UserSliceService extends BaseSliceService
     protected function mapToForm(Model $model): IBusinessObject
     {
         /** @var User $model */
-        $form = new UserFormBusinessObject();
+        $form = new UserFormBusinessObject;
         $form->id = $model->id;
         $form->name = $model->name;
         $form->email = $model->email;
@@ -53,20 +55,22 @@ class UserSliceService extends BaseSliceService
         $roleIds = [];
         try {
             if (method_exists($model, 'roles')) {
-                $roleIds = $model->roles ? $model->roles->pluck('id')->map(fn($id) => (int) $id)->toArray() : [];
+                $roleIds = $model->roles ? $model->roles->pluck('id')->map(fn ($id) => (int) $id)->toArray() : [];
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         if (empty($roleIds) && isset($model->id)) {
             try {
-                if (\Illuminate\Support\Facades\Schema::hasTable('role_user')) {
-                    $roleIds = \Illuminate\Support\Facades\DB::table('role_user')
+                if (Schema::hasTable('role_user')) {
+                    $roleIds = DB::table('role_user')
                         ->where('user_id', $model->id)
                         ->pluck('role_id')
-                        ->map(fn($id) => (int) $id)
+                        ->map(fn ($id) => (int) $id)
                         ->toArray();
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
 
         $form->roles = $roleIds;
@@ -74,12 +78,13 @@ class UserSliceService extends BaseSliceService
 
         try {
             if (method_exists($model, 'getAllPermissions')) {
-                $form->permissions = $model->getAllPermissions()->map(fn($p) => [
+                $form->permissions = $model->getAllPermissions()->map(fn ($p) => [
                     'name' => $p->name ?? $p->slug ?? 'Permission',
                     'slug' => $p->slug ?? $p->name ?? '',
                 ])->toArray();
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         return $form;
     }
@@ -87,7 +92,7 @@ class UserSliceService extends BaseSliceService
     protected function mapToListing(Model $model): IBusinessObject
     {
         /** @var User $model */
-        $listing = new UserListingBusinessObject();
+        $listing = new UserListingBusinessObject;
         $listing->id = $model->id;
         $listing->name = $model->name;
         $listing->email = $model->email;
@@ -114,7 +119,8 @@ class UserSliceService extends BaseSliceService
                 $listing->permissionsCount = $perms->count();
                 $listing->permissions = $perms->pluck('name')->toArray();
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+        }
 
         return $listing;
     }
@@ -137,7 +143,7 @@ class UserSliceService extends BaseSliceService
         $assign('gender', 'gender', $form->gender);
         $assign('phone', 'phone', $form->phone);
         $assign('customisedPermissions', 'customised_permissions', $form->customisedPermissions);
-        if (!empty($form->mfaChannel) && ($isNew || $form->provided('mfaChannel'))) {
+        if (! empty($form->mfaChannel) && ($isNew || $form->provided('mfaChannel'))) {
             $model->mfa_channel = $form->mfaChannel;
         }
     }
@@ -233,10 +239,10 @@ class UserSliceService extends BaseSliceService
         // 1. Save or Update 1-to-1 UserDetail (only the supplied fields on update)
         $detail = array_filter([
             'employee_id' => ['employeeId', $form->employeeId],
-            'department'  => ['department', $form->department],
+            'department' => ['department', $form->department],
             'designation' => ['designation', $form->designation],
-            'cnic'        => ['cnic', $form->cnic],
-            'dob'         => ['dob', $form->dob],
+            'cnic' => ['cnic', $form->cnic],
+            'dob' => ['dob', $form->dob],
         ], fn (array $pair) => $isNew || $form->provided($pair[0]));
         if ($detail !== []) {
             $model->detail()->updateOrCreate(['user_id' => $model->id], array_map(fn (array $pair) => $pair[1], $detail));
@@ -249,16 +255,16 @@ class UserSliceService extends BaseSliceService
             if (method_exists($model, 'roles')) {
                 $model->roles()->sync($roleIds);
                 $model->flushSlicePermissionCache();
-            } elseif (isset($model->id) && \Illuminate\Support\Facades\Schema::hasTable('role_user')) {
-                \Illuminate\Support\Facades\DB::table('role_user')->where('user_id', $model->id)->delete();
+            } elseif (isset($model->id) && Schema::hasTable('role_user')) {
+                DB::table('role_user')->where('user_id', $model->id)->delete();
                 $rows = [];
                 foreach ($roleIds as $rId) {
                     if ($rId > 0) {
                         $rows[] = ['role_id' => $rId, 'user_id' => $model->id];
                     }
                 }
-                if (!empty($rows)) {
-                    \Illuminate\Support\Facades\DB::table('role_user')->insert($rows);
+                if (! empty($rows)) {
+                    DB::table('role_user')->insert($rows);
                 }
             }
         }
@@ -273,7 +279,7 @@ class UserSliceService extends BaseSliceService
                 $query->where('status', $filter->status);
             }
             if ($filter->role) {
-                $query->whereHas('roles', fn($q) => $q->where('slug', $filter->role));
+                $query->whereHas('roles', fn ($q) => $q->where('slug', $filter->role));
             }
         }
     }
@@ -282,14 +288,14 @@ class UserSliceService extends BaseSliceService
     {
         $query->where(function ($q) use ($search) {
             $q->where('name', 'LIKE', "%{$search}%")
-              ->orWhere('email', 'LIKE', "%{$search}%")
-              ->orWhere('phone', 'LIKE', "%{$search}%")
-              ->orWhereHas('detail', function ($sub) use ($search) {
-                  $sub->where('cnic', 'LIKE', "%{$search}%")
-                      ->orWhere('employee_id', 'LIKE', "%{$search}%")
-                      ->orWhere('department', 'LIKE', "%{$search}%")
-                      ->orWhere('designation', 'LIKE', "%{$search}%");
-              });
+                ->orWhere('email', 'LIKE', "%{$search}%")
+                ->orWhere('phone', 'LIKE', "%{$search}%")
+                ->orWhereHas('detail', function ($sub) use ($search) {
+                    $sub->where('cnic', 'LIKE', "%{$search}%")
+                        ->orWhere('employee_id', 'LIKE', "%{$search}%")
+                        ->orWhere('department', 'LIKE', "%{$search}%")
+                        ->orWhere('designation', 'LIKE', "%{$search}%");
+                });
         });
     }
 }

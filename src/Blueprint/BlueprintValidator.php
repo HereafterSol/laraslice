@@ -2,6 +2,8 @@
 
 namespace LaraSlice\Blueprint;
 
+use LaraSlice\Generator\BladeSafeText;
+
 final class BlueprintValidator
 {
     private const FIELD_TYPES = [
@@ -10,10 +12,11 @@ final class BlueprintValidator
     ];
 
     private const RELATION_TYPES = ['belongsTo', 'hasOne', 'hasMany', 'belongsToMany'];
+
     private const RESERVED_FIELDS = ['id', 'created_at', 'updated_at', 'deleted_at'];
 
     /** @param array<string, mixed> $blueprint
-     *  @return array<string, mixed> Validated blueprint.
+     * @return array<string, mixed> Validated blueprint.
      */
     public function validate(array $blueprint): array
     {
@@ -47,6 +50,7 @@ final class BlueprintValidator
             $path = "models.{$index}";
             if (! is_array($model)) {
                 $errors[] = "{$path} must be a map.";
+
                 continue;
             }
             $this->checkKeys($model, ['handle', 'table', 'root', 'fields', 'relations', 'tenant', 'timestamps', 'soft_deletes'], $path, $errors);
@@ -100,6 +104,7 @@ final class BlueprintValidator
                 $fieldPath = "{$path}.fields.{$fieldIndex}";
                 if (! is_array($field)) {
                     $errors[] = "{$fieldPath} must be a map.";
+
                     continue;
                 }
                 $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'encrypted', 'width', 'length'], $fieldPath, $errors);
@@ -116,7 +121,7 @@ final class BlueprintValidator
                 }
 
                 if (! in_array($field['type'] ?? null, self::FIELD_TYPES, true)) {
-                    $errors[] = "{$fieldPath}.type must be one of: " . implode(', ', self::FIELD_TYPES) . '.';
+                    $errors[] = "{$fieldPath}.type must be one of: ".implode(', ', self::FIELD_TYPES).'.';
                 }
 
                 foreach (['required', 'nullable', 'encrypted'] as $booleanOption) {
@@ -130,11 +135,11 @@ final class BlueprintValidator
 
                 if (isset($field['label']) && (! is_string($field['label']) || trim($field['label']) === '' || strlen($field['label']) > 160)) {
                     $errors[] = "{$fieldPath}.label must be a non-empty string of at most 160 characters.";
-                } elseif (isset($field['label']) && ($problem = \LaraSlice\Generator\BladeSafeText::problem($field['label'], "{$fieldPath}.label"))) {
+                } elseif (isset($field['label']) && ($problem = BladeSafeText::problem($field['label'], "{$fieldPath}.label"))) {
                     $errors[] = $problem;
                 }
 
-                if (isset($field['default']) && is_string($field['default']) && ($problem = \LaraSlice\Generator\BladeSafeText::problem($field['default'], "{$fieldPath}.default"))) {
+                if (isset($field['default']) && is_string($field['default']) && ($problem = BladeSafeText::problem($field['default'], "{$fieldPath}.default"))) {
                     $errors[] = $problem;
                 }
                 if (isset($field['default']) && ! is_scalar($field['default']) && $field['default'] !== null) {
@@ -165,7 +170,7 @@ final class BlueprintValidator
                         $errors[] = "{$fieldPath}.options must be a non-empty map for enum fields.";
                     } else {
                         foreach ($options as $value => $label) {
-                            if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($label) || $label === '' || ! \LaraSlice\Generator\BladeSafeText::isSafe($label)) {
+                            if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($label) || $label === '' || ! BladeSafeText::isSafe($label)) {
                                 $errors[] = "{$fieldPath}.options must map values (letters, numbers, _ . -) to non-empty labels.";
                                 break;
                             }
@@ -231,6 +236,7 @@ final class BlueprintValidator
             $relations = $model['relations'] ?? [];
             if (! is_array($relations) || ! array_is_list($relations)) {
                 $errors[] = "{$path}.relations must be a list.";
+
                 continue;
             }
 
@@ -239,6 +245,7 @@ final class BlueprintValidator
                 $relationPath = "{$path}.relations.{$relationIndex}";
                 if (! is_array($relation)) {
                     $errors[] = "{$relationPath} must be a map.";
+
                     continue;
                 }
                 $this->checkKeys($relation, ['name', 'type', 'model', 'foreign_key', 'pivot_table', 'external', 'table'], $relationPath, $errors);
@@ -260,7 +267,8 @@ final class BlueprintValidator
 
                 $type = $relation['type'] ?? null;
                 if (! in_array($type, self::RELATION_TYPES, true)) {
-                    $errors[] = "{$relationPath}.type must be one of: " . implode(', ', self::RELATION_TYPES) . '.';
+                    $errors[] = "{$relationPath}.type must be one of: ".implode(', ', self::RELATION_TYPES).'.';
+
                     continue;
                 }
 
@@ -268,6 +276,7 @@ final class BlueprintValidator
                 $isInternal = is_string($targetHandle) && isset($modelHandles[$targetHandle]);
                 if (! is_string($targetHandle) || (! $isInternal && ($relation['external'] ?? false) !== true && $type !== 'belongsTo')) {
                     $errors[] = "{$relationPath}.model must reference a model handle in this blueprint.";
+
                     continue;
                 }
 

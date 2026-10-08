@@ -2,14 +2,14 @@
 
 namespace LaraSlice\Slices\Auth\Services;
 
-use LaraSlice\Slices\Users\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+use LaraSlice\Slices\Users\Models\User;
 use LaraSlice\Slices\Users\Services\RecoveryCodeService;
 use LaraSlice\Slices\Users\Services\SecurityPolicyService;
 use LaraSlice\Slices\Users\Services\TotpService;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 
 class AuthSliceService
 {
@@ -53,7 +53,7 @@ class AuthSliceService
                 'email' => $user->email,
                 'status' => $user->status,
                 'roles' => $user->roles->pluck('name')->toArray(),
-            ]
+            ],
         ];
     }
 

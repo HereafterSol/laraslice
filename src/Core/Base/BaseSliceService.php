@@ -2,17 +2,20 @@
 
 namespace LaraSlice\Core\Base;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use LaraSlice\Core\Contracts\IBusinessObject;
-use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IFilterObject;
+use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
+use LaraSlice\Support\SchemaCache;
 
 abstract class BaseSliceService implements IFormDataService, IListingDataService
 {
     abstract protected function getModelClass(): string;
+
     abstract protected function mapToForm(Model $model): IBusinessObject;
+
     abstract protected function mapToListing(Model $model): IBusinessObject;
 
     public function save(IBusinessObject $form): string|int
@@ -21,7 +24,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
 
         $modelClass = $this->getModelClass();
         $isNew = empty($form->id);
-        $model = $isNew ? new $modelClass() : $this->newQuery()->findOrFail($form->id);
+        $model = $isNew ? new $modelClass : $this->newQuery()->findOrFail($form->id);
 
         $this->beforeSave($form, $model, $isNew);
 
@@ -32,7 +35,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         if (! $isNew && $form instanceof BaseFormBusinessObject && $form->providedFields() !== null) {
             $data = array_intersect_key($data, array_flip($form->providedFields()));
         }
-        
+
         // Populate model attributes
         $model->fill($data);
         $this->prepareModelForSave($form, $model, $isNew);
@@ -47,7 +50,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     {
         $model = $this->newQuery()->find($id);
 
-        if (!$model) {
+        if (! $model) {
             return null;
         }
 
@@ -58,7 +61,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     {
         $model = $this->newQuery()->find($id);
 
-        if (!$model) {
+        if (! $model) {
             return false;
         }
 
@@ -84,7 +87,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         }
 
         $models = $query->skip(($page - 1) * $limit)->take($limit)->get();
-        $items = $models->map(fn($m) => $this->mapToListing($m))->all();
+        $items = $models->map(fn ($m) => $this->mapToListing($m))->all();
 
         return new PagedDataList($items, $totalCount, $page, $limit);
     }
@@ -126,7 +129,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         }
 
         try {
-            return \LaraSlice\Support\SchemaCache::hasColumn($model->getTable(), $column);
+            return SchemaCache::hasColumn($model->getTable(), $column);
         } catch (\Throwable $e) {
             return false;
         }
@@ -138,8 +141,12 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     }
 
     protected function validate(IBusinessObject $form): void {}
+
     protected function beforeSave(IBusinessObject $form, Model $model, bool $isNew): void {}
+
     protected function afterSave(IBusinessObject $form, Model $model, bool $isNew): void {}
+
     protected function beforeDelete(Model $model): void {}
+
     protected function afterDelete(string|int $id): void {}
 }

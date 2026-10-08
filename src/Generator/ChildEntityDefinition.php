@@ -41,7 +41,7 @@ final class ChildEntityDefinition
         $pluralSlice = Str::plural($slice);
         $childTable = Str::snake(trim($tableName));
         $parentTable = Str::plural(Str::snake($slice));
-        $foreignKey ??= Str::singular($parentTable) . '_id';
+        $foreignKey ??= Str::singular($parentTable).'_id';
 
         if (! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $childTable)) {
             throw new InvalidArgumentException('Child table names must be lowercase snake_case identifiers.');

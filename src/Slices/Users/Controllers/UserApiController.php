@@ -5,9 +5,9 @@ namespace LaraSlice\Slices\Users\Controllers;
 use LaraSlice\Core\Base\BaseSliceApiController;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
-use LaraSlice\Slices\Users\Services\UserSliceService;
-use LaraSlice\Slices\Users\Contracts\UserFormBusinessObject;
 use LaraSlice\Slices\Users\Contracts\UserFilterBusinessObject;
+use LaraSlice\Slices\Users\Contracts\UserFormBusinessObject;
+use LaraSlice\Slices\Users\Services\UserSliceService;
 
 class UserApiController extends BaseSliceApiController
 {

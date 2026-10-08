@@ -61,7 +61,7 @@ class TotpService
     public function code(string $secret, int $timeStep): string
     {
         $key = $this->base32Decode($secret);
-        $counter = pack('N*', 0) . pack('N*', $timeStep);
+        $counter = pack('N*', 0).pack('N*', $timeStep);
         $hmac = hash_hmac('sha1', $counter, $key, true);
         $offset = ord($hmac[19]) & 0x0F;
         $value = unpack('N', substr($hmac, $offset, 4))[1] & 0x7FFFFFFF;
@@ -71,8 +71,8 @@ class TotpService
 
     public function provisioningUri(string $accountName, string $secret, string $issuer = 'LaraSlice'): string
     {
-        return 'otpauth://totp/' . rawurlencode($issuer) . ':' . rawurlencode($accountName)
-            . '?secret=' . $secret . '&issuer=' . rawurlencode($issuer) . '&period=' . self::PERIOD;
+        return 'otpauth://totp/'.rawurlencode($issuer).':'.rawurlencode($accountName)
+            .'?secret='.$secret.'&issuer='.rawurlencode($issuer).'&period='.self::PERIOD;
     }
 
     private function base32Decode(string $secret): string

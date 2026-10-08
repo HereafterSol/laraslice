@@ -24,7 +24,8 @@ class BaseFilterTest extends TestCase
 
     public function test_it_uses_valid_custom_sort_columns_from_a_generated_filter(): void
     {
-        $filter = new class(['sortBy' => 'unit_price']) extends BaseFilter {
+        $filter = new class(['sortBy' => 'unit_price']) extends BaseFilter
+        {
             protected function sortableColumns(): array
             {
                 return ['id', 'unit_price', 'created_at'];

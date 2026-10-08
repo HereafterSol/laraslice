@@ -2,29 +2,34 @@
 
 namespace LaraSlice\Slices\Users\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use LaraSlice\Core\Base\BaseSliceWebController;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
-use LaraSlice\Slices\Users\Services\UserSliceService;
-use LaraSlice\Slices\Users\Contracts\UserFormBusinessObject;
+use LaraSlice\Core\Security\Access;
+use LaraSlice\Slices\Roles\Models\Permission;
+use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Users\Contracts\UserFilterBusinessObject;
+use LaraSlice\Slices\Users\Contracts\UserFormBusinessObject;
 use LaraSlice\Slices\Users\Models\User;
-use LaraSlice\Slices\Users\Models\UserDevice;
-use LaraSlice\Slices\Users\Models\UserSecurityLog;
 use LaraSlice\Slices\Users\Models\UserAttempt;
+use LaraSlice\Slices\Users\Models\UserCode;
 use LaraSlice\Slices\Users\Models\UserConnect;
 use LaraSlice\Slices\Users\Models\UserCred;
-use LaraSlice\Slices\Users\Models\UserCode;
+use LaraSlice\Slices\Users\Models\UserDevice;
 use LaraSlice\Slices\Users\Models\UserFactor;
-use LaraSlice\Slices\Roles\Models\Role;
-use LaraSlice\Slices\Roles\Models\Permission;
-use LaraSlice\Core\Security\Access;
-use LaraSlice\Slices\Users\Services\TotpService;
-use LaraSlice\Slices\Users\Services\RecoveryCodeService;
+use LaraSlice\Slices\Users\Models\UserPasskey;
+use LaraSlice\Slices\Users\Models\UserSecurityLog;
 use LaraSlice\Slices\Users\Services\QrCodeService;
+use LaraSlice\Slices\Users\Services\RecoveryCodeService;
+use LaraSlice\Slices\Users\Services\SecurityPolicyService;
+use LaraSlice\Slices\Users\Services\TotpService;
+use LaraSlice\Slices\Users\Services\UserSliceService;
+use LaraSlice\Slices\Users\Services\WebAuthnService;
 
 class UserWebController extends BaseSliceWebController
 {
@@ -32,16 +37,19 @@ class UserWebController extends BaseSliceWebController
     {
         if (session('laraslice_session_locked') === true) {
             $allowed = ['lockscreen', 'unlockScreen', 'passkeyUnlockOptions', 'passkeyUnlockVerify'];
-            if (!in_array($method, $allowed)) {
-                if (!request()->expectsJson()) {
-                    if (!session()->has('lockscreen_redirect_url')) {
+            if (! in_array($method, $allowed)) {
+                if (! request()->expectsJson()) {
+                    if (! session()->has('lockscreen_redirect_url')) {
                         session(['lockscreen_redirect_url' => request()->fullUrl()]);
                     }
+
                     return redirect()->route('lockscreen');
                 }
+
                 return response()->json(['message' => 'Session locked'], 423);
             }
         }
+
         return parent::callAction($method, $parameters);
     }
 
@@ -82,14 +90,14 @@ class UserWebController extends BaseSliceWebController
         $this->authorizeSlice('create');
 
         $formClass = $this->getFormClass();
-        $form = new $formClass();
+        $form = new $formClass;
         $availableRoles = class_exists(Role::class) ? Role::all() : [];
         $allPermissions = class_exists(Permission::class) ? Permission::all() : collect();
 
-        return view($this->getViewPrefix() . 'form', [
-            'form'           => $form,
-            'isNew'          => true,
-            'routePrefix'    => $this->getRoutePrefix(),
+        return view($this->getViewPrefix().'form', [
+            'form' => $form,
+            'isNew' => true,
+            'routePrefix' => $this->getRoutePrefix(),
             'availableRoles' => $availableRoles,
             'allPermissions' => $allPermissions,
         ]);
@@ -101,17 +109,17 @@ class UserWebController extends BaseSliceWebController
 
         $form = $this->getService()->getItemById($id);
 
-        if (!$form) {
-            return redirect()->route($this->getRoutePrefix() . 'index')->with('error', 'User not found');
+        if (! $form) {
+            return redirect()->route($this->getRoutePrefix().'index')->with('error', 'User not found');
         }
 
         $availableRoles = class_exists(Role::class) ? Role::all() : [];
         $allPermissions = class_exists(Permission::class) ? Permission::all() : collect();
 
-        return view($this->getViewPrefix() . 'form', [
-            'form'           => $form,
-            'isNew'          => false,
-            'routePrefix'    => $this->getRoutePrefix(),
+        return view($this->getViewPrefix().'form', [
+            'form' => $form,
+            'isNew' => false,
+            'routePrefix' => $this->getRoutePrefix(),
             'availableRoles' => $availableRoles,
             'allPermissions' => $allPermissions,
         ]);
@@ -128,12 +136,12 @@ class UserWebController extends BaseSliceWebController
         $today = now()->startOfDay();
 
         $stats = [
-            'logins_today'    => UserSecurityLog::where('event_type', 'login_success')->where('created_at', '>=', $today)->count(),
-            'active_devices'  => UserDevice::count(),
-            'total_users'     => User::count(),
-            'failed_logins'   => UserSecurityLog::where('event_type', 'login_failed')->where('created_at', '>=', $today)->count(),
+            'logins_today' => UserSecurityLog::where('event_type', 'login_success')->where('created_at', '>=', $today)->count(),
+            'active_devices' => UserDevice::count(),
+            'total_users' => User::count(),
+            'failed_logins' => UserSecurityLog::where('event_type', 'login_failed')->where('created_at', '>=', $today)->count(),
             'locked_accounts' => User::where('locked_until', '>', now())->count(),
-            'mfa_enabled'     => User::where('mfa_channel', '!=', 'none')->whereNotNull('mfa_confirmed_at')->count(),
+            'mfa_enabled' => User::where('mfa_channel', '!=', 'none')->whereNotNull('mfa_confirmed_at')->count(),
         ];
 
         $maxRows = (int) config('laraslice.data_table.max_rows', 1000);
@@ -162,46 +170,46 @@ class UserWebController extends BaseSliceWebController
                 $lng = (float) $m[2];
             }
             $locationRecords->push((object) [
-                'user'          => $dev->user,
-                'device_name'   => $dev->device_name,
-                'platform'      => $dev->platform,
-                'ip_address'    => $dev->ip_address,
-                'location_label'=> $dev->location_label ?? 'Local Workstation',
-                'latitude'      => $lat,
-                'longitude'     => $lng,
-                'last_active_at'=> $dev->last_active_at,
-                'is_current'    => $dev->is_current,
-                'source'        => 'Active Device Session',
+                'user' => $dev->user,
+                'device_name' => $dev->device_name,
+                'platform' => $dev->platform,
+                'ip_address' => $dev->ip_address,
+                'location_label' => $dev->location_label ?? 'Local Workstation',
+                'latitude' => $lat,
+                'longitude' => $lng,
+                'last_active_at' => $dev->last_active_at,
+                'is_current' => $dev->is_current,
+                'source' => 'Active Device Session',
             ]);
         }
 
         foreach ($logs as $log) {
             $p = is_array($log->payload) ? $log->payload : (json_decode($log->payload, true) ?: []);
-            if (!empty($p['latitude']) && !empty($p['longitude'])) {
+            if (! empty($p['latitude']) && ! empty($p['longitude'])) {
                 $locationRecords->push((object) [
-                    'user'          => $log->user,
-                    'device_name'   => $log->user_agent ? (substr($log->user_agent, 0, 28) . '...') : 'Web Client',
-                    'platform'      => 'web',
-                    'ip_address'    => $log->ip_address,
-                    'location_label'=> $p['location_label'] ?? "GPS: {$p['latitude']}, {$p['longitude']}",
-                    'latitude'      => (float) $p['latitude'],
-                    'longitude'     => (float) $p['longitude'],
-                    'last_active_at'=> $log->created_at,
-                    'is_current'    => false,
-                    'source'        => 'Auth Log (' . $log->event_type . ')',
+                    'user' => $log->user,
+                    'device_name' => $log->user_agent ? (substr($log->user_agent, 0, 28).'...') : 'Web Client',
+                    'platform' => 'web',
+                    'ip_address' => $log->ip_address,
+                    'location_label' => $p['location_label'] ?? "GPS: {$p['latitude']}, {$p['longitude']}",
+                    'latitude' => (float) $p['latitude'],
+                    'longitude' => (float) $p['longitude'],
+                    'last_active_at' => $log->created_at,
+                    'is_current' => false,
+                    'source' => 'Auth Log ('.$log->event_type.')',
                 ]);
             }
         }
 
-        $locationRecords = $locationRecords->sortByDesc(fn($l) => $l->last_active_at ?? now())->values();
+        $locationRecords = $locationRecords->sortByDesc(fn ($l) => $l->last_active_at ?? now())->values();
 
-        return view($this->getViewPrefix() . 'metrics', [
-            'stats'           => $stats,
-            'activeSessions'  => $activeSessions,
-            'devices'         => $devices,
-            'logs'            => $logs,
+        return view($this->getViewPrefix().'metrics', [
+            'stats' => $stats,
+            'activeSessions' => $activeSessions,
+            'devices' => $devices,
+            'logs' => $logs,
             'locationRecords' => $locationRecords,
-            'routePrefix'     => $this->getRoutePrefix(),
+            'routePrefix' => $this->getRoutePrefix(),
         ]);
     }
 
@@ -218,12 +226,12 @@ class UserWebController extends BaseSliceWebController
         $user->save();
 
         UserSecurityLog::create([
-            'user_id'              => $user->id,
+            'user_id' => $user->id,
             'identifier_attempted' => $user->email,
-            'event_type'           => 'account_unlocked',
-            'ip_address'           => request()->ip() ?? '127.0.0.1',
-            'user_agent'           => request()->userAgent(),
-            'created_at'           => now(),
+            'event_type' => 'account_unlocked',
+            'ip_address' => request()->ip() ?? '127.0.0.1',
+            'user_agent' => request()->userAgent(),
+            'created_at' => now(),
         ]);
 
         return redirect()->back()->with('success', "Account for {$user->name} has been unlocked.");
@@ -241,8 +249,8 @@ class UserWebController extends BaseSliceWebController
             ->limit((int) config('laraslice.data_table.max_rows', 1000))
             ->get();
 
-        return view($this->getViewPrefix() . 'devices', [
-            'devices'     => $devices,
+        return view($this->getViewPrefix().'devices', [
+            'devices' => $devices,
             'routePrefix' => $this->getRoutePrefix(),
         ]);
     }
@@ -273,9 +281,9 @@ class UserWebController extends BaseSliceWebController
         $logs = UserSecurityLog::with('user')->orderByDesc('created_at')->limit($maxRows)->get();
         $attempts = UserAttempt::with('user')->orderByDesc('created_at')->limit($maxRows)->get();
 
-        return view($this->getViewPrefix() . 'security_logs', [
-            'logs'        => $logs,
-            'attempts'    => $attempts,
+        return view($this->getViewPrefix().'security_logs', [
+            'logs' => $logs,
+            'attempts' => $attempts,
             'routePrefix' => $this->getRoutePrefix(),
         ]);
     }
@@ -297,13 +305,13 @@ class UserWebController extends BaseSliceWebController
             ? app(TotpService::class)->provisioningUri($user->email, $user->mfa_secret, config('app.name', 'LaraSlice'))
             : null;
 
-        return view($this->getViewPrefix() . 'settings', [
-            'user'         => $user,
+        return view($this->getViewPrefix().'settings', [
+            'user' => $user,
             'securityLogs' => $securityLogs,
-            'defaultTab'   => $defaultTab,
-            'routePrefix'  => $this->getRoutePrefix(),
-            'otpauthUri'   => $otpauthUri,
-            'qrSvg'        => $otpauthUri ? app(QrCodeService::class)->svg($otpauthUri) : null,
+            'defaultTab' => $defaultTab,
+            'routePrefix' => $this->getRoutePrefix(),
+            'otpauthUri' => $otpauthUri,
+            'qrSvg' => $otpauthUri ? app(QrCodeService::class)->svg($otpauthUri) : null,
         ]);
     }
 
@@ -322,13 +330,13 @@ class UserWebController extends BaseSliceWebController
             ['user_id' => $user->id],
             [
                 'employee_id' => $request->input('employee_id', $user->employee_id),
-                'cnic'        => $request->input('cnic', $user->cnic),
-                'department'  => $request->input('department', $user->department),
+                'cnic' => $request->input('cnic', $user->cnic),
+                'department' => $request->input('department', $user->department),
                 'designation' => $request->input('designation', $user->designation),
             ]
         );
 
-        return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#profile')
+        return redirect()->to(route($this->getRoutePrefix().'settings').'#profile')
             ->with('active_tab', 'profile')
             ->with('success', 'Profile and employment details updated successfully.');
     }
@@ -339,10 +347,10 @@ class UserWebController extends BaseSliceWebController
 
         $request->validate([
             'current_password' => 'required',
-            'new_password'     => 'required|min:8|confirmed',
+            'new_password' => 'required|min:8|confirmed',
         ]);
 
-        if (!Hash::check($request->input('current_password'), $user->password)) {
+        if (! Hash::check($request->input('current_password'), $user->password)) {
             return redirect()->back()->with('error', 'The provided current password does not match.');
         }
 
@@ -350,15 +358,15 @@ class UserWebController extends BaseSliceWebController
         $user->save();
 
         UserSecurityLog::create([
-            'user_id'              => $user->id,
+            'user_id' => $user->id,
             'identifier_attempted' => $user->email,
-            'event_type'           => 'password_changed',
-            'ip_address'           => $request->ip() ?? '127.0.0.1',
-            'user_agent'           => $request->userAgent(),
-            'created_at'           => now(),
+            'event_type' => 'password_changed',
+            'ip_address' => $request->ip() ?? '127.0.0.1',
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
         ]);
 
-        return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#password')
+        return redirect()->to(route($this->getRoutePrefix().'settings').'#password')
             ->with('active_tab', 'password')
             ->with('success', 'Password updated successfully.');
     }
@@ -380,7 +388,7 @@ class UserWebController extends BaseSliceWebController
 
             UserSecurityLog::log($user->id, '2fa_disabled', 'warning', 'Two-Factor Authentication (TOTP) was disabled by user.');
 
-            return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
+            return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
                 ->with('active_tab', 'mfa')
                 ->with('success', 'Authenticator App (TOTP) has been disabled.');
         }
@@ -398,16 +406,16 @@ class UserWebController extends BaseSliceWebController
         UserFactor::updateOrCreate(
             ['user_id' => $user->id],
             [
-                'secret_enc'   => encrypt($secret),
+                'secret_enc' => encrypt($secret),
                 'confirmed_at' => now(),
             ]
         );
 
         $codes = app(RecoveryCodeService::class)->generate($user);
 
-        UserSecurityLog::log($user->id, '2fa_enabled', 'success', 'Two-Factor Authentication (TOTP) enabled with ' . count($codes) . ' recovery codes.');
+        UserSecurityLog::log($user->id, '2fa_enabled', 'success', 'Two-Factor Authentication (TOTP) enabled with '.count($codes).' recovery codes.');
 
-        return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
+        return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
             ->with('active_tab', 'mfa')
             ->with('recovery_codes', $codes)
             ->with('success', 'Two-Factor Authentication enabled! Scan the QR code and save your recovery codes; they will not be shown again.');
@@ -419,9 +427,9 @@ class UserWebController extends BaseSliceWebController
 
         $codes = app(RecoveryCodeService::class)->generate($user);
 
-        UserSecurityLog::log($user->id, 'mfa_codes_regenerated', 'warning', 'New set of ' . count($codes) . ' recovery codes generated.');
+        UserSecurityLog::log($user->id, 'mfa_codes_regenerated', 'warning', 'New set of '.count($codes).' recovery codes generated.');
 
-        return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
+        return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
             ->with('active_tab', 'mfa')
             ->with('recovery_codes', $codes)
             ->with('success', 'A fresh set of emergency recovery codes has been generated. Save them now; they will not be shown again.');
@@ -431,18 +439,18 @@ class UserWebController extends BaseSliceWebController
     {
         $user = $this->requireUser();
 
-        $code = 'DEV-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+        $code = 'DEV-'.strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
 
         UserConnect::create([
-            'user_id'    => $user->id,
+            'user_id' => $user->id,
             'created_by' => $user->id,
-            'code_hash'  => hash('sha256', $code),
+            'code_hash' => hash('sha256', $code),
             'expires_at' => now()->addMinutes(15),
         ]);
 
         UserSecurityLog::log($user->id, 'device_code_issued', 'info', "Self-service device enrollment code {$code} generated (valid 15m).");
 
-        return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#mfa')
+        return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
             ->with('active_tab', 'mfa')
             ->with('generated_device_code', $code);
     }
@@ -451,7 +459,7 @@ class UserWebController extends BaseSliceWebController
     {
         $this->requireUser()->devices()->where('is_current', false)->delete();
 
-        return redirect()->to(route($this->getRoutePrefix() . 'settings') . '#devices')
+        return redirect()->to(route($this->getRoutePrefix().'settings').'#devices')
             ->with('active_tab', 'devices')
             ->with('success', 'Logged out of all other devices successfully.');
     }
@@ -461,15 +469,15 @@ class UserWebController extends BaseSliceWebController
         $this->authorizeSlice('mfa');
 
         // The page shows the 15 latest logs per user; never load whole log histories
-        $users = User::with(['roles', 'detail', 'devices', 'recoveryCodes', 'securityLogs' => fn($q) => $q->latest()->limit(15), 'passkeys'])
+        $users = User::with(['roles', 'detail', 'devices', 'recoveryCodes', 'securityLogs' => fn ($q) => $q->latest()->limit(15), 'passkeys'])
             ->limit((int) config('laraslice.data_table.max_rows', 1000))
             ->get();
         $totalUsers = User::count();
-        $enrolledCount = $users->filter(fn($u) => $u->hasMfa())->count();
+        $enrolledCount = $users->filter(fn ($u) => $u->hasMfa())->count();
         $needsEnrollment = max(0, $totalUsers - $enrolledCount);
-        $passkeyEnrolled = $users->filter(fn($u) => $u->passkeys->whereNull('revoked_at')->count() > 0 || $u->mfa_channel === 'webauthn')->count();
-        $totpEnrolled = $users->filter(fn($u) => in_array($u->mfa_channel, ['totp', 'both']))->count();
-        $totalPasskeys = \LaraSlice\Slices\Users\Models\UserPasskey::whereNull('revoked_at')->count();
+        $passkeyEnrolled = $users->filter(fn ($u) => $u->passkeys->whereNull('revoked_at')->count() > 0 || $u->mfa_channel === 'webauthn')->count();
+        $totpEnrolled = $users->filter(fn ($u) => in_array($u->mfa_channel, ['totp', 'both']))->count();
+        $totalPasskeys = UserPasskey::whereNull('revoked_at')->count();
 
         $stats = [
             'totalUsers' => $totalUsers,
@@ -481,11 +489,12 @@ class UserWebController extends BaseSliceWebController
             'enrolledCount' => $enrolledCount,
         ];
 
-        $securityPolicies = \LaraSlice\Slices\Users\Services\SecurityPolicyService::getAll();
-        $allRoles = class_exists(\LaraSlice\Slices\Roles\Models\Role::class) 
-            ? \LaraSlice\Slices\Roles\Models\Role::all() 
-            : \Illuminate\Support\Facades\DB::table('roles')->get();
-        return view($this->getViewPrefix() . 'mfa', compact('users', 'stats', 'securityPolicies', 'allRoles'));
+        $securityPolicies = SecurityPolicyService::getAll();
+        $allRoles = class_exists(Role::class)
+            ? Role::all()
+            : DB::table('roles')->get();
+
+        return view($this->getViewPrefix().'mfa', compact('users', 'stats', 'securityPolicies', 'allRoles'));
     }
 
     public function resetMfaEnrollment(Request $request, string|int $id)
@@ -501,14 +510,14 @@ class UserWebController extends BaseSliceWebController
         $user->recoveryCodes()->delete();
         UserCode::where('user_id', $user->id)->delete();
         UserDevice::where('user_id', $user->id)->delete();
-        \LaraSlice\Slices\Users\Models\UserPasskey::where('user_id', $user->id)->delete();
+        UserPasskey::where('user_id', $user->id)->delete();
         UserCred::where('user_id', $user->id)->delete();
         UserFactor::where('user_id', $user->id)->delete();
         UserConnect::where('user_id', $user->id)->delete();
 
         UserSecurityLog::log($user->id, 'mfa_admin_reset', 'danger', 'MFA enrollment was completely reset by administrator.');
 
-        return back()->with('success', 'MFA enrollment for ' . $user->name . ' was reset. User will enroll again upon next login.');
+        return back()->with('success', 'MFA enrollment for '.$user->name.' was reset. User will enroll again upon next login.');
     }
 
     public function resetMfaTotp(Request $request, string|int $id)
@@ -524,7 +533,7 @@ class UserWebController extends BaseSliceWebController
 
         UserSecurityLog::log($user->id, 'mfa_totp_revoked', 'warning', 'TOTP authenticator app secret revoked by administrator.');
 
-        return back()->with('success', 'Authenticator app for ' . $user->name . ' was revoked. User must scan a new QR code.');
+        return back()->with('success', 'Authenticator app for '.$user->name.' was revoked. User must scan a new QR code.');
     }
 
     public function revokeMfaDevices(Request $request, string|int $id)
@@ -535,7 +544,7 @@ class UserWebController extends BaseSliceWebController
         UserDevice::where('user_id', $user->id)->delete();
         UserSecurityLog::log($user->id, 'mfa_devices_revoked', 'info', 'All remembered device bypass tokens revoked.');
 
-        return back()->with('success', 'Remembered devices for ' . $user->name . ' were revoked. MFA required on next login.');
+        return back()->with('success', 'Remembered devices for '.$user->name.' were revoked. MFA required on next login.');
     }
 
     public function clearMfaPending(Request $request, string|int $id)
@@ -545,22 +554,23 @@ class UserWebController extends BaseSliceWebController
         $user = User::findOrFail($id);
         UserSecurityLog::log($user->id, 'mfa_pending_cleared', 'info', 'Stuck MFA challenge sessions cleared.');
 
-        return back()->with('success', 'Pending MFA challenge sessions for ' . $user->name . ' cleared successfully.');
+        return back()->with('success', 'Pending MFA challenge sessions for '.$user->name.' cleared successfully.');
     }
 
     public function lockscreen(Request $request)
     {
         $user = $this->requireUser();
         session(['laraslice_session_locked' => true]);
-        if (!session()->has('lockscreen_redirect_url')) {
+        if (! session()->has('lockscreen_redirect_url')) {
             $prev = $this->safeRedirectUrl(url()->previous());
-            if ($prev && !str_contains($prev, 'lockscreen') && !str_contains($prev, 'login')) {
+            if ($prev && ! str_contains($prev, 'lockscreen') && ! str_contains($prev, 'login')) {
                 session(['lockscreen_redirect_url' => $prev]);
             }
         }
         $hasPasskeys = $user ? $user->passkeys()->whereNull('revoked_at')->exists() : false;
-        $allowPasskeys = \LaraSlice\Slices\Users\Services\SecurityPolicyService::get('security.allow_passkeys', 'true') !== 'false';
-        return view($this->getViewPrefix() . 'lockscreen', compact('user', 'hasPasskeys', 'allowPasskeys'));
+        $allowPasskeys = SecurityPolicyService::get('security.allow_passkeys', 'true') !== 'false';
+
+        return view($this->getViewPrefix().'lockscreen', compact('user', 'hasPasskeys', 'allowPasskeys'));
     }
 
     public function unlockScreen(Request $request)
@@ -576,11 +586,12 @@ class UserWebController extends BaseSliceWebController
             session()->forget('laraslice_session_locked');
             session()->forget('unlock_fail_count');
             UserSecurityLog::log($user->id, 'lockscreen_unlocked', 'success', 'Session unlocked via password verification.');
-            
+
             $redirectUrl = $this->safeRedirectUrl(session()->pull('lockscreen_redirect_url'));
-            if ($redirectUrl && !str_contains($redirectUrl, 'lockscreen')) {
+            if ($redirectUrl && ! str_contains($redirectUrl, 'lockscreen')) {
                 return redirect($redirectUrl)->with('success', 'Session unlocked successfully.');
             }
+
             return redirect()->route('security.settings')->with('success', 'Session unlocked successfully.');
         }
 
@@ -606,16 +617,19 @@ class UserWebController extends BaseSliceWebController
             Auth::logout();
             session()->invalidate();
             session()->regenerateToken();
+
             return redirect()->route('login')->with('error', 'Too many failed unlock attempts. Please sign in again.');
         }
 
         $remaining = 5 - $fails;
-        return back()->with('error', 'Incorrect password. ' . $remaining . ' attempts remaining before session terminates.');
+
+        return back()->with('error', 'Incorrect password. '.$remaining.' attempts remaining before session terminates.');
     }
 
     public function lockSession(Request $request)
     {
         session(['laraslice_session_locked' => true]);
+
         return redirect()->route('lockscreen');
     }
 
@@ -631,13 +645,13 @@ class UserWebController extends BaseSliceWebController
         }
 
         UserConnect::create([
-            'user_id'    => $user->id,
+            'user_id' => $user->id,
             'created_by' => Auth::id() ?: $user->id,
-            'code_hash'  => hash('sha256', $code),
+            'code_hash' => hash('sha256', $code),
             'expires_at' => now()->addMinutes(15),
         ]);
 
-        session(['device_enrollment_code_' . $user->id => [
+        session(['device_enrollment_code_'.$user->id => [
             'code' => $code,
             'expires_at' => now()->addMinutes(15),
         ]]);
@@ -668,12 +682,13 @@ class UserWebController extends BaseSliceWebController
             UserFactor::updateOrCreate(
                 ['user_id' => $user->id],
                 [
-                    'secret_enc'   => encrypt($user->mfa_secret),
+                    'secret_enc' => encrypt($user->mfa_secret),
                     'confirmed_at' => now(),
                 ]
             );
 
             UserSecurityLog::log($user->id, 'totp_verified_test', 'success', 'User successfully verified their TOTP authenticator app code.');
+
             return back()->with('totp_test_success', "Code {$inputCode} verified successfully! Your Google Authenticator is fully synced and working.");
         }
 
@@ -758,7 +773,7 @@ class UserWebController extends BaseSliceWebController
         }
 
         $platform = in_array($os, ['Android', 'iOS']) ? 'Mobile' : 'Web';
-        $deviceName = $browser . ' on ' . $os;
+        $deviceName = $browser.' on '.$os;
 
         $device = UserDevice::where('user_id', $user->id)
             ->where('device_name', $deviceName)
@@ -767,24 +782,24 @@ class UserWebController extends BaseSliceWebController
         if ($device) {
             UserDevice::where('user_id', $user->id)->update(['is_current' => false]);
             $device->update([
-                'is_current'     => true,
-                'ip_address'     => $ip,
-                'browser'        => $browser,
-                'os'             => $os,
-                'platform'       => $platform,
+                'is_current' => true,
+                'ip_address' => $ip,
+                'browser' => $browser,
+                'os' => $os,
+                'platform' => $platform,
                 'last_active_at' => now(),
             ]);
         } else {
             UserDevice::where('user_id', $user->id)->update(['is_current' => false]);
             UserDevice::create([
-                'user_id'        => $user->id,
-                'device_name'    => $deviceName,
-                'browser'        => $browser,
-                'os'             => $os,
-                'platform'       => $platform,
-                'ip_address'     => $ip,
+                'user_id' => $user->id,
+                'device_name' => $deviceName,
+                'browser' => $browser,
+                'os' => $os,
+                'platform' => $platform,
+                'ip_address' => $ip,
                 'location_label' => ($ip === '127.0.0.1' || str_starts_with($ip, '192.168.')) ? 'Local' : 'Islamabad, PK',
-                'is_current'     => true,
+                'is_current' => true,
                 'last_active_at' => now(),
             ]);
         }
@@ -793,11 +808,11 @@ class UserWebController extends BaseSliceWebController
     /**
      * WebAuthn Registration Options for active user.
      */
-    public function passkeyRegisterOptions(Request $request): \Illuminate\Http\JsonResponse
+    public function passkeyRegisterOptions(Request $request): JsonResponse
     {
         $user = $this->requireUser();
 
-        $service = new \LaraSlice\Slices\Users\Services\WebAuthnService();
+        $service = new WebAuthnService;
         $options = $service->getRegisterArgs($user);
 
         return response()->json($options);
@@ -806,18 +821,18 @@ class UserWebController extends BaseSliceWebController
     /**
      * WebAuthn Registration Verification (Enrollment).
      */
-    public function passkeyRegisterVerify(Request $request): \Illuminate\Http\JsonResponse
+    public function passkeyRegisterVerify(Request $request): JsonResponse
     {
         $user = $this->requireUser();
 
         $request->validate([
-            'clientDataJSON'    => 'required|string',
+            'clientDataJSON' => 'required|string',
             'attestationObject' => 'required|string',
-            'label'             => 'nullable|string|max:100',
+            'label' => 'nullable|string|max:100',
         ]);
 
         try {
-            $service = new \LaraSlice\Slices\Users\Services\WebAuthnService();
+            $service = new WebAuthnService;
             $passkey = $service->processRegister(
                 $user,
                 $request->input('clientDataJSON'),
@@ -847,8 +862,8 @@ class UserWebController extends BaseSliceWebController
     {
         $user = $this->requireUser();
         $passkey = Access::allows($user, ['users.mfa', 'user.mfa'])
-            ? \LaraSlice\Slices\Users\Models\UserPasskey::find($id)
-            : \LaraSlice\Slices\Users\Models\UserPasskey::where('user_id', $user->id)->find($id);
+            ? UserPasskey::find($id)
+            : UserPasskey::where('user_id', $user->id)->find($id);
 
         if (! $passkey) {
             return redirect()->to(url('/admin/users/settings#mfa'))->with('error', 'Passkey not found or already removed.');
@@ -867,33 +882,33 @@ class UserWebController extends BaseSliceWebController
         $this->authorizeSlice('mfa');
 
         $request->validate([
-            'mfa_enforcement'          => 'required|in:off,optional,privileged_only,all',
-            'max_failed_attempts'      => 'required|integer|min:1|max:20',
-            'lockout_minutes'          => 'nullable|integer|min:1|max:1440',
+            'mfa_enforcement' => 'required|in:off,optional,privileged_only,all',
+            'max_failed_attempts' => 'required|integer|min:1|max:20',
+            'lockout_minutes' => 'nullable|integer|min:1|max:1440',
             'lockout_duration_minutes' => 'nullable|integer|min:1|max:1440',
-            'idle_lock_minutes'        => 'nullable|integer|min:0|max:1440',
-            'remember_device_days'     => 'nullable|integer|min:0|max:365',
+            'idle_lock_minutes' => 'nullable|integer|min:0|max:1440',
+            'remember_device_days' => 'nullable|integer|min:0|max:365',
         ]);
 
         $lockoutMinutes = (int) ($request->input('lockout_minutes') ?: $request->input('lockout_duration_minutes') ?: 15);
         $idleLockMinutes = (int) ($request->input('idle_lock_minutes', 15));
         $rememberDays = (int) ($request->input('remember_device_days') ?: 30);
 
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.mfa_enforcement', $request->input('mfa_enforcement'), 'Global MFA Policy');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.allow_passkeys', $request->boolean('allow_passkeys') ? 'true' : 'false', 'Enable FIDO2 Passkeys');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.allow_totp', $request->boolean('allow_totp') ? 'true' : 'false', 'Enable TOTP Apps');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.allow_device_code', $request->boolean('allow_device_code') ? 'true' : 'false', 'Enable Admin Device Code');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.allow_recovery_codes', $request->boolean('allow_recovery_codes') ? 'true' : 'false', 'Enable Recovery Codes');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.max_failed_attempts', $request->input('max_failed_attempts'), 'Lockout Attempts');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.lockout_minutes', $lockoutMinutes, 'Lockout Duration (mins)');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.idle_lock_minutes', $idleLockMinutes, 'Inactivity Screen Auto-Lock (mins)');
-        \LaraSlice\Slices\Users\Services\SecurityPolicyService::set('security.remember_device_days', $rememberDays, 'Remember Device Window (days)');
+        SecurityPolicyService::set('security.mfa_enforcement', $request->input('mfa_enforcement'), 'Global MFA Policy');
+        SecurityPolicyService::set('security.allow_passkeys', $request->boolean('allow_passkeys') ? 'true' : 'false', 'Enable FIDO2 Passkeys');
+        SecurityPolicyService::set('security.allow_totp', $request->boolean('allow_totp') ? 'true' : 'false', 'Enable TOTP Apps');
+        SecurityPolicyService::set('security.allow_device_code', $request->boolean('allow_device_code') ? 'true' : 'false', 'Enable Admin Device Code');
+        SecurityPolicyService::set('security.allow_recovery_codes', $request->boolean('allow_recovery_codes') ? 'true' : 'false', 'Enable Recovery Codes');
+        SecurityPolicyService::set('security.max_failed_attempts', $request->input('max_failed_attempts'), 'Lockout Attempts');
+        SecurityPolicyService::set('security.lockout_minutes', $lockoutMinutes, 'Lockout Duration (mins)');
+        SecurityPolicyService::set('security.idle_lock_minutes', $idleLockMinutes, 'Inactivity Screen Auto-Lock (mins)');
+        SecurityPolicyService::set('security.remember_device_days', $rememberDays, 'Remember Device Window (days)');
 
         if ($request->has('privileged_roles')) {
             $roles = (array) $request->input('privileged_roles');
-            \LaraSlice\Slices\Users\Services\SecurityPolicyService::set(
-                'security.mfa_privileged_roles', 
-                json_encode(array_values($roles)), 
+            SecurityPolicyService::set(
+                'security.mfa_privileged_roles',
+                json_encode(array_values($roles)),
                 'Roles requiring mandatory MFA under Privileged Roles Only policy'
             );
         }
@@ -908,25 +923,26 @@ class UserWebController extends BaseSliceWebController
         return back()->with('success', 'Enterprise Security Policies updated and applied system-wide.');
     }
 
-    public function passkeyUnlockOptions(Request $request): \Illuminate\Http\JsonResponse
+    public function passkeyUnlockOptions(Request $request): JsonResponse
     {
         $user = $this->requireUser();
-        $service = new \LaraSlice\Slices\Users\Services\WebAuthnService();
+        $service = new WebAuthnService;
         $options = $service->getLoginArgs($user);
+
         return response()->json($options);
     }
 
-    public function passkeyUnlockVerify(Request $request): \Illuminate\Http\JsonResponse
+    public function passkeyUnlockVerify(Request $request): JsonResponse
     {
         $request->validate([
-            'clientDataJSON'    => 'required|string',
+            'clientDataJSON' => 'required|string',
             'authenticatorData' => 'required|string',
-            'signature'         => 'required|string',
-            'credentialId'      => 'required|string',
+            'signature' => 'required|string',
+            'credentialId' => 'required|string',
         ]);
 
         try {
-            $service = new \LaraSlice\Slices\Users\Services\WebAuthnService();
+            $service = new WebAuthnService;
             $user = $service->processLogin(
                 $request->input('clientDataJSON'),
                 $request->input('authenticatorData'),
@@ -952,13 +968,13 @@ class UserWebController extends BaseSliceWebController
             );
 
             $redirectUrl = $this->safeRedirectUrl(session()->pull('lockscreen_redirect_url'));
-            if (!$redirectUrl || str_contains($redirectUrl, 'lockscreen')) {
+            if (! $redirectUrl || str_contains($redirectUrl, 'lockscreen')) {
                 $redirectUrl = route('security.settings');
             }
 
             return response()->json([
-                'success'  => true,
-                'message'  => 'Session unlocked successfully!',
+                'success' => true,
+                'message' => 'Session unlocked successfully!',
                 'redirect' => $redirectUrl,
             ]);
         } catch (\Throwable $e) {
@@ -968,5 +984,4 @@ class UserWebController extends BaseSliceWebController
             ], 422);
         }
     }
-
 }

@@ -2,9 +2,8 @@
 
 namespace LaraSlice\Slices\Settings\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Illuminate\Routing\Controller;
+use Illuminate\View\View;
 
 class ThemeWebController extends Controller
 {

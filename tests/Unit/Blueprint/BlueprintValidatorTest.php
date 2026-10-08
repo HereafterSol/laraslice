@@ -10,7 +10,7 @@ class BlueprintValidatorTest extends TestCase
 {
     public function test_it_accepts_a_multi_model_parent_child_blueprint(): void
     {
-        $blueprint = (new BlueprintValidator())->validate($this->serviceDeskBlueprint());
+        $blueprint = (new BlueprintValidator)->validate($this->serviceDeskBlueprint());
 
         $this->assertSame('service_desk', $blueprint['models'][0]['handle']);
         $this->assertCount(2, $blueprint['models']);
@@ -23,7 +23,7 @@ class BlueprintValidatorTest extends TestCase
         $blueprint['models'][0]['relations'][0]['model'] = 'missing_model';
 
         try {
-            (new BlueprintValidator())->validate($blueprint);
+            (new BlueprintValidator)->validate($blueprint);
             $this->fail('Expected blueprint errors.');
         } catch (BlueprintValidationException $exception) {
             $this->assertStringContainsString("duplicates field 'name'", $exception->getMessage());
@@ -37,7 +37,7 @@ class BlueprintValidatorTest extends TestCase
         $blueprint['models'][0]['relations'][0]['foreign_key'] = 'missing_id';
 
         $this->expectException(BlueprintValidationException::class);
-        (new BlueprintValidator())->validate($blueprint);
+        (new BlueprintValidator)->validate($blueprint);
     }
 
     public function test_it_rejects_unreachable_models_instead_of_planning_orphan_tables(): void
@@ -50,7 +50,7 @@ class BlueprintValidatorTest extends TestCase
         ];
 
         $this->expectException(BlueprintValidationException::class);
-        (new BlueprintValidator())->validate($blueprint);
+        (new BlueprintValidator)->validate($blueprint);
     }
 
     public function test_it_rejects_unknown_schema_keys_instead_of_silently_ignoring_them(): void
@@ -59,7 +59,7 @@ class BlueprintValidatorTest extends TestCase
         $blueprint['models'][0]['fields'][0]['searchable'] = true;
 
         $this->expectException(BlueprintValidationException::class);
-        (new BlueprintValidator())->validate($blueprint);
+        (new BlueprintValidator)->validate($blueprint);
     }
 
     private function serviceDeskBlueprint(): array
