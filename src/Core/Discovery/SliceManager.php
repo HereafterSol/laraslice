@@ -399,7 +399,7 @@ class SliceManager
                         if (!str_contains($idx, '$parentId ?') && preg_match("/route\('{$parentPlural}\.{$childName}\.edit',\s*\[[\'\"]parentId[\'\"]\s*=>\s*\\\$parentId,\s*[\'\"](?:contact|id)[\'\"]\s*=>\s*\\\$item->id\]\)/", $idx, $mEdit)) {
                             $idx = str_replace(
                                 $mEdit[0],
-                                "(\$parentId ? route('{$parentPlural}.{$childName}.edit', ['parentId' => \$parentId, 'id' => \$item->id]) : (\\Illuminate\\Support\\Facades\\Route::has('{$childName}.edit') ? route('{$childName}.edit', \$item->id) : route('{$parentPlural}.{$childName}.edit', ['parentId' => \$item->{$fkDefault} ?? 1, 'id' => \$item->id])))",
+                                "(\$parentId ? route('{$parentPlural}.{$childName}.edit', ['parentId' => \$parentId, 'id' => \$item->id]) : (\\Illuminate\\Support\\Facades\\Route::has('{$childName}.edit') ? route('{$childName}.edit', \$item->id) : route('{$parentPlural}.{$childName}.edit', ['parentId' => \$item->{$fkDefault} ?? 0, 'id' => \$item->id])))",
                                 $idx
                             );
                             $idxChanged = true;
@@ -424,7 +424,7 @@ class SliceManager
 
                         if (!str_contains($ff, '$parentId ?') && str_contains($ff, "\$isNew ? route('{$parentPlural}.{$childName}.store', ['parentId' => \$parentId])")) {
                             $oldAction = "\$isNew ? route('{$parentPlural}.{$childName}.store', ['parentId' => \$parentId]) : route('{$parentPlural}.{$childName}.update', ['parentId' => \$parentId, 'id' => \$form->id])";
-                            $newAction = "\$isNew ? (\$parentId ? route('{$parentPlural}.{$childName}.store', ['parentId' => \$parentId]) : (\\Illuminate\\Support\\Facades\\Route::has('{$childName}.store') ? route('{$childName}.store') : route('{$parentPlural}.{$childName}.store', ['parentId' => old('{$fkDefault}', 1)]))) : (\$parentId ? route('{$parentPlural}.{$childName}.update', ['parentId' => \$parentId, 'id' => \$form->id]) : (\\Illuminate\\Support\\Facades\\Route::has('{$childName}.update') ? route('{$childName}.update', \$form->id) : route('{$parentPlural}.{$childName}.update', ['parentId' => \$form->{$fkDefault} ?? 1, 'id' => \$form->id])))";
+                            $newAction = "\$isNew ? (\$parentId ? route('{$parentPlural}.{$childName}.store', ['parentId' => \$parentId]) : (\\Illuminate\\Support\\Facades\\Route::has('{$childName}.store') ? route('{$childName}.store') : route('{$parentPlural}.{$childName}.store', ['parentId' => old('{$fkDefault}', 0)]))) : (\$parentId ? route('{$parentPlural}.{$childName}.update', ['parentId' => \$parentId, 'id' => \$form->id]) : (\\Illuminate\\Support\\Facades\\Route::has('{$childName}.update') ? route('{$childName}.update', \$form->id) : route('{$parentPlural}.{$childName}.update', ['parentId' => \$form->{$fkDefault} ?? 0, 'id' => \$form->id])))";
                             $ff = str_replace($oldAction, $newAction, $ff);
                             $ffChanged = true;
                         }
@@ -504,7 +504,6 @@ class SliceManager
                                     . "    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
                                     . "    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
                                     . "    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
-                                    . "    Route::get('/{id}', [{$childStudly}WebController::class, 'show'])->name('show');\n"
                                     . "    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
                                     . "    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
                                     . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"
@@ -513,7 +512,6 @@ class SliceManager
                                     . "    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
                                     . "    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
                                     . "    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
-                                    . "    Route::get('/{id}', [{$childStudly}WebController::class, 'show'])->name('show');\n"
                                     . "    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
                                     . "    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
                                     . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"

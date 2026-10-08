@@ -26,7 +26,7 @@ class SliceGenerator
         $domain = isset($options['domain']) && is_string($options['domain']) && trim($options['domain']) !== ''
             ? trim($options['domain'])
             : null;
-        $domainFolder = $domain ? Str::studly(Str::slug($domain)) : null;
+        $domainFolder = $domain ? SliceName::domainSegment($domain) : null;
         $domainSlug = $domain ? Str::slug($domain) : null;
         $domainDot = $domainSlug ? str_replace('-', '_', $domainSlug) . '.' : '';
         $routePrefix = $domainSlug ? "{$domainSlug}/{$pluralSnake}" : $pluralSnake;
@@ -65,11 +65,11 @@ class SliceGenerator
         $fillable = var_export(array_values(array_unique(array_merge(['title', 'description', 'status'], $customColumns))), true);
         $sortableColumns = implode(', ', array_map(fn (string $column) => var_export($column, true), array_values(array_unique(array_merge(['id', 'title', 'status', 'created_at', 'updated_at'], $customColumns)))));
 
-        $dtoTitleDefault = var_export($titleField['default'] ?? '', true);
-        $dtoDescDefault = var_export($descriptionField['default'] ?? null, true);
-        $dtoStatusDefault = var_export($statusField['default'] ?? 'draft', true);
+        $dtoTitle = $this->dtoProperty('title', $titleField, 'string', '');
+        $dtoDesc = $this->dtoProperty('description', $descriptionField, '?string', null);
+        $dtoStatus = $this->dtoProperty('status', $statusField, 'string', 'draft');
 
-        $dtoProperties = implode("\n", array_map(fn (array $field) => '    public $' . $field['name'] . ' = ' . var_export($field['default'], true) . ';', $extraFields));
+        $dtoProperties = implode("\n", array_map(fn (array $field) => '    ' . $this->dtoProperty($field['name'], $field), $extraFields));
         if ($dtoProperties !== '') {
             $dtoProperties = "\n" . $dtoProperties;
         }
@@ -91,11 +91,11 @@ class SliceGenerator
         }
 
         $schemaTitle = $titleField ? $titleField['schema'] : "Field::make('title')->label('Title')->required()->autofocus()";
-        $schemaDesc = $descriptionField ? $descriptionField['schema'] : "Field::make('description')->textarea()->rows(3)";
+        $schemaDesc = $descriptionField ? $descriptionField['schema'] : "Field::make('description', 'textarea')->rows(3)";
         if ($statusField) {
             $schemaStatus = $statusField['schema'];
         } else {
-            $schemaStatus = "Field::make('status')->select([\n                'draft' => 'Draft',\n                'active' => 'Active',\n                'archived' => 'Archived',\n            ])->default('draft')";
+            $schemaStatus = "Field::make('status', 'select')->options([\n                'draft' => 'Draft',\n                'active' => 'Active',\n                'archived' => 'Archived',\n            ])->default('draft')";
         }
         $schemaFields = implode("\n", array_map(fn (array $field) => '            ' . $field['schema'] . ',', $extraFields));
         if ($schemaFields !== '') {
@@ -335,9 +335,9 @@ use LaraSlice\\Core\\Base\\BaseFormBusinessObject;
 
 class {$studlyName}FormBusinessObject extends BaseFormBusinessObject
 {
-    public string \$title = {$dtoTitleDefault};
-    public ?string \$description = {$dtoDescDefault};
-    public string \$status = {$dtoStatusDefault};{$dtoProperties}
+    {$dtoTitle}
+    {$dtoDesc}
+    {$dtoStatus}{$dtoProperties}
 }
 PHP;
         $this->writeFile($sliceDir . "/Contracts/{$studlyName}FormBusinessObject.php", $formDto);
@@ -351,8 +351,8 @@ use LaraSlice\\Core\\Base\\BaseListingBusinessObject;
 
 class {$studlyName}ListingBusinessObject extends BaseListingBusinessObject
 {
-    public string \$title = {$dtoTitleDefault};
-    public string \$status = {$dtoStatusDefault};{$dtoProperties}
+    {$dtoTitle}
+    {$dtoStatus}{$dtoProperties}
 }
 PHP;
         $this->writeFile($sliceDir . "/Contracts/{$studlyName}ListingBusinessObject.php", $listingDto);
@@ -909,6 +909,15 @@ BLADE;
 
     private function writeFile(string $path, string $contents): void
     {
+        // Generated PHP must parse; files are staged, so a failure leaves nothing behind
+        if (str_ends_with($path, '.php') && ! str_ends_with($path, '.blade.php')) {
+            try {
+                token_get_all($contents, TOKEN_PARSE);
+            } catch (\ParseError $e) {
+                throw new \RuntimeException('Generated ' . basename($path) . " is not valid PHP (line {$e->getLine()}): {$e->getMessage()}", 0, $e);
+            }
+        }
+
         if (file_put_contents($path, $contents, LOCK_EX) === false) {
             throw new \RuntimeException("Unable to write generated file: {$path}");
         }
@@ -1076,6 +1085,32 @@ BLADE;
         }
 
         return array_values($definitions);
+    }
+
+    /**
+     * A typed DTO property declaration whose default always matches its type.
+     *
+     * Built-in columns without a custom definition use $fallbackType / $fallbackDefault.
+     */
+    private function dtoProperty(string $name, ?array $field, string $fallbackType = '?string', mixed $fallbackDefault = null): string
+    {
+        if ($field === null) {
+            return "public {$fallbackType} \${$name} = " . var_export($fallbackDefault, true) . ';';
+        }
+
+        $default = $field['default'] ?? null;
+        [$type, $default] = match ($field['type']) {
+            'boolean' => ['bool', (bool) $default],
+            'integer', 'foreign_id' => ['?int', $default === null ? null : (int) $default],
+            'decimal' => ['?float', $default === null ? null : (float) $default],
+            default => [! $field['nullable'] && $default !== null ? 'string' : '?string', $default === null ? null : (string) $default],
+        };
+
+        if ($type === 'string' && $default === null) {
+            $default = '';
+        }
+
+        return "public {$type} \${$name} = " . var_export($default, true) . ';';
     }
 
     private function renderFormField(string $name, string $label, string $type, bool $required, mixed $default, array $options): string

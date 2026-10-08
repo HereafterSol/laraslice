@@ -44,12 +44,18 @@ class ChildEntityGenerator
             $fName = $f['name'];
             $fType = strtolower($f['type']);
             $phpType = match($fType) {
-                'integer', 'biginteger', 'smallinteger', 'tinyinteger' => '?int',
+                'integer', 'biginteger', 'unsignedbiginteger', 'smallinteger', 'tinyinteger', 'foreign_id' => '?int',
                 'boolean' => '?bool',
                 'decimal', 'float', 'double' => '?float',
                 default => '?string',
             };
-            $default = $f['default'] !== null ? var_export($f['default'], true) : 'null';
+            // Cast the default to the property type, e.g. a decimal default "1.5" must be 1.5
+            $default = var_export($f['default'] === null ? null : match ($phpType) {
+                '?int' => (int) $f['default'],
+                '?bool' => (bool) $f['default'],
+                '?float' => (float) $f['default'],
+                default => (string) $f['default'],
+            }, true);
             $formProps[] = "    public {$phpType} \${$fName} = {$default};";
             $listingProps[] = "    public {$phpType} \${$fName} = {$default};";
         }
@@ -339,7 +345,7 @@ PHP;
         }
         $dataTableColumns = implode("\n", $columnLines);
 
-        $editLinkExpr = "\$parentId ? (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', ['id' => \$item->id, 'parentId' => \$parentId]) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$parentId, 'id' => \$item->id])) : (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', \$item->id) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$item->{$foreignKey} ?? 1, 'id' => \$item->id]))";
+        $editLinkExpr = "\$parentId ? (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', ['id' => \$item->id, 'parentId' => \$parentId]) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$parentId, 'id' => \$item->id])) : (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', \$item->id) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$item->{$foreignKey} ?? 0, 'id' => \$item->id]))";
 
         $indexBlade = <<<BLADE
 @extends('layouts.app')
@@ -527,7 +533,7 @@ HTML;
             <x-ui.card-description>Configure {$childSingularLabel} details and link with {$parentStudly}</x-ui.card-description>
         </x-ui.card-header>
         <x-ui.card-content class="p-6">
-            <form action="{{ \$isNew ? (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.store') ? route('{$childPluralSnake}.store') : route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => old('{$foreignKey}', 1)]))) : (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$parentId, 'id' => \$form->id]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.update') ? route('{$childPluralSnake}.update', \$form->id) : route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$form->{$foreignKey} ?? 1, 'id' => \$form->id]))) }}" method="POST" class="space-y-6">
+            <form action="{{ \$isNew ? (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.store') ? route('{$childPluralSnake}.store') : route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => old('{$foreignKey}', 0)]))) : (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$parentId, 'id' => \$form->id]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.update') ? route('{$childPluralSnake}.update', \$form->id) : route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$form->{$foreignKey} ?? 0, 'id' => \$form->id]))) }}" method="POST" class="space-y-6">
                 @csrf
                 @if(!\$isNew) @method('PUT') @endif
                 
@@ -607,7 +613,6 @@ BLADE;
                     . "    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
                     . "    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
                     . "    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
-                    . "    Route::get('/{id}', [{$childStudly}WebController::class, 'show'])->name('show');\n"
                     . "    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
                     . "    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
                     . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"
@@ -619,7 +624,6 @@ BLADE;
                         . "    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
                         . "    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
                         . "    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
-                        . "    Route::get('/{id}', [{$childStudly}WebController::class, 'show'])->name('show');\n"
                         . "    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
                         . "    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
                         . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"

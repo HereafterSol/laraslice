@@ -17,12 +17,16 @@ abstract class BaseFormBusinessObject implements IBusinessObject
     {
         $instance = new static();
         foreach ($data as $key => $value) {
+            if (! is_string($key)) {
+                continue;
+            }
+
             // Support camelCase and snake_case
             $camel = lcfirst(str_replace(' ', '', ucwords(str_replace('_', ' ', $key))));
-            if (property_exists($instance, $key)) {
-                $instance->{$key} = $value;
-            } elseif (property_exists($instance, $camel)) {
-                $instance->{$camel} = $value;
+            $property = property_exists($instance, $key) ? $key : (property_exists($instance, $camel) ? $camel : null);
+
+            if ($property !== null && static::coerce($instance, $property, $value, $coerced)) {
+                $instance->{$property} = $coerced;
             }
         }
 
@@ -41,5 +45,44 @@ abstract class BaseFormBusinessObject implements IBusinessObject
         }
 
         return $instance;
+    }
+
+    /**
+     * Convert a request value to the property's declared type. Returns false when it cannot be
+     * converted, in which case the property keeps its default and validation reports the problem.
+     */
+    protected static function coerce(object $instance, string $property, mixed $value, mixed &$coerced): bool
+    {
+        $type = (new \ReflectionProperty($instance, $property))->getType();
+        if (! $type instanceof \ReflectionNamedType || $type->getName() === 'mixed') {
+            $coerced = $value;
+            return true;
+        }
+
+        if ($value === null) {
+            if ($type->allowsNull()) {
+                $coerced = null;
+                return true;
+            }
+            // Empty form inputs arrive as null; treat them as empty values
+            $coerced = match ($type->getName()) {
+                'string' => '',
+                'bool' => false,
+                'array' => [],
+                default => null,
+            };
+            return $coerced !== null;
+        }
+
+        $coerced = match ($type->getName()) {
+            'string' => is_scalar($value) ? (string) $value : null,
+            'int' => is_numeric($value) && (int) $value == $value ? (int) $value : null,
+            'float' => is_numeric($value) ? (float) $value : null,
+            'bool' => is_bool($value) ? $value : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
+            'array' => is_array($value) ? $value : null,
+            default => $value,
+        };
+
+        return $coerced !== null;
     }
 }

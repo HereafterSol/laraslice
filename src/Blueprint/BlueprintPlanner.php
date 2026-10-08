@@ -17,7 +17,7 @@ final class BlueprintPlanner
         $domain = isset($blueprint['domain']) && is_string($blueprint['domain']) && trim($blueprint['domain']) !== ''
             ? trim($blueprint['domain'])
             : null;
-        $domainFolder = $domain ? Str::studly(Str::slug($domain)) : null;
+        $domainFolder = $domain ? SliceName::domainSegment($domain) : null;
         $sliceDirectory = $domainFolder
             ? ($domainFolder . DIRECTORY_SEPARATOR . Str::plural($sliceClass))
             : Str::plural($sliceClass);
