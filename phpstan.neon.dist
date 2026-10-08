@@ -7,10 +7,6 @@ parameters:
     level: 5
     paths:
         - src
-    # Vendored third-party code: used for type information, not analysed
-    excludePaths:
-        analyse:
-            - src/Slices/Users/WebAuthn/lbuchs
     # Slice models get their columns from the migrations each slice ships
     databaseMigrationsPath:
         - database/migrations

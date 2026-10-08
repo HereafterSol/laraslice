@@ -154,6 +154,8 @@ class LaraSliceServiceProvider extends ServiceProvider
         // 2. Load Core Migrations & Views
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/Wizard/views', 'laraslice');
+        // The starter UI components, so package pages share the copies published to host apps
+        $this->loadViewsFrom(dirname(__DIR__).'/resources/stubs/starter/views/components/ui', 'laraslice-ui');
 
         $this->registerRateLimiters();
 

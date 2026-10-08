@@ -15,7 +15,7 @@
     @includeIf('layouts.partials.head')
 
     <!-- Standalone Tailwind CSS CDN & BlatUI Theme Config -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -58,7 +58,7 @@
     </script>
 
     <!-- Alpine.js CDN for interactive tabs & FAQs -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js" integrity="sha384-5/joNqFnRyVWzXp99bHot6RHG+EksGp+USSgZwPar7T9SD9PKKER37n/8bXBAZGd" crossorigin="anonymous"></script>
 
     <!-- Design Tokens (BlatUI standard: Light & Dark) -->
     <style>

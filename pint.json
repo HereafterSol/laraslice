@@ -1,8 +1,5 @@
 {
     "preset": "laravel",
-    "exclude": [
-        "src/Slices/Users/WebAuthn/lbuchs"
-    ],
     "notPath": [
         "resources/stubs"
     ]
