@@ -119,6 +119,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 BlueprintApplyCommand::class,
                 \LaraSlice\Console\Commands\SliceSyncCommand::class,
                 \LaraSlice\Commands\SliceCacheCommand::class,
+                \LaraSlice\Commands\SliceRepairCommand::class,
                 \LaraSlice\Commands\SliceClearCommand::class,
                 \LaraSlice\Commands\SlicePublishCommand::class,
                 \LaraSlice\Commands\AuditPruneCommand::class,
