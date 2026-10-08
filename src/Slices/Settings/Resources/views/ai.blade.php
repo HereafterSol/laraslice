@@ -236,9 +236,9 @@ function aiSettingsApp() {
                         <div class="space-y-1.5">
                             <x-ui.label for="openai_model">Model Selection</x-ui.label>
                             <select id="openai_model" name="openai_model" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                <option value="gpt-4o-mini" {{ ($settings['openai_model'] ?? '') === 'gpt-4o-mini' ? 'selected' : '' }}>GPT-4o Mini (Fast & Cost-Effective)</option>
-                                <option value="gpt-4o" {{ ($settings['openai_model'] ?? '') === 'gpt-4o' ? 'selected' : '' }}>GPT-4o (State-of-the-Art)</option>
-                                <option value="gpt-4-turbo" {{ ($settings['openai_model'] ?? '') === 'gpt-4-turbo' ? 'selected' : '' }}>GPT-4 Turbo</option>
+                                <option value="gpt-4o-mini" {{ ($settings['openai_model'] ?? '') === 'gpt-4o-mini' ? 'selected' : '' }}>GPT-4o Mini (Fast &amp; Cost-Effective)</option>
+                                <option value="gpt-4o" {{ ($settings['openai_model'] ?? '') === 'gpt-4o' ? 'selected' : '' }}>GPT-4o</option>
+                                <option value="gpt-5.4-mini" {{ ($settings['openai_model'] ?? '') === 'gpt-5.4-mini' ? 'selected' : '' }}>GPT-5.4 Mini</option>
                             </select>
                         </div>
                     </div>
@@ -252,9 +252,9 @@ function aiSettingsApp() {
                         <div class="space-y-1.5">
                             <x-ui.label for="gemini_model">Model Selection</x-ui.label>
                             <select id="gemini_model" name="gemini_model" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                <option value="gemini-2.5-flash" {{ ($settings['gemini_model'] ?? '') === 'gemini-2.5-flash' ? 'selected' : '' }}>Gemini 2.5 Flash (Sub-Second Reasoning)</option>
-                                <option value="gemini-2.5-pro" {{ ($settings['gemini_model'] ?? '') === 'gemini-2.5-pro' ? 'selected' : '' }}>Gemini 2.5 Pro (Deep Architecture)</option>
-                                <option value="gemini-1.5-flash" {{ ($settings['gemini_model'] ?? '') === 'gemini-1.5-flash' ? 'selected' : '' }}>Gemini 1.5 Flash</option>
+                                <option value="gemini-3.8-flash" {{ ($settings['gemini_model'] ?? '') === 'gemini-3.8-flash' ? 'selected' : '' }}>Gemini 3.8 Flash</option>
+                                <option value="gemini-3.7-flash" {{ ($settings['gemini_model'] ?? '') === 'gemini-3.7-flash' ? 'selected' : '' }}>Gemini 3.7 Flash</option>
+                                <option value="gemini-2.5-pro" {{ ($settings['gemini_model'] ?? '') === 'gemini-2.5-pro' ? 'selected' : '' }}>Gemini 2.5 Pro</option>
                             </select>
                         </div>
                     </div>
@@ -268,8 +268,9 @@ function aiSettingsApp() {
                         <div class="space-y-1.5">
                             <x-ui.label for="anthropic_model">Model Selection</x-ui.label>
                             <select id="anthropic_model" name="anthropic_model" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                <option value="claude-3-5-sonnet-20241022" {{ ($settings['anthropic_model'] ?? '') === 'claude-3-5-sonnet-20241022' ? 'selected' : '' }}>Claude 3.5 Sonnet</option>
-                                <option value="claude-3-5-haiku-20241022" {{ ($settings['anthropic_model'] ?? '') === 'claude-3-5-haiku-20241022' ? 'selected' : '' }}>Claude 3.5 Haiku</option>
+                                <option value="claude-opus-5-5" {{ ($settings['anthropic_model'] ?? '') === 'claude-opus-5-5' ? 'selected' : '' }}>Claude Opus 5.5</option>
+                                <option value="claude-sonnet-5-5" {{ ($settings['anthropic_model'] ?? '') === 'claude-sonnet-5-5' ? 'selected' : '' }}>Claude Sonnet 5.5 (Faster)</option>
+                                <option value="claude-haiku-4-5" {{ ($settings['anthropic_model'] ?? '') === 'claude-haiku-4-5' ? 'selected' : '' }}>Claude Haiku 4.5 (Fastest)</option>
                             </select>
                         </div>
                     </div>

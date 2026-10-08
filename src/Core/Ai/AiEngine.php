@@ -9,6 +9,19 @@ use LaraSlice\Core\Discovery\SliceManager;
 
 class AiEngine
 {
+    /**
+     * Default model per provider, used until a model is chosen in AI settings or config.
+     * Retired IDs (claude-3-5-*, gemini-1.5-*, gpt-4-turbo) were replaced in v1.4.2.
+     */
+    public const DEFAULT_MODELS = [
+        'opencode'   => 'space-bunny-free',
+        'openai'     => 'gpt-4o-mini',
+        'gemini'     => 'gemini-3.8-flash',
+        'anthropic'  => 'claude-opus-5-5',
+        'openrouter' => 'meta-llama/llama-3.3-70b-instruct',
+        'ollama'     => 'deepseek-r1:8b',
+    ];
+
     protected SliceManager $sliceManager;
 
     public function __construct(SliceManager $sliceManager)
@@ -46,8 +59,8 @@ class AiEngine
                 'name'        => 'OpenAI (GPT-4o / GPT-4o-mini)',
                 'is_free'     => false,
                 'key_setting' => 'ai.openai_api_key',
-                'model'       => 'gpt-4o-mini',
-                'models'      => ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
+                'model'       => self::DEFAULT_MODELS['openai'],
+                'models'      => ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini'],
                 'description' => 'Direct integration with OpenAI API.',
             ],
             [
@@ -55,8 +68,8 @@ class AiEngine
                 'name'        => 'Google Gemini (Gemini 2.5 Flash / Pro)',
                 'is_free'     => false,
                 'key_setting' => 'ai.gemini_api_key',
-                'model'       => 'gemini-2.5-flash',
-                'models'      => ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'],
+                'model'       => self::DEFAULT_MODELS['gemini'],
+                'models'      => ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-pro'],
                 'description' => 'Google DeepMind state-of-the-art multimodal reasoning models.',
             ],
             [
@@ -64,8 +77,8 @@ class AiEngine
                 'name'        => 'Anthropic (Claude 3.5 Sonnet)',
                 'is_free'     => false,
                 'key_setting' => 'ai.anthropic_api_key',
-                'model'       => 'claude-3-5-sonnet-20241022',
-                'models'      => ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+                'model'       => self::DEFAULT_MODELS['anthropic'],
+                'models'      => ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5'],
                 'description' => 'Industry-leading code generation and architectural reasoning.',
             ],
             [
@@ -74,7 +87,7 @@ class AiEngine
                 'is_free'     => false,
                 'key_setting' => 'ai.openrouter_api_key',
                 'model'       => 'meta-llama/llama-3.3-70b-instruct',
-                'models'      => ['meta-llama/llama-3.3-70b-instruct', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.5-flash'],
+                'models'      => ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash'],
                 'description' => 'Access 200+ models with a single unified OpenRouter API key.',
             ],
             [
@@ -1533,13 +1546,13 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
                 case 'openai':
                     $apiKey = $this->providerKey('openai');
                     if (empty($apiKey)) return null;
-                    $model = $this->providerModel('openai', 'gpt-4o-mini');
+                    $model = $this->providerModel('openai', self::DEFAULT_MODELS['openai']);
                     return $this->callOpenAiCompatible('https://api.openai.com/v1/chat/completions', $apiKey, $model, $systemPrompt, $message, $history);
 
                 case 'gemini':
                     $apiKey = $this->providerKey('gemini');
                     if (empty($apiKey)) return null;
-                    $model = $this->providerModel('gemini', 'gemini-2.5-flash');
+                    $model = $this->providerModel('gemini', self::DEFAULT_MODELS['gemini']);
                     // Google Gemini OpenAI-compatible endpoint
                     return $this->callOpenAiCompatible('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', $apiKey, $model, $systemPrompt, $message, $history);
 
@@ -1552,7 +1565,7 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
                 case 'anthropic':
                     $apiKey = $this->providerKey('anthropic');
                     if (empty($apiKey)) return null;
-                    $model = $this->providerModel('anthropic', 'claude-3-5-sonnet-20241022');
+                    $model = $this->providerModel('anthropic', self::DEFAULT_MODELS['anthropic']);
                     return $this->callAnthropic($apiKey, $model, $systemPrompt, $message, $history);
 
                 case 'ollama':
@@ -1647,7 +1660,8 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             'model'      => $model,
             'system'     => $systemPrompt,
             'messages'   => $messages,
-            'max_tokens' => 1200,
+            // Current Claude models think before answering; leave room for both
+            'max_tokens' => 4096,
         ];
 
         $ch = curl_init('https://api.anthropic.com/v1/messages');
@@ -1660,17 +1674,33 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             "x-api-key: {$apiKey}",
             'anthropic-version: 2023-06-01',
         ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         if ($code >= 200 && $code < 300 && $res) {
             $data = json_decode($res, true);
-            return $data['content'][0]['text'] ?? null;
+            return self::anthropicText(is_array($data) ? $data : []);
         }
 
         return null;
+    }
+
+    /**
+     * The answer text of a Messages API response. Current Claude models return thinking
+     * blocks before the text, so the reply is never simply content[0].
+     */
+    public static function anthropicText(array $response): ?string
+    {
+        $text = '';
+        foreach ($response['content'] ?? [] as $block) {
+            if (($block['type'] ?? null) === 'text' && is_string($block['text'] ?? null)) {
+                $text .= $block['text'];
+            }
+        }
+
+        return $text !== '' ? $text : null;
     }
 
     /**
