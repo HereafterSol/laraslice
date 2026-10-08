@@ -59,7 +59,8 @@ class SliceManifest
         $this->description  = $data['description'] ?? '';
         $this->author       = $data['author'] ?? 'LaraSlice';
         $this->icon         = $data['icon'] ?? 'cube';
-        $this->active       = $data['active'] ?? true;
+        // Manifests may say "false" or "no"; unparsable values keep the slice active
+        $this->active       = filter_var($data['active'] ?? true, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
         $this->dependencies = $data['dependencies'] ?? [];
         $this->permissions  = $data['permissions'] ?? [];
         $this->navigation   = $data['navigation'] ?? [];

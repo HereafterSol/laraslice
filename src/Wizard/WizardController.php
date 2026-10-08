@@ -647,11 +647,11 @@ class WizardController extends Controller
                     'success' => true,
                     'step'    => 2,
                     'reply'   => "I can build a complete HR enterprise solution for you! I have designed a domain architecture with:\n\n" .
-                                 "â€¢ **Departments**: Manage organizational departments, codes, and budgets\n" .
-                                 "â€¢ **Positions**: Job designations linked to departments with salary bands\n" .
-                                 "â€¢ **Employees**: Master records linked to departments & positions\n" .
-                                 "â€¢ **LeaveRequests**: Employee leave tracking with status workflows\n" .
-                                 "â€¢ **AttendanceRecords**: Daily check-in/out records\n\n" .
+                                 "• **Departments**: Manage organizational departments, codes, and budgets\n" .
+                                 "• **Positions**: Job designations linked to departments with salary bands\n" .
+                                 "• **Employees**: Master records linked to departments & positions\n" .
+                                 "• **LeaveRequests**: Employee leave tracking with status workflows\n" .
+                                 "• **AttendanceRecords**: Daily check-in/out records\n\n" .
                                  "Would you like me to build all these modules or customize them? (Reply 'Build All' or specify modules)",
                     'options' => ['Build All', 'Employees & Departments Only', 'Include Payroll & Attendance'],
                     'plan'    => [

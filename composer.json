@@ -76,8 +76,7 @@
                 "LaraSlice\\LaraSliceServiceProvider"
             ],
             "aliases": {
-                "SliceManager": "LaraSlice\\Facades\\SliceManager",
-                "AiEngine": "LaraSlice\\Facades\\AiEngine"
+                "LaraSlice": "LaraSlice\\Facades\\LaraSlice"
             }
         }
     },

@@ -16,10 +16,7 @@ class SkillPublishCommand extends Command
         $this->info("🚀 Publishing LaraSlice AI Skills and MCP configuration...");
 
         // 1. Locate source SKILL.md
-        $sourceSkill = __DIR__ . '/../../../../config/skills/laraslice/SKILL.md';
-        if (! file_exists($sourceSkill)) {
-            $sourceSkill = base_path('SKILL.md');
-        }
+        $sourceSkill = dirname(__DIR__, 2) . '/skills/laraslice/SKILL.md';
 
         // 2. Publish to .agents/skills/laraslice/SKILL.md
         $agentsDir = base_path('.agents/skills/laraslice');

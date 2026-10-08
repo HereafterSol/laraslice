@@ -1365,7 +1365,7 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             return "### 🛡️ Security Audit Telemetry\n\n" .
                    "Audit log retention is configured at **{$days} days** with automatic pruning " . ($autoPrune === 'true' ? 'enabled' : 'disabled') . ".\n" .
                    "Currently tracking **{$totalAudit} recorded audit entries** in `laraslice_audit_logs`.\n\n" .
-                   "To manually prune stale logs, execute:\n```bash\nphp artisan laraslice:audit-prune --days={$days}\n```";
+                   "To manually prune stale logs, execute:\n```bash\nphp artisan laraslice:audit:prune --days={$days}\n```";
         }
 
         // Educational 1: How to scaffold a domain / E-Commerce suite
@@ -1432,7 +1432,7 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
             $reply .= "| `laraslice:mcp` | Start Model Context Protocol server for AI IDEs | `php artisan laraslice:mcp` |\n";
             $reply .= "| `laraslice:mcp --test` | Self-test and diagnostic for 13 MCP tools | `php artisan laraslice:mcp --test` |\n";
             $reply .= "| `laraslice:skill:publish` | Export agent skill instructions to `.agents` / `.cursor` | `php artisan laraslice:skill:publish` |\n";
-            $reply .= "| `laraslice:audit-prune` | Clean up stale security and telemetry logs | `php artisan laraslice:audit-prune --days=90` |\n";
+            $reply .= "| `laraslice:audit:prune` | Clean up stale security and telemetry logs | `php artisan laraslice:audit:prune --days=90` |\n";
             $reply .= "| `laraslice:wipe-domain` | Safely truncate and re-seed an entire domain | `php artisan laraslice:wipe-domain E-Commerce` |\n";
             return $reply;
         }

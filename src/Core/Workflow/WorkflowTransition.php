@@ -29,6 +29,25 @@ class WorkflowTransition
             return false;
         }
 
+        if ($this->permission !== null && ! $this->userMayApply()) {
+            return false;
+        }
+
         return true;
+    }
+
+    /**
+     * Web requests need a user holding the transition's permission. Console code
+     * (jobs, commands, schedulers) without a signed-in user is trusted.
+     */
+    protected function userMayApply(): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return app()->runningInConsole() && ! app()->runningUnitTests();
+        }
+
+        return \LaraSlice\Core\Security\Access::allows($user, $this->permission);
     }
 }

@@ -95,7 +95,7 @@ class LaraSliceServiceProvider extends ServiceProvider
             ], 'laraslice-config');
 
             $this->publishes([
-                __DIR__ . '/../resources/stubs/starter/welcome.blade.php' => resource_path('views/welcome.blade.php'),
+                __DIR__ . '/../resources/stubs/starter/views/welcome.blade.php' => resource_path('views/welcome.blade.php'),
             ], 'laraslice-starter');
 
             $this->commands([

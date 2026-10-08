@@ -32,7 +32,7 @@ trait HasWorkflow
         $transition = $transitions[$transitionName];
 
         if (!$transition->canApply($this->getCurrentState(), $this)) {
-            throw new \IllegalStateException("Cannot apply transition '{$transitionName}' from state '{$this->getCurrentState()}'");
+            throw new \LogicException("Cannot apply transition '{$transitionName}' from state '{$this->getCurrentState()}'");
         }
 
         $stateField = $this->getWorkflowStateField();
