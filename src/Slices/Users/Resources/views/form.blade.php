@@ -92,6 +92,7 @@
                             $rawUserRoles = old('roles', $form->roles ?? ($form->roleIds ?? []));
                             $userRoleIds = is_array($rawUserRoles) ? array_map('intval', $rawUserRoles) : [];
                         @endphp
+                        <input type="hidden" name="roles" value="">
                         @forelse ($availableRoles as $r)
                             <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40 cursor-pointer transition-colors">
                                 <input type="checkbox" name="roles[]" value="{{ $r->id }}" {{ in_array((int)$r->id, $userRoleIds, true) ? 'checked' : '' }} class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">

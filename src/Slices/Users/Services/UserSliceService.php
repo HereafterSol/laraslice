@@ -141,14 +141,21 @@ class UserSliceService extends BaseSliceService
     {
         /** @var UserFormBusinessObject $form */
         /** @var User $model */
-        $model->name = $form->name;
-        $model->email = $form->email;
-        $model->status = $form->status ?? 'active';
-        $model->avatar_url = $form->avatarUrl;
-        $model->gender = $form->gender;
-        $model->phone = $form->phone;
-        $model->customised_permissions = $form->customisedPermissions;
-        if (!empty($form->mfaChannel)) {
+        // On update, only change what the request supplied
+        $assign = function (string $property, string $column, mixed $value) use ($form, $model, $isNew): void {
+            if ($isNew || $form->provided($property)) {
+                $model->{$column} = $value;
+            }
+        };
+
+        $assign('name', 'name', $form->name);
+        $assign('email', 'email', $form->email);
+        $assign('status', 'status', $form->status ?: 'active');
+        $assign('avatarUrl', 'avatar_url', $form->avatarUrl);
+        $assign('gender', 'gender', $form->gender);
+        $assign('phone', 'phone', $form->phone);
+        $assign('customisedPermissions', 'customised_permissions', $form->customisedPermissions);
+        if (!empty($form->mfaChannel) && ($isNew || $form->provided('mfaChannel'))) {
             $model->mfa_channel = $form->mfaChannel;
         }
     }
@@ -185,7 +192,10 @@ class UserSliceService extends BaseSliceService
             throw new AuthorizationException('Only a super-admin can modify a super-admin account.');
         }
 
-        $requested = array_map('intval', (array) (! empty($form->roles) ? $form->roles : $form->roleIds));
+        $requested = $this->requestedRoleIds($form);
+        if ($requested === null) {
+            return; // roles are not being changed
+        }
         $current = $target ? $target->roles()->pluck('roles.id')->map(fn ($id) => (int) $id)->all() : [];
         $actorRoles = method_exists($actor, 'roles')
             ? $actor->roles()->pluck('roles.id')->map(fn ($id) => (int) $id)->all()
@@ -195,6 +205,29 @@ class UserSliceService extends BaseSliceService
         if (array_diff($added, $actorRoles) !== []) {
             throw ValidationException::withMessages(['roles' => 'You can only assign roles that you hold yourself.']);
         }
+    }
+
+    /**
+     * Role ids the request wants the user to hold, or null when roles are not being changed.
+     *
+     * @return array<int, int>|null
+     */
+    protected function requestedRoleIds(UserFormBusinessObject $form): ?array
+    {
+        $provided = $form->providedFields();
+
+        if ($provided === null) {
+            // Built in code rather than from a request: an empty list means "not specified"
+            $roles = ! empty($form->roles) ? $form->roles : (! empty($form->roleIds) ? $form->roleIds : null);
+        } elseif (in_array('roles', $provided, true)) {
+            $roles = $form->roles;
+        } elseif (in_array('roleIds', $provided, true)) {
+            $roles = $form->roleIds;
+        } else {
+            $roles = null;
+        }
+
+        return $roles === null ? null : array_values(array_filter(array_map('intval', (array) $roles)));
     }
 
     protected function prepareModelForSave(IBusinessObject $form, Model $model, bool $isNew): void
@@ -215,20 +248,20 @@ class UserSliceService extends BaseSliceService
         /** @var UserFormBusinessObject $form */
         /** @var User $model */
 
-        // 1. Save or Update 1-to-1 UserDetail
-        $model->detail()->updateOrCreate(
-            ['user_id' => $model->id],
-            [
-                'employee_id' => $form->employeeId,
-                'department'  => $form->department,
-                'designation' => $form->designation,
-                'cnic'        => $form->cnic,
-                'dob'         => $form->dob,
-            ]
-        );
+        // 1. Save or Update 1-to-1 UserDetail (only the supplied fields on update)
+        $detail = array_filter([
+            'employee_id' => ['employeeId', $form->employeeId],
+            'department'  => ['department', $form->department],
+            'designation' => ['designation', $form->designation],
+            'cnic'        => ['cnic', $form->cnic],
+            'dob'         => ['dob', $form->dob],
+        ], fn (array $pair) => $isNew || $form->provided($pair[0]));
+        if ($detail !== []) {
+            $model->detail()->updateOrCreate(['user_id' => $model->id], array_map(fn (array $pair) => $pair[1], $detail));
+        }
 
-        // 2. Sync Roles
-        $roles = !empty($form->roles) ? $form->roles : ($form->roleIds ?? null);
+        // 2. Sync Roles only when the request supplied them ("roles" or "roleIds")
+        $roles = $this->requestedRoleIds($form);
         if ($roles !== null) {
             $roleIds = array_map('intval', (array) $roles);
             if (method_exists($model, 'roles')) {

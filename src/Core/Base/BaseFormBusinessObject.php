@@ -8,14 +8,36 @@ abstract class BaseFormBusinessObject implements IBusinessObject
 {
     public string|int|null $id = null;
 
+    /** Properties set from request data by fromArray(); null when the object was built by hand. */
+    private ?array $providedFields = null;
+
     public function toArray(): array
     {
-        return get_object_vars($this);
+        $data = get_object_vars($this);
+        unset($data['providedFields']);
+
+        return $data;
+    }
+
+    /**
+     * Property names that the request actually supplied, or null when unknown.
+     *
+     * @return array<int, string>|null
+     */
+    public function providedFields(): ?array
+    {
+        return $this->providedFields;
+    }
+
+    public function provided(string $property): bool
+    {
+        return $this->providedFields === null || in_array($property, $this->providedFields, true);
     }
 
     public static function fromArray(array $data): static
     {
         $instance = new static();
+        $instance->providedFields = [];
         foreach ($data as $key => $value) {
             if (! is_string($key)) {
                 continue;
@@ -27,6 +49,7 @@ abstract class BaseFormBusinessObject implements IBusinessObject
 
             if ($property !== null && static::coerce($instance, $property, $value, $coerced)) {
                 $instance->{$property} = $coerced;
+                $instance->providedFields[] = $property;
             }
         }
 
@@ -79,7 +102,8 @@ abstract class BaseFormBusinessObject implements IBusinessObject
             'int' => is_numeric($value) && (int) $value == $value ? (int) $value : null,
             'float' => is_numeric($value) ? (float) $value : null,
             'bool' => is_bool($value) ? $value : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
-            'array' => is_array($value) ? $value : null,
+            // A hidden empty input (e.g. "no roles selected") arrives as ''
+            'array' => is_array($value) ? $value : ($value === '' ? [] : null),
             default => $value,
         };
 

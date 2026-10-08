@@ -27,6 +27,11 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
 
         $data = $form->toArray();
         unset($data['id']);
+
+        // Updates only touch what the request sent, so partial API updates keep other values
+        if (! $isNew && $form instanceof BaseFormBusinessObject && $form->providedFields() !== null) {
+            $data = array_intersect_key($data, array_flip($form->providedFields()));
+        }
         
         // Populate model attributes
         $model->fill($data);
