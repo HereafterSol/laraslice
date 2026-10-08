@@ -11,7 +11,8 @@ class SliceFieldCommand extends Command
                             {slice : The target slice name (e.g. Product, User, Invoice)}
                             {field? : Field column name or comma-separated list (e.g. price, "sku:string,stock:integer:default=0")}
                             {type? : Field data type (string, text, integer, decimal, boolean, date, datetime, json, uuid)}
-                            {--nullable : Make the field nullable (default: true)}
+                            {--nullable : Make the field nullable (the default; kept for compatibility)}
+                            {--required : Make the field NOT NULL}
                             {--batch : Interactively define multiple fields in a single consolidated migration}
                             {--migrate : Automatically run migrations after adding the field}';
 
@@ -50,7 +51,7 @@ class SliceFieldCommand extends Command
                     'name'     => $colName,
                     'type'     => $colType,
                     'nullable' => $nullable,
-                    'default'  => $default,
+                    'default'  => $this->castDefault($default, $colType),
                 ];
 
                 $this->line("<fg=green>✓</> Added [{$colName}: {$colType}] to batch list. (" . count($fieldsToAdd) . " field(s) queued)\n");
@@ -84,7 +85,7 @@ class SliceFieldCommand extends Command
                     'name'     => $colName,
                     'type'     => $colType,
                     'nullable' => $nullable,
-                    'default'  => $default,
+                    'default'  => $this->castDefault($default, $colType),
                 ];
             }
         }
@@ -108,7 +109,7 @@ class SliceFieldCommand extends Command
             $fieldsToAdd[] = [
                 'name'     => $field,
                 'type'     => $type,
-                'nullable' => (bool) ($this->option('nullable') ?? true),
+                'nullable' => ! $this->option('required'),
             ];
         }
 
@@ -141,5 +142,20 @@ class SliceFieldCommand extends Command
             return Command::FAILURE;
         }
     }
-}
 
+    /**
+     * Command-line defaults arrive as strings; cast them to the column type.
+     */
+    private function castDefault(mixed $default, string $type): mixed
+    {
+        if ($default === null || $default === '') {
+            return null;
+        }
+
+        return match (strtolower($type)) {
+            'integer', 'int', 'biginteger', 'smallinteger', 'tinyinteger', 'unsignedinteger', 'unsignedbiginteger' => is_numeric($default) ? (int) $default : $default,
+            'boolean', 'bool' => filter_var($default, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default,
+            default => (string) $default,
+        };
+    }
+}

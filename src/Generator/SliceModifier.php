@@ -136,23 +136,17 @@ PHP;
                 }
             }
 
-            // 3. Update BlatUI Blade Views
+            // 3. Model mass-assignment and service validation, so the new values are saved
+            $this->addToFillable($sliceDir . "/Models/{$studlyName}.php", array_column($fields, 'name'));
+            $this->addValidationRules($sliceDir . "/Services/{$studlyName}SliceService.php", $fields);
+
+            // 4. Update BlatUI Blade Views
             $this->injectBlatUiFormFields($sliceDir, $studlyName, $fields);
             $this->injectBlatUiTableColumns($sliceDir, $studlyName, $fields);
         } else {
             // Child table: If child model exists, update fillable
             $childModelName = Str::studly(Str::singular($tableName));
-            $childModelFile = $sliceDir . "/Models/{$childModelName}.php";
-            if (file_exists($childModelFile)) {
-                $content = file_get_contents($childModelFile);
-                foreach ($fields as $field) {
-                    $snakeField = $field['name'];
-                    if (!str_contains($content, "'{$snakeField}'")) {
-                        $content = preg_replace("/(protected\s+\\\$fillable\s*=\s*\[)(.*?)(\];)/s", "$1$2'{$snakeField}', $3", $content);
-                    }
-                }
-                file_put_contents($childModelFile, $content);
-            }
+            $this->addToFillable($sliceDir . "/Models/{$childModelName}.php", array_column($fields, 'name'));
         }
 
         // 4. Update slice.json Manifest Version & Changelog
@@ -362,6 +356,87 @@ PHP;
         return array_values($normalized);
     }
 
+    /**
+     * Add column names to a model's $fillable, whether it is written as [...] or array (...).
+     */
+    protected function addToFillable(string $modelFile, array $columns): void
+    {
+        if (! file_exists($modelFile)) {
+            return;
+        }
+
+        $content = file_get_contents($modelFile);
+        $pattern = '/protected\s+\$fillable\s*=\s*(?:\[(?<short>.*?)\]|array\s*\((?<long>.*?)\))\s*;/s';
+        if (! preg_match($pattern, $content, $match)) {
+            return;
+        }
+
+        preg_match_all("/'([A-Za-z0-9_]+)'/", ($match['short'] ?? '') . ($match['long'] ?? ''), $existing);
+        $merged = array_values(array_unique(array_merge($existing[1], $columns)));
+        if ($merged === $existing[1]) {
+            return;
+        }
+
+        $list = implode('', array_map(fn ($column) => "\n        '{$column}',", $merged));
+        $replacement = "protected \$fillable = [{$list}\n    ];";
+        file_put_contents($modelFile, preg_replace($pattern, addcslashes($replacement, '\\$'), $content, 1), LOCK_EX);
+    }
+
+    /**
+     * Add validation rules for new columns to a generated service's Validator::make([...]) call.
+     */
+    protected function addValidationRules(string $serviceFile, array $fields): void
+    {
+        if (! file_exists($serviceFile)) {
+            return;
+        }
+
+        $content = file_get_contents($serviceFile);
+        $anchor = '        ])->validate();';
+        if (! str_contains($content, $anchor)) {
+            return;
+        }
+
+        $lines = '';
+        foreach ($fields as $field) {
+            if (preg_match("/'" . preg_quote($field['name'], '/') . "'\s*=>/", $content)) {
+                continue;
+            }
+            $lines .= "            '{$field['name']}' => " . var_export($this->validationRulesFor($field), true) . ",\n";
+        }
+
+        if ($lines !== '') {
+            file_put_contents($serviceFile, str_replace($anchor, rtrim($lines, "\n") . "\n" . $anchor, $content), LOCK_EX);
+        }
+    }
+
+    /**
+     * Validation rules for a normalized migration field.
+     *
+     * @return array<int, string>
+     */
+    protected function validationRulesFor(array $field): array
+    {
+        $type = strtolower($field['type']);
+        $rules = [$field['nullable'] ? 'nullable' : 'required'];
+
+        $rules[] = match (true) {
+            in_array($type, ['integer', 'biginteger', 'smallinteger', 'tinyinteger', 'unsignedinteger', 'unsignedbiginteger'], true) => 'integer',
+            in_array($type, ['decimal', 'float', 'double'], true) => 'numeric',
+            $type === 'boolean' => 'boolean',
+            in_array($type, ['date', 'datetime', 'timestamp'], true) => 'date',
+            $type === 'json' => 'array',
+            $type === 'uuid' => 'uuid',
+            default => 'string',
+        };
+
+        if ($type === 'string') {
+            $rules[] = 'max:' . ($field['length'] ?? 255);
+        }
+
+        return $rules;
+    }
+
     protected function injectDtoProperty(string $dtoFile, string $field, string $type, bool $nullable): void
     {
         if (!file_exists($dtoFile)) {
@@ -369,8 +444,8 @@ PHP;
         }
 
         $content = file_get_contents($dtoFile);
-        if (str_contains($content, "\${$field}")) {
-            return; // Already present
+        if (preg_match('/\$' . preg_quote($field, '/') . '\b/', $content)) {
+            return; // Already present ($desc must not match $description)
         }
 
         $phpType = $this->mapPhpType($type);
