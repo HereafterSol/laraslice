@@ -3,10 +3,11 @@
 namespace LaraSlice\Core\Ai;
 
 /**
- * TypeSafe AI / Jev System One Decision Service
+ * Rule-based decision helpers for the blueprint studio: archetype classification,
+ * migration risk scoring and component assignment.
  *
- * Implements Jev System One primitives (Choice, Noul, Score) for schema classification,
- * migration risk analysis, and component assignment.
+ * These are keyword and weight heuristics ("Choice", "Noul", "Score" primitives), not model
+ * calls; confidence values are relative weights, not calibrated probabilities.
  */
 class JevDecisionService
 {

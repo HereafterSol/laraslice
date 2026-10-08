@@ -11,14 +11,14 @@ class SliceAiCommand extends Command
     protected $signature = 'slice:ai {prompt : Natural language prompt (e.g. "Create an Invoice slice with line items and approval workflow")}
                             {--flutter : Also generate Flutter views}';
 
-    protected $description = 'AI-Assisted slice generation: scaffold a full-stack Laravel & Flutter slice from a natural language prompt (Laravel 13+)';
+    protected $description = 'Scaffold a slice from a short description. Picks the name and workflow by keyword matching; no AI provider is called';
 
     public function handle(): int
     {
         $prompt = $this->argument('prompt');
         $includeFlutter = (bool) $this->option('flutter');
 
-        $this->info("🤖 LaraSlice AI Engine (Laravel 13+) analyzing prompt: \"{$prompt}\"...");
+        $this->info("Reading the description for a slice name and workflow keywords: \"{$prompt}\"");
 
         // Parse prompt heuristics for slice name and workflow
         $words = preg_split('/\s+/', strtolower($prompt));
@@ -41,16 +41,16 @@ class SliceAiCommand extends Command
         $generator = new SliceGenerator;
         $sliceDir = $generator->generate($sliceName, [], $hasWorkflow);
 
-        $this->line("<fg=green>✓</> AI Scaffolded Vertical Slice: <comment>{$sliceDir}</comment>");
+        $this->line("<fg=green>✓</> Scaffolded vertical slice: <comment>{$sliceDir}</comment>");
 
         if ($includeFlutter) {
             $flutterGen = new FlutterSliceGenerator;
             $flutterDir = $flutterGen->generate($sliceName);
-            $this->line("<fg=cyan>✓</> AI Scaffolded Flutter Views: <comment>{$flutterDir}</comment>");
+            $this->line("<fg=cyan>✓</> Scaffolded Flutter views: <comment>{$flutterDir}</comment>");
         }
 
         $this->newLine();
-        $this->info("✨ AI Slice [{$sliceName}] successfully created! Ready to customize.");
+        $this->info("✨ Slice [{$sliceName}] created. Add fields with slice:field or the studio.");
 
         return Command::SUCCESS;
     }

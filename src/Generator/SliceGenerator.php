@@ -1103,7 +1103,6 @@ BLADE;
             $definitions[$name] = [
                 'name' => $name,
                 'label' => $label,
-                'label_html' => htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                 'rules' => $rules,
                 'type' => $type,
                 'schema' => $schema,

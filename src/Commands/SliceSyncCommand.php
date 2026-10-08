@@ -1,6 +1,6 @@
 <?php
 
-namespace LaraSlice\Console\Commands;
+namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -74,7 +74,7 @@ class SliceSyncCommand extends Command
                 }
 
                 if (! in_array($colName, $existingHandles, true)) {
-                    $typeName = strtolower($col['type_name'] ?? 'string');
+                    $typeName = strtolower($col['type_name']);
                     $type = match (true) {
                         str_contains($typeName, 'int') && ($col['type'] === 'tinyint(1)' || $typeName === 'bool') => 'boolean',
                         str_contains($typeName, 'int') => 'integer',
@@ -90,7 +90,7 @@ class SliceSyncCommand extends Command
                         'handle' => $colName,
                         'label' => Str::headline($colName),
                         'type' => $type,
-                        'required' => ! ($col['nullable'] ?? false) && ($col['default'] === null),
+                        'required' => ! $col['nullable'] && ($col['default'] === null),
                         'default' => $col['default'] ?? null,
                     ];
                 }

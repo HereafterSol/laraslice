@@ -342,33 +342,6 @@ HTML;
 HTML;
     }
 
-    /**
-     * Export to Flutter Dart TextFormField / Widget code
-     */
-    public function toFlutterWidget(): string
-    {
-        $camel = Str::camel($this->name);
-        $label = $this->getLabel();
-
-        if ($this->type === 'boolean') {
-            return <<<DART
-SwitchListTile(
-  title: const Text('{$label}'),
-  value: state.{$camel} ?? false,
-  onChanged: (val) => notifier.update{$camel}(val),
-)
-DART;
-        }
-
-        return <<<DART
-TextFormField(
-  initialValue: state.{$camel}?.toString(),
-  decoration: const InputDecoration(labelText: '{$label}'),
-  onChanged: (val) => notifier.update{$camel}(val),
-)
-DART;
-    }
-
     public function toArray(): array
     {
         return [

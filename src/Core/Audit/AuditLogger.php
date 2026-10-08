@@ -118,6 +118,11 @@ class AuditLogger
      */
     public static function record(array $data): void
     {
+        // Callable before the container is booted (CLI scripts, unit tests): default to enabled
+        if (app()->bound('config') && ! config('laraslice.audit.enabled', true)) {
+            return;
+        }
+
         $user = self::resolveAuthUser();
         $request = self::resolveRequest();
 

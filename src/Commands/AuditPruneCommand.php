@@ -5,11 +5,12 @@ namespace LaraSlice\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use LaraSlice\Core\Audit\AuditLogger;
+use LaraSlice\Support\SchemaCache;
 
 class AuditPruneCommand extends Command
 {
     protected $signature = 'laraslice:audit:prune 
-                            {--days=90 : Number of days of audit records to retain}
+                            {--days= : Days of audit records to retain (default: the audit.retention_days setting, else config)}
                             {--slice= : Optional slice filter to prune}
                             {--force : Force pruning without confirmation}';
 
@@ -20,7 +21,9 @@ class AuditPruneCommand extends Command
         if ($this->option('days') !== null) {
             $days = (int) $this->option('days');
         } else {
-            $dbDays = DB::table('settings')->where('key', 'audit.retention_days')->value('value');
+            $dbDays = SchemaCache::hasTable('settings')
+                ? DB::table('settings')->where('key', 'audit.retention_days')->value('value')
+                : null;
             $days = $dbDays ? (int) $dbDays : (int) config('laraslice.audit.retention_days', 90);
         }
         if ($days < 1) {

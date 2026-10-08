@@ -3,6 +3,7 @@
 namespace LaraSlice;
 
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
@@ -31,11 +32,11 @@ use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SliceRepairCommand;
 use LaraSlice\Commands\SliceSeedCommand;
+use LaraSlice\Commands\SliceSyncCommand;
 use LaraSlice\Commands\SliceToggleCommand;
 use LaraSlice\Commands\SliceUiPruneCommand;
 use LaraSlice\Commands\SliceWipeCommand;
 use LaraSlice\Commands\SliceWizardCommand;
-use LaraSlice\Console\Commands\SliceSyncCommand;
 use LaraSlice\Core\Ai\AiChatController;
 use LaraSlice\Core\Ai\AiEngine;
 use LaraSlice\Core\Ai\McpServer;
@@ -149,6 +150,12 @@ class LaraSliceServiceProvider extends ServiceProvider
                 LaraSliceMcpCommand::class,
                 SkillPublishCommand::class,
             ]);
+
+            if (config('laraslice.audit.auto_prune')) {
+                $this->callAfterResolving(Schedule::class, function ($schedule) {
+                    $schedule->command('laraslice:audit:prune', ['--force' => true])->daily()->withoutOverlapping();
+                });
+            }
         }
 
         // 2. Load Core Migrations & Views

@@ -18,9 +18,11 @@ return [
     |--------------------------------------------------------------------------
     */
     'audit' => [
-        'enabled' => env('LARASLICE_AUDIT_ENABLED', true),
+        // false stops writing audit records
+        'enabled' => (bool) env('LARASLICE_AUDIT_ENABLED', true),
         'retention_days' => (int) env('LARASLICE_AUDIT_RETENTION_DAYS', 90),
-        'auto_prune' => env('LARASLICE_AUDIT_AUTO_PRUNE', false),
+        // true schedules `laraslice:audit:prune --force` daily (requires the Laravel scheduler)
+        'auto_prune' => (bool) env('LARASLICE_AUDIT_AUTO_PRUNE', false),
     ],
 
     /*
@@ -29,17 +31,6 @@ return [
     |--------------------------------------------------------------------------
     */
     'slices_namespace' => 'App\\Slices',
-
-    /*
-    |--------------------------------------------------------------------------
-    | UI Framework Integration
-    |--------------------------------------------------------------------------
-    |
-    | Supported: 'blatui' (Blade + Alpine.js + Tailwind CSS v4), 'bootstrap5', 'tailwind'
-    | Default: 'blatui' (using 156+ shadcn-styled Blade components)
-    |
-    */
-    'ui_framework' => env('LARASLICE_UI_FRAMEWORK', 'blatui'),
 
     /*
     |--------------------------------------------------------------------------
