@@ -1,3 +1,4 @@
+@if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 <div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" x-data="larasliceCopilot()" x-cloak>
     <!-- Floating Trigger Bubble -->
     <div class="relative group" x-show="!isOpen">
@@ -822,7 +823,6 @@ function larasliceCopilot() {
                     },
                     body: JSON.stringify({
                         message: query,
-                        provider: 'opencode',
                         page_context: {
                             path: this.currentPath,
                             url: window.location.href,
@@ -1090,3 +1090,4 @@ function larasliceCopilot() {
     }
 }
 </script>
+@endif

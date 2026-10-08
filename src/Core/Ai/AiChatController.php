@@ -132,7 +132,7 @@ class AiChatController
         $pageContext = (array) $request->input('page_context', [
             'path' => $request->header('X-Current-Path', '/'),
         ]);
-        $provider = $request->input('provider');
+        $provider = null; // always the provider configured in AI settings
         $history = (array) $request->input('history', []);
 
         if (trim($message) === '') {

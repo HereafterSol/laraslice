@@ -164,7 +164,7 @@ class AiEngine
     public function canAccessTable(string $table, string $ability): bool
     {
         $user = auth()->user();
-        if (! $user || $table === '') {
+        if (! $user || $table === '' || ! $this->telemetryAllowed()) {
             return false;
         }
 
@@ -192,6 +192,26 @@ class AiEngine
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    /**
+     * "Allow Live Database Telemetry" in AI settings: when off, the copilot reads no table data.
+     */
+    public function telemetryAllowed(): bool
+    {
+        return $this->getSetting('ai.allow_telemetry', 'true') !== 'false';
+    }
+
+    /**
+     * Whether to render the floating copilot bubble for the signed-in user.
+     */
+    public function copilotBubbleVisible(): bool
+    {
+        $user = auth()->user();
+
+        return $user !== null
+            && \LaraSlice\Core\Security\Access::allows($user, ['ai.copilot.use'])
+            && $this->getSetting('ai.floating_bubble', 'true') !== 'false';
     }
 
     public function isProtectedTable(string $table): bool
@@ -1754,7 +1774,7 @@ if (preg_match('/(?:starter\s+templates?|domain\s+suites?|quick\s+starter|templa
                "LIVE SYSTEM TELEMETRY:\n" .
                "- Current Screen: {$page}\n" . $domInfo .
                "- Active Vertical Slices: {$slicesList}\n" .
-               "- Live Database Metrics: {$usersCount} users registered across {$tablesCount} database tables\n" .
+               ($this->telemetryAllowed() ? "- Live Database Metrics: {$usersCount} users registered across {$tablesCount} database tables\n" : '') .
                "- Studio Capabilities: Slices can be scaffolded, toggled, seeded, wiped at slice/domain level, and destroyed.\n\n" .
                "GUIDELINES:\n" .
                "1. Always format responses in clean GitHub-style Markdown with tables, code blocks, and bold highlights.\n" .
