@@ -216,7 +216,7 @@ BLADE;
             'author'      => $author,
             'active'      => true,
             'workflow'    => $includeWorkflow,
-            'fields'      => $manifestFields,
+            'fields'      => \LaraSlice\Core\Discovery\ManifestRepository::fieldMap($manifestFields),
             'permissions' => !empty($options['permissions']) && is_array($options['permissions'])
                 ? $options['permissions']
                 : [

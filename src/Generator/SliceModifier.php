@@ -3,6 +3,7 @@
 namespace LaraSlice\Generator;
 
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
 
 class SliceModifier
@@ -43,7 +44,7 @@ class SliceModifier
         }
 
         $manifestFile = $sliceDir . '/slice.json';
-        $manifest = file_exists($manifestFile) ? json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR) : [];
+        $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
 
         // Build column definitions and down statements
         $upStatements = [];
@@ -193,7 +194,7 @@ PHP;
             'date'        => date('Y-m-d H:i:s'),
         ];
 
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        ManifestRepository::write($manifestFile, $manifest);
 
         return [
             'success'     => true,
@@ -772,7 +773,7 @@ HTML;
             throw new \RuntimeException("Slice manifest not found for [{$sliceName}]");
         }
 
-        $manifest = json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::read($manifestFile);
         $current = $manifest['navigation'] ?? [];
         $newUrl = !empty($navConfig['url']) ? '/' . ltrim($navConfig['url'], '/') : ('/' . Str::snake($pluralName));
         $cleanPrefix = ltrim($newUrl, '/');
@@ -846,7 +847,7 @@ HTML;
         if ($routeContent !== null) {
             file_put_contents($webRouteFile, $routeContent, LOCK_EX);
         }
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
+        ManifestRepository::write($manifestFile, $manifest);
 
         if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
             try {
@@ -1014,7 +1015,7 @@ HTML;
 
         $manifestFile = "{$sliceDir}/slice.json";
         $manifest = file_exists($manifestFile)
-            ? json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR)
+            ? ManifestRepository::read($manifestFile)
             : [];
         if (in_array($childTable, $manifest['tables'] ?? [], true)) {
             throw new \InvalidArgumentException("Child table '{$childTable}' is already declared in this slice.");
@@ -1196,7 +1197,7 @@ REL;
             'foreign_key' => $foreignKey,
             'method'      => $relationMethod,
         ];
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        ManifestRepository::write($manifestFile, $manifest);
 
         $childGenerator = new \LaraSlice\Generator\ChildEntityGenerator();
         $childGenerator->generate($sliceDir, $baseSliceNamespace, $pluralSlice, $childTable, $parentTable, $foreignKey, $fields);
@@ -1360,7 +1361,7 @@ REL;
             throw new \RuntimeException("Slice manifest not found for [{$sliceName}]");
         }
 
-        $manifest = json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::read($manifestFile);
         $history = $manifest['version_history'] ?? [];
 
         if (empty($history)) {
@@ -1465,7 +1466,7 @@ REL;
         $manifest['version'] = $targetVersion;
         $manifest['version_history'] = $keptHistory;
 
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        ManifestRepository::write($manifestFile, $manifest);
 
         return [
             'success'             => true,
@@ -1493,7 +1494,7 @@ REL;
         }
 
         $manifestFile = $sliceDir . '/slice.json';
-        $manifest = file_exists($manifestFile) ? json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR) : [];
+        $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
 
         $isPrimary = (!$targetTable || $targetTable === Str::plural(Str::snake($studlyName)));
         $upStatements = [];
@@ -1743,7 +1744,7 @@ PHP;
             'date'        => date('Y-m-d H:i:s'),
         ];
 
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        ManifestRepository::write($manifestFile, $manifest);
 
         return [
             'success'     => true,
@@ -1769,7 +1770,7 @@ PHP;
         }
 
         $manifestFile = $sliceDir . '/slice.json';
-        $manifest = file_exists($manifestFile) ? json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR) : [];
+        $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
 
         $cleanedRelations = [];
         foreach ($relations as $rel) {
@@ -1874,7 +1875,7 @@ PHP;
             'date'        => date('Y-m-d H:i:s'),
         ];
 
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        ManifestRepository::write($manifestFile, $manifest);
 
         return [
             'success'   => true,

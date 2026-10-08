@@ -21,7 +21,7 @@ class ChildEntityGenerator
         $parentModelClass = "{$sliceNamespace}\\{$pluralSlice}\\Models\\{$parentStudly}";
 
         $manifestFile = "{$sliceDir}/slice.json";
-        $manifest = file_exists($manifestFile) ? json_decode(file_get_contents($manifestFile), true) : [];
+        $manifest = file_exists($manifestFile) ? \LaraSlice\Core\Discovery\ManifestRepository::read($manifestFile) : [];
         $domain = $manifest['domain'] ?? $manifest['navigation']['group'] ?? null;
         $domainSlug = $domain ? Str::slug($domain) : null;
 

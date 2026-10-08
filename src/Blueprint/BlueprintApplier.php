@@ -263,14 +263,14 @@ final class BlueprintApplier
             $manifest['permissions'] = $blueprint['permissions'];
         }
         $manifest['tables'] = array_values(array_map(static fn (array $model): string => $model['table'], $models));
-        $manifest['fields'] = array_map(static fn (array $field): array => [
+        $manifest['fields'] = \LaraSlice\Core\Discovery\ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
             'name' => $field['handle'],
             'label' => $field['label'] ?? Str::headline($field['handle']),
             'type' => $field['type'],
             'nullable' => $field['nullable'] ?? ! ($field['required'] ?? false),
             'default' => $field['default'] ?? null,
             'options' => $field['options'] ?? [],
-        ], $root['fields'] ?? []);
+        ], $root['fields'] ?? []));
         file_put_contents($manifestPath, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
 
         $yamlPath = $sliceDirectory . DIRECTORY_SEPARATOR . 'slice.yaml';

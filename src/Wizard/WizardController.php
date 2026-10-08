@@ -285,7 +285,8 @@ class WizardController extends Controller
         $slices = [];
         foreach ($manager->getAllSlices() as $slice) {
             $manifestFile = $slice->path . '/slice.json';
-            $raw = file_exists($manifestFile) ? json_decode(file_get_contents($manifestFile), true) : $slice->toArray();
+            // Fields are always keyed by column name for the studio UI
+            $raw = file_exists($manifestFile) ? \LaraSlice\Core\Discovery\ManifestRepository::read($manifestFile) : \LaraSlice\Core\Discovery\ManifestRepository::normalize($slice->toArray());
 
             // Discover all tables belonging to this slice
             $primaryTable = \Illuminate\Support\Str::plural(\Illuminate\Support\Str::snake($slice->name));
