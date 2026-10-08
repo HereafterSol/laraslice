@@ -4,6 +4,11 @@ namespace LaraSlice\Core\Base;
 
 use LaraSlice\Core\Contracts\IBusinessObject;
 
+/**
+ * Subclasses keep a compatible constructor; the static factories rely on new static().
+ *
+ * @phpstan-consistent-constructor
+ */
 abstract class BaseListingBusinessObject implements IBusinessObject
 {
     public string|int $id;

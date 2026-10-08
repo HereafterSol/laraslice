@@ -1,0 +1,415 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Negated boolean expression is always true\.$#'
+			identifier: booleanNot.alwaysTrue
+			count: 1
+			path: src/Blueprint/BlueprintApplier.php
+
+		-
+			message: '#^Offset ''create_table''\|''foreign_key''\|''pivot_table'' on array\{create_table\: 0, pivot_table\: 1, foreign_key\: 2\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Blueprint/BlueprintPlanner.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\{name\: string, schema\: string\|null, schema_qualified_name\: string, size\: int\|null, comment\: string\|null, collation\: string\|null, engine\: string\|null\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: src/Blueprint/BlueprintStudioController.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: string, schema\: string\|null, schema_qualified_name\: string, size\: int\|null, comment\: string\|null, collation\: string\|null, engine\: string\|null\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Blueprint/BlueprintStudioController.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: string, type\: string, type_name\: string, collation\: string\|null, nullable\: bool, default\: mixed, auto_increment\: bool, comment\: string\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Blueprint/BlueprintStudioController.php
+
+		-
+			message: '#^Offset ''nullable'' on array\{name\: string, type\: string, type_name\: string, collation\: string\|null, nullable\: bool, default\: mixed, auto_increment\: bool, comment\: string\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Blueprint/BlueprintStudioController.php
+
+		-
+			message: '#^Offset ''type_name'' on array\{name\: string, type\: string, type_name\: string, collation\: string\|null, nullable\: bool, default\: mixed, auto_increment\: bool, comment\: string\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Blueprint/BlueprintStudioController.php
+
+		-
+			message: '#^Parameter \#1 \$view of function view expects view\-string\|null, string given\.$#'
+			identifier: argument.type
+			count: 5
+			path: src/Blueprint/BlueprintStudioController.php
+
+		-
+			message: '#^Offset ''model'' on non\-empty\-array\<mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Blueprint/BlueprintValidator.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Blueprint/BlueprintValidator.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''belongsToMany'' and ''belongsToMany'' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/Blueprint/BlueprintValidator.php
+
+		-
+			message: '#^Offset ''nullable'' on array\{name\: string, type\: string, type_name\: string, collation\: string\|null, nullable\: bool, default\: mixed, auto_increment\: bool, comment\: string\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Console/Commands/SliceSyncCommand.php
+
+		-
+			message: '#^Offset ''type_name'' on array\{name\: string, type\: string, type_name\: string, collation\: string\|null, nullable\: bool, default\: mixed, auto_increment\: bool, comment\: string\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Console/Commands/SliceSyncCommand.php
+
+		-
+			message: '#^Offset ''created'' on array\{id\: mixed, title\: mixed, created\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Core/Ai/AiEngine.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/Core/Ai/AiEngine.php
+
+		-
+			message: '#^Dead catch \- Throwable is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: src/Core/Audit/AuditLogger.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: src/Core/Audit/AuditLogger.php
+
+		-
+			message: '#^Offset ''action'' on array\{slice\: string, action\: string, actor_id\?\: int\|string\|null, actor_type\?\: string\|null, actor_email\?\: string\|null, entity_type\?\: string\|null, entity_id\?\: int\|string\|null, old_values\?\: array\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Core/Audit/AuditLogger.php
+
+		-
+			message: '#^Offset ''slice'' on array\{slice\: string, action\: string, actor_id\?\: int\|string\|null, actor_type\?\: string\|null, actor_email\?\: string\|null, entity_type\?\: string\|null, entity_id\?\: int\|string\|null, old_values\?\: array\|null, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Core/Audit/AuditLogger.php
+
+		-
+			message: '#^Trait LaraSlice\\Core\\Audit\\Traits\\AuditableSlice is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Core/Audit/Traits/AuditableSlice.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$created_by\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Core/Base/BaseSliceService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$updated_by\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Core/Base/BaseSliceService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Core/Base/BaseSliceWebController.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Illuminate\\Contracts\\Foundation\\Application and ''bootstrapPath'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Core/Discovery/SliceManager.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Illuminate\\Foundation\\Auth\\User and ''can'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Core/Discovery/SliceManager.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: src/Core/Discovery/SliceManager.php
+
+		-
+			message: '#^Call to function method_exists\(\) with \$this\(LaraSlice\\Slices\\Users\\Models\\User\) and ''relationLoaded'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Core/Security/Traits/HasSlicePermissions.php
+
+		-
+			message: '#^Call to function method_exists\(\) with \$this\(LaraSlice\\Slices\\Users\\Models\\User\) and ''unsetRelation'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Core/Security/Traits/HasSlicePermissions.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Illuminate\\Database\\Eloquent\\Model and ''relationLoaded'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Core/Security/Traits/HasSlicePermissions.php
+
+		-
+			message: '#^Trait LaraSlice\\Core\\Workflow\\HasWorkflow is used zero times and is not analysed\.$#'
+			identifier: trait.unused
+			count: 1
+			path: src/Core/Workflow/HasWorkflow.php
+
+		-
+			message: '#^Call to function token_get_all\(\) on a separate line has no effect\.$#'
+			identifier: function.resultUnused
+			count: 1
+			path: src/Generator/SliceGenerator.php
+
+		-
+			message: '#^Match arm comparison between ''boolean'' and ''boolean'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 1
+			path: src/Generator/SliceGenerator.php
+
+		-
+			message: '#^Offset ''options'' on non\-empty\-array\<mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Generator/SliceGenerator.php
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 1
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Match arm comparison between ''biginteger''\|''boolean''\|''decimal''\|''double''\|''float''\|''integer''\|''json''\|''smallinteger''\|''tinyinteger''\|''unsignedbiginteger''\|''unsignedinteger'' and ''int'' is always false\.$#'
+			identifier: match.alwaysFalse
+			count: 1
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Match arm comparison between ''boolean''\|''json'' and ''bool'' is always false\.$#'
+			identifier: match.alwaysFalse
+			count: 1
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Offset ''short'' on array\{0\: non\-falsy\-string, short\: '''', 1\: '''', long\: string, 2\: string\}\|array\{0\: non\-falsy\-string, short\: string, 1\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Offset 0 on non\-empty\-list\<string\> in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 2
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Variable \$downStatements in empty\(\) always exists and is not falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: src/Generator/SliceModifier.php
+
+		-
+			message: '#^Variable \$records in empty\(\) always exists and is not falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: src/Generator/SliceSeederService.php
+
+		-
+			message: '#^Call to function is_scalar\(\) with \(int\|string\) will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Schema/Field.php
+
+		-
+			message: '#^Negated boolean expression is always true\.$#'
+			identifier: booleanNot.alwaysTrue
+			count: 1
+			path: src/Slices/Auth/Controllers/AuthWebController.php
+
+		-
+			message: '#^Cannot call method isFuture\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Slices/Auth/Services/LoginAttemptService.php
+
+		-
+			message: '#^Access to an undefined property LaraSlice\\Core\\Contracts\\IBusinessObject\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Slices/Roles/Controllers/RoleWebController.php
+
+		-
+			message: '#^Call to function method_exists\(\) with LaraSlice\\Slices\\Roles\\Models\\Role and ''permissions'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Slices/Roles/Services/RoleSliceService.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: src/Slices/Roles/Services/RoleSliceService.php
+
+		-
+			message: '#^Parameter \#1 \$view of function view expects view\-string\|null, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Slices/Settings/Controllers/SettingWebController.php
+
+		-
+			message: '#^Parameter \#1 \$view of function view expects view\-string\|null, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Slices/Settings/Controllers/ThemeWebController.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: src/Slices/Users/Controllers/UserWebController.php
+
+		-
+			message: '#^Parameter \#1 \$json of function json_decode expects string, null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Slices/Users/Controllers/UserWebController.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: src/Slices/Users/Controllers/UserWebController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type LaraSlice\\Slices\\Users\\Models\\User\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 5
+			path: src/Slices/Users/Controllers/UserWebController.php
+
+		-
+			message: '#^Cannot call method isFuture\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Slices/Users/Models/User.php
+
+		-
+			message: '#^Method LaraSlice\\Slices\\Users\\Models\\UserAttempt\:\:record\(\) should return static\(LaraSlice\\Slices\\Users\\Models\\UserAttempt\) but returns LaraSlice\\Slices\\Users\\Models\\UserAttempt\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Slices/Users/Models/UserAttempt.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 2
+			path: src/Slices/Users/Models/UserAttempt.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Http\\Request\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: src/Slices/Users/Models/UserSecurityLog.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>email" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Slices/Users/Models/UserSecurityLog.php
+
+		-
+			message: '#^Call to method writeString\(\) on an unknown class BaconQrCode\\Writer\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Slices/Users/Services/QrCodeService.php
+
+		-
+			message: '#^Instantiated class BaconQrCode\\Renderer\\ImageRenderer not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Slices/Users/Services/QrCodeService.php
+
+		-
+			message: '#^Instantiated class BaconQrCode\\Renderer\\Image\\SvgImageBackEnd not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Slices/Users/Services/QrCodeService.php
+
+		-
+			message: '#^Instantiated class BaconQrCode\\Renderer\\RendererStyle\\RendererStyle not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Slices/Users/Services/QrCodeService.php
+
+		-
+			message: '#^Instantiated class BaconQrCode\\Writer not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Slices/Users/Services/QrCodeService.php
+
+		-
+			message: '#^Call to function method_exists\(\) with LaraSlice\\Slices\\Users\\Models\\User and ''getAllPermissions'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: src/Slices/Users/Services/UserSliceService.php
+
+		-
+			message: '#^Call to function method_exists\(\) with LaraSlice\\Slices\\Users\\Models\\User and ''roles'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: src/Slices/Users/Services/UserSliceService.php
+
+		-
+			message: '#^Ternary operator condition is always false\.$#'
+			identifier: ternary.alwaysFalse
+			count: 1
+			path: src/Slices/Users/Services/UserSliceService.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: src/Slices/Users/Services/UserSliceService.php
+
+		-
+			message: '#^Method LaraSlice\\Slices\\Users\\Services\\WebAuthnService\:\:processLogin\(\) should return LaraSlice\\Slices\\Users\\Models\\User but returns Illuminate\\Database\\Eloquent\\Model\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Slices/Users/Services/WebAuthnService.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\<int\<0, max\>, non\-falsy\-string\>\) to function array_filter does not contain falsy values, the array will always stay the same\.$#'
+			identifier: arrayFilter.same
+			count: 1
+			path: src/Wizard/WizardController.php

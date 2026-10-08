@@ -2,6 +2,11 @@
 
 namespace LaraSlice\Schema;
 
+/**
+ * Subclasses keep a compatible constructor; the static factories rely on new static().
+ *
+ * @phpstan-consistent-constructor
+ */
 class Relation
 {
     protected string $name;

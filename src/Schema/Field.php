@@ -6,6 +6,11 @@ use BadMethodCallException;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
+/**
+ * Subclasses keep a compatible constructor; the static factories rely on new static().
+ *
+ * @phpstan-consistent-constructor
+ */
 class Field
 {
     protected string $name;

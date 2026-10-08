@@ -34,7 +34,7 @@ final class ChildEntityDefinition
         'foreign_id' => 'unsignedBigInteger',
     ];
 
-    /** @return array{slice:string,plural_slice:string,child_table:string,foreign_key:string,fields:array<int,array{name:string,type:string,nullable:bool,required:bool}>} */
+    /** @return array{slice:string,plural_slice:string,child_table:string,foreign_key:string,fields:array<int,array{name:string,type:string,nullable:bool,required:bool,default:mixed}>} */
     public static function normalize(string $sliceName, string $tableName, string $relationType, ?string $foreignKey, array $fields): array
     {
         $slice = SliceName::canonical($sliceName);

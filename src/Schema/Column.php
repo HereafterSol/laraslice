@@ -4,6 +4,11 @@ namespace LaraSlice\Schema;
 
 use Illuminate\Support\Str;
 
+/**
+ * Subclasses keep a compatible constructor; the static factories rely on new static().
+ *
+ * @phpstan-consistent-constructor
+ */
 class Column
 {
     protected string $name;

@@ -450,7 +450,7 @@ class SliceSeederService
             return round((float) (($index + 1) * 19.99), 2);
         }
 
-        if ($type === 'boolean' || str_starts_with($colLower, 'is_') || str_starts_with($colLower, 'has_')) {
+        if ($type === 'boolean') {
             return 1;
         }
 

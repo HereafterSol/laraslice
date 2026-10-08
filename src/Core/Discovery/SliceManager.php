@@ -1163,17 +1163,29 @@ class SliceManager
     /**
      * Enable or disable all slices in a domain.
      */
+    /**
+     * Slices whose domain (or navigation group) matches $domainName, case-insensitively.
+     *
+     * @return array<string, SliceManifest>
+     */
+    public function getDomainSlices(string $domainName): array
+    {
+        $wanted = strtolower(trim($domainName));
+
+        return array_filter($this->getAllSlices(), function (SliceManifest $slice) use ($wanted) {
+            $sliceDomain = $slice->domain ?? $slice->navigation['group'] ?? $slice->raw['domain'] ?? null;
+
+            return strtolower(trim((string) $sliceDomain)) === $wanted;
+        });
+    }
+
     public function toggleDomain(string $domainName, ?bool $active = null): array
     {
         $this->discover();
         $updated = [];
 
-        foreach ($this->getAllSlices() as $slice) {
-            $sliceDomain = $slice->domain ?? $slice->navigation['group'] ?? $slice->raw['domain'] ?? null;
-            if (strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName))) {
-                $newActive = $this->toggleSlice($slice->name, $active);
-                $updated[$slice->name] = $newActive;
-            }
+        foreach ($this->getDomainSlices($domainName) as $slice) {
+            $updated[$slice->name] = $this->toggleSlice($slice->name, $active);
         }
 
         $this->clearCache();

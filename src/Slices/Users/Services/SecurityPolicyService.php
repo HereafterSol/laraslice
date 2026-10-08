@@ -2,7 +2,6 @@
 
 namespace LaraSlice\Slices\Users\Services;
 
-use App\Models\User as AppUser;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -77,7 +76,7 @@ class SecurityPolicyService
     /**
      * Determine if a user is required to complete Multi-Factor Authentication.
      */
-    public static function requiresMfa(User|AppUser|Authenticatable $user): bool
+    public static function requiresMfa(User|Authenticatable $user): bool
     {
         $policy = self::get('security.mfa_enforcement', self::MFA_PRIVILEGED);
 
@@ -85,7 +84,7 @@ class SecurityPolicyService
             self::MFA_OFF => false,
             self::MFA_ALL => true,
             self::MFA_PRIVILEGED => self::isPrivilegedUser($user),
-            self::MFA_OPTIONAL => $user->hasMfa(),
+            self::MFA_OPTIONAL => self::hasMfa($user),
             default => false,
         };
     }
@@ -95,7 +94,7 @@ class SecurityPolicyService
      * Privileged/official roles mandate or recommend Passkeys (WebAuthn).
      * Staff/general users default to Authenticator App (TOTP).
      */
-    public static function preferredMethodFor(User|AppUser|Authenticatable $user): string
+    public static function preferredMethodFor(User|Authenticatable $user): string
     {
         if (self::isPrivilegedUser($user)) {
             return 'webauthn';
@@ -107,7 +106,7 @@ class SecurityPolicyService
     /**
      * Check if user is an administrator, security officer, or holds a privileged role.
      */
-    public static function isPrivilegedUser(User|AppUser|Authenticatable $user): bool
+    public static function isPrivilegedUser(User|Authenticatable $user): bool
     {
         // 1. Super Admin universal check
         if (Access::isSuperAdmin($user)) {
@@ -119,7 +118,7 @@ class SecurityPolicyService
         try {
             if (DB::table('role_user')
                 ->join('roles', 'role_user.role_id', '=', 'roles.id')
-                ->where('role_user.user_id', $user->id)
+                ->where('role_user.user_id', $user->getAuthIdentifier())
                 ->whereIn('roles.slug', $configuredRoles)
                 ->exists()) {
                 return true;
@@ -137,6 +136,14 @@ class SecurityPolicyService
         }
 
         // 4. If user explicitly enabled TOTP / passkeys on their account
-        return $user->hasMfa();
+        return self::hasMfa($user);
+    }
+
+    /**
+     * Host user models may not implement hasMfa(); such users have no LaraSlice MFA enrolled.
+     */
+    protected static function hasMfa(Authenticatable $user): bool
+    {
+        return method_exists($user, 'hasMfa') && $user->hasMfa();
     }
 }

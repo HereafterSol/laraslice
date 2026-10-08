@@ -55,27 +55,33 @@ class User extends Authenticatable
 
     /**
      * Extended Profile & Employment details (1-to-1 Aggregate)
+     *
+     * @return HasOne<UserDetail, $this>
      */
     public function detail(): HasOne
     {
         return $this->hasOne(UserDetail::class, 'user_id');
     }
 
+    /** @return HasMany<UserDevice, $this> */
     public function devices(): HasMany
     {
         return $this->hasMany(UserDevice::class, 'user_id');
     }
 
+    /** @return HasMany<UserRecoveryCode, $this> */
     public function recoveryCodes(): HasMany
     {
         return $this->hasMany(UserRecoveryCode::class, 'user_id');
     }
 
+    /** @return HasMany<UserPasskey, $this> */
     public function passkeys(): HasMany
     {
         return $this->hasMany(UserPasskey::class, 'user_id');
     }
 
+    /** @return HasMany<UserSecurityLog, $this> */
     public function securityLogs(): HasMany
     {
         return $this->hasMany(UserSecurityLog::class, 'user_id');

@@ -781,12 +781,21 @@ class AiEngine
             }
 
             if ($targetTable && Schema::hasTable($targetTable)) {
+                // Portable equivalent of MySQL's SHOW COLUMNS "Key": PRI, UNI or MUL (first column of an index)
+                $indexKeys = [];
+                foreach (Schema::getIndexes($targetTable) as $index) {
+                    $first = $index['columns'][0] ?? null;
+                    if ($first === null || isset($indexKeys[$first]) && $indexKeys[$first] !== 'MUL') {
+                        continue;
+                    }
+                    $indexKeys[$first] = $index['primary'] ? 'PRI' : ($index['unique'] ? 'UNI' : 'MUL');
+                }
                 $colsInfo = array_map(fn ($c) => (object) [
                     'Field' => $c['name'],
                     'Type' => $c['type'],
                     'Null' => $c['nullable'] ? 'YES' : 'NO',
-                    'Key' => ($c['auto_increment'] ?? false) || $c['name'] === 'id' ? 'PRI' : '',
-                    'Extra' => ($c['auto_increment'] ?? false) ? 'auto_increment' : '',
+                    'Key' => $indexKeys[$c['name']] ?? ($c['auto_increment'] ? 'PRI' : ''),
+                    'Extra' => $c['auto_increment'] ? 'auto_increment' : '',
                     'Default' => $c['default'],
                 ], Schema::getColumns($targetTable));
                 $rowCount = DB::table($targetTable)->count();

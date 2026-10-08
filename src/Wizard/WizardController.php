@@ -1043,11 +1043,11 @@ class WizardController extends Controller
                     foreach ($childTables as $child) {
                         if (! empty($child['name'])) {
                             $childFields = $child['fields'] ?? [];
-                            $modifier->addChildEntity(
+                            $modifier->addChildTable(
                                 $sliceName,
                                 $child['name'],
-                                $childFields,
                                 $child['relation'] ?? 'hasMany',
+                                $childFields,
                                 $child['foreign_key'] ?? null
                             );
                         }
