@@ -601,12 +601,8 @@ BLADE;
                 
                 $childUrlPrefix = $domainSlug ? "{$domainSlug}/{$childPluralSnake}" : $childPluralSnake;
 
-                $routeDef = "Route::prefix('{$parentUrlPrefix}/{parentId}')->name('{$parentRouteName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n    Route::resource('{$childPluralSnake}', {$childStudly}WebController::class)->parameters(['{$childPluralSnake}' => 'id']);\n});\n";
+                $routeDef = "Route::prefix('{$parentUrlPrefix}/{parentId}')->name('{$parentRouteName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n    Route::resource('{$childPluralSnake}', {$childStudly}WebController::class)->parameters(['{$childPluralSnake}' => 'id'])->except(['show']);\n});\n";
 
-                if ($domainSlug) {
-                    $domainDot = str_replace('-', '_', $domainSlug) . '.';
-                    $routeDef .= "\nRoute::prefix('{$parentUrlPrefix}/{parentId}')->name('{$domainDot}{$parentRouteName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n    Route::resource('{$childPluralSnake}', {$childStudly}WebController::class)->parameters(['{$childPluralSnake}' => 'id']);\n});\n";
-                }
 
                 // Global top-level routes: /crm/contacts or /contacts
                 $routeDef .= "\nRoute::prefix('{$childUrlPrefix}')->name('{$childPluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n"
@@ -618,17 +614,6 @@ BLADE;
                     . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"
                     . "});\n";
 
-                if ($domainSlug) {
-                    $domainDot = str_replace('-', '_', $domainSlug) . '.';
-                    $routeDef .= "\nRoute::prefix('{$childUrlPrefix}')->name('{$domainDot}{$childPluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n"
-                        . "    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
-                        . "    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
-                        . "    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
-                        . "    Route::get('/{id}/edit', [{$childStudly}WebController::class, 'edit'])->name('edit');\n"
-                        . "    Route::put('/{id}', [{$childStudly}WebController::class, 'update'])->name('update');\n"
-                        . "    Route::delete('/{id}', [{$childStudly}WebController::class, 'destroy'])->name('destroy');\n"
-                        . "});\n";
-                }
 
                 $webRoutes .= "\n" . $routeDef;
                 file_put_contents($webRoutesFile, $webRoutes);

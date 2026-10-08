@@ -669,7 +669,7 @@ HTML;
      */
     public function updateNavigation(string $sliceName, array $navConfig): array
     {
-        $studlyName = Str::studly($sliceName);
+        $studlyName = SliceName::canonical($sliceName);
         $pluralName = Str::plural($studlyName);
         $sliceDir   = $this->resolveSliceDir($pluralName);
 
@@ -678,9 +678,8 @@ HTML;
             throw new \RuntimeException("Slice manifest not found for [{$sliceName}]");
         }
 
-        $manifest = json_decode(file_get_contents($manifestFile), true);
-        $existingChildren = $manifest['navigation']['children'] ?? [];
-        $existingGroup = $manifest['navigation']['group'] ?? $manifest['domain'] ?? null;
+        $manifest = json_decode(file_get_contents($manifestFile), true, flags: JSON_THROW_ON_ERROR);
+        $current = $manifest['navigation'] ?? [];
         $newUrl = !empty($navConfig['url']) ? '/' . ltrim($navConfig['url'], '/') : ('/' . Str::snake($pluralName));
         $cleanPrefix = ltrim($newUrl, '/');
 
@@ -689,46 +688,51 @@ HTML;
             throw new \InvalidArgumentException('The navigation URL may only contain letters, numbers, "/", "_" and "-".');
         }
 
-        $oldUrl = $manifest['navigation']['url'] ?? ('/' . Str::snake($pluralName));
-        $oldTitle = $manifest['navigation']['title'] ?? $manifest['navigation']['label'] ?? $manifest['title'] ?? $sliceName;
+        $oldUrl = $current['url'] ?? ('/' . Str::snake($pluralName));
+        $oldPrefix = trim($oldUrl, '/');
 
-        $manifest['navigation'] = [
-            'label'      => $navConfig['label'] ?? $navConfig['title'] ?? Str::title(Str::snake($pluralName, ' ')),
-            'title'      => $navConfig['title'] ?? $navConfig['label'] ?? Str::title(Str::snake($pluralName, ' ')),
-            'icon'       => $navConfig['icon'] ?? 'cube',
-            'order'      => (int) ($navConfig['order'] ?? 10),
-            'parent'     => $navConfig['parent'] ?? null,
-            'permission' => $navConfig['permission'] ?? null,
-            'url'        => $newUrl,
-            'group'      => $navConfig['group'] ?? $existingGroup,
-        ];
-
-        if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
-            $manifest['permissions'] = array_values(array_unique(array_filter($navConfig['permissions'])));
-            try {
-                app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
-            } catch (\Throwable $e) {}
+        // 1. Routes first, so a failure leaves the manifest untouched
+        $webRouteFile = $sliceDir . '/Routes/web.php';
+        $routeContent = null;
+        if ($oldPrefix !== $cleanPrefix && file_exists($webRouteFile)) {
+            $routeContent = $this->moveRoutePrefix(file_get_contents($webRouteFile), $oldPrefix, $cleanPrefix, $navConfig['redirect_old'] ?? true);
         }
 
-        // Track navigation and route changes in version_history
+        // 2. Change log, compared against the values before this update
         $changes = [];
         if ($oldUrl !== $newUrl) {
             $changes[] = "Route URL changed from '{$oldUrl}' to '{$newUrl}'";
         }
+        $oldTitle = $current['title'] ?? $current['label'] ?? $manifest['title'] ?? $sliceName;
         if (!empty($navConfig['title']) && $navConfig['title'] !== $oldTitle) {
             $changes[] = "Menu title changed to '{$navConfig['title']}'";
         }
-        if (!empty($navConfig['icon']) && $navConfig['icon'] !== ($manifest['navigation']['icon'] ?? '')) {
+        if (!empty($navConfig['icon']) && $navConfig['icon'] !== ($current['icon'] ?? '')) {
             $changes[] = "Icon changed to '{$navConfig['icon']}'";
         }
-        if (isset($navConfig['order']) && (int)$navConfig['order'] !== (int)($manifest['navigation']['order'] ?? 10)) {
+        if (isset($navConfig['order']) && (int) $navConfig['order'] !== (int) ($current['order'] ?? 10)) {
             $changes[] = "Menu order set to {$navConfig['order']}";
         }
 
+        $defaultTitle = Str::title(Str::snake($pluralName, ' '));
+        $manifest['navigation'] = array_filter([
+            'label'      => $navConfig['label'] ?? $navConfig['title'] ?? $current['label'] ?? $defaultTitle,
+            'title'      => $navConfig['title'] ?? $navConfig['label'] ?? $current['title'] ?? $defaultTitle,
+            'icon'       => $navConfig['icon'] ?? $current['icon'] ?? 'cube',
+            'order'      => (int) ($navConfig['order'] ?? $current['order'] ?? 10),
+            'parent'     => $navConfig['parent'] ?? $current['parent'] ?? null,
+            'permission' => $navConfig['permission'] ?? $current['permission'] ?? null,
+            'url'        => $newUrl,
+            'group'      => $navConfig['group'] ?? $current['group'] ?? $manifest['domain'] ?? null,
+            // Sub-menu entries are kept unless new ones are supplied
+            'children'   => $navConfig['children'] ?? $current['children'] ?? null,
+        ], fn ($value) => $value !== null);
+
+        if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
+            $manifest['permissions'] = array_values(array_unique(array_filter($navConfig['permissions'])));
+        }
+
         if (!empty($changes)) {
-            if (!isset($manifest['version_history'])) {
-                $manifest['version_history'] = [];
-            }
             $currentVersion = $manifest['version'] ?? '1.0.0';
             $vParts = explode('.', $currentVersion);
             $vParts[count($vParts) - 1] = ((int) end($vParts)) + 1;
@@ -744,49 +748,55 @@ HTML;
             ];
         }
 
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        // 3. Write routes, then the manifest, then sync permissions from the saved manifest
+        if ($routeContent !== null) {
+            file_put_contents($webRouteFile, $routeContent, LOCK_EX);
+        }
+        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
 
-        // Sync web.php if custom prefix is set
-        $webRouteFile = $sliceDir . '/Routes/web.php';
-        if (file_exists($webRouteFile) && !empty($cleanPrefix)) {
-            $webContent = file_get_contents($webRouteFile);
-            if (!str_contains($webContent, "Route::prefix('{$cleanPrefix}')")) {
-                $controllerCandidates = glob($sliceDir . '/Controllers/*WebController.php');
-                if (!empty($controllerCandidates)) {
-                    $primaryController = basename($controllerCandidates[0], '.php');
-                    $fullControllerClass = !empty($manifest['namespace'])
-                        ? '\\' . ltrim($manifest['namespace'], '\\') . "\\Controllers\\{$primaryController}"
-                        : (isset($manifest['domain'])
-                            ? "\\App\\Slices\\" . \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($manifest['domain'])) . "\\{$pluralName}\\Controllers\\{$primaryController}"
-                            : "\\App\\Slices\\{$pluralName}\\Controllers\\{$primaryController}");
-
-                    $routeBlock = "\n\n// Custom Route URL alias from Navigation Studio\n" .
-                        "Route::prefix(" . var_export($cleanPrefix, true) . ")->name('" . Str::snake($pluralName) . ".')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n" .
-                        "    Route::get('/', [{$fullControllerClass}::class, 'index'])->name('index');\n" .
-                        "    Route::get('/create', [{$fullControllerClass}::class, 'create'])->name('create');\n" .
-                        "    Route::post('/', [{$fullControllerClass}::class, 'store'])->name('store');\n" .
-                        "    Route::get('/{id}/edit', [{$fullControllerClass}::class, 'edit'])->name('edit');\n" .
-                        "    Route::put('/{id}', [{$fullControllerClass}::class, 'update'])->name('update');\n" .
-                        "    Route::delete('/{id}', [{$fullControllerClass}::class, 'destroy'])->name('destroy');\n" .
-                        "});\n";
-
-                    $redirectOld = !isset($navConfig['redirect_old']) || !empty($navConfig['redirect_old']);
-                    $oldCleanPrefix = trim($oldUrl, '/');
-                    if ($redirectOld && !empty($oldCleanPrefix) && $oldCleanPrefix !== $cleanPrefix && self::isSafeRoutePrefix($oldCleanPrefix)) {
-                        $redirectLine = 'Route::redirect(' . var_export($oldCleanPrefix, true) . ', ' . var_export($newUrl, true) . ', 301);';
-                        if (!str_contains($webContent, $redirectLine)) {
-                            $routeBlock .= "\n// Canonical 301 Permanent Redirect\n" . $redirectLine . "\n";
-                        }
-                    }
-
-                    $webContent .= $routeBlock;
-                    file_put_contents($webRouteFile, $webContent);
-                }
+        if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
+            try {
+                app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+            } catch (\Throwable $e) {
+                report($e);
             }
         }
 
         return $manifest['navigation'];
     }
+
+    /**
+     * Move a slice's routes from one URL prefix to another inside Routes/web.php.
+     *
+     * Every route group keeps its name, so route() calls and route:cache keep working; the
+     * slug redirects follow the new URL, and a single marked 301 sends the old URL to the new one.
+     */
+    protected function moveRoutePrefix(string $content, string $oldPrefix, string $newPrefix, bool $redirectOld): string
+    {
+        $groupPattern = '/Route::prefix\(\s*([\'"])' . preg_quote($oldPrefix, '/') . '\1\s*\)/';
+        if (!preg_match($groupPattern, $content)) {
+            throw new \RuntimeException("Routes/web.php has no route group for '/{$oldPrefix}'; update the prefix there by hand, then save the navigation again.");
+        }
+
+        $content = preg_replace($groupPattern, 'Route::prefix(' . addcslashes(var_export($newPrefix, true), '\\$') . ')', $content);
+
+        // Existing slug redirects point at the old URL; send them to the new one
+        $content = preg_replace(
+            '#(Route::redirect\(\s*[\'"][^\'"]*[\'"]\s*,\s*[\'"])/' . preg_quote($oldPrefix, '#') . '(/\{any\})?([\'"])#',
+            '${1}/' . addcslashes($newPrefix, '\\$') . '${2}${3}',
+            $content
+        );
+
+        // One marked redirect from the previous URL; drop any that would now loop
+        $content = preg_replace('#\R?// laraslice:navigation-redirect\R[^\r\n]*#', '', $content);
+        if ($redirectOld) {
+            $content = rtrim($content) . "\n\n// laraslice:navigation-redirect\n"
+                . 'Route::redirect(' . var_export($oldPrefix, true) . ', ' . var_export('/' . $newPrefix, true) . ", 301);\n";
+        }
+
+        return $content;
+    }
+
 
     protected function resolveSliceDir(string $pluralName): string
     {
@@ -805,10 +815,9 @@ HTML;
             }
         }
 
-        // 3. Check framework package slices
-        $packagePath = dirname(__DIR__, 2) . '/src/Slices/' . $pluralName;
-        if (is_dir($packagePath)) {
-            return $packagePath;
+        // 3. Core slices ship inside the package; changes there would be lost on composer update
+        if (is_dir(dirname(__DIR__) . '/Slices/' . $pluralName)) {
+            throw new \RuntimeException("[{$pluralName}] is a core LaraSlice slice inside the package and cannot be modified from the studio.");
         }
 
         return $appPath;

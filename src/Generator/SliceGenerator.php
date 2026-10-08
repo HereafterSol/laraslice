@@ -549,37 +549,10 @@ PHP;
         }
         $aliasRedirectCode = implode("\n", $aliasRedirects);
 
+        // One named group only: identical URIs under several names collapse to the last one
+        // in a compiled route cache, which broke route('...') calls after `php artisan route:cache`.
         $domainNamedRoutes = '';
-        if ($domainSlug) {
-            $domainNamedRoutes = <<<PHP
-
-// Domain-prefixed route aliases: {$domainDot}{$pluralSnake}.index, {$domainDot}{$pluralSnake}.create, etc.
-Route::prefix('{$routePrefix}')->name('{$domainDot}{$pluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {
-    Route::get('/', [{$studlyName}WebController::class, 'index'])->name('index');
-    Route::get('/create', [{$studlyName}WebController::class, 'create'])->name('create');
-    Route::post('/', [{$studlyName}WebController::class, 'store'])->name('store');
-    Route::get('/{id}/edit', [{$studlyName}WebController::class, 'edit'])->name('edit');
-    Route::put('/{id}', [{$studlyName}WebController::class, 'update'])->name('update');
-    Route::delete('/{id}', [{$studlyName}WebController::class, 'destroy'])->name('destroy');
-});
-PHP;
-        }
-
         $aliasRoutes = '';
-        if ($snakeName !== $pluralSnake) {
-            $aliasRoutes = <<<PHP
-
-// Singular route aliases: {$snakeName}.index, {$snakeName}.create, {$snakeName}.store, etc.
-Route::prefix('{$routePrefix}')->name('{$snakeName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {
-    Route::get('/', [{$studlyName}WebController::class, 'index'])->name('index');
-    Route::get('/create', [{$studlyName}WebController::class, 'create'])->name('create');
-    Route::post('/', [{$studlyName}WebController::class, 'store'])->name('store');
-    Route::get('/{id}/edit', [{$studlyName}WebController::class, 'edit'])->name('edit');
-    Route::put('/{id}', [{$studlyName}WebController::class, 'update'])->name('update');
-    Route::delete('/{id}', [{$studlyName}WebController::class, 'destroy'])->name('destroy');
-});
-PHP;
-        }
 
         $webRoutes = <<<PHP
 <?php
@@ -731,7 +704,7 @@ PHP;
                     </x-ui.button>
                 </form>
             @endif
-            <x-ui.button href="{{ route('{$snakeName}.create') }}" as="a" class="gap-1.5 shadow-sm">
+            <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" class="gap-1.5 shadow-sm">
                 <x-lucide-plus class="size-4" />
                 <span>Create {$studlyName}</span>
             </x-ui.button>
@@ -751,8 +724,8 @@ PHP;
             // @laraslice:columns
         ];
         \$rows = \LaraSlice\Support\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
-            'edit_url'   => route('{$snakeName}.edit', \$item->id),
-            'delete_url' => route('{$snakeName}.destroy', \$item->id),
+            'edit_url'   => route('{$pluralSnake}.edit', \$item->id),
+            'delete_url' => route('{$pluralSnake}.destroy', \$item->id),
         ]);
     @endphp
 
@@ -785,7 +758,7 @@ PHP;
                         <p class="text-xs text-muted-foreground mt-0.5">Start by creating your first entry or generate realistic mock data.</p>
                     </div>
                     <div class="flex items-center gap-2 pt-1">
-                        <x-ui.button href="{{ route('{$snakeName}.create') }}" as="a" variant="outline" size="sm">
+                        <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" variant="outline" size="sm">
                             Create {$studlyName}
                         </x-ui.button>
                         @if(Route::has('laraslice.wizard.seed_slice'))
@@ -830,7 +803,7 @@ BLADE;
 @section('content')
 <div class="w-full max-w-5xl mx-auto space-y-6">
     <div class="flex items-center gap-2 text-xs text-muted-foreground">
-        <a href="{{ route('{$snakeName}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
+        <a href="{{ route('{$pluralSnake}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
         <span>/</span>
         <span class="text-foreground font-medium">{{ \$isNew ? 'Create {$studlyName}' : 'Edit {$studlyName} #' . \$form->id }}</span>
     </div>
@@ -856,7 +829,7 @@ BLADE;
         </x-ui.card-header>
 
         <x-ui.card-content class="p-6">
-            <form action="{{ \$isNew ? route('{$snakeName}.store') : route('{$snakeName}.update', \$form->id) }}" method="POST" class="space-y-5">
+            <form action="{{ \$isNew ? route('{$pluralSnake}.store') : route('{$pluralSnake}.update', \$form->id) }}" method="POST" class="space-y-5">
                 @csrf
                 @if(!\$isNew) @method('PUT') @endif
 
@@ -867,7 +840,7 @@ BLADE;
 {$formStatus}{$formFields}
 
                 <div class="flex items-center justify-end gap-3 pt-4 border-t border-border/50">
-                    <x-ui.button href="{{ route('{$snakeName}.index') }}" as="a" variant="outline">
+                    <x-ui.button href="{{ route('{$pluralSnake}.index') }}" as="a" variant="outline">
                         Cancel
                     </x-ui.button>
                     <x-ui.button type="submit" name="action" value="save_continue" variant="secondary">
