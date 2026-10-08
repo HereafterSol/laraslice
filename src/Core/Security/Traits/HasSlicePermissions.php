@@ -24,6 +24,71 @@ trait HasSlicePermissions
         return $this->belongsToMany(Role::class, 'role_user', 'user_id', 'role_id');
     }
 
+    /** @var array<int, string>|null role slugs, loaded once per user instance */
+    protected ?array $sliceRoleSlugs = null;
+
+    /** Permissions through the user's roles, loaded once per user instance */
+    protected ?Collection $slicePermissions = null;
+
+    /**
+     * Forget cached roles and permissions, e.g. after syncing this user's roles.
+     */
+    public function flushSlicePermissionCache(): static
+    {
+        $this->sliceRoleSlugs = null;
+        $this->slicePermissions = null;
+        if (method_exists($this, 'unsetRelation')) {
+            $this->unsetRelation('roles');
+        }
+
+        return $this;
+    }
+
+    /**
+     * The slugs of the user's roles.
+     *
+     * @return array<int, string>
+     */
+    public function roleSlugs(): array
+    {
+        if ($this->sliceRoleSlugs !== null) {
+            return $this->sliceRoleSlugs;
+        }
+
+        if ($this->rolesInMemory()) {
+            return $this->sliceRoleSlugs = collect($this->roles)->pluck('slug')->all();
+        }
+
+        if (! isset($this->id)) {
+            return [];
+        }
+
+        try {
+            $slugs = DB::table('role_user')
+                ->join('roles', 'role_user.role_id', '=', 'roles.id')
+                ->where('role_user.user_id', $this->id)
+                ->pluck('roles.slug')
+                ->all();
+        } catch (\Throwable $e) {
+            return []; // tables not migrated yet; do not cache
+        }
+
+        return $this->sliceRoleSlugs = $slugs;
+    }
+
+    /**
+     * Whether the roles are already in memory: an eager-loaded relation, or a plain
+     * object (not an Eloquent model) that carries its roles in a property.
+     */
+    protected function rolesInMemory(): bool
+    {
+        if (method_exists($this, 'relationLoaded')) {
+            return $this->relationLoaded('roles');
+        }
+
+        return isset($this->roles);
+    }
+
     /**
      * Check if user possesses a specific role slug.
      */
@@ -31,32 +96,7 @@ trait HasSlicePermissions
     {
         $roles = is_array($role) ? $role : func_get_args();
 
-        $userRoles = [];
-        try {
-            if ((method_exists($this, 'relationLoaded') && $this->relationLoaded('roles')) || isset($this->roles)) {
-                $userRoles = $this->roles->pluck('slug')->toArray();
-            }
-        } catch (\Throwable $e) {}
-
-        if (empty($userRoles) && isset($this->id)) {
-            try {
-                if (\Illuminate\Support\Facades\Schema::hasTable('role_user') && \Illuminate\Support\Facades\Schema::hasTable('roles')) {
-                    $userRoles = \Illuminate\Support\Facades\DB::table('role_user')
-                        ->join('roles', 'role_user.role_id', '=', 'roles.id')
-                        ->where('role_user.user_id', $this->id)
-                        ->pluck('roles.slug')
-                        ->toArray();
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        foreach ($roles as $r) {
-            if (in_array($r, $userRoles, true)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_intersect($roles, $this->roleSlugs()) !== [];
     }
 
     /**
@@ -78,8 +118,7 @@ trait HasSlicePermissions
 
         // Wildcard match (e.g. 'shop_product.*' satisfies 'shop_product.view')
         if (str_contains($permissionSlug, '.')) {
-            $prefix = explode('.', $permissionSlug)[0];
-            $wildcard = $prefix . '.*';
+            $wildcard = explode('.', $permissionSlug)[0] . '.*';
             if ($allPermissions->contains('slug', $wildcard) || $allPermissions->contains('name', $wildcard)) {
                 return true;
             }
@@ -93,40 +132,42 @@ trait HasSlicePermissions
      */
     public function getAllPermissions(): Collection
     {
-        if ($this->hasRole('super-admin')) {
-            try {
-                if (\Illuminate\Support\Facades\Schema::hasTable('permissions')) {
-                    return Permission::all();
-                }
-            } catch (\Throwable $e) {
-                // Return empty collection if DB not available
-            }
+        if ($this->slicePermissions !== null) {
+            return $this->slicePermissions;
         }
 
-        $hasRolesLoaded = (method_exists($this, 'relationLoaded') && $this->relationLoaded('roles')) || isset($this->roles);
-
-        if ($hasRolesLoaded) {
-            $permissions = collect();
-            foreach ($this->roles as $role) {
-                if (method_exists($role, 'relationLoaded') && $role->relationLoaded('permissions')) {
-                    $permissions = $permissions->merge($role->permissions);
-                } elseif (isset($role->permissions)) {
-                    $permissions = $permissions->merge($role->permissions);
-                } elseif (method_exists($role, 'permissions')) {
-                    $permissions = $permissions->merge($role->permissions()->get());
-                }
+        try {
+            if ($this->hasRole('super-admin')) {
+                return $this->slicePermissions = Permission::all();
             }
-            return $permissions->unique('id');
-        }
 
-        // Direct DB fallback for performance / unhydrated models
-        return Permission::query()
-            ->join('permission_role', 'permissions.id', '=', 'permission_role.permission_id')
-            ->join('role_user', 'permission_role.role_id', '=', 'role_user.role_id')
-            ->where('role_user.user_id', $this->id)
-            ->select('permissions.*')
-            ->distinct()
-            ->get();
+            if ($this->rolesInMemory()) {
+                // Roles already loaded (eager-loaded, or a plain object): use their permissions
+                $permissions = collect();
+                foreach ($this->roles as $role) {
+                    $rolePermissions = method_exists($role, 'relationLoaded') && ! $role->relationLoaded('permissions') && method_exists($role, 'permissions')
+                        ? $role->permissions()->get()
+                        : ($role->permissions ?? collect());
+                    $permissions = $permissions->merge($rolePermissions);
+                }
+
+                return $this->slicePermissions = $permissions->unique('id')->values();
+            }
+
+            if (! isset($this->id)) {
+                return collect();
+            }
+
+            return $this->slicePermissions = Permission::query()
+                ->join('permission_role', 'permissions.id', '=', 'permission_role.permission_id')
+                ->join('role_user', 'permission_role.role_id', '=', 'role_user.role_id')
+                ->where('role_user.user_id', $this->id)
+                ->select('permissions.*')
+                ->distinct()
+                ->get();
+        } catch (\Throwable $e) {
+            return collect(); // tables not migrated yet; do not cache
+        }
     }
 
     /**

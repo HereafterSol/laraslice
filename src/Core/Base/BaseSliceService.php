@@ -126,7 +126,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         }
 
         try {
-            return \Illuminate\Support\Facades\Schema::hasColumn($model->getTable(), $column);
+            return \LaraSlice\Support\SchemaCache::hasColumn($model->getTable(), $column);
         } catch (\Throwable $e) {
             return false;
         }

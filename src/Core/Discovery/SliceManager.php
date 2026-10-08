@@ -14,6 +14,9 @@ class SliceManager
     /** @var array<string, string|null> Model classes already resolved by modelClass(). */
     protected array $resolvedModels = [];
 
+    /** @var array<string, array> navigation per user, built by getNavigableSlices() */
+    protected array $navigationCache = [];
+
     /** @var array<int, string> files changed by the current repairSlice() call */
     protected array $repairedFiles = [];
 
@@ -27,6 +30,8 @@ class SliceManager
     public function discover(): void
     {
         $this->slices = [];
+        $this->navigationCache = [];
+        $this->resolvedModels = [];
         if ($this->isCached()) {
             $cached = include $this->getCachedSlicesPath();
             if (is_array($cached)) {
@@ -714,8 +719,15 @@ class SliceManager
      */
     public function getNavigableSlices(): array
     {
-        $nav = [];
         $currentUser = auth()->check() ? auth()->user() : null;
+
+        // Built once per user per request: every view and component asks for it
+        $cacheKey = $currentUser ? 'user:' . $currentUser->getAuthIdentifier() : 'guest';
+        if (isset($this->navigationCache[$cacheKey])) {
+            return $this->navigationCache[$cacheKey];
+        }
+
+        $nav = [];
 
         $isSuperAdmin = $currentUser && \LaraSlice\Core\Security\Access::isSuperAdmin($currentUser);
 
@@ -894,7 +906,7 @@ class SliceManager
 
         usort($nav, fn($a, $b) => $a['order'] <=> $b['order']);
 
-        return $nav;
+        return $this->navigationCache[$cacheKey] = $nav;
     }
 
     /**

@@ -40,7 +40,7 @@ class AuditLogger
         }
 
         try {
-            return class_exists(Schema::class) && Schema::hasTable(self::TABLE_NAME);
+            return class_exists(Schema::class) && \LaraSlice\Support\SchemaCache::hasTable(self::TABLE_NAME);
         } catch (Throwable) {
             return false;
         }

@@ -203,7 +203,7 @@ trait AuditableSlice
         }
 
         try {
-            return \Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), $column);
+            return \LaraSlice\Support\SchemaCache::hasColumn($this->getTable(), $column);
         } catch (\Throwable $e) {
             return false;
         }

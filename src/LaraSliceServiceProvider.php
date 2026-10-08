@@ -134,6 +134,9 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         $this->registerRateLimiters();
 
+        // Schema checks are cached per process; forget them whenever the schema changes
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Database\Events\MigrationsEnded::class, fn () => \LaraSlice\Support\SchemaCache::flush());
+
         // 3. Register Wizard Routes. Every route needs studio.access; writes need the
         // matching studio.* permission so read access never unlocks code generation.
         if (config('laraslice.wizard.enabled', false)) {

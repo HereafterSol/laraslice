@@ -266,6 +266,7 @@ class UserSliceService extends BaseSliceService
             $roleIds = array_map('intval', (array) $roles);
             if (method_exists($model, 'roles')) {
                 $model->roles()->sync($roleIds);
+                $model->flushSlicePermissionCache();
             } elseif (isset($model->id) && \Illuminate\Support\Facades\Schema::hasTable('role_user')) {
                 \Illuminate\Support\Facades\DB::table('role_user')->where('user_id', $model->id)->delete();
                 $rows = [];
