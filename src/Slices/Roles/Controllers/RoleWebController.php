@@ -50,7 +50,7 @@ class RoleWebController extends BaseSliceWebController
 
         $formClass = $this->getFormClass();
         $form = new $formClass();
-        app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+        app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissionsIfChanged();
         $permissions = Permission::all()->groupBy('group');
 
         return view($this->getViewPrefix() . 'form', [
@@ -71,7 +71,7 @@ class RoleWebController extends BaseSliceWebController
             return redirect()->route($this->getRoutePrefix() . 'index')->with('error', 'Role not found');
         }
 
-        app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+        app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissionsIfChanged();
         $permissions = Permission::all()->groupBy('group');
 
         $isMfaEnforced = false;

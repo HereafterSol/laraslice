@@ -912,24 +912,42 @@ class SliceManager
     /**
      * Automatically sync declared slice permissions into the database permissions table
      */
-    public function syncPermissions(): int
+    /**
+     * Sync permissions only when the slices' declared permissions changed since the last sync.
+     * Cheap enough for page loads: normally a single cache lookup.
+     */
+    public function syncPermissionsIfChanged(): int
     {
-        if (!\Illuminate\Support\Facades\Schema::hasTable('permissions')) {
+        $fingerprint = md5(serialize(array_map(
+            fn (SliceManifest $slice) => [$slice->name, $slice->title, $slice->domain, $slice->permissions, $slice->navigation['group'] ?? null],
+            $this->slices
+        )));
+
+        if (\Illuminate\Support\Facades\Cache::get('laraslice:permissions-fingerprint') === $fingerprint) {
             return 0;
         }
 
-        // Ensure domain column exists in permissions table if missing
-        if (!\Illuminate\Support\Facades\Schema::hasColumn('permissions', 'domain')) {
-            try {
-                \Illuminate\Support\Facades\Schema::table('permissions', function (\Illuminate\Database\Schema\Blueprint $table) {
-                    $table->string('domain')->nullable()->after('group');
-                });
-            } catch (\Throwable $e) {
-                // Ignore if unable to alter table dynamically
-            }
+        $count = $this->syncPermissions();
+        \Illuminate\Support\Facades\Cache::forever('laraslice:permissions-fingerprint', $fingerprint);
+
+        return $count;
+    }
+
+    /**
+     * Create or update the permissions declared by discovered slices and the studio.
+     *
+     * With $prune, permissions this method created earlier (source "laraslice") that no slice
+     * declares any more are deleted. Permissions created by the application are never pruned,
+     * and nothing is pruned when no slices were discovered.
+     */
+    public function syncPermissions(bool $prune = false): int
+    {
+        if (! \LaraSlice\Support\SchemaCache::hasTable('permissions')) {
+            return 0;
         }
 
-        $hasDomainColumn = \Illuminate\Support\Facades\Schema::hasColumn('permissions', 'domain');
+        $hasDomainColumn = \LaraSlice\Support\SchemaCache::hasColumn('permissions', 'domain');
+        $hasSourceColumn = \LaraSlice\Support\SchemaCache::hasColumn('permissions', 'source');
 
         $count = 0;
         $validSlugs = [];
@@ -956,6 +974,9 @@ class SliceManager
 
                     if ($hasDomainColumn) {
                         $payload['domain'] = $domain;
+                    }
+                    if ($hasSourceColumn) {
+                        $payload['source'] = 'laraslice';
                     }
 
                     \Illuminate\Support\Facades\DB::table('permissions')->updateOrInsert(
@@ -1021,6 +1042,9 @@ class SliceManager
             if ($hasDomainColumn) {
                 $payload['domain'] = $sp['domain'] ?? 'System';
             }
+            if ($hasSourceColumn) {
+                $payload['source'] = 'laraslice';
+            }
             \Illuminate\Support\Facades\DB::table('permissions')->updateOrInsert(
                 ['slug' => $sp['slug']],
                 $payload
@@ -1029,25 +1053,18 @@ class SliceManager
             $count++;
         }
 
-        // 3. Automatically prune orphaned permissions belonging to deleted/removed slices
-        try {
-            $orphans = \Illuminate\Support\Facades\DB::table('permissions')
+        // 3. Prune permissions of removed slices: only on request, only rows this method created
+        if ($prune && $this->slices !== [] && $hasSourceColumn) {
+            $orphanIds = \Illuminate\Support\Facades\DB::table('permissions')
+                ->where('source', 'laraslice')
                 ->whereNotIn('slug', $validSlugs)
-                ->get(['id', 'slug']);
+                ->pluck('id')
+                ->all();
 
-            if ($orphans->isNotEmpty()) {
-                $orphanIds = $orphans->pluck('id')->toArray();
-                if (\Illuminate\Support\Facades\Schema::hasTable('permission_role')) {
-                    \Illuminate\Support\Facades\DB::table('permission_role')
-                        ->whereIn('permission_id', $orphanIds)
-                        ->delete();
-                }
-                \Illuminate\Support\Facades\DB::table('permissions')
-                    ->whereIn('id', $orphanIds)
-                    ->delete();
+            if ($orphanIds !== []) {
+                \Illuminate\Support\Facades\DB::table('permission_role')->whereIn('permission_id', $orphanIds)->delete();
+                \Illuminate\Support\Facades\DB::table('permissions')->whereIn('id', $orphanIds)->delete();
             }
-        } catch (\Throwable $e) {
-            // Safe fallback
         }
 
         // Ensure super-admin role automatically receives all synced permissions by default
@@ -1307,7 +1324,7 @@ class SliceManager
 
         $this->clearCache();
         try {
-            $this->syncPermissions();
+            $this->syncPermissions(prune: true);
         } catch (\Throwable) {}
 
         return [
@@ -1356,7 +1373,7 @@ class SliceManager
 
         $this->clearCache();
         try {
-            $this->syncPermissions();
+            $this->syncPermissions(prune: true);
         } catch (\Throwable) {}
 
         return [

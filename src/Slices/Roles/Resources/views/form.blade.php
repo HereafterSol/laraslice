@@ -80,10 +80,6 @@
 
                     @php
                         $sliceManager = app(\LaraSlice\Core\Discovery\SliceManager::class);
-                        try {
-                            $sliceManager->syncPermissions();
-                        } catch (\Throwable $e) {}
-
                         $allPerms = \Illuminate\Support\Facades\DB::table('permissions')->get();
                         $rawGranted = !empty($form->permissions) ? $form->permissions : (!empty($form->permissionIds) ? $form->permissionIds : []);
                         $grantedIds = is_array($rawGranted) ? $rawGranted : (method_exists($rawGranted, 'toArray') ? $rawGranted->toArray() : (array) $rawGranted);
