@@ -46,6 +46,13 @@ class SliceGenerator
             $fieldsByName[$field['name']] = $field;
         }
 
+        $softDeletes = (bool) ($options['soft_deletes'] ?? false);
+        $migrationSoftDeletes = $softDeletes ? "\n                \$table->softDeletes();" : '';
+        $encryptedColumns = array_column(array_filter($fields, fn (array $f) => $f['encrypted']), 'name');
+        $modelCasts = $encryptedColumns === []
+            ? ''
+            : "\n    protected \$casts = " . var_export(array_fill_keys($encryptedColumns, 'encrypted'), true) . ';';
+
         $titleField = $fieldsByName['title'] ?? null;
         $descriptionField = $fieldsByName['description'] ?? null;
         $statusField = $fieldsByName['status'] ?? null;
@@ -276,6 +283,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LaraSlice\Core\Audit\Traits\AuditableSlice;
 PHP;
+        if ($softDeletes) {
+            $modelContent .= "\nuse Illuminate\\Database\\Eloquent\\SoftDeletes;";
+        }
         if ($includeWorkflow) {
             $modelContent .= "\nuse LaraSlice\\Core\\Workflow\\HasWorkflow;\n";
         }
@@ -313,13 +323,16 @@ class {$studlyName} extends Model
 {
     use AuditableSlice;
 PHP;
+        if ($softDeletes) {
+            $modelContent .= "\n    use SoftDeletes;\n";
+        }
         if ($includeWorkflow) {
             $modelContent .= "\n    use HasWorkflow;\n";
         }
         $modelContent .= <<<PHP
 
     protected \$table = '{$tableName}';
-    protected \$fillable = {$fillable};
+    protected \$fillable = {$fillable};{$modelCasts}
 {$modelRelations}
 }
 PHP;
@@ -640,7 +653,7 @@ return new class extends Migration {
                 {$migrationStatus}{$migrationFields}
                 \$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
                 \$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
-                \$table->timestamps();
+                \$table->timestamps();{$migrationSoftDeletes}
         });
     }
 
@@ -963,6 +976,11 @@ BLADE;
             'email' => ['migration' => 'string', 'validation' => 'email', 'input' => 'email'],
             'select' => ['migration' => 'string', 'validation' => 'string', 'input' => 'select'],
             'foreign_id' => ['migration' => 'unsignedBigInteger', 'validation' => 'integer', 'input' => 'select'],
+            'url' => ['migration' => 'string', 'validation' => 'url', 'input' => 'url'],
+            'json' => ['migration' => 'json', 'validation' => 'json', 'input' => 'textarea'],
+            'float' => ['migration' => 'float', 'validation' => 'numeric', 'input' => 'decimal'],
+            'bigInteger' => ['migration' => 'bigInteger', 'validation' => 'integer', 'input' => 'number'],
+            'timestamp' => ['migration' => 'timestamp', 'validation' => 'date', 'input' => 'datetime-local'],
         ];
 
         foreach ($fields as $index => $definition) {
@@ -1028,9 +1046,9 @@ BLADE;
                 throw new SliceFieldDefinitionException($problem);
             }
             if ($default !== null && match ($type) {
-                'string', 'text', 'email', 'select', 'date', 'datetime' => ! is_string($default),
-                'integer', 'foreign_id' => ! is_int($default),
-                'decimal' => ! is_numeric($default),
+                'string', 'text', 'email', 'select', 'date', 'datetime', 'url', 'json', 'timestamp' => ! is_string($default),
+                'integer', 'foreign_id', 'bigInteger' => ! is_int($default),
+                'decimal', 'float' => ! is_numeric($default),
                 'boolean' => ! is_bool($default),
                 default => true,
             }) {
@@ -1040,10 +1058,37 @@ BLADE;
                 throw new SliceFieldDefinitionException("Field '{$name}' default must match one of its select option values.");
             }
 
+            $encrypted = (bool) ($definition['encrypted'] ?? false);
+            if ($encrypted && ! in_array($type, ['string', 'text', 'email', 'url', 'json'], true)) {
+                throw new SliceFieldDefinitionException("Field '{$name}' cannot be encrypted; only text-like fields support encryption.");
+            }
+
+            $length = $definition['length'] ?? null;
+            $maxLength = 255;
             $column = $types[$type]['migration'];
-            $columnExpression = $column === 'decimal'
-                ? "\$table->decimal('{$name}', 12, 2)"
-                : "\$table->{$column}('{$name}')";
+            if ($encrypted) {
+                // Ciphertext is much longer than the value, so encrypted columns are always text
+                $columnExpression = "\$table->text('{$name}')";
+            } elseif (in_array($type, ['decimal', 'float'], true)) {
+                [$precision, $scale] = [12, 2];
+                if ($length !== null) {
+                    if (! is_string($length) || ! preg_match('/^(\d{1,2})\s*,\s*(\d{1,2})$/', $length, $m) || (int) $m[2] > (int) $m[1]) {
+                        throw new SliceFieldDefinitionException("Field '{$name}' length must be \"precision,scale\", e.g. \"12,2\".");
+                    }
+                    [$precision, $scale] = [(int) $m[1], (int) $m[2]];
+                }
+                $columnExpression = "\$table->decimal('{$name}', {$precision}, {$scale})";
+            } elseif (in_array($column, ['string'], true) && $length !== null) {
+                if (! is_int($length) || $length < 1 || $length > 65535) {
+                    throw new SliceFieldDefinitionException("Field '{$name}' length must be between 1 and 65535.");
+                }
+                $maxLength = $length;
+                $columnExpression = "\$table->string('{$name}', {$length})";
+            } elseif ($length !== null) {
+                throw new SliceFieldDefinitionException("Field '{$name}' does not support a length.");
+            } else {
+                $columnExpression = "\$table->{$column}('{$name}')";
+            }
             if ($nullable) {
                 $columnExpression .= '->nullable()';
             }
@@ -1054,7 +1099,7 @@ BLADE;
             $rules = array_values(array_filter([
                 $nullable ? 'nullable' : 'required',
                 $types[$type]['validation'],
-                in_array($type, ['string', 'email', 'select'], true) ? 'max:255' : null,
+                in_array($type, ['string', 'email', 'select', 'url'], true) ? 'max:' . $maxLength : null,
                 $type === 'select' && ! empty($options) ? 'in:' . implode(',', array_keys($options)) : null,
             ]));
 
@@ -1081,6 +1126,7 @@ BLADE;
                 'default' => $default,
                 'nullable' => $nullable,
                 'options' => $options,
+                'encrypted' => $encrypted,
             ];
         }
 
@@ -1101,8 +1147,8 @@ BLADE;
         $default = $field['default'] ?? null;
         [$type, $default] = match ($field['type']) {
             'boolean' => ['bool', (bool) $default],
-            'integer', 'foreign_id' => ['?int', $default === null ? null : (int) $default],
-            'decimal' => ['?float', $default === null ? null : (float) $default],
+            'integer', 'foreign_id', 'bigInteger' => ['?int', $default === null ? null : (int) $default],
+            'decimal', 'float' => ['?float', $default === null ? null : (float) $default],
             default => [! $field['nullable'] && $default !== null ? 'string' : '?string', $default === null ? null : (string) $default],
         };
 

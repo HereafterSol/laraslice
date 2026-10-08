@@ -77,18 +77,24 @@ final class BlueprintApplier
             if (! isset($childHandles[$model['handle']])) {
                 throw new RuntimeException('Blueprint apply supports only direct child models related to the root.');
             }
+            if (($model['soft_deletes'] ?? false) === true) {
+                throw new RuntimeException("Blueprint apply does not support soft_deletes on child model [{$model['handle']}].");
+            }
             foreach ($model['fields'] ?? [] as $field) {
                 if ($field['handle'] === $childHandles[$model['handle']]) {
                     continue;
                 }
-                if (! in_array($field['type'], ['string', 'text', 'integer', 'decimal', 'boolean', 'date', 'datetime', 'enum', 'json', 'email', 'url', 'foreign_id'], true)) {
+                if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'json', 'email', 'url', 'foreign_id'], true)) {
                     throw new RuntimeException("Blueprint apply does not support child field type [{$field['type']}].");
+                }
+                if (($field['encrypted'] ?? false) === true) {
+                    throw new RuntimeException("Blueprint apply supports encrypted fields on the root model only (child field [{$field['handle']}]).");
                 }
             }
         }
 
         foreach ($root['fields'] ?? [] as $field) {
-            if (! in_array($field['type'], ['string', 'text', 'integer', 'decimal', 'boolean', 'date', 'datetime', 'enum', 'email', 'url', 'json', 'foreign_id'], true)) {
+            if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'email', 'url', 'json', 'foreign_id'], true)) {
                 throw new RuntimeException("Blueprint apply does not support root field type [{$field['type']}].");
             }
         }
@@ -130,6 +136,8 @@ final class BlueprintApplier
                 'nullable' => $field['nullable'] ?? ! $required,
                 'default' => $field['default'] ?? ($type === 'boolean' ? false : null),
                 'options' => $field['options'] ?? [],
+                'length' => $field['length'] ?? null,
+                'encrypted' => $field['encrypted'] ?? false,
             ];
         }
 
@@ -140,6 +148,7 @@ final class BlueprintApplier
                 'description' => $blueprint['description'] ?? '',
                 'domain' => $blueprint['domain'] ?? null,
                 'api' => true,
+                'soft_deletes' => (bool) ($root['soft_deletes'] ?? false),
             ]);
 
             foreach ($root['relations'] ?? [] as $relation) {
