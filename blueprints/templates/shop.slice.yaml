@@ -1,0 +1,102 @@
+schema_version: 1
+name: Shop Products
+handle: shop_products
+domain: E-Commerce
+author: LaraSlice Team
+version: 1.0.0
+description: E-Commerce product catalog with category linking, SKU variants and pricing.
+models:
+  - handle: shop_product
+    table: shop_products
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: shop_category_id
+        label: Category
+        type: foreign_id
+        required: true
+      - handle: name
+        label: Product Name
+        type: string
+        required: true
+        length: 255
+      - handle: slug
+        label: URL Slug
+        type: string
+        required: true
+        length: 255
+      - handle: sku
+        label: SKU Code
+        type: string
+        required: true
+        length: 100
+      - handle: price
+        label: Base Price
+        type: decimal
+        required: true
+        length: 10,2
+      - handle: sale_price
+        label: Sale Price
+        type: decimal
+        required: false
+        nullable: true
+        length: 10,2
+      - handle: stock_quantity
+        label: Stock Qty
+        type: integer
+        required: false
+        nullable: true
+        default: 0
+      - handle: is_featured
+        label: Featured
+        type: boolean
+        default: false
+      - handle: is_active
+        label: Active
+        type: boolean
+        default: true
+    relations:
+      - name: category
+        type: belongsTo
+        model: shop_category
+        foreign_key: shop_category_id
+      - name: variants
+        type: hasMany
+        model: shop_variant
+        foreign_key: shop_product_id
+
+  - handle: shop_variant
+    table: shop_variants
+    timestamps: true
+    soft_deletes: false
+    fields:
+      - handle: shop_product_id
+        label: Product
+        type: foreign_id
+        required: true
+      - handle: sku
+        label: Variant SKU
+        type: string
+        required: true
+        length: 100
+      - handle: title
+        label: Variant Title
+        type: string
+        required: true
+        length: 150
+      - handle: price
+        label: Price
+        type: decimal
+        required: true
+        length: 10,2
+      - handle: stock_quantity
+        label: Stock
+        type: integer
+        required: true
+        default: 0
+    relations:
+      - name: product
+        type: belongsTo
+        model: shop_product
+        foreign_key: shop_product_id

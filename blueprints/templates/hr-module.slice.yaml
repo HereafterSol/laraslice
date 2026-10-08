@@ -1,0 +1,105 @@
+schema_version: 1
+name: Departments
+handle: departments
+domain: Human Resources
+author: LaraSlice Team
+version: 1.0.0
+description: Manage company departments and staff employees.
+models:
+  - handle: department
+    table: departments
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: name
+        label: Department Name
+        type: string
+        required: true
+        length: 150
+      - handle: code
+        label: Department Code
+        type: string
+        required: true
+        length: 20
+      - handle: budget
+        label: Annual Budget
+        type: decimal
+        required: false
+        nullable: true
+        length: 12,2
+      - handle: location
+        label: Location
+        type: string
+        required: false
+        nullable: true
+        length: 100
+      - handle: is_active
+        label: Active
+        type: boolean
+        default: true
+    relations:
+      - name: employees
+        type: hasMany
+        model: employee
+        foreign_key: department_id
+
+  - handle: employee
+    table: employees
+    timestamps: true
+    soft_deletes: false
+    fields:
+      - handle: department_id
+        label: Department
+        type: foreign_id
+        required: true
+      - handle: first_name
+        label: First Name
+        type: string
+        required: true
+        length: 100
+      - handle: last_name
+        label: Last Name
+        type: string
+        required: true
+        length: 100
+      - handle: email
+        label: Email Address
+        type: email
+        required: true
+        length: 255
+      - handle: phone
+        label: Phone Number
+        type: string
+        required: false
+        nullable: true
+        length: 50
+      - handle: job_title
+        label: Job Title
+        type: string
+        required: true
+        length: 150
+      - handle: hire_date
+        label: Hire Date
+        type: date
+        required: true
+      - handle: salary
+        label: Base Salary
+        type: decimal
+        required: false
+        nullable: true
+        length: 10,2
+      - handle: status
+        label: Employment Status
+        type: enum
+        required: true
+        default: active
+        options:
+          active: Active
+          on_leave: On Leave
+          terminated: Terminated
+    relations:
+      - name: department
+        type: belongsTo
+        model: department
+        foreign_key: department_id

@@ -1,0 +1,102 @@
+schema_version: 1
+name: Shop Orders
+handle: shop_orders
+domain: E-Commerce
+author: LaraSlice Team
+version: 1.0.0
+description: Order checkout and management with real-world product line items.
+models:
+  - handle: shop_order
+    table: shop_orders
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: order_number
+        label: Order Number
+        type: string
+        required: true
+        length: 50
+      - handle: customer_name
+        label: Customer Name
+        type: string
+        required: true
+        length: 255
+      - handle: customer_email
+        label: Customer Email
+        type: email
+        required: true
+        length: 255
+      - handle: total_amount
+        label: Total Amount
+        type: decimal
+        required: true
+        length: 12,2
+      - handle: order_status
+        label: Order Status
+        type: enum
+        required: true
+        default: pending
+        options:
+          pending: Pending
+          processing: Processing
+          completed: Completed
+          cancelled: Cancelled
+      - handle: payment_status
+        label: Payment Status
+        type: enum
+        required: true
+        default: unpaid
+        options:
+          unpaid: Unpaid
+          paid: Paid
+          refunded: Refunded
+          failed: Failed
+    relations:
+      - name: items
+        type: hasMany
+        model: shop_order_item
+        foreign_key: shop_order_id
+
+  - handle: shop_order_item
+    table: shop_order_items
+    timestamps: true
+    soft_deletes: false
+    fields:
+      - handle: shop_order_id
+        label: Order
+        type: foreign_id
+        required: true
+      - handle: shop_product_id
+        label: Product
+        type: foreign_id
+        required: true
+      - handle: product_name
+        label: Product Name
+        type: string
+        required: true
+        length: 255
+      - handle: quantity
+        label: Quantity
+        type: integer
+        required: true
+        default: 1
+      - handle: unit_price
+        label: Unit Price
+        type: decimal
+        required: true
+        length: 10,2
+      - handle: total_price
+        label: Line Total
+        type: decimal
+        required: true
+        length: 10,2
+    relations:
+      - name: order
+        type: belongsTo
+        model: shop_order
+        foreign_key: shop_order_id
+      - name: product
+        type: belongsTo
+        model: shop_product
+        foreign_key: shop_product_id

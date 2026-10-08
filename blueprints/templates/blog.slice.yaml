@@ -1,0 +1,39 @@
+schema_version: 1
+name: Articles
+handle: articles
+domain: Content
+author: LaraSlice Team
+version: 1.0.0
+description: Editorial articles, publishing lifecycle, and discussion comments.
+models:
+  - handle: article
+    table: articles
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: title
+        label: Article Title
+        type: string
+        required: true
+        length: 255
+      - handle: slug
+        label: URL Slug
+        type: string
+        required: true
+        length: 255
+      - handle: excerpt
+        label: Excerpt
+        type: text
+        required: false
+        nullable: true
+      - handle: status
+        label: Publish State
+        type: enum
+        required: true
+        default: draft
+        options:
+          draft: Draft
+          in_review: In Review
+          published: Published
+          archived: Archived

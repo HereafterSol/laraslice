@@ -1,0 +1,77 @@
+schema_version: 1
+name: Companies
+handle: companies
+domain: CRM
+author: LaraSlice Team
+version: 1.0.0
+description: Track client companies and business contacts.
+models:
+  - handle: company
+    table: companies
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: name
+        label: Company Name
+        type: string
+        required: true
+        length: 200
+      - handle: industry
+        label: Industry
+        type: string
+        required: false
+        nullable: true
+        length: 100
+      - handle: website
+        label: Website
+        type: string
+        required: false
+        nullable: true
+        length: 255
+      - handle: annual_revenue
+        label: Revenue
+        type: decimal
+        required: false
+        nullable: true
+        length: 12,2
+      - handle: is_active
+        label: Active
+        type: boolean
+        default: true
+    relations:
+      - name: contacts
+        type: hasMany
+        model: contact
+        foreign_key: company_id
+
+  - handle: contact
+    table: contacts
+    timestamps: true
+    soft_deletes: false
+    fields:
+      - handle: company_id
+        label: Company
+        type: foreign_id
+        required: true
+      - handle: full_name
+        label: Full Name
+        type: string
+        required: true
+        length: 150
+      - handle: email
+        label: Email
+        type: email
+        required: true
+        length: 255
+      - handle: phone
+        label: Phone Number
+        type: string
+        required: false
+        nullable: true
+        length: 50
+    relations:
+      - name: company
+        type: belongsTo
+        model: company
+        foreign_key: company_id

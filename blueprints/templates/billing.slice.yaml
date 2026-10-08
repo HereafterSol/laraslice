@@ -1,0 +1,40 @@
+schema_version: 1
+name: Invoices
+handle: invoices
+domain: Billing
+author: LaraSlice Team
+version: 1.0.0
+description: Enterprise client invoicing, balances, payment dates, and delivery tracking.
+models:
+  - handle: invoice
+    table: invoices
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: invoice_number
+        label: Invoice Number
+        type: string
+        required: true
+        length: 50
+      - handle: amount
+        label: Total Amount ($)
+        type: decimal
+        required: true
+        length: 14,2
+        default: 0.00
+      - handle: due_date
+        label: Due Date
+        type: date
+        required: true
+      - handle: status
+        label: Invoice Status
+        type: enum
+        required: true
+        default: draft
+        options:
+          draft: Draft
+          sent: Sent
+          paid: Paid
+          overdue: Overdue
+          void: Void

@@ -1,0 +1,33 @@
+schema_version: 1
+name: Shop Categories
+handle: shop_categories
+domain: E-Commerce
+author: LaraSlice Team
+version: 1.0.0
+description: E-Commerce product catalog categories and taxonomy.
+models:
+  - handle: shop_category
+    table: shop_categories
+    root: true
+    timestamps: true
+    soft_deletes: true
+    fields:
+      - handle: name
+        label: Category Name
+        type: string
+        required: true
+        length: 150
+      - handle: slug
+        label: URL Slug
+        type: string
+        required: true
+        length: 150
+      - handle: summary
+        label: Summary Overview
+        type: text
+        required: false
+        nullable: true
+      - handle: is_active
+        label: Active Status
+        type: boolean
+        default: true
