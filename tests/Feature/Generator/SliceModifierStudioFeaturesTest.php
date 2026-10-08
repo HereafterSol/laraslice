@@ -3,7 +3,8 @@
 namespace LaraSlice\Tests\Feature\Generator;
 
 use LaraSlice\Generator\SliceModifier;
-use PHPUnit\Framework\TestCase;
+use Illuminate\Support\Facades\Schema;
+use LaraSlice\Tests\TestCase;
 
 class SliceModifierStudioFeaturesTest extends TestCase
 {
@@ -155,8 +156,15 @@ class SliceModifierStudioFeaturesTest extends TestCase
         $this->assertSame('1.0.1', $manifest['version']);
         $this->assertArrayHasKey('barcode', $manifest['fields']);
 
+        // The synced migration ran against a real table
+        Schema::create('shop_products', function ($table) {
+            $table->id();
+            $table->string('barcode')->nullable();
+        });
+
         // Now rollback to v1.0.0
         $rollbackResult = $modifier->rollbackVersion('ShopProducts', '1.0.0');
+        $this->assertFalse(Schema::hasColumn('shop_products', 'barcode'), 'the migration down() really ran');
 
         $this->assertTrue($rollbackResult['success']);
         $this->assertSame('1.0.0', $rollbackResult['version']);

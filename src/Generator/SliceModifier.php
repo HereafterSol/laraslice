@@ -437,6 +437,100 @@ PHP;
         return $rules;
     }
 
+    /**
+     * Remove column names from a model's $fillable.
+     */
+    protected function removeFromFillable(string $modelFile, array $columns): void
+    {
+        if ($columns === [] || ! file_exists($modelFile)) {
+            return;
+        }
+
+        $content = file_get_contents($modelFile);
+        $pattern = '/protected\s+\$fillable\s*=\s*(?:\[(?<short>.*?)\]|array\s*\((?<long>.*?)\))\s*;/s';
+        if (! preg_match($pattern, $content, $match)) {
+            return;
+        }
+
+        preg_match_all("/'([A-Za-z0-9_]+)'/", ($match['short'] ?? '') . ($match['long'] ?? ''), $existing);
+        $kept = array_values(array_diff($existing[1], $columns));
+        $list = implode('', array_map(fn ($column) => "\n        '{$column}',", $kept));
+        file_put_contents($modelFile, preg_replace($pattern, addcslashes("protected \$fillable = [{$list}\n    ];", '\\$'), $content, 1), LOCK_EX);
+    }
+
+    /**
+     * Remove validation rules for dropped columns from a generated service.
+     */
+    protected function removeValidationRules(string $serviceFile, array $columns): void
+    {
+        if ($columns === [] || ! file_exists($serviceFile)) {
+            return;
+        }
+
+        $content = file_get_contents($serviceFile);
+        foreach ($columns as $column) {
+            // 'column' => array ( ... ), or 'column' => [...],
+            $content = preg_replace("/\R[ \t]*'" . preg_quote($column, '/') . "'\s*=>\s*(?:array\s*\((?:[^()]|\([^()]*\))*\)|\[[^\]]*\]),/", '', $content);
+        }
+        file_put_contents($serviceFile, $content, LOCK_EX);
+    }
+
+    /**
+     * Blueprint statement that recreates a dropped column (as nullable) in a migration's down().
+     */
+    protected function restoreColumnStatement(string $table, string $column, array $manifest): string
+    {
+        $known = $manifest['fields'][$column] ?? $manifest['child_fields'][$table][$column] ?? null;
+        if ($known === null && array_is_list($manifest['fields'] ?? [])) {
+            // Generated manifests list fields as [{name, type, ...}]
+            foreach ($manifest['fields'] ?? [] as $entry) {
+                if (($entry['name'] ?? null) === $column) {
+                    $known = $entry;
+                }
+            }
+        }
+        if (is_array($known) && ! empty($known['type'])) {
+            try {
+                $field = $this->normalizeMigrationFields([[
+                    'name' => $column,
+                    'type' => $known['type'] === 'select' ? 'string' : $known['type'],
+                    'length' => $known['length'] ?? null,
+                    'nullable' => true,
+                ]])[0];
+
+                return $this->buildColumnDefinition($column, $field['type'], $field['length'], true, null);
+            } catch (\InvalidArgumentException) {
+                // fall through to the live schema
+            }
+        }
+
+        try {
+            foreach (\Illuminate\Support\Facades\Schema::getColumns($table) as $info) {
+                if ($info['name'] === $column) {
+                    $type = match (true) {
+                        str_contains($info['type_name'], 'int') && str_contains($info['type'], '(1)') => 'boolean',
+                        in_array($info['type_name'], ['bigint', 'int8'], true) => 'bigInteger',
+                        str_contains($info['type_name'], 'int') => 'integer',
+                        in_array($info['type_name'], ['decimal', 'numeric'], true) => 'decimal',
+                        in_array($info['type_name'], ['float', 'double', 'real'], true) => 'float',
+                        in_array($info['type_name'], ['bool', 'boolean'], true) => 'boolean',
+                        $info['type_name'] === 'date' => 'date',
+                        in_array($info['type_name'], ['datetime', 'timestamp', 'timestamptz'], true) => 'dateTime',
+                        in_array($info['type_name'], ['json', 'jsonb'], true) => 'json',
+                        str_contains($info['type_name'], 'text') => 'text',
+                        default => 'string',
+                    };
+
+                    return $this->buildColumnDefinition($column, $type, null, true, null);
+                }
+            }
+        } catch (\Throwable) {
+            // no database connection while generating
+        }
+
+        return "\$table->text('{$column}')->nullable() /* original definition unknown */";
+    }
+
     protected function injectDtoProperty(string $dtoFile, string $field, string $type, bool $nullable): void
     {
         if (!file_exists($dtoFile)) {
@@ -844,7 +938,63 @@ HTML;
      * @param string|null $foreignKey e.g. "product_id"
      * @return array
      */
+    /**
+     * Add a child table to a slice. All-or-nothing: if any step fails, every file in the
+     * slice folder is restored to its previous state and new files are removed.
+     */
     public function addChildTable(string $sliceName, string $tableName, string $relationType = 'hasMany', array $fields = [], ?string $foreignKey = null): array
+    {
+        $definition = ChildEntityDefinition::normalize($sliceName, $tableName, $relationType, $foreignKey, $fields);
+        $sliceDir = $this->resolveSliceDir($definition['plural_slice']);
+
+        return $this->withSliceRollback($sliceDir, fn () => $this->performAddChildTable($sliceName, $tableName, $relationType, $fields, $foreignKey));
+    }
+
+    /**
+     * Run $change and restore the slice folder exactly as it was if it throws.
+     */
+    protected function withSliceRollback(string $sliceDir, callable $change): mixed
+    {
+        $snapshot = [];
+        if (is_dir($sliceDir)) {
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($sliceDir, \FilesystemIterator::SKIP_DOTS)) as $file) {
+                if ($file->isFile()) {
+                    $snapshot[$file->getPathname()] = file_get_contents($file->getPathname());
+                }
+            }
+        }
+
+        try {
+            return $change();
+        } catch (\Throwable $e) {
+            if (is_dir($sliceDir)) {
+                $iterator = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($sliceDir, \FilesystemIterator::SKIP_DOTS),
+                    \RecursiveIteratorIterator::CHILD_FIRST
+                );
+                foreach ($iterator as $entry) {
+                    $path = $entry->getPathname();
+                    if ($entry->isDir()) {
+                        @rmdir($path); // only succeeds for folders left empty
+                    } elseif (! array_key_exists($path, $snapshot)) {
+                        @unlink($path);
+                    }
+                }
+            }
+            foreach ($snapshot as $path => $contents) {
+                if (! is_dir(dirname($path))) {
+                    @mkdir(dirname($path), 0755, true);
+                }
+                if (! file_exists($path) || file_get_contents($path) !== $contents) {
+                    file_put_contents($path, $contents, LOCK_EX);
+                }
+            }
+
+            throw $e;
+        }
+    }
+
+    protected function performAddChildTable(string $sliceName, string $tableName, string $relationType = 'hasMany', array $fields = [], ?string $foreignKey = null): array
     {
         $definition = ChildEntityDefinition::normalize($sliceName, $tableName, $relationType, $foreignKey, $fields);
         $studlyName       = $definition['slice'];
@@ -1251,6 +1401,10 @@ REL;
         foreach (array_reverse($undoneItems) as $item) {
             // 1. Revert migration if exists
             if (!empty($item['migration'])) {
+                // The name comes from slice.json; only plain migration file names inside Migrations/
+                if (!is_string($item['migration']) || !preg_match('/^[A-Za-z0-9_]+\.php$/', $item['migration'])) {
+                    throw new \RuntimeException('Version history names an invalid migration file; nothing was rolled back.');
+                }
                 $migFile = $sliceDir . '/Migrations/' . $item['migration'];
                 if (file_exists($migFile)) {
                     try {
@@ -1264,7 +1418,9 @@ REL;
                             \Illuminate\Support\Facades\DB::table('migrations')->where('migration', $migrationName)->delete();
                         }
                     } catch (\Throwable $e) {
-                        // Keep going
+                        // Stop here: the manifest must not claim a version the database is not at
+                        $done = $revertedMigrations === [] ? 'nothing was reverted' : 'already reverted: ' . implode(', ', $revertedMigrations);
+                        throw new \RuntimeException("Rolling back {$item['migration']} failed ({$done}): " . $e->getMessage(), 0, $e);
                     }
                 }
 
@@ -1365,14 +1521,25 @@ REL;
 
         // 2. Process Deleted Fields
         $validatedDeletedFields = [];
+        $protectedColumns = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'];
+        if ($isPrimary) {
+            // The generated model, service and views depend on these
+            $protectedColumns = array_merge($protectedColumns, ['title', 'description', 'status']);
+        }
         if (!empty($deletedFields)) {
             foreach ($deletedFields as $delCol) {
-                $delCol = Str::snake(trim($delCol));
-                if (preg_match('/^[a-z][a-z0-9_]{0,62}$/', $delCol)) {
-                    $validatedDeletedFields[] = $delCol;
-                    $upStatements[] = "            \$table->dropColumn('{$delCol}');";
-                    $actionsSummary[] = "Dropped {$delCol}";
+                $delCol = Str::snake(trim((string) $delCol));
+                if (!preg_match('/^[a-z][a-z0-9_]{0,62}$/', $delCol)) {
+                    throw new \InvalidArgumentException("Invalid column name '{$delCol}'.");
                 }
+                if (in_array($delCol, $protectedColumns, true) || str_ends_with($delCol, '_id') && $delCol === Str::singular(Str::snake($studlyName)) . '_id') {
+                    throw new \InvalidArgumentException("Column '{$delCol}' is required by the generated slice and cannot be dropped.");
+                }
+                $validatedDeletedFields[] = $delCol;
+                $upStatements[] = "            \$table->dropColumn('{$delCol}');";
+                // Data cannot be restored, but rolling back recreates the column (nullable)
+                $downStatements[] = '            ' . $this->restoreColumnStatement($tableName, $delCol, $manifest) . ';';
+                $actionsSummary[] = "Dropped {$delCol}";
             }
         }
 
@@ -1382,6 +1549,9 @@ REL;
         if (!empty($upStatements)) {
             $migrationSlug = "update_{$tableName}_table_sync_schema";
             $migrationFile = $sliceDir . "/Migrations/{$timestamp}_{$migrationSlug}.php";
+            if (file_exists($migrationFile)) {
+                throw new \RuntimeException("Migration already exists at {$migrationFile}; retry after the current second.");
+            }
 
             $upBody = implode("\n", $upStatements);
             $downBody = !empty($downStatements) ? implode("\n", $downStatements) : "            // Revert changes";
@@ -1447,6 +1617,16 @@ PHP;
                 $this->injectBlatUiFormFields($sliceDir, $studlyName, $normalizedNewFields);
                 $this->injectBlatUiTableColumns($sliceDir, $studlyName, $normalizedNewFields);
             }
+        }
+
+        // Model mass assignment and validation follow the schema change
+        $modelFile = $sliceDir . '/Models/' . ($isPrimary ? $studlyName : Str::studly(Str::singular($tableName))) . '.php';
+        $this->addToFillable($modelFile, array_column($normalizedNewFields, 'name'));
+        $this->removeFromFillable($modelFile, $validatedDeletedFields);
+        if ($isPrimary) {
+            $serviceFile = $sliceDir . "/Services/{$studlyName}SliceService.php";
+            $this->addValidationRules($serviceFile, $normalizedNewFields);
+            $this->removeValidationRules($serviceFile, $validatedDeletedFields);
         }
 
         // 4. Update slice.json Metadata

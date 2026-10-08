@@ -83,6 +83,7 @@ class WizardController extends Controller
                 ]
             );
 
+            $childErrors = [];
             // Scaffold child tables and aggregate relationships if defined
             if (!empty($validated['childTables'])) {
                 $modifier = new \LaraSlice\Generator\SliceModifier(
@@ -97,7 +98,9 @@ class WizardController extends Controller
                         try {
                             $modifier->addChildTable($validated['projectName'], $childName, $relationType, $childFields);
                         } catch (\Throwable $e) {
-                            \Illuminate\Support\Facades\Log::warning("Could not add child table {$childName}: " . $e->getMessage());
+                            report($e);
+                            // The slice was generated; report the child that was rolled back instead of hiding it
+                            $childErrors[$childName] = $e->getMessage();
                         }
                     }
                 }
@@ -139,7 +142,10 @@ class WizardController extends Controller
 
         return response()->json([
             'success'         => true,
-            'message'         => "Slice '{$validated['projectName']}' generated successfully!",
+            'message'         => $childErrors === []
+                ? "Slice '{$validated['projectName']}' generated successfully!"
+                : "Slice '{$validated['projectName']}' generated, but " . count($childErrors) . ' child table(s) could not be added: ' . implode(', ', array_keys($childErrors)) . '.',
+            'childErrors'     => $childErrors,
             'sliceName'       => $validated['projectName'],
             'path'            => $sliceDir,
             'flutterPath'     => $flutterDir,
