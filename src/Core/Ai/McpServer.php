@@ -254,11 +254,10 @@ class McpServer
             case 'get_slice_schema':
                 $slice = $args['slice'] ?? 'Users';
                 $tables = [];
-                $allTables = DB::select('SHOW TABLES');
+                $allTables = array_column(Schema::getTables(), 'name');
                 $sliceLower = strtolower($slice);
 
-                foreach ($allTables as $t) {
-                    $tbl = current((array)$t);
+                foreach ($allTables as $tbl) {
                     if (str_contains(strtolower($tbl), $sliceLower) || ($sliceLower === 'users' && str_starts_with($tbl, 'user_'))) {
                         $tables[$tbl] = Schema::getColumnListing($tbl);
                     }

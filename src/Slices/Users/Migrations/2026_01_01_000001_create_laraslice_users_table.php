@@ -9,7 +9,8 @@ return new class extends Migration {
     {
         if (!Schema::hasTable('users')) {
             Schema::create('users', function (Blueprint $table) {
-                $table->uuid('id')->primary();
+                // Integer keys: every related table (role_user, user_devices, ...) uses unsignedBigInteger user_id
+                $table->id();
                 $table->string('name');
                 $table->string('email')->unique();
                 $table->timestamp('email_verified_at')->nullable();
@@ -33,6 +34,13 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::dropIfExists('users');
+        // The users table usually belongs to the host application; only remove what this migration adds
+        Schema::table('users', function (Blueprint $table) {
+            foreach (['avatar_url', 'status'] as $column) {
+                if (Schema::hasColumn('users', $column)) {
+                    $table->dropColumn($column);
+                }
+            }
+        });
     }
 };

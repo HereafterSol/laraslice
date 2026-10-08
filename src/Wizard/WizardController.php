@@ -43,10 +43,7 @@ class WizardController extends Controller
 
         $tables = [];
         try {
-            $raw = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
-            foreach ($raw as $t) {
-                $tables[] = current((array)$t);
-            }
+            $tables = array_column(\Illuminate\Support\Facades\Schema::getTables(), 'name');
         } catch (\Throwable $e) {}
 
         return view('laraslice::schema-studio', compact('slicesList', 'tables'));

@@ -1169,9 +1169,7 @@ class SliceManager
 
         // 1. Database operations
         if ($mode === 'complete' || $mode === 'db_only') {
-            try {
-                \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-            } catch (\Throwable) {}
+            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
             foreach ($tables as $t) {
                 if (!empty($t) && \Illuminate\Support\Facades\Schema::hasTable($t)) {
                     \Illuminate\Support\Facades\Schema::dropIfExists($t);
@@ -1190,22 +1188,16 @@ class SliceManager
                     }
                 }
             } catch (\Throwable) {}
-            try {
-                \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-            } catch (\Throwable) {}
+            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
         } elseif ($mode === 'wipe_data') {
-            try {
-                \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-            } catch (\Throwable) {}
+            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
             foreach ($tables as $t) {
                 if (!empty($t) && \Illuminate\Support\Facades\Schema::hasTable($t)) {
                     \Illuminate\Support\Facades\DB::table($t)->truncate();
                     $wipedTables[] = $t;
                 }
             }
-            try {
-                \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-            } catch (\Throwable) {}
+            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
         }
 
         // 2. Code deletion

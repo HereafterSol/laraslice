@@ -497,23 +497,12 @@ class SliceSeederService
 
     protected function disableForeignKeyConstraints(): void
     {
-        try {
-            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-        } catch (\Throwable) {
-            try {
-                DB::statement('PRAGMA foreign_keys = OFF;');
-            } catch (\Throwable) {}
-        }
+        // Works on MySQL, MariaDB, PostgreSQL, SQLite and SQL Server
+        Schema::disableForeignKeyConstraints();
     }
 
     protected function enableForeignKeyConstraints(): void
     {
-        try {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-        } catch (\Throwable) {
-            try {
-                DB::statement('PRAGMA foreign_keys = ON;');
-            } catch (\Throwable) {}
-        }
+        Schema::enableForeignKeyConstraints();
     }
 }
