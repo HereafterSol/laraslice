@@ -3,6 +3,7 @@
 namespace LaraSlice\Blueprint;
 
 use LaraSlice\Generator\BladeSafeText;
+use LaraSlice\Schema\FieldType;
 
 final class BlueprintValidator
 {
@@ -160,7 +161,7 @@ final class BlueprintValidator
                         $errors[] = "{$fieldPath}.length must be 1-65535 for string, email and url fields, or \"precision,scale\" for decimal and float fields.";
                     }
                 }
-                if (($field['encrypted'] ?? false) === true && ! in_array($type, ['string', 'text', 'email', 'url', 'json'], true)) {
+                if (($field['encrypted'] ?? false) === true && ! FieldType::isEncryptable($type)) {
                     $errors[] = "{$fieldPath}.encrypted is only supported for string, text, email, url and json fields.";
                 }
 

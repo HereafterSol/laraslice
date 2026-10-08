@@ -4,35 +4,11 @@ namespace LaraSlice\Generator;
 
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use LaraSlice\Schema\FieldType;
 
 final class ChildEntityDefinition
 {
-    private const TYPES = [
-        'string' => 'string',
-        'text' => 'text',
-        'mediumtext' => 'mediumText',
-        'longtext' => 'longText',
-        'integer' => 'integer',
-        'int' => 'integer',
-        'biginteger' => 'bigInteger',
-        'smallinteger' => 'smallInteger',
-        'tinyinteger' => 'tinyInteger',
-        'boolean' => 'boolean',
-        'bool' => 'boolean',
-        'decimal' => 'decimal',
-        'float' => 'float',
-        'double' => 'double',
-        'date' => 'date',
-        'datetime' => 'dateTime',
-        'timestamp' => 'timestamp',
-        'time' => 'time',
-        'json' => 'json',
-        'uuid' => 'uuid',
-        'enum' => 'string',
-        'email' => 'string',
-        'url' => 'string',
-        'foreign_id' => 'unsignedBigInteger',
-    ];
+    private const TYPES = FieldType::COLUMN_METHODS;
 
     /** @return array{slice:string,plural_slice:string,child_table:string,foreign_key:string,fields:array<int,array{name:string,type:string,nullable:bool,required:bool,default:mixed}>} */
     public static function normalize(string $sliceName, string $tableName, string $relationType, ?string $foreignKey, array $fields): array
@@ -116,13 +92,7 @@ final class ChildEntityDefinition
             if ($default !== null && ! is_scalar($default)) {
                 throw new InvalidArgumentException("Child field '{$name}' default must be scalar or null.");
             }
-            if ($default !== null && match ($type) {
-                'string', 'text', 'mediumText', 'longText', 'date', 'dateTime', 'timestamp', 'time', 'uuid' => ! is_string($default),
-                'integer', 'bigInteger', 'smallInteger', 'tinyInteger' => ! is_int($default),
-                'decimal', 'float', 'double' => ! is_numeric($default),
-                'boolean' => ! is_bool($default),
-                default => true,
-            }) {
+            if (! FieldType::defaultMatches($type, $default)) {
                 throw new InvalidArgumentException("Child field '{$name}' default does not match its database type.");
             }
             if ($inputType === 'enum' && $default !== null && ! array_key_exists($default, $options)) {

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Schema\FieldType;
 
 class SliceModifier
 {
@@ -273,15 +274,7 @@ PHP;
             throw new \InvalidArgumentException('Provide between 1 and 50 fields per migration.');
         }
 
-        $types = [
-            'string' => 'string', 'text' => 'text', 'mediumtext' => 'mediumText', 'longtext' => 'longText',
-            'integer' => 'integer', 'int' => 'integer', 'biginteger' => 'bigInteger', 'smallinteger' => 'smallInteger',
-            'tinyinteger' => 'tinyInteger', 'unsignedinteger' => 'unsignedInteger', 'unsignedbiginteger' => 'unsignedBigInteger',
-            'boolean' => 'boolean', 'bool' => 'boolean', 'decimal' => 'decimal', 'float' => 'float', 'double' => 'double',
-            'date' => 'date', 'datetime' => 'dateTime', 'timestamp' => 'timestamp', 'time' => 'time',
-            'json' => 'json', 'uuid' => 'uuid', 'binary' => 'binary',
-            'foreign_id' => 'unsignedBigInteger',
-        ];
+        $types = FieldType::COLUMN_METHODS;
         $reserved = ['id', 'created_at', 'updated_at', 'deleted_at'];
         $normalized = [];
 
@@ -331,13 +324,7 @@ PHP;
             if ($default !== null && ! is_scalar($default)) {
                 throw new \InvalidArgumentException("Field '{$name}' default must be scalar or null.");
             }
-            if ($default !== null && match (strtolower($type)) {
-                'string', 'text', 'mediumtext', 'longtext', 'date', 'datetime', 'timestamp', 'time', 'uuid', 'binary' => ! is_string($default),
-                'integer', 'int', 'biginteger', 'smallinteger', 'tinyinteger', 'unsignedinteger', 'unsignedbiginteger' => ! is_int($default),
-                'decimal', 'float', 'double' => ! is_numeric($default),
-                'boolean', 'bool' => ! is_bool($default),
-                default => true,
-            }) {
+            if (! FieldType::defaultMatches($type, $default)) {
                 throw new \InvalidArgumentException("Field '{$name}' default does not match its database type.");
             }
 

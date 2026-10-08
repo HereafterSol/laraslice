@@ -5,6 +5,7 @@ namespace LaraSlice\Generator;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Schema\FieldType;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceGenerator
@@ -1021,13 +1022,7 @@ BLADE;
             if (is_string($default) && ($problem = BladeSafeText::problem($default, "Field '{$name}' default"))) {
                 throw new SliceFieldDefinitionException($problem);
             }
-            if ($default !== null && match ($type) {
-                'string', 'text', 'email', 'select', 'date', 'datetime', 'url', 'json', 'timestamp' => ! is_string($default),
-                'integer', 'foreign_id', 'bigInteger' => ! is_int($default),
-                'decimal', 'float' => ! is_numeric($default),
-                'boolean' => ! is_bool($default),
-                default => true,
-            }) {
+            if (! FieldType::defaultMatches($type, $default)) {
                 throw new SliceFieldDefinitionException("Field '{$name}' has a default value that does not match its {$type} type.");
             }
             if ($type === 'select' && $default !== null && ! empty($options) && ! array_key_exists($default, $options)) {
@@ -1035,7 +1030,7 @@ BLADE;
             }
 
             $encrypted = (bool) ($definition['encrypted'] ?? false);
-            if ($encrypted && ! in_array($type, ['string', 'text', 'email', 'url', 'json'], true)) {
+            if ($encrypted && ! FieldType::isEncryptable($type)) {
                 throw new SliceFieldDefinitionException("Field '{$name}' cannot be encrypted; only text-like fields support encryption.");
             }
 
