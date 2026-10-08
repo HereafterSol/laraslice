@@ -5,6 +5,7 @@ namespace LaraSlice\Slices\Users\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
+use LaraSlice\Slices\Users\Support\UserAgent;
 
 class UserDevice extends Model
 {
@@ -48,34 +49,14 @@ class UserDevice extends Model
             $ip = '127.0.0.1';
         }
 
-        $os = 'Windows';
-        if (stripos($userAgent, 'Macintosh') !== false || stripos($userAgent, 'Mac OS') !== false) {
-            $os = 'macOS';
-        } elseif (stripos($userAgent, 'Android') !== false) {
-            $os = 'Android';
-        } elseif (stripos($userAgent, 'iPhone') !== false || stripos($userAgent, 'iPad') !== false) {
-            $os = 'iOS';
-        } elseif (stripos($userAgent, 'Linux') !== false) {
-            $os = 'Linux';
-        }
-
-        $browser = 'Chrome';
-        if (stripos($userAgent, 'Edg') !== false || stripos($userAgent, 'Edge') !== false) {
-            $browser = 'Edge';
-        } elseif (stripos($userAgent, 'Firefox') !== false) {
-            $browser = 'Firefox';
-        } elseif (stripos($userAgent, 'Safari') !== false && stripos($userAgent, 'Chrome') === false) {
-            $browser = 'Safari';
-        } elseif (stripos($userAgent, 'Opera') !== false || stripos($userAgent, 'OPR') !== false) {
-            $browser = 'Opera';
-        }
+        ['os' => $os, 'browser' => $browser] = UserAgent::parse($userAgent);
 
         $platform = in_array($os, ['Android', 'iOS']) ? 'Mobile' : 'Web';
         $deviceName = "{$browser} on {$os}";
 
         $lat = $request->input('latitude');
         $lng = $request->input('longitude');
-        $location = ($lat && $lng) ? "GPS: {$lat}, {$lng}" : (($ip === '127.0.0.1' || str_starts_with($ip, '192.168.')) ? 'Local Workstation' : 'Islamabad, PK');
+        $location = ($lat && $lng) ? "GPS: {$lat}, {$lng}" : (($ip === '127.0.0.1' || str_starts_with($ip, '192.168.')) ? 'Local Workstation' : 'Remote Client');
 
         return compact('os', 'browser', 'platform', 'deviceName', 'ip', 'location');
     }

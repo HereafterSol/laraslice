@@ -6,6 +6,7 @@ use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Schema\FieldType;
+use LaraSlice\Support\Directory;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceGenerator
@@ -891,7 +892,7 @@ BLADE;
 
             return $targetDir;
         } catch (\Throwable $exception) {
-            $this->removeDirectory($stagingDir);
+            Directory::remove($stagingDir);
 
             throw $exception;
         }
@@ -911,26 +912,6 @@ BLADE;
         if (file_put_contents($path, $contents, LOCK_EX) === false) {
             throw new \RuntimeException("Unable to write generated file: {$path}");
         }
-    }
-
-    private function removeDirectory(string $path): void
-    {
-        if (! is_dir($path) || is_link($path)) {
-            return;
-        }
-
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-
-        foreach ($iterator as $entry) {
-            $entry->isDir() && ! $entry->isLink()
-                ? rmdir($entry->getPathname())
-                : unlink($entry->getPathname());
-        }
-
-        rmdir($path);
     }
 
     /** Normalize user input before the generator creates any files. */

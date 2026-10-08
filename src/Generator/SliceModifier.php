@@ -26,6 +26,15 @@ class SliceModifier
      *
      * @param  array  $fields  Array of field definitions: [['name' => 'sku', 'type' => 'string', 'length' => 100, 'nullable' => true, 'default' => null, 'unsigned' => false]]
      */
+    /** "1.2.3" becomes "1.2.4"; a missing version starts from 1.0.0. */
+    private static function nextPatchVersion(?string $version): string
+    {
+        $parts = explode('.', $version ?: '1.0.0');
+        $parts[count($parts) - 1] = ((int) end($parts)) + 1;
+
+        return implode('.', $parts);
+    }
+
     public function addFieldsBatch(string $sliceName, array $fields, string $author = 'Developer', ?string $note = null, ?string $targetTable = null): array
     {
         $studlyName = SliceName::canonical($sliceName);
@@ -149,10 +158,7 @@ PHP;
         }
 
         // 4. Update slice.json Manifest Version & Changelog
-        $currentVersion = $manifest['version'] ?? '1.0.0';
-        $parts = explode('.', $currentVersion);
-        $parts[count($parts) - 1] = ((int) end($parts)) + 1;
-        $newVersion = implode('.', $parts);
+        $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
 
         $manifest['version'] = $newVersion;
         if (! isset($manifest['fields'])) {
@@ -813,10 +819,7 @@ HTML;
         }
 
         if (! empty($changes)) {
-            $currentVersion = $manifest['version'] ?? '1.0.0';
-            $vParts = explode('.', $currentVersion);
-            $vParts[count($vParts) - 1] = ((int) end($vParts)) + 1;
-            $newVersion = implode('.', $vParts);
+            $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
             $manifest['version'] = $newVersion;
 
             $manifest['version_history'][] = [
@@ -1614,10 +1617,7 @@ PHP;
         }
 
         // 4. Update slice.json Metadata
-        $currentVersion = $manifest['version'] ?? '1.0.0';
-        $parts = explode('.', $currentVersion);
-        $parts[count($parts) - 1] = ((int) end($parts)) + 1;
-        $newVersion = implode('.', $parts);
+        $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
         $manifest['version'] = $newVersion;
 
         if ($isPrimary) {
@@ -1841,10 +1841,7 @@ PHP;
 
         $manifest['relations'] = $cleanedRelations;
 
-        $currentVersion = $manifest['version'] ?? '1.0.0';
-        $parts = explode('.', $currentVersion);
-        $parts[count($parts) - 1] = ((int) end($parts)) + 1;
-        $newVersion = implode('.', $parts);
+        $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
         $manifest['version'] = $newVersion;
 
         if (! isset($manifest['version_history'])) {

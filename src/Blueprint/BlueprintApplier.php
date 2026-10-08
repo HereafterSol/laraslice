@@ -8,6 +8,7 @@ use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Generator\SliceName;
+use LaraSlice\Support\Directory;
 use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
@@ -222,7 +223,7 @@ final class BlueprintApplier
         } catch (Throwable $exception) {
             throw $exception;
         } finally {
-            $this->removeDirectory($staging);
+            Directory::remove($staging);
         }
     }
 
@@ -299,18 +300,6 @@ final class BlueprintApplier
                 throw new RuntimeException('Generated invalid PHP in '.$file->getPathname().': '.$exception->getMessage(), previous: $exception);
             }
         }
-    }
-
-    private function removeDirectory(string $directory): void
-    {
-        if (! is_dir($directory) || is_link($directory)) {
-            return;
-        }
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ($iterator as $entry) {
-            $entry->isDir() && ! $entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
-        }
-        rmdir($directory);
     }
 
     private function copyDirectory(string $source, string $destination): bool

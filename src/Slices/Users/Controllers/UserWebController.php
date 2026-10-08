@@ -30,6 +30,7 @@ use LaraSlice\Slices\Users\Services\SecurityPolicyService;
 use LaraSlice\Slices\Users\Services\TotpService;
 use LaraSlice\Slices\Users\Services\UserSliceService;
 use LaraSlice\Slices\Users\Services\WebAuthnService;
+use LaraSlice\Slices\Users\Support\UserAgent;
 
 class UserWebController extends BaseSliceWebController
 {
@@ -750,27 +751,7 @@ class UserWebController extends BaseSliceWebController
             $ip = '127.0.0.1';
         }
 
-        $os = 'Windows';
-        if (stripos($userAgent, 'Macintosh') !== false || stripos($userAgent, 'Mac OS') !== false) {
-            $os = 'macOS';
-        } elseif (stripos($userAgent, 'Android') !== false) {
-            $os = 'Android';
-        } elseif (stripos($userAgent, 'iPhone') !== false || stripos($userAgent, 'iPad') !== false) {
-            $os = 'iOS';
-        } elseif (stripos($userAgent, 'Linux') !== false) {
-            $os = 'Linux';
-        }
-
-        $browser = 'Chrome';
-        if (stripos($userAgent, 'Edge') !== false || stripos($userAgent, 'Edg') !== false) {
-            $browser = 'Edge';
-        } elseif (stripos($userAgent, 'Firefox') !== false) {
-            $browser = 'Firefox';
-        } elseif (stripos($userAgent, 'Safari') !== false && stripos($userAgent, 'Chrome') === false) {
-            $browser = 'Safari';
-        } elseif (stripos($userAgent, 'Opera') !== false || stripos($userAgent, 'OPR') !== false) {
-            $browser = 'Opera';
-        }
+        ['os' => $os, 'browser' => $browser] = UserAgent::parse($userAgent);
 
         $platform = in_array($os, ['Android', 'iOS']) ? 'Mobile' : 'Web';
         $deviceName = $browser.' on '.$os;
