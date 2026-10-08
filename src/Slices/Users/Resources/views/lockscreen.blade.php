@@ -143,8 +143,8 @@
             <div class="relative text-left">
                 <label for="password" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Password</label>
                 <div class="relative">
-                    <input type="password" id="password" name="password" required autofocus placeholder="Enter password to unlock..." class="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all pr-11">
-                    <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors">
+                    <input type="password" id="password" name="password" required autofocus aria-label="Password" placeholder="Enter password to unlock..." class="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all pr-11">
+                    <button type="button" onclick="togglePasswordVisibility()" aria-label="Show or hide password" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors">
                         <x-lucide-eye id="eyeIcon" class="size-4" />
                     </button>
                 </div>

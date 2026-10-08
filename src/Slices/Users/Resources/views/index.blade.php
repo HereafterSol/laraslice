@@ -38,7 +38,7 @@
                         />
                     </div>
                     <div class="w-full sm:w-48">
-                        <select name="status" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                        <select name="status" aria-label="Filter by status" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                             <option value="">All Statuses</option>
                             <option value="active" {{ ($filter->status ?? '') === 'active' ? 'selected' : '' }}>Active</option>
                             <option value="suspended" {{ ($filter->status ?? '') === 'suspended' ? 'selected' : '' }}>Suspended</option>

@@ -95,8 +95,8 @@
                     </div>
 
                     <div class="text-left space-y-1.5">
-                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Device / Workstation Label</label>
-                        <input type="text" x-model="passkeyLabel" placeholder="e.g. My Laptop (Windows 11)"
+                        <label for="mfa_enroll_passkeylabel" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Device / Workstation Label</label>
+                        <input id="mfa_enroll_passkeylabel" type="text" x-model="passkeyLabel" placeholder="e.g. My Laptop (Windows 11)"
                                class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500">
                     </div>
 
@@ -154,10 +154,10 @@
                     <input type="hidden" name="longitude" id="geo_lng" value="">
 
                     <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        <label for="mfa_enroll_code" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
                             Enter 6-Digit Code from Your App to Confirm
                         </label>
-                        <input type="text" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" required autofocus
+                        <input id="mfa_enroll_code" type="text" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" required autofocus
                             placeholder="000000"
                             class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white text-center font-mono font-bold text-lg tracking-[0.4em] focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 placeholder-slate-700 transition">
                     </div>

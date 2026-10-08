@@ -77,7 +77,7 @@
                             <form action="{{ route('roles.destroy', $role->id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this role?')">
                                 @csrf
                                 @method('DELETE')
-                                <x-ui.button type="submit" variant="ghost" size="sm" class="size-8 p-0 hover:text-destructive">
+                                <x-ui.button type="submit" variant="ghost" size="sm" aria-label="Delete role" class="size-8 p-0 hover:text-destructive">
                                     <x-lucide-trash-2 class="size-3.5" />
                                 </x-ui.button>
                             </form>

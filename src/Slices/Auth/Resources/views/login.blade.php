@@ -82,16 +82,16 @@
                 <input type="hidden" name="longitude" id="geo_lng" value="">
                 @csrf
                 <div>
-                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Email Address</label>
+                    <label for="login_email" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Email Address</label>
                     <input type="email" id="login_email" name="email" x-model="email" required autofocus class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-600 transition" placeholder="admin@laraslice.com">
                 </div>
 
                 <div>
                     <div class="flex items-center justify-between mb-2">
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Password</label>
+                        <label for="login_password" class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Password</label>
                         <a href="#" class="text-xs text-indigo-400 hover:text-indigo-300 transition">Forgot?</a>
                     </div>
-                    <input type="password" name="password" x-model="password" required class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-600 transition" placeholder="••••••••">
+                    <input id="login_password" type="password" name="password" x-model="password" required class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-600 transition" placeholder="••••••••">
                 </div>
 
                 <div class="flex items-center justify-between">

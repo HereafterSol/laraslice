@@ -158,13 +158,13 @@
                     <input type="hidden" name="auth_mode" value="device">
 
                     <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
+                        <label for="mfa_challenge_device_code" class="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
                             Device Enrollment Code (DEV-XXXXXX)
                         </label>
                         <p class="text-[11px] text-slate-400 mb-3">
                             Enter the single-use code issued by your Administrator or generated from your trusted workstation's Settings:
                         </p>
-                        <input type="text" name="device_code" maxlength="14" placeholder="DEV-XXXXXX" required
+                        <input id="mfa_challenge_device_code" type="text" name="device_code" maxlength="14" placeholder="DEV-XXXXXX" required
                             class="w-full bg-slate-900 border border-amber-500/40 rounded-xl px-4 py-3 text-white text-center font-mono font-bold text-lg tracking-widest uppercase focus:outline-none focus:border-amber-500">
                     </div>
 
@@ -192,11 +192,11 @@
                 <input type="hidden" name="auth_mode" value="totp">
 
                 <div class="space-y-2">
-                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <label for="mfa_challenge_code" class="block text-xs font-semibold uppercase tracking-wider text-slate-400">
                         6-Digit Authenticator Code
                     </label>
                     <div class="relative">
-                        <input type="text" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autofocus
+                        <input id="mfa_challenge_code" type="text" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autofocus
                             placeholder="000000"
                             class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white text-center font-mono font-bold text-lg tracking-[0.4em] focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-700 transition"
                             required>
@@ -227,11 +227,11 @@
                         <input type="hidden" name="longitude" id="geo_lng_rec" value="">
                         <input type="hidden" name="auth_mode" value="recovery">
                         
-                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <label for="mfa_challenge_recovery_code" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                             Emergency Backup Code
                         </label>
                         <div class="flex items-center gap-2">
-                            <input type="text" name="recovery_code" maxlength="12" placeholder="e.g. A1B2C-3D4E5" required
+                            <input id="mfa_challenge_recovery_code" type="text" name="recovery_code" maxlength="12" placeholder="e.g. A1B2C-3D4E5" required
                                 class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs tracking-widest uppercase focus:outline-none focus:border-indigo-500">
                             <button type="submit" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg transition shrink-0">
                                 Verify
@@ -247,11 +247,11 @@
                         <input type="hidden" name="longitude" id="geo_lng_dev" value="">
                         <input type="hidden" name="auth_mode" value="device">
                         
-                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <label for="mfa_challenge_device_code_2" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
                             Administrator Device Code
                         </label>
                         <div class="flex items-center gap-2">
-                            <input type="text" name="device_code" maxlength="14" placeholder="DEV-XXXXXX" required
+                            <input id="mfa_challenge_device_code_2" type="text" name="device_code" maxlength="14" placeholder="DEV-XXXXXX" required
                                 class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs tracking-widest uppercase focus:outline-none focus:border-indigo-500">
                             <button type="submit" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg transition shrink-0">
                                 Verify

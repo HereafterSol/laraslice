@@ -131,8 +131,8 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
                     <!-- Enforcement Scope -->
                     <div class="space-y-2" x-data="{ tier: '{{ $securityPolicies['mfa_enforcement'] ?? 'privileged_only' }}' }">
-                        <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Enforcement Tier</label>
-                        <select name="mfa_enforcement" x-model="tier" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
+                        <label for="mfa_mfa_enforcement" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Enforcement Tier</label>
+                        <select id="mfa_mfa_enforcement" name="mfa_enforcement" x-model="tier" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
                             <option value="off">Disabled (Optional for all)</option>
                             <option value="optional">User Choice (Self-enrollment)</option>
                             <option value="privileged_only">Privileged Roles Only (Configurable)</option>
@@ -172,29 +172,29 @@
 
                     <!-- Max Failed Attempts -->
                     <div class="space-y-2">
-                        <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Max Failed Attempts</label>
-                        <input type="number" name="max_failed_attempts" min="1" max="20" value="{{ $securityPolicies['max_failed_attempts'] ?? 5 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
+                        <label for="mfa_max_failed_attempts" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Max Failed Attempts</label>
+                        <input id="mfa_max_failed_attempts" type="number" name="max_failed_attempts" min="1" max="20" value="{{ $securityPolicies['max_failed_attempts'] ?? 5 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
                         <p class="text-[11px] text-muted-foreground">Consecutive errors before account lockout.</p>
                     </div>
 
                     <!-- Failed Login Lockout Duration -->
                     <div class="space-y-2">
-                        <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Login Freeze (Mins)</label>
-                        <input type="number" name="lockout_duration_minutes" min="1" max="1440" value="{{ $securityPolicies['lockout_duration_minutes'] ?? $securityPolicies['lockout_minutes'] ?? 15 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
+                        <label for="mfa_lockout_duration_minutes" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Login Freeze (Mins)</label>
+                        <input id="mfa_lockout_duration_minutes" type="number" name="lockout_duration_minutes" min="1" max="1440" value="{{ $securityPolicies['lockout_duration_minutes'] ?? $securityPolicies['lockout_minutes'] ?? 15 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
                         <p class="text-[11px] text-muted-foreground">Failed login freeze before retry.</p>
                     </div>
 
                     <!-- Inactivity Idle Screen Lock -->
                     <div class="space-y-2">
-                        <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Idle Auto-Lock (Mins)</label>
-                        <input type="number" name="idle_lock_minutes" min="0" max="1440" value="{{ $securityPolicies['idle_lock_minutes'] ?? 15 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
+                        <label for="mfa_idle_lock_minutes" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Idle Auto-Lock (Mins)</label>
+                        <input id="mfa_idle_lock_minutes" type="number" name="idle_lock_minutes" min="0" max="1440" value="{{ $securityPolicies['idle_lock_minutes'] ?? 15 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
                         <p class="text-[11px] text-muted-foreground">Screen lock on inactivity (0 = off).</p>
                     </div>
 
                     <!-- Remember Device Bypass Window -->
                     <div class="space-y-2">
-                        <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Remember Device (Days)</label>
-                        <input type="number" name="remember_device_days" min="0" max="365" value="{{ $securityPolicies['remember_device_days'] ?? 30 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
+                        <label for="mfa_remember_device_days" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Remember Device (Days)</label>
+                        <input id="mfa_remember_device_days" type="number" name="remember_device_days" min="0" max="365" value="{{ $securityPolicies['remember_device_days'] ?? 30 }}" class="w-full text-xs rounded-xl border border-input bg-background text-foreground py-2 px-3 focus:outline-none focus:ring-1 focus:ring-purple-500">
                         <p class="text-[11px] text-muted-foreground">Device bypass cookie authorization window.</p>
                     </div>
                 </div>
@@ -388,7 +388,7 @@
                 <x-lucide-shield-alert class="size-5 text-white" />
                 <h3 id="modalTitle" class="font-bold text-base tracking-wide">MFA Recovery Console</h3>
             </div>
-            <button type="button" onclick="closeRecoveryConsole()" class="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
+            <button type="button" onclick="closeRecoveryConsole()" aria-label="Close" class="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
                 <x-lucide-x class="size-5" />
             </button>
         </div>

@@ -437,7 +437,7 @@
                                         <form action="{{ route('users.settings.2fa.verify_test') }}" method="POST" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                             @csrf
                                             <div class="relative flex-1">
-                                                <input type="text" name="code" maxlength="6" pattern="[0-9]{6}" required placeholder="Test 6-digit code from your app..." class="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm font-mono tracking-widest text-foreground placeholder:text-muted-foreground placeholder:tracking-normal focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-xs" />
+                                                <input type="text" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" required aria-label="6-digit code from your authenticator app" placeholder="Test 6-digit code from your app..." class="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm font-mono tracking-widest text-foreground placeholder:text-muted-foreground placeholder:tracking-normal focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-xs" />
                                             </div>
                                             <button type="submit" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1.5 shrink-0">
                                                 <x-lucide-check-circle class="size-3.5" />
