@@ -14,6 +14,10 @@ class ListingQueryCountTest extends TestCase
 {
     private function queriesFor(string $uri): int
     {
+        // Pages refresh the current device's last_active_at; Eloquent skips that UPDATE when the
+        // value is unchanged within the same second. Move the clock so every request does it.
+        $this->travel(1)->seconds();
+
         DB::flushQueryLog();
         DB::enableQueryLog();
         $this->get($uri)->assertOk();

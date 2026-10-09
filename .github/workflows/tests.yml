@@ -46,7 +46,9 @@ jobs:
       - name: Install dependencies
         run: |
           composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --dev --no-interaction --no-update
-          composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
+          # Every Laravel 11 release now has a published security advisory (it is out of security
+          # support), so Composer refuses it by default; install anyway to keep testing compatibility
+          composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress ${{ matrix.laravel == '11.*' && '--no-security-blocking' || '' }}
 
       - name: Run tests
         run: vendor/bin/phpunit
