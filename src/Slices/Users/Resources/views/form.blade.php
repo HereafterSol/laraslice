@@ -122,6 +122,7 @@
                         <x-ui.label for="gender">Gender</x-ui.label>
                         <select id="gender" name="gender" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                             <option value="">Select Gender...</option>
+                            <option value="" {{ blank(old('gender', $form->gender)) ? 'selected' : '' }}>Not specified</option>
                             <option value="male" {{ old('gender', $form->gender ?? '') === 'male' ? 'selected' : '' }}>Male</option>
                             <option value="female" {{ old('gender', $form->gender ?? '') === 'female' ? 'selected' : '' }}>Female</option>
                             <option value="other" {{ old('gender', $form->gender ?? '') === 'other' ? 'selected' : '' }}>Other</option>

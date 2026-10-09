@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use LaraSlice\Core\Base\BaseSliceWebController;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
@@ -320,9 +321,21 @@ class UserWebController extends BaseSliceWebController
     {
         $user = $this->requireUser();
 
+        // Both settings forms post here (profile and employment), so every field is optional
+        $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique($user->getTable(), 'email')->ignore($user->getKey())],
+            'gender' => ['sometimes', 'nullable', Rule::in(['male', 'female', 'other'])],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'employee_id' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'cnic' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'department' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'designation' => ['sometimes', 'nullable', 'string', 'max:150'],
+        ]);
+
         $user->name = $request->input('name', $user->name);
         $user->email = $request->input('email', $user->email);
-        $user->gender = $request->input('gender', $user->gender);
+        $user->gender = $request->filled('gender') ? $request->input('gender') : ($request->has('gender') ? null : $user->gender);
         $user->phone = $request->input('phone', $user->phone);
         $user->save();
 
