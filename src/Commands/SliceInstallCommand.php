@@ -33,8 +33,13 @@ class SliceInstallCommand extends Command
     /** Files already in the app were left alone because they may be customised */
     protected int $skippedFiles = 0;
 
+    /** No config/laraslice.php yet: the starter replaces Laravel's default welcome page, app.css and app.js */
+    protected bool $firstInstall = false;
+
     public function handle(): int
     {
+        $this->firstInstall = ! File::exists(config_path('laraslice.php'));
+
         $this->components->info('⚡ Installing LaraSlice Enterprise Framework...');
 
         // 1. Publish Configuration
@@ -298,11 +303,11 @@ class SliceInstallCommand extends Command
     }
 
     /**
-     * Copy a starter file into the app. An existing file is kept (it may be customised) unless --force.
+     * Copy a starter file into the app. On a re-run an existing file is kept (it may be customised) unless --force.
      */
     protected function publishFile(string $source, string $destination): void
     {
-        if (File::exists($destination) && ! $this->option('force')) {
+        if (File::exists($destination) && ! $this->option('force') && ! $this->firstInstall) {
             $this->skippedFiles++;
 
             return;
