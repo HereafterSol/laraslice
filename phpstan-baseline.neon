@@ -301,36 +301,6 @@ parameters:
 			path: src/Slices/Users/Models/UserSecurityLog.php
 
 		-
-			message: '#^Call to method writeString\(\) on an unknown class BaconQrCode\\Writer\.$#'
-			identifier: class.notFound
-			count: 1
-			path: src/Slices/Users/Services/QrCodeService.php
-
-		-
-			message: '#^Instantiated class BaconQrCode\\Renderer\\ImageRenderer not found\.$#'
-			identifier: class.notFound
-			count: 1
-			path: src/Slices/Users/Services/QrCodeService.php
-
-		-
-			message: '#^Instantiated class BaconQrCode\\Renderer\\Image\\SvgImageBackEnd not found\.$#'
-			identifier: class.notFound
-			count: 1
-			path: src/Slices/Users/Services/QrCodeService.php
-
-		-
-			message: '#^Instantiated class BaconQrCode\\Renderer\\RendererStyle\\RendererStyle not found\.$#'
-			identifier: class.notFound
-			count: 1
-			path: src/Slices/Users/Services/QrCodeService.php
-
-		-
-			message: '#^Instantiated class BaconQrCode\\Writer not found\.$#'
-			identifier: class.notFound
-			count: 1
-			path: src/Slices/Users/Services/QrCodeService.php
-
-		-
 			message: '#^Call to function method_exists\(\) with LaraSlice\\Slices\\Users\\Models\\User and ''getAllPermissions'' will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 2

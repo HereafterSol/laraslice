@@ -42,6 +42,7 @@
     ],
     "require": {
         "php": "^8.2",
+        "bacon/bacon-qr-code": "^3.0",
         "gehrisandro/tailwind-merge-php": "^1.1",
         "guzzlehttp/guzzle": "^7.8|^8.0",
         "laravel/framework": "^11.0|^12.0|^13.0",
@@ -55,9 +56,6 @@
         "phpunit/phpunit": "^11.0|^12.0",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18"
-    },
-    "suggest": {
-        "bacon/bacon-qr-code": "^3.0 - render TOTP enrollment QR codes on the server instead of showing only the setup key"
     },
     "autoload": {
         "psr-4": {

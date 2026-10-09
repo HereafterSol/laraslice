@@ -205,7 +205,8 @@ class AuthenticationHardeningTest extends TestCase
         $this->post('/login', ['email' => 'new@example.test', 'password' => 'correct-horse-battery'])
             ->assertRedirect(route('login.mfa.enroll'));
         $enroll = $this->get('/login/mfa-enroll')->assertOk()->getContent();
-        $this->assertStringContainsString('otpauth://totp/', $enroll);
+        // The QR code is drawn on the server (bacon/bacon-qr-code), never by a third-party image service
+        $this->assertMatchesRegularExpression('/<svg[^>]*>.*<\/svg>/s', $enroll);
         $this->assertStringNotContainsString('qrserver', $enroll);
 
         $enrolled = $this->makeUser();
