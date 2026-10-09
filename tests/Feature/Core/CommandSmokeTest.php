@@ -74,4 +74,16 @@ class CommandSmokeTest extends TestCase
         $this->assertFalse(SecurityPolicyService::isPrivilegedUser($user));
         $this->assertSame('totp', SecurityPolicyService::preferredMethodFor($user));
     }
+
+    public function test_destroying_the_last_slice_of_a_domain_removes_the_domain_folder(): void
+    {
+        $this->artisan('slice:make', ['name' => ['Ticket'], '--domain' => 'Helpdesk'])->assertSuccessful();
+        $domainDir = config('laraslice.slices_path').'/Helpdesk';
+        $this->assertDirectoryExists($domainDir);
+
+        $this->artisan('slice:destroy', ['slice' => 'Tickets', '--mode' => 'complete', '--force' => true])->assertSuccessful();
+
+        $this->assertDirectoryDoesNotExist($domainDir);
+        $this->assertDirectoryExists(config('laraslice.slices_path'));
+    }
 }

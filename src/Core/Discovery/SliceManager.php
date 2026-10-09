@@ -1347,6 +1347,13 @@ class SliceManager
             if (is_dir($slicePath)) {
                 $this->recursiveDeleteDir($slicePath);
                 $codeRemoved = true;
+
+                // A domain folder (app/Slices/Helpdesk) goes with its last slice; the slices root stays
+                $domainDir = dirname($slicePath);
+                $root = realpath((string) config('laraslice.slices_path', app_path('Slices')));
+                if ($root !== false && realpath($domainDir) !== $root && str_starts_with((string) realpath($domainDir), $root) && glob($domainDir.'/*') === []) {
+                    @rmdir($domainDir);
+                }
             }
             unset($this->slices[$slice->name]);
         }
