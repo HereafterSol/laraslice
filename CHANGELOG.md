@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.2] - 2026-10-10
+
+### Fixed
+- **Multi-slice generator file locking resilience on Windows**: Fixed an issue where rapidly generating multiple slices in a domain preset (such as CRM or E-Commerce) in the Wizard could fail on Windows/NTFS with `Unable to publish generated slice; no existing files were replaced`. Transient file-handle locks from watchers (e.g. Vite `npm run dev`), search indexers, or antivirus could prevent atomic directory renaming. LaraSlice now triggers garbage collection, extends retry attempts, and falls back to a recursive copy (`Directory::copy`) before safely cleaning up the staging directory.
+
 ## [1.5.1] - 2026-10-09
 
 ### Fixed
