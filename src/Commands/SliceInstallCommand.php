@@ -3,6 +3,7 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Console\View\TaskResult;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -250,7 +251,7 @@ class SliceInstallCommand extends Command
                     if (! preg_match('/plugins\s*:\s*\[/', $viteConfig)) {
                         $this->components->warn("Add `tailwindcss()` from '@tailwindcss/vite' to the Vite plugins manually.");
 
-                        return false;
+                        return $this->taskResult(false);
                     }
 
                     $viteConfig = preg_replace('/plugins\s*:\s*\[/', "$0\n        tailwindcss(),", $viteConfig, 1);
@@ -271,14 +272,16 @@ class SliceInstallCommand extends Command
                         $process->setTimeout(600);
                         $process->run();
 
-                        return $process->isSuccessful();
+                        return $this->taskResult($process->isSuccessful());
                     } catch (\Throwable $e) {
                         $this->components->warn('npm install skipped: '.$e->getMessage());
 
-                        return false;
+                        return $this->taskResult(false);
                     }
                 });
             }
+
+            $this->buildFrontend();
         }
 
         $this->newLine();
@@ -345,5 +348,59 @@ class SliceInstallCommand extends Command
         $this->components->info('Enabled Slice Studio for local development (LARASLICE_WIZARD_ENABLED=true in .env).');
 
         return true;
+    }
+
+    /**
+     * Build the starter assets so the app is usable without `npm run dev`. Without a build the
+     * layout falls back to CDN Tailwind, where dropdowns and other BlatUI widgets are not positioned.
+     */
+    protected function buildFrontend(): void
+    {
+        if (! File::exists(base_path('node_modules'))) {
+            return;
+        }
+
+        $output = '';
+        $built = false;
+        $this->components->task('Building front-end assets (npm run build)', function () use (&$output, &$built) {
+            try {
+                $process = Process::fromShellCommandline('npm run build', base_path());
+                $process->setTimeout(600);
+                $process->run();
+                $output = $process->getOutput().$process->getErrorOutput();
+
+                return $this->taskResult($built = $process->isSuccessful());
+            } catch (\Throwable $e) {
+                $output = $e->getMessage();
+
+                return $this->taskResult(false);
+            }
+        });
+
+        if ($built) {
+            return;
+        }
+
+        $this->components->warn('The front-end build failed, so pages use a CDN fallback without the BlatUI dropdown positioning.');
+        if (str_contains($output, 'Cannot find native binding') || str_contains($output, "Cannot find module '@rollup/") || str_contains($output, "Cannot find module '@rolldown/")) {
+            $this->components->bulletList([
+                'npm skipped a platform-specific package (a known npm bug: https://github.com/npm/cli/issues/4828).',
+                'Fix: delete node_modules and run `npm ci` (or delete package-lock.json too and run `npm install`), then `npm run build`.',
+            ]);
+        }
+        $this->line('<fg=gray>'.implode(PHP_EOL, array_slice(preg_split('/\R/', trim($output)) ?: [], -8)).'</>');
+    }
+
+    /**
+     * A task callback result that shows FAIL on every supported Laravel version: Laravel 13 only
+     * treats TaskResult::Failure as a failure, while older versions treat false as one.
+     */
+    protected function taskResult(bool $ok): mixed
+    {
+        if (enum_exists(TaskResult::class)) {
+            return $ok ? TaskResult::Success->value : TaskResult::Failure->value;
+        }
+
+        return $ok;
     }
 }
