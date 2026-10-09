@@ -933,19 +933,20 @@ class SliceManager
      */
     public function syncPermissionsIfChanged(): int
     {
-        $fingerprint = md5(serialize(array_map(
-            fn (SliceManifest $slice) => [$slice->name, $slice->title, $slice->domain, $slice->permissions, $slice->navigation['group'] ?? null],
-            $this->slices
-        )));
-
-        if (Cache::get('laraslice:permissions-fingerprint') === $fingerprint) {
+        if (Cache::get('laraslice:permissions-fingerprint:v2') === $this->permissionsFingerprint()) {
             return 0;
         }
 
-        $count = $this->syncPermissions();
-        Cache::forever('laraslice:permissions-fingerprint', $fingerprint);
+        return $this->syncPermissions();
+    }
 
-        return $count;
+    /** What the discovered slices declare, as far as permission rows are concerned. */
+    protected function permissionsFingerprint(): string
+    {
+        return md5(serialize(array_map(
+            fn (SliceManifest $slice) => [$slice->name, $slice->title, $slice->domain, $slice->permissions, $slice->navigation['group'] ?? null],
+            $this->slices
+        )));
     }
 
     /**
@@ -1110,6 +1111,10 @@ class SliceManager
         } catch (\Throwable $e) {
             // Fail-safe if DB schema not ready
         }
+
+        // Every full sync records what it synced. Otherwise a slice set that returns to an earlier
+        // state (destroyed, then generated again) matches a stale fingerprint and is never synced.
+        Cache::forever('laraslice:permissions-fingerprint:v2', $this->permissionsFingerprint());
 
         return $count;
     }

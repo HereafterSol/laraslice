@@ -40,4 +40,24 @@ class PermissionSyncTest extends TestCase
         $this->assertSame([], DB::getQueryLog());
         DB::disableQueryLog();
     }
+
+    public function test_a_slice_destroyed_and_generated_again_gets_its_permissions_back(): void
+    {
+        $manager = app(SliceManager::class);
+        $manager->syncPermissionsIfChanged();
+        $this->artisan('slice:make', ['name' => ['Ticket']])->assertSuccessful();
+        $manager->discover();
+        $manager->syncPermissionsIfChanged();
+        $this->assertDatabaseHas('permissions', ['slug' => 'ticket.view']);
+
+        $this->artisan('slice:destroy', ['slice' => 'Tickets', '--mode' => 'complete', '--force' => true])->assertSuccessful();
+        $this->assertDatabaseMissing('permissions', ['slug' => 'ticket.view']);
+
+        $this->artisan('slice:make', ['name' => ['Ticket']])->assertSuccessful();
+        $manager->discover();
+        $manager->syncPermissionsIfChanged();
+        $this->assertDatabaseHas('permissions', ['slug' => 'ticket.view']);
+
+        app('files')->deleteDirectory(config('laraslice.slices_path'));
+    }
 }
