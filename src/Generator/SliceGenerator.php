@@ -875,17 +875,24 @@ BLADE;
             $this->writeFile($sliceDir.'/Resources/views/edit.blade.php', $bladeForm);
 
             $renamed = false;
-            if (! file_exists($targetDir)) {
+            if (! file_exists($targetDir) && ! is_link($targetDir)) {
                 $parent = dirname($targetDir);
                 if (! is_dir($parent) && ! mkdir($parent, 0755, true) && ! is_dir($parent)) {
                     throw new \RuntimeException("Unable to create parent directory for slice: {$parent}");
                 }
-                for ($attempt = 0; $attempt < 5; $attempt++) {
+                gc_collect_cycles();
+                for ($attempt = 0; $attempt < 8; $attempt++) {
                     if (@rename($stagingDir, $targetDir)) {
                         $renamed = true;
                         break;
                     }
-                    usleep(25000);
+                    usleep(30000);
+                }
+                if (! $renamed) {
+                    $renamed = Directory::copy($stagingDir, $targetDir);
+                    if ($renamed) {
+                        Directory::remove($stagingDir);
+                    }
                 }
             }
 

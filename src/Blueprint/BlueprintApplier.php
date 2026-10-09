@@ -211,7 +211,7 @@ final class BlueprintApplier
                     usleep(25000);
                 }
                 if (! $renamed) {
-                    $renamed = $this->copyDirectory($sliceDirectory, $target);
+                    $renamed = Directory::copy($sliceDirectory, $target);
                 }
             }
 
@@ -302,33 +302,6 @@ final class BlueprintApplier
         }
     }
 
-    private function copyDirectory(string $source, string $destination): bool
-    {
-        if (! is_dir($destination) && ! mkdir($destination, 0755, true) && ! is_dir($destination)) {
-            return false;
-        }
-
-        $dir = opendir($source);
-        if ($dir === false) {
-            return false;
-        }
-
-        while (($file = readdir($dir)) !== false) {
-            if ($file === '.' || $file === '..') {
-                continue;
-            }
-            $srcPath = $source.DIRECTORY_SEPARATOR.$file;
-            $dstPath = $destination.DIRECTORY_SEPARATOR.$file;
-            if (is_dir($srcPath)) {
-                $this->copyDirectory($srcPath, $dstPath);
-            } else {
-                copy($srcPath, $dstPath);
-            }
-        }
-        closedir($dir);
-
-        return true;
-    }
 
     /** A model from this blueprint by handle, or null for external models. */
     private function findModel(array $models, string $handle): ?array
