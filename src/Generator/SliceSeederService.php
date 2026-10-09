@@ -246,18 +246,32 @@ class SliceSeederService
     /**
      * Seed a single table with rich, realistic mock records.
      */
+    /**
+     * Reduce a database column type to the kinds of value the seeder generates.
+     * Booleans are tinyint(1) on MySQL and SQLite, so the full type is checked before the integer family.
+     */
+    protected function seedType(string $typeName, string $fullType): string
+    {
+        $name = strtolower($typeName);
+
+        return match (true) {
+            in_array($name, ['bool', 'boolean'], true) || strtolower($fullType) === 'tinyint(1)' => 'boolean',
+            in_array($name, ['int', 'integer', 'bigint', 'smallint', 'tinyint', 'mediumint', 'int2', 'int4', 'int8'], true) => 'integer',
+            in_array($name, ['decimal', 'numeric', 'float', 'double', 'real', 'float4', 'float8', 'money'], true) => 'decimal',
+            $name === 'date' => 'date',
+            $name === 'datetime' || str_starts_with($name, 'timestamp') => 'datetime',
+            default => 'string',
+        };
+    }
+
     protected function seedTable(string $table, SliceManifest $slice, int $count = 10): int
     {
         $columns = Schema::getColumnListing($table);
         $toCreate = max(1, $count);
 
         $columnTypes = [];
-        foreach ($columns as $col) {
-            try {
-                $columnTypes[$col] = Schema::getColumnType($table, $col);
-            } catch (\Throwable) {
-                $columnTypes[$col] = 'string';
-            }
+        foreach (Schema::getColumns($table) as $column) {
+            $columnTypes[$column['name']] = $this->seedType($column['type_name'], $column['type']);
         }
 
         $records = [];
@@ -436,22 +450,18 @@ class SliceSeederService
             return now()->subDays(rand(1, 90))->toDateString();
         }
 
-        if (str_starts_with($colLower, 'is_') || str_starts_with($colLower, 'has_') || $colLower === 'active') {
+        if ($type === 'boolean' || str_starts_with($colLower, 'is_') || str_starts_with($colLower, 'has_') || $colLower === 'active') {
             return 1;
         }
 
         // Type-aware fallbacks
-        if (in_array($type, ['integer', 'bigint', 'smallint', 'tinyint', 'int'], true) ||
+        if ($type === 'integer' ||
             in_array($colLower, ['score', 'rating', 'points', 'qty', 'quantity', 'count', 'age', 'views', 'votes', 'order', 'position', 'priority'], true)) {
             return ($index + 1) * 10;
         }
 
-        if (in_array($type, ['float', 'double', 'decimal'], true)) {
+        if ($type === 'decimal') {
             return round((float) (($index + 1) * 19.99), 2);
-        }
-
-        if ($type === 'boolean') {
-            return 1;
         }
 
         if ($type === 'date') {
