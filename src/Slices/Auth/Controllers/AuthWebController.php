@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
 use LaraSlice\Slices\Auth\Services\AuthSliceService;
 use LaraSlice\Slices\Auth\Services\LoginAttemptService;
@@ -82,7 +83,7 @@ class AuthWebController extends Controller
                 'created_at' => now(),
             ]);
 
-            return redirect()->intended('/admin/users/settings')
+            return redirect()->intended($this->homeUrl())
                 ->withCookie($this->deviceCookie($token));
         }
 
@@ -259,7 +260,7 @@ class AuthWebController extends Controller
 
             $this->forgetPendingMfa();
 
-            return redirect()->intended('/admin/users/settings')
+            return redirect()->intended($this->homeUrl())
                 ->withCookie($this->deviceCookie($token))
                 ->with('success', "Signed in successfully via {$methodUsed}.");
         }
@@ -587,7 +588,7 @@ class AuthWebController extends Controller
 
             return response()->json([
                 'success' => true,
-                'redirect' => url('/admin/users/settings'),
+                'redirect' => redirect()->intended($this->homeUrl())->getTargetUrl(),
             ])->withCookie($this->deviceCookie($token));
 
         } catch (\Throwable $e) {
@@ -646,5 +647,14 @@ class AuthWebController extends Controller
         $this->authService->logoutWeb();
 
         return redirect()->route('login')->with('success', 'You have been successfully logged out.');
+    }
+
+    /**
+     * Where a signed-in user lands: the app's dashboard route (LaraSlice's fallback sends studio users
+     * to Slice Studio and everyone else to their account), else the account settings page.
+     */
+    protected function homeUrl(): string
+    {
+        return Route::has('dashboard') ? route('dashboard') : url('/admin/users/settings');
     }
 }

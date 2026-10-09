@@ -31,6 +31,9 @@ function larasliceWizard() {
         newChildName: '',
         newChildRelation: 'hasMany',
         auditLogs: [],
+        auditSearch: '',
+        auditActionFilter: 'all',
+        auditCounts: {},
         isLoadingAuditLogs: false,
         expandedAuditLogId: null,
 
@@ -169,7 +172,8 @@ function larasliceWizard() {
         loadAuditLogs(sliceName) {
             if (!sliceName) return;
             this.isLoadingAuditLogs = true;
-            fetch('/laraslice/wizard/audit-logs?slice=' + encodeURIComponent(sliceName), {
+            const params = new URLSearchParams({ slice: sliceName, action: this.auditActionFilter, search: this.auditSearch || '' });
+            fetch('/laraslice/wizard/audit-logs?' + params.toString(), {
                 headers: { 'Accept': 'application/json' }
             })
             .then(r => r.json())
@@ -177,6 +181,7 @@ function larasliceWizard() {
                 this.isLoadingAuditLogs = false;
                 if (d.success) {
                     this.auditLogs = d.logs || [];
+                    this.auditCounts = d.counts || {};
                 }
             })
             .catch(e => {
@@ -2335,11 +2340,11 @@ function larasliceWizard() {
                             <!-- Multi-Slice Breakdown: Show ALL Generated Slices with Direct Links -->
                             <div x-show="resultData?.allSlices && resultData.allSlices.length > 0" class="space-y-2.5 pt-2 border-t border-border/80">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-xs font-bold text-foreground uppercase tracking-wider">📦 All Slices in this Suite (<span x-text="resultData.allSlices.length"></span>)</span>
+                                    <span class="text-xs font-bold text-foreground uppercase tracking-wider">📦 All Slices in this Suite (<span x-text="resultData?.allSlices?.length ?? 0"></span>)</span>
                                     <span class="text-[11px] text-muted-foreground">Each slice is isolated and directly accessible:</span>
                                 </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                    <template x-for="(sl, sIdx) in resultData.allSlices" :key="sIdx">
+                                    <template x-for="(sl, sIdx) in (resultData?.allSlices ?? [])" :key="sIdx">
                                         <div class="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition gap-2">
                                             <div class="min-w-0">
                                                 <div class="flex items-center gap-2">
@@ -2580,8 +2585,8 @@ function larasliceWizard() {
                             <span>⚡</span> Seed Demo Data
                         </button>
                         <button type="button" @click="toggleSliceActive(selectedSlice, $event)" class="px-3.5 py-2 border font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                                :class="selectedSlice.active !== false ? 'border-border bg-muted/40 hover:bg-muted text-foreground' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'">
-                            <span x-text="selectedSlice.active !== false ? '👁 Hide from Nav' : '👁 Show in Nav'"></span>
+                                :class="selectedSlice?.active !== false ? 'border-border bg-muted/40 hover:bg-muted text-foreground' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'">
+                            <span x-text="selectedSlice?.active !== false ? '👁 Hide from Nav' : '👁 Show in Nav'"></span>
                         </button>
                         <button type="button" @click="wipeSliceData(selectedSlice.name, $event)" title="Wipe (Truncate) Table Records" class="px-3 py-2 border border-border bg-muted/30 hover:bg-muted text-foreground font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs">
                             <span>🧹</span> Wipe
