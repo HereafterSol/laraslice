@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.5.0] - Unreleased
+## [1.5.0] - 2026-10-09
 
 A correctness, performance and maintenance release. No new security defaults, but read **Upgrading**: a few behaviours changed.
 
