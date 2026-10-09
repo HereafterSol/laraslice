@@ -163,14 +163,14 @@ parameters:
 			path: src/Core/Workflow/HasWorkflow.php
 
 		-
-			message: '#^Call to function token_get_all\(\) on a separate line has no effect\.$#'
-			identifier: function.resultUnused
-			count: 1
-			path: src/Generator/SliceGenerator.php
-
-		-
 			message: '#^Offset ''options'' on non\-empty\-array\<mixed\> on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Generator/FieldDefinitionNormalizer.php
+
+		-
+			message: '#^Call to function token_get_all\(\) on a separate line has no effect\.$#'
+			identifier: function.resultUnused
 			count: 1
 			path: src/Generator/SliceGenerator.php
 
