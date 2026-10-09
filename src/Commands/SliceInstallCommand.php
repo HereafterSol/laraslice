@@ -30,13 +30,17 @@ class SliceInstallCommand extends Command
      */
     protected $description = 'Install and initialize LaraSlice: publish landing page, run migrations, and seed default Super Admin';
 
+    /** Files already in the app were left alone because they may be customised */
+    protected int $skippedFiles = 0;
+
     public function handle(): int
     {
         $this->components->info('⚡ Installing LaraSlice Enterprise Framework...');
 
         // 1. Publish Configuration
         $this->components->task('Publishing LaraSlice configuration', function () {
-            Artisan::call('vendor:publish', ['--tag' => 'laraslice-config', '--force' => true]);
+            // An existing config/laraslice.php is kept unless --force is given
+            Artisan::call('vendor:publish', ['--tag' => 'laraslice-config', '--force' => (bool) $this->option('force')]);
 
             return true;
         });
@@ -50,24 +54,21 @@ class SliceInstallCommand extends Command
                 $welcomeSource = $starterViewsDir.'/welcome.blade.php';
                 $welcomeDest = resource_path('views/welcome.blade.php');
                 if (File::exists($welcomeSource)) {
-                    File::ensureDirectoryExists(dirname($welcomeDest));
-                    File::copy($welcomeSource, $welcomeDest);
+                    $this->publishFile($welcomeSource, $welcomeDest);
                 }
 
                 // Copy dashboard-01 layouts
                 $layoutsSource = $starterViewsDir.'/layouts';
                 $layoutsDest = resource_path('views/layouts');
                 if (File::isDirectory($layoutsSource)) {
-                    File::ensureDirectoryExists($layoutsDest);
-                    File::copyDirectory($layoutsSource, $layoutsDest);
+                    $this->publishDirectory($layoutsSource, $layoutsDest);
                 }
 
                 // Copy BlatUI UI components
                 $componentsSource = $starterViewsDir.'/components';
                 $componentsDest = resource_path('views/components');
                 if (File::isDirectory($componentsSource)) {
-                    File::ensureDirectoryExists($componentsDest);
-                    File::copyDirectory($componentsSource, $componentsDest);
+                    $this->publishDirectory($componentsSource, $componentsDest);
                 }
             }
 
@@ -75,16 +76,14 @@ class SliceInstallCommand extends Command
             $cssSource = __DIR__.'/../../resources/stubs/starter/css';
             $cssDest = resource_path('css');
             if (File::isDirectory($cssSource)) {
-                File::ensureDirectoryExists($cssDest);
-                File::copyDirectory($cssSource, $cssDest);
+                $this->publishDirectory($cssSource, $cssDest);
             }
 
             // Copy JS assets (blatui.js, blatui-core.js, etc.)
             $jsSource = __DIR__.'/../../resources/stubs/starter/js';
             $jsDest = resource_path('js');
             if (File::isDirectory($jsSource)) {
-                File::ensureDirectoryExists($jsDest);
-                File::copyDirectory($jsSource, $jsDest);
+                $this->publishDirectory($jsSource, $jsDest);
             }
 
             return true;
@@ -284,6 +283,10 @@ class SliceInstallCommand extends Command
             ]
         );
 
+        if ($this->skippedFiles > 0) {
+            $this->components->info("Kept {$this->skippedFiles} starter file(s) that already exist in your app. Use --force to overwrite them.");
+        }
+
         if ($adminCreated && ! $passwordGiven) {
             $this->components->warn('This generated password is shown only once. Store it now and change it after signing in.');
         }
@@ -292,5 +295,27 @@ class SliceInstallCommand extends Command
         $this->newLine();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Copy a starter file into the app. An existing file is kept (it may be customised) unless --force.
+     */
+    protected function publishFile(string $source, string $destination): void
+    {
+        if (File::exists($destination) && ! $this->option('force')) {
+            $this->skippedFiles++;
+
+            return;
+        }
+
+        File::ensureDirectoryExists(dirname($destination));
+        File::copy($source, $destination);
+    }
+
+    protected function publishDirectory(string $source, string $destination): void
+    {
+        foreach (File::allFiles($source) as $file) {
+            $this->publishFile($file->getPathname(), $destination.DIRECTORY_SEPARATOR.$file->getRelativePathname());
+        }
     }
 }
