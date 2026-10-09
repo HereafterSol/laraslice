@@ -323,10 +323,7 @@ PHP;
                 }
             }
 
-            $default = $field['default'] ?? null;
-            if ($default === '') {
-                $default = null;
-            }
+            $default = FieldType::coerceDefault($type, $field['default'] ?? null);
             if ($default !== null && ! is_scalar($default)) {
                 throw new \InvalidArgumentException("Field '{$name}' default must be scalar or null.");
             }

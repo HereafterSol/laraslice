@@ -62,6 +62,34 @@ final class FieldType
     }
 
     /**
+     * Convert a default typed into a form (always a string) to the column's PHP type when the
+     * string is unambiguous: "" becomes null, "42" an int for integer columns, "1"/"0"/"true"/
+     * "false" a bool for booleans. Anything else is returned unchanged for defaultMatches() to judge.
+     */
+    public static function coerceDefault(string $type, mixed $default): mixed
+    {
+        if (! is_string($default)) {
+            return $default;
+        }
+        if (trim($default) === '') {
+            return null;
+        }
+
+        $value = trim($default);
+
+        return match (self::columnMethod($type)) {
+            'integer', 'bigInteger', 'smallInteger', 'tinyInteger',
+            'unsignedInteger', 'unsignedBigInteger' => preg_match('/^-?\d+$/', $value) ? (int) $value : $default,
+            'boolean' => match (strtolower($value)) {
+                '1', 'true', 'yes', 'on' => true,
+                '0', 'false', 'no', 'off' => false,
+                default => $default,
+            },
+            default => $default,
+        };
+    }
+
+    /**
      * Whether $default is a valid default for a column of $type: strings for text-like and date
      * columns, integers for integer columns, numbers for decimals and booleans for booleans.
      */

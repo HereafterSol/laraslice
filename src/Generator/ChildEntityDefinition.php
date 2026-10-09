@@ -88,7 +88,7 @@ final class ChildEntityDefinition
                 throw new InvalidArgumentException("Child field '{$name}' required and nullable settings conflict.");
             }
 
-            $default = $field['default'] ?? null;
+            $default = FieldType::coerceDefault($type, $field['default'] ?? null);
             if ($default !== null && ! is_scalar($default)) {
                 throw new InvalidArgumentException("Child field '{$name}' default must be scalar or null.");
             }

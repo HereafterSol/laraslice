@@ -45,4 +45,17 @@ class FieldTypeTest extends TestCase
         $this->assertTrue(FieldType::isEncryptable('json'));
         $this->assertFalse(FieldType::isEncryptable('integer'));
     }
+
+    public function test_form_string_defaults_are_coerced_only_when_unambiguous(): void
+    {
+        $this->assertSame(0, FieldType::coerceDefault('integer', '0'));
+        $this->assertSame(-5, FieldType::coerceDefault('bigInteger', ' -5 '));
+        $this->assertFalse(FieldType::coerceDefault('boolean', '0'));
+        $this->assertTrue(FieldType::coerceDefault('bool', 'true'));
+        $this->assertNull(FieldType::coerceDefault('string', ''));
+        $this->assertSame('9.99', FieldType::coerceDefault('decimal', '9.99'));
+        $this->assertSame('maybe', FieldType::coerceDefault('boolean', 'maybe'));
+        $this->assertSame('1.5', FieldType::coerceDefault('integer', '1.5'));
+        $this->assertSame(3, FieldType::coerceDefault('integer', 3));
+    }
 }

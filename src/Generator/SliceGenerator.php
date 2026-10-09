@@ -996,7 +996,7 @@ BLADE;
             }
             $nullable = (bool) $nullableInput;
             $required = ! $nullable;
-            $default = $definition['default'] ?? ($type === 'boolean' ? false : null);
+            $default = FieldType::coerceDefault($type, $definition['default'] ?? null) ?? ($type === 'boolean' ? false : null);
             if (! is_null($default) && ! is_scalar($default)) {
                 throw new SliceFieldDefinitionException("Field '{$name}' default must be a scalar value or null.");
             }
@@ -1016,6 +1016,12 @@ BLADE;
             }
 
             $length = $definition['length'] ?? null;
+            // Forms (the Slice Studio wizard) send lengths as strings: "" means none, "50" means 50
+            if ($length === '') {
+                $length = null;
+            } elseif (is_string($length) && ctype_digit($length)) {
+                $length = (int) $length;
+            }
             $maxLength = 255;
             $column = $types[$type]['migration'];
             if ($encrypted) {
