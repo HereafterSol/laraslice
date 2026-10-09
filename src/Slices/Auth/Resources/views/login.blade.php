@@ -53,7 +53,7 @@
                     <template x-if="window.location.hostname === '127.0.0.1'">
                         <div class="pt-1">
                             <a :href="window.location.href.replace('127.0.0.1', 'localhost')" class="text-indigo-400 hover:underline font-semibold">
-                                👉 Switch to http://localhost:7000 for Passkeys
+                                👉 Switch to <span x-text="window.location.origin.replace('127.0.0.1', 'localhost')"></span> for Passkeys
                             </a>
                         </div>
                     </template>
@@ -157,7 +157,7 @@
 
             try {
                 if (window.location.hostname === '127.0.0.1') {
-                    throw new Error("WebAuthn / Passkeys require a valid domain name (e.g. http://localhost:7000 or an HTTPS .test domain) rather than an IP address (127.0.0.1).");
+                    throw new Error("WebAuthn / Passkeys require a valid domain name (e.g. " + window.location.origin.replace('127.0.0.1', 'localhost') + " or an HTTPS .test domain) rather than an IP address (127.0.0.1).");
                 }
 
                 if (!window.isSecureContext) {
