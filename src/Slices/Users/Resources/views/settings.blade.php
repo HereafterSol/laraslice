@@ -324,7 +324,8 @@
                     </x-ui.card-header>
                     <x-ui.card-content class="p-6 space-y-6">
                         <!-- 2FA Status Card with Toggle Controls -->
-                        <div x-data="{ showSetupDetails: false }" class="space-y-4">
+                        @php($totpPending = ! $user->hasTotp() && ! empty($user->mfa_secret))
+                        <div x-data="{ showSetupDetails: {{ $totpPending ? 'true' : 'false' }} }" class="space-y-4">
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border {{ $user->hasTotp() ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-border bg-muted/20' }}">
                                 <div class="flex items-start gap-3">
                                     @if($user->hasTotp())
@@ -346,7 +347,11 @@
                                         </div>
                                         <div>
                                             <span class="text-sm font-bold text-foreground">Authenticator App (TOTP)</span>
-                                            <p class="text-xs text-muted-foreground mt-0.5">Generate 6-digit one-time verification codes when logging in</p>
+                                            @if ($totpPending)
+                                                <p class="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-medium">Setup not finished: scan the QR code and enter a code below to turn it on.</p>
+                                            @else
+                                                <p class="text-xs text-muted-foreground mt-0.5">Generate 6-digit one-time verification codes when logging in</p>
+                                            @endif
                                         </div>
                                     @endif
                                 </div>
@@ -372,8 +377,8 @@
                                     @else
                                         <form action="{{ route('users.settings.2fa.toggle') }}" method="POST">
                                             @csrf
-                                            <x-ui.button type="submit" variant="default" size="sm">
-                                                Enable 2FA
+                                            <x-ui.button type="submit" :variant="$totpPending ? 'outline' : 'default'" size="sm">
+                                                {{ $totpPending ? 'Cancel setup' : 'Enable 2FA' }}
                                             </x-ui.button>
                                         </form>
                                     @endif
@@ -396,7 +401,7 @@
                                 </div>
                             @endif
 
-                            @if ($user->hasTotp())
+                            @if ($user->hasTotp() || $totpPending)
                             <!-- QR Code & Setup Key Container (Expandable on demand) -->
                             <div x-show="showSetupDetails" x-cloak x-transition class="p-5 rounded-2xl border border-purple-500/20 bg-purple-500/5 dark:bg-purple-950/20 flex flex-col md:flex-row items-center gap-6">
                                 <div class="shrink-0 flex flex-col items-center">
@@ -416,10 +421,17 @@
                                 </div>
                                 <div class="flex-1 space-y-3">
                                     <div>
-                                        <h4 class="text-sm font-bold text-foreground">Authenticator Setup Key & Live Test</h4>
-                                        <p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                                            Your authenticator app is active. If you need to link a second phone or re-configure <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>, scan this code or enter the secret key manually:
-                                        </p>
+                                        @if ($totpPending)
+                                            <h4 class="text-sm font-bold text-foreground">Finish setting up your authenticator</h4>
+                                            <p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                                Scan this code with <strong>Google Authenticator</strong>, <strong>Microsoft Authenticator</strong> or 1Password, or enter the key manually. Then type the 6-digit code it shows. Sign-in only asks for codes after this step.
+                                            </p>
+                                        @else
+                                            <h4 class="text-sm font-bold text-foreground">Authenticator Setup Key & Live Test</h4>
+                                            <p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                                Your authenticator app is active. If you need to link a second phone or re-configure <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>, scan this code or enter the secret key manually:
+                                            </p>
+                                        @endif
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <div class="px-3 py-2 bg-background border border-input rounded-lg font-mono text-sm font-bold tracking-widest text-purple-600 dark:text-purple-400 select-all shadow-xs">
@@ -442,7 +454,7 @@
                                             </div>
                                             <button type="submit" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1.5 shrink-0">
                                                 <x-lucide-check-circle class="size-3.5" />
-                                                Test Code
+                                                {{ $totpPending ? 'Confirm & turn on' : 'Test Code' }}
                                             </button>
                                         </form>
                                         @if(session('totp_test_success'))

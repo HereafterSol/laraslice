@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Tests\Feature\Slices;
 
+use LaraSlice\Slices\Users\Services\TotpService;
 use LaraSlice\Tests\TestCase;
 
 class AccountSettingsTest extends TestCase
@@ -29,5 +30,33 @@ class AccountSettingsTest extends TestCase
 
         $this->actingAs($user)->post('/admin/users/settings/profile', ['name' => $user->name, 'email' => $user->email, 'gender' => ''])->assertSessionHasNoErrors();
         $this->assertNull($user->fresh()->gender);
+    }
+
+    public function test_authenticator_is_only_turned_on_after_a_code_is_confirmed(): void
+    {
+        $user = $this->makeUser();
+        $this->actingAs($user)->post('/admin/users/settings/2fa/toggle')->assertRedirect();
+
+        $user->refresh();
+        $this->assertNotEmpty($user->mfa_secret);
+        $this->assertFalse($user->hasTotp(), 'a pending secret must not make sign-in ask for codes');
+
+        $this->actingAs($user)->post('/admin/users/settings/2fa/verify-test', ['code' => '000000']);
+        $this->assertFalse($user->fresh()->hasTotp());
+
+        $code = app(TotpService::class)->code($user->mfa_secret, intdiv(time(), 30));
+        $this->actingAs($user)->post('/admin/users/settings/2fa/verify-test', ['code' => $code])
+            ->assertSessionHas('recovery_codes');
+        $this->assertTrue($user->fresh()->hasTotp());
+    }
+
+    public function test_a_pending_authenticator_setup_can_be_cancelled(): void
+    {
+        $user = $this->makeUser();
+        $this->actingAs($user)->post('/admin/users/settings/2fa/toggle');
+        $this->actingAs($user)->post('/admin/users/settings/2fa/toggle');
+
+        $this->assertEmpty($user->fresh()->mfa_secret);
+        $this->assertFalse($user->fresh()->hasTotp());
     }
 }

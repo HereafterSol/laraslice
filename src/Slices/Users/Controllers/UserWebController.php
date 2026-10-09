@@ -407,32 +407,25 @@ class UserWebController extends BaseSliceWebController
                 ->with('success', 'Authenticator App (TOTP) has been disabled.');
         }
 
-        $secret = TotpService::generateSecret();
-        $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
+        // A secret waiting for its first code: "Cancel setup" removes it
+        if (! empty($user->mfa_secret)) {
+            $user->mfa_secret = null;
+            $user->two_factor_secret = null;
+            $user->save();
 
-        $user->mfa_channel = $hasPasskeys ? 'both' : 'totp';
-        $user->mfa_secret = $secret;
-        $user->mfa_confirmed_at = now();
-        $user->two_factor_secret = $secret;
-        $user->two_factor_confirmed_at = now();
+            return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
+                ->with('active_tab', 'mfa')
+                ->with('success', 'Authenticator setup cancelled.');
+        }
+
+        // Only a pending secret: sign-in does not ask for codes until one is confirmed,
+        // so a user who never scans the QR code cannot lock themselves out
+        $user->mfa_secret = TotpService::generateSecret();
         $user->save();
-
-        UserFactor::updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'secret_enc' => encrypt($secret),
-                'confirmed_at' => now(),
-            ]
-        );
-
-        $codes = app(RecoveryCodeService::class)->generate($user);
-
-        UserSecurityLog::log($user->id, '2fa_enabled', 'success', 'Two-Factor Authentication (TOTP) enabled with '.count($codes).' recovery codes.');
 
         return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
             ->with('active_tab', 'mfa')
-            ->with('recovery_codes', $codes)
-            ->with('success', 'Two-Factor Authentication enabled! Scan the QR code and save your recovery codes; they will not be shown again.');
+            ->with('success', 'Scan the QR code with your authenticator app, then enter a 6-digit code to finish turning on two-factor authentication.');
     }
 
     public function regenerateRecoveryCodes(Request $request)
@@ -685,12 +678,17 @@ class UserWebController extends BaseSliceWebController
         $user = $this->requireUser();
 
         $inputCode = trim($request->input('code'));
+        if (empty($user->mfa_secret)) {
+            return back()->with('totp_test_error', 'Turn on the authenticator app first.');
+        }
         $isValid = app(TotpService::class)->verify($user->mfa_secret, $inputCode, $user->id);
 
         if ($isValid) {
+            $wasPending = ! $user->hasTotp();
             $hasPasskeys = $user->passkeys()->whereNull('revoked_at')->exists();
             $user->mfa_channel = $hasPasskeys ? 'both' : 'totp';
             $user->mfa_confirmed_at = now();
+            $user->two_factor_secret = $user->mfa_secret;
             $user->save();
 
             UserFactor::updateOrCreate(
@@ -702,6 +700,16 @@ class UserWebController extends BaseSliceWebController
             );
 
             UserSecurityLog::log($user->id, 'totp_verified_test', 'success', 'User successfully verified their TOTP authenticator app code.');
+
+            if ($wasPending) {
+                $codes = app(RecoveryCodeService::class)->generate($user);
+                UserSecurityLog::log($user->id, '2fa_enabled', 'success', 'Two-Factor Authentication (TOTP) enabled with '.count($codes).' recovery codes.');
+
+                return redirect()->to(route($this->getRoutePrefix().'settings').'#mfa')
+                    ->with('active_tab', 'mfa')
+                    ->with('recovery_codes', $codes)
+                    ->with('success', 'Two-factor authentication is on. Save your recovery codes now; they will not be shown again.');
+            }
 
             return back()->with('totp_test_success', "Code {$inputCode} verified successfully! Your Google Authenticator is fully synced and working.");
         }
