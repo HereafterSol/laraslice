@@ -122,7 +122,7 @@ function aiSettingsApp() {
             </div>
             <div>
                 <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Active Provider</span>
-                <p class="text-sm font-bold text-foreground capitalize" x-text="selectedProvider === 'opencode' ? 'OpenCode Free' : selectedProvider"></p>
+                <p class="text-sm font-bold text-foreground capitalize" x-text="selectedProvider === 'opencode' ? 'OpenCode AI' : selectedProvider"></p>
             </div>
         </div>
 
@@ -188,7 +188,7 @@ function aiSettingsApp() {
             <div x-show="activeTab === 'providers'" class="space-y-6">
                 <div>
                     <h3 class="text-sm font-bold text-foreground">Select Active AI Engine</h3>
-                    <p class="text-xs text-muted-foreground">OpenCode AI Free is ready out of the box with zero configuration. You can also connect your own enterprise API keys.</p>
+                    <p class="text-xs text-muted-foreground">Without an API key the copilot answers from LaraSlice's built-in rules (record counts, schemas, permissions, navigation). Add a key for the provider you choose to get full AI answers; Ollama runs locally without one.</p>
                 </div>
 
                 <!-- Provider Selector Radio Grid -->

@@ -36,14 +36,14 @@ class AiEngine
     }
 
     /**
-     * Get list of supported AI providers. OpenCode Free is at the top.
+     * Supported AI providers. Every hosted provider needs an API key; Ollama runs locally without one.
      */
     public function getProviders(): array
     {
         return [
             [
                 'id' => 'opencode',
-                'name' => 'OpenCode AI (6 Free Models)',
+                'name' => 'OpenCode AI',
                 'is_free' => true,
                 'is_default' => true,
                 'key_setting' => 'ai.opencode_api_key',
@@ -58,11 +58,11 @@ class AiEngine
                     'fledge-alpha-free',
                     'longcat-2.5-preview-free',
                 ],
-                'description' => 'Official OpenCode AI Zen service with 6+ free high-speed models, fast reasoning, and LaraSlice framework telemetry.',
+                'description' => 'OpenCode Zen models, including free tiers. Needs an OpenCode API key (OPENCODE_API_KEY or this page).',
             ],
             [
                 'id' => 'openai',
-                'name' => 'OpenAI (GPT-4o / GPT-4o-mini)',
+                'name' => 'OpenAI',
                 'is_free' => false,
                 'key_setting' => 'ai.openai_api_key',
                 'model' => self::DEFAULT_MODELS['openai'],
@@ -71,7 +71,7 @@ class AiEngine
             ],
             [
                 'id' => 'gemini',
-                'name' => 'Google Gemini (Gemini 2.5 Flash / Pro)',
+                'name' => 'Google Gemini',
                 'is_free' => false,
                 'key_setting' => 'ai.gemini_api_key',
                 'model' => self::DEFAULT_MODELS['gemini'],
@@ -80,7 +80,7 @@ class AiEngine
             ],
             [
                 'id' => 'anthropic',
-                'name' => 'Anthropic (Claude 3.5 Sonnet)',
+                'name' => 'Anthropic Claude',
                 'is_free' => false,
                 'key_setting' => 'ai.anthropic_api_key',
                 'model' => self::DEFAULT_MODELS['anthropic'],
@@ -98,13 +98,31 @@ class AiEngine
             ],
             [
                 'id' => 'ollama',
-                'name' => 'Ollama Local (DeepSeek-R1 / Llama 3.3)',
+                'name' => 'Ollama (local)',
                 'is_free' => true,
                 'endpoint' => 'http://localhost:11434',
                 'model' => 'deepseek-r1:8b',
                 'models' => ['deepseek-r1:8b', 'llama3.3:latest', 'qwen2.5-coder:latest'],
                 'description' => 'Self-hosted local AI inference with zero external network calls.',
             ],
+        ];
+    }
+
+    /**
+     * The active provider and whether it can answer: hosted providers need an API key, while
+     * Ollama runs locally. Without one, the copilot answers from LaraSlice's built-in rules.
+     *
+     * @return array{provider: string, name: string, connected: bool}
+     */
+    public function copilotStatus(): array
+    {
+        $provider = $this->getActiveProvider();
+        $definition = collect($this->getProviders())->firstWhere('id', $provider);
+
+        return [
+            'provider' => $provider,
+            'name' => $definition['name'] ?? ucfirst($provider),
+            'connected' => $provider === 'ollama' || $this->providerKey($provider) !== null,
         ];
     }
 
@@ -1578,7 +1596,7 @@ class AiEngine
         if (str_contains($path, 'settings/ai') || str_contains($path, 'ai/settings')) {
             return "### 📍 Current Context: AI Copilot & Model Settings\n\n".
                    "You are on **`/admin/settings/ai`**.\n\n".
-                   'Here you can configure your active AI provider (**OpenCode Free**, OpenAI, Google Gemini, Anthropic Claude, OpenRouter, or Ollama), save API keys, adjust live telemetry access, and run live diagnostic pings.';
+                   'Here you can configure your active AI provider (**OpenCode AI**, OpenAI, Google Gemini, Anthropic Claude, OpenRouter, or Ollama), save API keys, adjust live telemetry access, and run live diagnostic pings.';
         }
 
         if (str_contains($path, 'wizard') || str_contains($path, 'studio')) {

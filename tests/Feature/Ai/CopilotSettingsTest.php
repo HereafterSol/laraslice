@@ -19,6 +19,21 @@ class CopilotSettingsTest extends TestCase
         $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()->assertDontSee(self::BUBBLE, false);
     }
 
+    public function test_bubble_says_whether_a_provider_key_is_configured(): void
+    {
+        config(['laraslice.ai.providers.opencode.key' => null]);
+        $admin = $this->makeSuperAdmin();
+
+        $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()
+            ->assertSee('Built-in answers')
+            ->assertDontSee('OpenCode Free');
+
+        config(['laraslice.ai.providers.opencode.key' => 'test-key']);
+        $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()
+            ->assertDontSee('Built-in answers')
+            ->assertSee('Powered by');
+    }
+
     public function test_bubble_is_hidden_from_users_without_copilot_access(): void
     {
         $studioOnly = $this->makeUserWithPermissions(['studio.access']);

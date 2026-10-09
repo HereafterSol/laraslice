@@ -1,4 +1,5 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
+@php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
 <div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" x-data="larasliceCopilot()" x-cloak>
     <!-- Floating Trigger Bubble -->
     <div class="relative group" x-show="!isOpen">
@@ -18,7 +19,7 @@
             <div class="text-left hidden sm:block">
                 <div class="text-xs font-bold leading-tight tracking-wide flex items-center gap-1.5">
                     <span>AI Copilot</span>
-                    <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 font-mono">OpenCode Free</span>
+                    <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 font-mono">{{ $copilotStatus['connected'] ? $copilotStatus['name'] : 'Built-in answers' }}</span>
                 </div>
                 <div class="text-[10px] text-slate-400 leading-none">Ready &bull; Aware of Current Page</div>
             </div>
@@ -118,7 +119,7 @@
                 </div>
                 <div class="bg-slate-800/90 border border-slate-700/60 rounded-2xl rounded-tl-sm p-3.5 text-slate-200 shadow-md max-w-[88%] leading-relaxed">
                     <p class="font-semibold text-white mb-1">Hello! I am your LaraSlice Copilot.</p>
-                    <p class="text-slate-300 mb-2">Powered by <strong class="text-indigo-300">OpenCode Free Suite</strong>. I am fully aware of this page (<span class="font-mono text-[10px] text-pink-300" x-text="currentPath"></span>), live MySQL schemas, and relations.</p>
+                    <p class="text-slate-300 mb-2">@if ($copilotStatus['connected'])Powered by <strong class="text-indigo-300">{{ $copilotStatus['name'] }}</strong>.@else Answering from <strong class="text-indigo-300">LaraSlice's built-in rules</strong>; add an API key in AI settings for full AI answers.@endif I am fully aware of this page (<span class="font-mono text-[10px] text-pink-300" x-text="currentPath"></span>), live MySQL schemas, and relations.</p>
                     <div class="text-[11px] text-slate-400">Ask questions, query counts, or type <code class="text-indigo-300 font-mono bg-slate-900 px-1 py-0.5 rounded">/</code> for slash commands:</div>
                 </div>
             </div>
