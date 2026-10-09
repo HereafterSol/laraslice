@@ -13,10 +13,10 @@
 
 <p align="center">
   <a href="https://packagist.org/packages/hereafter/laraslice"><img src="https://img.shields.io/badge/composer-hereafter%2Flaraslice-orange.svg" alt="Composer Package"></a>
-  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.4.1-amber.svg" alt="Latest Version"></a>
+  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.5.0-amber.svg" alt="Latest Version"></a>
   <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-red.svg" alt="Laravel Version"></a>
   <a href="https://php.net"><img src="https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-blue.svg" alt="PHP Version"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/tests-58%2F58%20passing%20(100%25)-brightgreen.svg" alt="Tests Passing"></a>
+  <a href="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml"><img src="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-Cross--Platform-cyan.svg" alt="Flutter Support"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://skills.sh/HereafterSol/laraslice"><img src="https://skills.sh/b/HereafterSol/laraslice" alt="skills.sh"></a>
@@ -99,7 +99,7 @@ LaraSlice operates on a pragmatic **Three-Layer Hybrid Model** ([ADR-001](docs/a
 | **Enterprise Audit Engine** | Immutable compliance tracking in `laraslice_audit_logs`. `AuditableSlice` Eloquent trait records actor email, IP, user-agent, and before/after JSON diffs with sensitive field redaction. |
 | **High-Performance Discovery** | `php artisan slice:cache` creates a compiled manifest map for production environments, eliminating filesystem scanning overhead on boot. |
 | **BlatUI Frontend** | Pure Blade + Alpine.js + Tailwind CSS v4 design system. 156+ accessible shadcn-styled components. Zero Metronic dependencies. |
-| **Flutter Mobile Generator** | Scaffolds native Flutter Dart models, client services, and CRUD UI views with one command (`php artisan slice:export:flutter`). |
+| **Flutter Mobile Generator** | Scaffolds native Flutter Dart models, client services, and CRUD UI views with one command (`php artisan slice:export-flutter`). |
 | **Declarative Blueprint Studio** | Visual designer and round-trip `slice.yaml` editor with Statamic-style field widths (`33%`, `50%`, `100%`) and real-time UI mockups. |
 | **Native AI & MCP Server** | Built-in Model Context Protocol server (`/.well-known/mcp`) allowing AI coding agents to inspect schemas and co-author slices. |
 
@@ -328,9 +328,10 @@ We welcome contributions from fellow developers!
 #### 1. Open Source Contributions to Framework Core
 1. **Fork the Repository**: [github.com/hereaftersol/laraslice](https://github.com/hereaftersol/laraslice)
 2. **Edit the Core Slice**: Make your enhancements directly in `src/Slices/{SliceName}` (e.g. `src/Slices/Users`, `src/Slices/Roles`, `src/Slices/Settings`).
-3. **Run the Test Suite**: Ensure all 57 tests pass with 100% assertions:
+3. **Run the checks**: the test suite, Pint and Larastan must pass (CI runs the same):
    ```bash
-   ./vendor/bin/phpunit tests
+   composer test
+   composer lint
    ```
 4. **Submit a Pull Request**: Push your branch to your fork and open a Pull Request on GitHub.
 
