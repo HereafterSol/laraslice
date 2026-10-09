@@ -44,6 +44,21 @@ A correctness, performance and maintenance release. No new security defaults, bu
 - `laraslice:audit:prune` ignored the configured retention because `--days` defaulted to 90; without `--days` it now uses the `audit.retention_days` setting.
 - The facade alias, the starter publish path and `laraslice:skill:publish` pointed at things that did not exist; `active: "false"` in a manifest now disables the slice; the studio no longer fails with 419 (missing CSRF meta tag).
 
+### Fixed — found by installing into a fresh Laravel 13 app and testing in Chrome
+- **Installable on Laravel 13:** a new app locks Guzzle 8, which the Guzzle requirement rejected.
+- **`slice:install`:** re-running it no longer overwrites a customised `config/laraslice.php`, layouts, components, CSS or JS (`--force` still does); on a local install it turns Slice Studio on, since the summary and landing page link to it.
+- **Slice Studio:** presets and forms generate again (string lengths and defaults such as `"50"` and `"0"` were rejected); no JavaScript errors; the audit trail search and filters work.
+- **AI settings page** returned 500 whenever Slice Studio was disabled (the default).
+- **Sign-in** lands on the dashboard route (Slice Studio for builders, the account page for others) instead of always on account settings.
+- **End users** see only the controls they may use: generated listings hide Create, Edit, Delete and Seed without permission, and Studio links are hidden without `studio.access`.
+- **Permissions:** a slice destroyed and generated again gets its permissions back (a stale cache skipped the sync).
+- **Two-factor setup** from the account page needs a confirmed code before it turns on; before, it was active immediately and could lock users out. QR codes are rendered on the server (`bacon/bacon-qr-code` is now required).
+- **Passkeys** work end to end on `localhost` (tested with Chrome's virtual authenticator); the 127.0.0.1 hint shows the app's real address instead of port 7000.
+- **Account settings** validate the profile (another user's email used to cause a 500); gender can be left unset.
+- **Demo data:** booleans are 0/1 (they overflowed on MySQL) and select fields use their declared options.
+- **AI copilot** says whether a provider key is configured instead of advertising a free service that needs a key.
+- `slice:destroy` removes the empty domain folder.
+
 ### Performance
 - Booting slices no longer reads, rewrites or writes files on each request.
 - Roles, permissions, navigation and schema checks are memoized per request; repeated permission checks run no queries.
@@ -65,7 +80,7 @@ A correctness, performance and maintenance release. No new security defaults, bu
 
 ### Development
 - PHPUnit 11/12 on Testbench, Pint, and Larastan level 5 (with a baseline of pre-existing findings), run by GitHub Actions on PHP 8.2–8.4 × Laravel 11–13. Run `composer test` and `composer lint`.
-- Test suite grew from 62 to 280 tests, including route and command smoke tests and query-count checks.
+- Test suite grew from 62 to 298 tests, including route and command smoke tests, query-count checks and replays of browser requests.
 - Added the MIT `LICENSE` file; tests, docs and tooling are excluded from Composer dist archives.
 
 ## [1.4.1] - 2026-10-07
