@@ -89,7 +89,7 @@ class ProductSchema extends SliceSchema
 
 ### Exporting for Mobile & AI
 Call `ProductSchema::toJson()` or `toArray()` to produce structured schema metadata. This is consumed by:
-- Flutter mobile code generators for forms and state classes (`php artisan slice:export:flutter {Slice}`).
+- Flutter mobile code generators for forms and state classes (`php artisan slice:export-flutter {Slice}`).
 - AI agents to understand the aggregate structure and auto-generate views/migrations.
 
 ---
@@ -183,6 +183,32 @@ In the **Visual Studio** (`/laraslice/wizard`):
 - Click **CRM Suite (3 Slices)**, **E-Commerce Suite (4 Slices)**, or **Billing Suite (3 Slices)**.
 - Or enter comma-separated slice names: `Companies, Contacts, Deals` with Domain `CRM`.
 
+### D. Domain Accordion & Lifecycle Controls (Slice Studio)
+
+The Installed Slices panel in Slice Studio (`/laraslice/wizard`) groups slices into **collapsible domain accordions** with full lifecycle controls:
+
+1. **Domain Accordion UI**:
+   - Slices are grouped by their `domain` or `navigation.group` from `slice.yaml`.
+   - Each domain card shows: slice count badge, total models badge, and domain status (`Active`, `Disabled`, `Partial`).
+   - The accordion header toggles collapse/expand and supports a search/filter input above.
+
+2. **Domain-Level Lifecycle Actions** (on the accordion header row):
+   - **⚡ Seed Domain Data**: Seeds demo data into all slice tables in the domain.
+   - **👁️ Toggle Domain Active**: Enable/Disable all slices in a domain (hides from navigation sidebar).
+   - **🧹 Wipe Domain Data**: Truncates all tables in the domain.
+   - **🗑️ Remove Domain**: Destroys all slices in the domain (with mode selection).
+
+3. **Slice-Level Lifecycle Actions** (per-slice dropdown menu):
+   - **⚡ Seed Demo Data**: Seeds realistic relational data for the individual slice.
+   - **👁️ Toggle Active**: Enable/Disable the slice (hide/show in navigation).
+   - **🧹 Wipe Table Data**: Truncate all records from the slice's tables.
+   - **🗑️ Delete Slice**: Destroy the slice with confirmation modal.
+
+4. **Seeding Engine (`SliceSeederService`)**:
+   - Resolves relational dependency ordering across slice tables.
+   - Type-aware value generators: inspects column types (`Schema::getColumnType`) and generates integers, floats, dates, booleans, and text appropriately.
+   - Foreign key checks are disabled and re-enabled portably (`Schema::disableForeignKeyConstraints()` in a `try...finally`), so seeding works on MySQL, PostgreSQL and SQLite.
+
 ---
 
 ## 5. Enterprise Transactional Integrity & Audit Logging
@@ -260,14 +286,34 @@ All administrative slice views extend `layouts.app` / `<x-layouts.app>` (Dashboa
 
 ## 7. Working with CLI Commands & Laravel Boost
 
-LaraSlice provides standardized console commands in the `slice:*` namespace:
-- `php artisan slice:list`: Display all registered slices, domains, versions, and active status.
-- `php artisan slice:make <SliceName>`: Scaffold a new production-ready vertical slice (bounded context).
-- `php artisan slice:publish <SliceName>`: Publish a packaged core slice into `app/Slices/{SliceName}` for local customization (use `--all` for all slices, `--force` to overwrite).
-- `php artisan slice:sync <SliceName>`: Detect database schema drift and safely update `slice.yaml` without overwriting custom PHP.
-- `php artisan slice:cache`: Cache discovered slice manifests for high-performance production boot.
-- `php artisan slice:clear`: Clear the slice discovery cache.
-- `php artisan slice:export:flutter <SliceName>`: Scaffold native Flutter models, client services, and CRUD UI views.
+LaraSlice provides a comprehensive, standardized suite of console commands across the `slice:*` and `laraslice:*` namespaces:
+
+### Discovery, Blueprint & Scaffolding
+- `php artisan slice:list {--domain=}`: Display all registered slices with Domain, Models, Version, and Status.
+- `php artisan slice:make <SliceName> [<SliceName2> ...] {--domain=} {--workflow} {--field=*} {--flutter}`: Scaffold complete end-to-end vertical slices.
+- `php artisan slice:field <SliceName> [field]`: Enhance an existing slice with new field(s) in a single consolidated migration (October CMS Builder style).
+- `php artisan slice:ai "<description>" {--flutter}`: Scaffold a slice from a short description. The slice name and workflow are picked by keyword matching; no AI provider is called.
+- `php artisan slice:blueprint:validate <path>`: Validate versioned YAML/JSON blueprints.
+- `php artisan slice:blueprint:plan <path> {--format=table|json}`: Show deterministic schema and file plan before writing code.
+- `php artisan slice:blueprint:apply <path> {--plan-hash=} {--yes}`: Apply a reviewed blueprint with SHA-256 plan hash verification.
+- `php artisan slice:export-flutter <SliceName> {--force}`: Scaffold native Flutter models, typed HTTP client, and responsive CRUD views.
+
+### Lifecycle, Data & Studio Operations
+- `php artisan slice:seed {slice?} {--domain=} {--count=10}`: Seed realistic relational demo data for an individual slice or entire domain.
+- `php artisan slice:toggle {slice?} {--domain=} {--enable} {--disable}`: Toggle activation status (shows or hides in navigation, enables/suspends routes).
+- `php artisan slice:wipe {slice?} {--domain=} {--force}`: Safely truncate/wipe all records from tables of a slice or domain while preserving code files.
+- `php artisan slice:destroy {slice?} {--domain=} {--mode=complete} {--force}`: Safely tear down a slice or domain (`complete`, `code_only`, `db_only`, `wipe_data`).
+- `php artisan slice:ui:prune {--force} {--dry-run}`: Identify and prune unused BlatUI components to keep assets lean.
+- `php artisan slice:wizard {--web}`: Interactive console wizard or one-click web browser launcher for Slice Studio.
+- `php artisan slice:sync <SliceName>`: Detect database schema drift and synchronize fields back to `slice.yaml`.
+- `php artisan slice:cache` / `slice:clear`: Cache or clear slice discovery manifests for production boot optimization.
+- `php artisan slice:repair {slice?} {--dry-run}`: Upgrade files of slices generated by older LaraSlice versions (discovery never rewrites files at runtime).
+- `php artisan slice:publish {slice?} {--all} {--force}`: Publish core slices into `app/Slices/` for full customization.
+
+### Enterprise Governance & AI Commands
+- `php artisan laraslice:audit:prune {--days=} {--slice=} {--force}`: Prune old audit log records. Without `--days` it uses the `audit.retention_days` setting, then `config('laraslice.audit.retention_days')`.
+- `php artisan laraslice:mcp {--test}`: Run the LaraSlice Model Context Protocol (MCP) server over stdio for Cursor, Antigravity, and Claude AI agents.
+- `php artisan laraslice:skill:publish {--force}`: Publish LaraSlice AI skills to `.agents/skills/laraslice/SKILL.md`, `.cursor/rules/laraslice.mdc`, and `.cursor/mcp.json`.
 
 ---
 
@@ -320,3 +366,153 @@ In the test project's `composer.json`, add a local path repository:
 ]
 ```
 Then run `composer update hereafter/laraslice`. This creates a symlink/junction, allowing developers to test their framework edits in real time before pushing to GitHub.
+
+---
+
+## 10. Enterprise Dual-Layer Auditability, Full Lifecycle Stamps & Device Security
+
+LaraSlice enforces regulatory compliance (SOX, GDPR, ISO 27001) using a **Two-Tier Audit Model**:
+
+### 1. Intrinsic Full-Lifecycle Record Stamps (Tier 1)
+Every slice migration includes the `$table->auditStamps()` blueprint macro:
+```php
+$table->auditStamps();
+// Expands to:
+// - $table->timestamps();         (created_at, updated_at)
+// - $table->userstamps();         (created_by, updated_by)
+// - $table->softDeletes();        (deleted_at)
+// - $table->softUserstamps();     (deleted_by)
+```
+
+In slice models, use `AuditableSlice` and `SoftDeletes`:
+```php
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use LaraSlice\Core\Audit\Traits\AuditableSlice;
+
+class Invoice extends Model
+{
+    use AuditableSlice, SoftDeletes;
+
+    protected $fillable = [
+        'title',
+        'amount',
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+    ];
+}
+```
+* **Auto-Stamping**: Automatically stamps `created_by` on creation, `updated_by` on update, and `deleted_by` before soft-delete using `auth()->id()`.
+* **Relationships**: Exposes `$model->creator`, `$model->updater`, and `$model->deleter` `BelongsTo` relationships resolving to the model in `auth.providers.users.model`.
+
+### 2. Immutable Event Ledger & Scaling (Tier 2)
+The `laraslice_audit_logs` table records granular field diffs (`old_values`, `new_values`), actor ID, email, IP, and User-Agent.
+
+* **Audit Configuration** (`config/laraslice.php`):
+  ```php
+  'audit' => [
+      'enabled'        => (bool) env('LARASLICE_AUDIT_ENABLED', true),       // false stops writing audit records
+      'retention_days' => (int) env('LARASLICE_AUDIT_RETENTION_DAYS', 90),
+      'auto_prune'     => (bool) env('LARASLICE_AUDIT_AUTO_PRUNE', false),   // true schedules a daily prune (needs the Laravel scheduler)
+  ],
+  ```
+* **Pruning Command**:
+  ```bash
+  php artisan laraslice:audit:prune             # Uses the configured retention_days (default 90)
+  php artisan laraslice:audit:prune --days=30    # Custom retention window
+  php artisan laraslice:audit:prune --slice=users --force
+  ```
+* **Slice Studio Audit Search**: The Studio Audit Trail UI (`/laraslice/wizard`) features real-time search, action filters (`All`, `Created`, `Updated`, `Deleted`), date ranges, and on-demand modal pruning.
+
+### 3. Enterprise Identity & Device Trust (Enterprise Architecture Parity)
+LaraSlice integrates 10 dedicated security tables for hardware device binding and multi-factor defense:
+1. `user_devices`: Active device sessions, platform (`Web`/`App`), browser & OS fingerprinting (`Chrome`, `Edge`, `Safari`, `Firefox`), IP, geolocation, `is_trusted` flag, and persistent `laraslice_device_token` cookie for multi-browser recognition.
+2. `user_connect`: **Device Enrollment Codes** (`DEV-XXXXXX`), 15-minute TTL, single-use, admin or self-issued for pairing and authorizing new computers/browsers.
+3. `user_creds` & `user_passkeys`: **WebAuthn / FIDO2 Passkeys** credentials, public keys, and authenticator counters.
+4. `user_factors`: **TOTP Authenticator App** secrets (encrypted) for Google/Microsoft Authenticator.
+5. `user_codes` & `user_recovery_codes`: **Single-use Recovery Backup Codes** (SHA-256 hashed).
+6. `user_attempts`: Brute-force tracking, IP & User-Agent forensics, and lockout thresholds.
+7. `user_checks`: Ephemeral MFA login challenges and pending step tokens.
+8. `user_push_devices`: FCM Push Notification tokens for web and mobile devices.
+9. `user_resets`: Password reset tickets with channel (Web vs App), IP, and audit tracking.
+10. `user_tokens`: Persistent Remember-Me split tokens (selector + verifier hash).
+
+All relationships are natively exposed on `App\Models\User`:
+`$user->devices`, `$user->deviceCodes`, `$user->passkeys`, `$user->totpFactors`, `$user->recoveryCodes`, and `$user->attempts`.
+
+### 4. Enterprise Enrollment & Multi-Browser Flows
+* **First-Time / Post-Reset Enrollment (`login.mfa.enroll`)**:
+  - Automatically branches by role policy: Privileged users (Admin, Manager, Director) default to **Biometric Passkey (Windows Hello / Touch ID / Hardware Key)** enrollment to physically bind the device, with a one-click tab to switch to **Authenticator App (TOTP)**.
+  - Automatically provisions 8 emergency recovery codes (`user_codes` / `user_recovery_codes`) and sets current workstation as `is_trusted = true` in `user_devices` with secure `laraslice_device_token` cookie.
+* **New Browser / Device Detection (`login.mfa.challenge`)**:
+  - Checks if incoming request has a valid `laraslice_device_token` cookie matched to `user_devices`.
+  - If unrecognized (e.g. logging in from Microsoft Edge after enrolling in Chrome):
+    - Prominently alerts: **"New Browser / Workstation Detected: Edge on Windows"**.
+    - Directly offers **Device Enrollment Code (`DEV-XXXXXX`)** authorization (redeemed via `user_connect` table).
+    - Or verifies with Authenticator App / Hardware Security Key, binds the new browser to `user_devices` (`is_trusted = 1`), and issues the device token cookie.
+
+---
+
+## 11. Model Context Protocol (MCP) Server & AI Copilot Architecture
+
+LaraSlice features a native **Model Context Protocol (MCP)** server and an integrated **Context-Aware AI Copilot**.
+
+### 1. Connecting AI Agents via MCP (`laraslice:mcp`)
+IDEs such as Cursor, Antigravity, and Claude Code connect directly to LaraSlice via JSON-RPC 2.0 over stdio. (The HTTP endpoint `/.well-known/mcp` is off by default; when enabled it needs a Sanctum bearer token for a user with `studio.access`.)
+```json
+{
+  "mcpServers": {
+    "laraslice": {
+      "command": "php",
+      "args": ["artisan", "laraslice:mcp"]
+    }
+  }
+}
+```
+
+### 2. Available MCP Tools in LaraSlice
+| Tool Name | Parameters | Description |
+| :--- | :--- | :--- |
+| `list_slices` | `domain?` | List all discovered slices, domain groups, status, version, and models. |
+| `toggle_slice` | `slice?`, `domain?`, `action` | Enable or disable an individual slice or entire domain group. |
+| `seed_slice` | `slice?`, `domain?`, `count?` | Seed realistic relational dummy data for a slice or domain. |
+| `wipe_slice_data` | `slice?`, `domain?`, `confirm` | Truncate records for a slice or domain while keeping code intact. `confirm` must repeat the slice or domain name. |
+| `destroy_slice` | `slice?`, `domain?`, `mode`, `confirm` | Complete teardown: drop tables, clean migrations, delete files. `confirm` must repeat the slice or domain name. |
+| `get_slice_schema` | `slice` | Inspect declarative schema, columns, child tables, and relationships. |
+| `scaffold_slice` | `name`, `domain?`, `fields?`, `workflow?`, `flutter?` | Generate an end-to-end vertical slice with models, views, and routes. |
+| `query_database_metrics` | *(none)* | Live telemetry: total users, active users, roles, audit counts, table list. |
+| `prune_audit_logs` | `days?`, `slice?` | Prune security and audit log entries older than retention period. |
+| `get_page_context` | `path` | Deep inspection of any screen/route (models used, permissions, controls). |
+
+### 3. Providers & Floating AI Copilot Bubble
+- **Provider keys are required**: No API key ships with LaraSlice. Set `OPENCODE_API_KEY` (or another provider's key) in `.env`, or save one on the AI settings page (`/admin/settings/ai`), where keys are stored encrypted. Without a key the copilot answers from LaraSlice's built-in rules only.
+- **Permissions**: The copilot needs sign-in plus `ai.copilot.use`; the settings page needs `ai.settings.view` / `ai.settings.edit`.
+- **Floating Copilot Bubble (`<x-ui.ai-copilot-bubble />`)**:
+  - Displays as a non-intrusive floating bubble on any screen.
+  - Automatically detects the current page route and URL hash (e.g. `/admin/users/settings#mfa`).
+  - Answers live operational questions with real database facts (*"How many users do we have?"*, *"Explain this page"*, *"What is our audit retention?"*).
+  - Fully aware of Slice Studio actions: toggling slices, wiping slice data, wiping domain data, and adding fields.
+- **Custom Provider Extensibility**:
+  - Supports OpenAI, Google Gemini, Anthropic Claude, OpenRouter, and local Ollama via the UI switcher or `settings` table keys (`ai.openai_api_key`, `ai.gemini_api_key`, etc.).
+
+
+### 4. LaraSlice Copilot Slash (`/`) Commands & Column Introspection
+The in-browser AI Copilot provides live conversational commands tailored to the active screen:
+- `/fields [table]`: Live introspects column schema (`Field`, `Type`, `Nullable`, `Key`, `Default`) through Laravel's portable schema API (MySQL, PostgreSQL, SQLite).
+- `/add-field [table] [field]`: Previews inferred column types and opens 1-click migration execution.
+- `/relations`: Displays the aggregate parent-child entity tree and foreign keys (e.g. `user_id -> users.id`).
+- `/permissions`: Inspects declared slice capabilities (`users.view`, `users.create`, `users.mfa`, etc.).
+- `/nav`: Displays live sidebar navigation configuration, group order, and routes.
+- `/logs`: Displays migration version trail and security audit retention statistics.
+- `/suggest-fields [table]`: Catalog of enterprise fields tailored to the table context.
+- `/seed [slice]`: Seeds realistic, relationally-consistent demo data in 1-click.
+- `/wipe [slice]`: Safely wipes and truncates slice-specific data with cascade protections.
+
+### 5. Conversational Field Migrations & Schema Evolution
+When a user asks: `"add [field] in [table]"`, the AI Copilot:
+1. Evaluates table compatibility and column presence.
+2. Infers appropriate SQL type (`string`, `text`, `integer`, `decimal`, `boolean`, `date`, `timestamp`, `json`).
+3. Enforces `nullable: true` by default to prevent breaking existing production rows.
+4. Renders an interactive card in the chat window with enterprise recommendations chips and a single-click button: **`⚡ Apply Migration & Add Field Now`** which executes `POST /laraslice/wizard/add-field` directly.
