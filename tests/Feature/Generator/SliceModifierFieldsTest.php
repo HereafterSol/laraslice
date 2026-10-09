@@ -81,4 +81,20 @@ class SliceModifierFieldsTest extends TestCase
         }
         $this->assertParses($childModel);
     }
+
+    public function test_added_fields_appear_once_in_the_form_and_listing_views(): void
+    {
+        $path = (new SliceGenerator($this->slicesPath, 'App\Slices'))->generate('Invoice');
+        $modifier = new SliceModifier($this->slicesPath, 'App\Slices');
+
+        $modifier->addFieldsBatch('Invoice', [['name' => 'reference', 'type' => 'string', 'nullable' => true]]);
+        $form = file_get_contents($path.'/Resources/views/form.blade.php');
+        $index = file_get_contents($path.'/Resources/views/index.blade.php');
+
+        $this->assertSame(1, substr_count($form, 'name="reference"'));
+        $this->assertStringContainsString('reference', $index);
+
+        $modifier->addFieldsBatch('Invoice', [['name' => 'notes', 'type' => 'text', 'nullable' => true]]);
+        $this->assertSame(1, substr_count(file_get_contents($path.'/Resources/views/form.blade.php'), 'name="reference"'));
+    }
 }
