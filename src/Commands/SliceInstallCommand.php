@@ -202,6 +202,12 @@ class SliceInstallCommand extends Command
             return true;
         });
 
+        // Slice Studio is off by default (it writes code); a local install turns it on for the developer
+        $studioEnabled = (bool) config('laraslice.wizard.enabled');
+        if (! $studioEnabled && app()->isLocal()) {
+            $studioEnabled = $this->enableStudioInEnv();
+        }
+
         // 5. Ensure frontend dependencies & run npm install
         if (! $this->option('skip-npm') && File::exists(base_path('package.json'))) {
             $needed = [
@@ -282,7 +288,7 @@ class SliceInstallCommand extends Command
             [
                 ['Landing Page', url('/')],
                 ['Login Portal', url('/login')],
-                ['Blueprint Studio', url('/laraslice/wizard')],
+                ['Slice Studio', $studioEnabled ? url('/laraslice/wizard') : 'disabled: set LARASLICE_WIZARD_ENABLED=true in .env (local development only)'],
                 ['Super Admin Email', $email],
                 ['Super Admin Password', $adminCreated ? $password : '(unchanged: account already existed)'],
             ]
@@ -322,5 +328,22 @@ class SliceInstallCommand extends Command
         foreach (File::allFiles($source) as $file) {
             $this->publishFile($file->getPathname(), $destination.DIRECTORY_SEPARATOR.$file->getRelativePathname());
         }
+    }
+
+    /**
+     * Add LARASLICE_WIZARD_ENABLED=true to .env unless the key is already set (to anything).
+     */
+    protected function enableStudioInEnv(): bool
+    {
+        $envFile = app()->environmentFilePath();
+        if (! File::exists($envFile) || preg_match('/^LARASLICE_WIZARD_ENABLED=/m', File::get($envFile))) {
+            return false;
+        }
+
+        File::append($envFile, PHP_EOL.'# Slice Studio writes code and runs migrations: keep it off outside local development'.PHP_EOL.'LARASLICE_WIZARD_ENABLED=true'.PHP_EOL);
+        config(['laraslice.wizard.enabled' => true]);
+        $this->components->info('Enabled Slice Studio for local development (LARASLICE_WIZARD_ENABLED=true in .env).');
+
+        return true;
     }
 }
