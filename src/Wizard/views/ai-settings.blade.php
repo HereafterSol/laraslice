@@ -80,10 +80,12 @@ function aiSettingsApp() {
                     </div>
                 </template>
             </x-ui.button>
+            @if (Route::has('laraslice.wizard.schema_studio'))
             <x-ui.button href="{{ route('laraslice.wizard.schema_studio') }}" as="a" variant="secondary" size="sm">
                 <x-lucide-layout-grid class="size-4 mr-1.5" />
                 <span>Schema Studio</span>
             </x-ui.button>
+            @endif
         </div>
     </div>
 
