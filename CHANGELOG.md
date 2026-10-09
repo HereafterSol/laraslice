@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.5.1] - 2026-10-09
 
 ### Fixed
 - **`slice:install` checks that the front end builds.** It now runs `npm run build` after `npm install`. When npm has skipped a platform package (the npm bug behind "Cannot find native binding" from Vite/rolldown, https://github.com/npm/cli/issues/4828), it says so and how to fix it: delete `node_modules`, run `npm ci`, then `npm run build`. Without a build, the layout falls back to CDN assets in which dropdowns are not positioned.
