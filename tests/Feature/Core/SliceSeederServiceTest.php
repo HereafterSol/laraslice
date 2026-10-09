@@ -5,6 +5,7 @@ namespace LaraSlice\Tests\Feature\Core;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceSeederService;
 use LaraSlice\Tests\TestCase;
 
@@ -90,5 +91,20 @@ class SliceSeederServiceTest extends TestCase
         } catch (\InvalidArgumentException $e) {
             $service->wipeSlice('Users');
         }
+    }
+
+    public function test_select_fields_are_seeded_with_their_option_keys(): void
+    {
+        (new SliceGenerator(config('laraslice.slices_path'), 'App\Slices'))->generate('Deal', [
+            ['name' => 'stage', 'type' => 'select', 'options' => ['new' => 'New', 'won' => 'Won', 'lost' => 'Lost']],
+        ]);
+        app(SliceManager::class)->discover();
+        foreach (glob(config('laraslice.slices_path').'/*/Migrations', GLOB_ONLYDIR) as $dir) {
+            $this->artisan('migrate', ['--path' => $dir, '--realpath' => true])->assertSuccessful();
+        }
+
+        app(SliceSeederService::class)->seedSlice('Deal', 6);
+
+        $this->assertSame([], DB::table('deals')->whereNotIn('stage', ['new', 'won', 'lost'])->pluck('stage')->all());
     }
 }

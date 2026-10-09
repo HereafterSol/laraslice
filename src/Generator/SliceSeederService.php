@@ -274,6 +274,19 @@ class SliceSeederService
             $columnTypes[$column['name']] = $this->seedType($column['type_name'], $column['type']);
         }
 
+        // Select/enum fields declared in slice.json only accept their option keys
+        $fieldOptions = [];
+        $definitions = array_merge(
+            is_array($slice->raw['fields'] ?? null) ? $slice->raw['fields'] : [],
+            is_array($slice->raw['child_fields'][$table] ?? null) ? $slice->raw['child_fields'][$table] : []
+        );
+        foreach ($definitions as $key => $definition) {
+            $column = is_array($definition) ? ($definition['name'] ?? $key) : null;
+            if (is_string($column) && ! empty($definition['options']) && is_array($definition['options'])) {
+                $fieldOptions[$column] = array_keys($definition['options']);
+            }
+        }
+
         $records = [];
         for ($i = 0; $i < $toCreate; $i++) {
             $row = [];
@@ -283,7 +296,9 @@ class SliceSeederService
                 }
 
                 $type = $columnTypes[$col] ?? 'string';
-                $row[$col] = $this->generateFieldValue($col, $type, $table, $i);
+                $row[$col] = isset($fieldOptions[$col])
+                    ? $fieldOptions[$col][$i % count($fieldOptions[$col])]
+                    : $this->generateFieldValue($col, $type, $table, $i);
             }
 
             if (in_array('created_at', $columns, true)) {

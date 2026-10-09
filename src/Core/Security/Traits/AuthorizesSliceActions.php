@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Core\Security\Traits;
 
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Security\Access;
 
@@ -47,5 +48,28 @@ trait AuthorizesSliceActions
             "{$base}.*",
             "{$plural}.*",
         ]));
+    }
+
+    /**
+     * What the signed-in user may do in this slice, for showing only the controls they can use.
+     * The server still checks every action; this only hides buttons that would end in a 403.
+     *
+     * @return array{view: bool, create: bool, edit: bool, delete: bool, seed: bool}
+     */
+    protected function sliceAbilities(): array
+    {
+        $user = auth()->user();
+        $can = fn (string $action) => $user !== null && Access::allows($user, $this->slicePermissionCandidates($action));
+
+        return [
+            'view' => $can('view'),
+            'create' => $can('create'),
+            'edit' => $can('edit'),
+            'delete' => $can('delete'),
+            'seed' => $user !== null
+                && Route::has('laraslice.wizard.seed_slice')
+                && Access::allows($user, 'studio.access')
+                && Access::allows($user, ['system.slices.seed', 'slice.seed', $this->getPermissionBase().'.seed']),
+        ];
     }
 }

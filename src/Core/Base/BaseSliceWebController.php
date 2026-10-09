@@ -47,6 +47,7 @@ abstract class BaseSliceWebController extends Controller
             'routePrefix' => $this->getRoutePrefix(),
             'routeParameters' => $this->routeParameters(),
             'parentId' => request()->route('parentId'),
+            'can' => $this->sliceAbilities(),
         ]);
     }
 

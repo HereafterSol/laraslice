@@ -697,7 +697,7 @@ PHP;
             <p class="text-sm text-muted-foreground mt-0.5">Manage and organize {$pluralName} records with LaraSlice & BlatUI</p>
         </div>
         <div class="flex items-center gap-3">
-            @if(Route::has('laraslice.wizard.seed_slice'))
+            @if((\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))
                 <form action="{{ route('laraslice.wizard.seed_slice') }}" method="POST" class="inline">
                     @csrf
                     <input type="hidden" name="slice" value="{$studlyName}">
@@ -708,10 +708,12 @@ PHP;
                     </x-ui.button>
                 </form>
             @endif
+            @if(\$can['create'] ?? true)
             <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" class="gap-1.5 shadow-sm">
                 <x-lucide-plus class="size-4" />
                 <span>Create {$studlyName}</span>
             </x-ui.button>
+            @endif
         </div>
     </div>
 
@@ -762,10 +764,12 @@ PHP;
                         <p class="text-xs text-muted-foreground mt-0.5">Start by creating your first entry or generate realistic mock data.</p>
                     </div>
                     <div class="flex items-center gap-2 pt-1">
+                        @if(\$can['create'] ?? true)
                         <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" variant="outline" size="sm">
                             Create {$studlyName}
                         </x-ui.button>
-                        @if(Route::has('laraslice.wizard.seed_slice'))
+                        @endif
+                        @if((\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))
                             <form action="{{ route('laraslice.wizard.seed_slice') }}" method="POST" class="inline">
                                 @csrf
                                 <input type="hidden" name="slice" value="{$studlyName}">
@@ -781,9 +785,12 @@ PHP;
             @else
                 <x-ui.data-table :columns="\$columns" :rows="\$rows" :page-size="10" search-placeholder="Filter {$pluralName}...">
                     <x-slot:actions>
+                        @if(\$can['edit'] ?? true)
                         <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
                             <x-lucide-pencil class="size-4" /> Edit
                         </x-ui.button>
+                        @endif
+                        @if(\$can['delete'] ?? true)
                         <form method="POST" :action="item.r.delete_url" class="inline" onsubmit="return confirm('Delete this record?')">
                             @csrf
                             @method('DELETE')
@@ -791,6 +798,7 @@ PHP;
                                 <x-lucide-trash-2 class="size-4" /> Delete
                             </x-ui.button>
                         </form>
+                        @endif
                     </x-slot:actions>
                 </x-ui.data-table>
             @endif

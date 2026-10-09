@@ -365,9 +365,11 @@ PHP;
             <h1 class="text-2xl font-bold tracking-tight text-foreground">{$childPluralLabel}</h1>
             <p class="text-sm text-muted-foreground">{{ \$parentId ? 'Manage {$childPluralLabel} linked with {$parentStudly} #' . \$parentId : 'Manage and organize all {$childPluralLabel}' }}</p>
         </div>
+        @if(\$can['create'] ?? true)
         <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.create') ? route('{$childPluralSnake}.create') : '#') }}" as="a" class="bg-primary text-primary-foreground font-semibold shadow-sm">
             <x-lucide-plus class="mr-2 h-4 w-4" /> Create {$childSingularLabel}
         </x-ui.button>
+        @endif
     </div>
     @php
         \$columns = [
@@ -395,9 +397,11 @@ PHP;
             @endif
             <x-ui.data-table :columns="\$columns" :rows="\$rows" :page-size="10" search-placeholder="Filter {$childPluralLabel}...">
                 <x-slot:actions>
+                    @if(\$can['edit'] ?? true)
                     <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
                         <x-lucide-pencil class="size-4" /> Edit
                     </x-ui.button>
+                    @endif
                 </x-slot:actions>
             </x-ui.data-table>
         @endif

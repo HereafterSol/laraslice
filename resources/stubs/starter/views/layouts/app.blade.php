@@ -103,10 +103,14 @@
                 ], $s['children'] ?? []),
             ];
 
+            // Slice Studio links only for users who may open it
+            $canUseStudio = Route::has('laraslice.wizard') && auth()->check()
+                && \LaraSlice\Core\Security\Access::allows(auth()->user(), 'studio.access');
+
             $workspaceItems = [
                 ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
             ];
-            if (Route::has('laraslice.wizard')) {
+            if ($canUseStudio) {
                 $workspaceItems[] = ['title' => 'Slice Studio', 'icon' => 'wand-2', 'url' => route('laraslice.wizard'), 'isActive' => request()->routeIs('laraslice.wizard*')];
             }
             $navMain = [
@@ -279,7 +283,7 @@
                             </button>
 
                             <!-- Slice Wizard Quick Action -->
-                            @if (Route::has('laraslice.wizard'))
+                            @if ($canUseStudio)
                             <x-ui.button href="{{ route('laraslice.wizard') }}" as="a" size="sm" class="hidden sm:inline-flex gap-1.5 shadow-xs">
                                 <x-lucide-wand-2 class="size-3.5" />
                                 <span>Studio</span>
@@ -313,13 +317,13 @@
                         </x-ui.command-group>
                         <x-ui.command-separator />
                         <x-ui.command-group heading="Quick Actions">
-                            @if (Route::has('laraslice.wizard'))
+                            @if ($canUseStudio)
                             <x-ui.command-item href="{{ route('laraslice.wizard') }}">
                                 <x-lucide-wand-2 class="size-4 mr-2" />
                                 <span>Open Slice Studio & Architecture Wizard</span>
                             </x-ui.command-item>
                             @endif
-                            @if (Route::has('laraslice.wizard.schema_studio'))
+                            @if ($canUseStudio && Route::has('laraslice.wizard.schema_studio'))
                               <x-ui.command-item href="{{ route('laraslice.wizard.schema_studio') }}">
                                   <x-lucide-columns-2 class="size-4 mr-2 text-emerald-400" />
                                   <span>Schema Studio (2-Column Visual Builder)</span>
