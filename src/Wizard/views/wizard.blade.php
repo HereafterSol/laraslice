@@ -581,6 +581,9 @@ function larasliceWizard() {
                 const cType = meta.type || (col.type === 'varchar' ? 'string' : (col.type === 'int' ? 'integer' : col.type)) || 'string';
                 const cLabel = meta.label || (col.name.charAt(0).toUpperCase() + col.name.slice(1).replace(/_/g, ' '));
                 const cNullable = meta.nullable !== undefined ? !!meta.nullable : (col.nullable !== undefined ? !!col.nullable : false);
+                const isHidden = meta.hidden !== undefined ? !!meta.hidden : false;
+                const showInForm = meta.show_in_form !== undefined ? !!meta.show_in_form : !isHidden;
+                const showInList = meta.show_in_list !== undefined ? !!meta.show_in_list : !isHidden;
 
                 fieldsList.push({
                     handle: col.name,
@@ -589,6 +592,9 @@ function larasliceWizard() {
                     width: parseInt(meta.width) || (['text', 'json'].includes(cType) ? 100 : 50),
                     required: !cNullable,
                     nullable: cNullable,
+                    hidden: isHidden,
+                    show_in_form: showInForm,
+                    show_in_list: showInList,
                     length: meta.length !== undefined && meta.length !== null ? String(meta.length) : (cType === 'decimal' ? '10,2' : (cType === 'string' ? '255' : '')),
                     default: meta.default !== undefined && meta.default !== null ? String(meta.default) : '',
                     optionsText: '',
@@ -696,7 +702,19 @@ function larasliceWizard() {
                         default: f.default || null
                     })),
                     deleted_fields: deletedCols,
-                    all_fields: this.studioFields,
+                    all_fields: this.studioFields.map(f => ({
+                        handle: (f.handle || f.name || '').trim(),
+                        label: f.label,
+                        type: f.type,
+                        width: f.width,
+                        required: !!f.required,
+                        nullable: !!f.nullable,
+                        hidden: !!f.hidden,
+                        show_in_form: f.hidden ? false : (f.show_in_form !== undefined ? !!f.show_in_form : true),
+                        show_in_list: f.hidden ? false : (f.show_in_list !== undefined ? !!f.show_in_list : true),
+                        length: f.length || null,
+                        default: f.default || null
+                    })),
                     migrate: true
                 })
             }).then(r => r.json()).then(d => {
@@ -2806,6 +2824,9 @@ function larasliceWizard() {
                                     <th class="w-32 px-2.5 py-2.5 text-center">Width</th>
                                     <th class="w-14 px-2 py-2.5 text-center">Req</th>
                                     <th class="w-14 px-2 py-2.5 text-center">Null</th>
+                                    <th class="w-12 px-2 py-2.5 text-center" title="Show in Create/Edit Form">Form</th>
+                                    <th class="w-12 px-2 py-2.5 text-center" title="Show in Data Table List">Table</th>
+                                    <th class="w-12 px-2 py-2.5 text-center" title="Hide on UI">Hide</th>
                                     <th class="w-32 px-2.5 py-2.5">Length / Options</th>
                                     <th class="w-32 px-2.5 py-2.5">Default Value</th>
                                     <th class="w-12 px-2.5 py-2.5 text-right"></th>
@@ -2864,6 +2885,21 @@ function larasliceWizard() {
                                         <!-- Nullable -->
                                         <td class="px-2 py-2 text-center">
                                             <input type="checkbox" x-model="field.nullable" @change="onStudioNullableToggle(field)" class="rounded border-input text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer" title="Allow NULL values">
+                                        </td>
+                                        <!-- Form Visibility -->
+                                        <td class="px-2 py-2 text-center">
+                                            <input type="checkbox" x-model="field.show_in_form" :disabled="field.hidden" class="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer disabled:opacity-30" title="Show in Create/Edit Form">
+                                        </td>
+                                        <!-- Table Visibility -->
+                                        <td class="px-2 py-2 text-center">
+                                            <input type="checkbox" x-model="field.show_in_list" :disabled="field.hidden" class="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer disabled:opacity-30" title="Show in Data Table Listing">
+                                        </td>
+                                        <!-- Hide on UI toggle -->
+                                        <td class="px-2 py-2 text-center">
+                                            <button type="button" @click="field.hidden = !field.hidden; if(field.hidden){field.show_in_form = false; field.show_in_list = false;}else{field.show_in_form = true; field.show_in_list = true;}" :class="field.hidden ? 'text-rose-500 bg-rose-500/10' : 'text-muted-foreground hover:text-foreground'" class="p-1 rounded transition cursor-pointer" :title="field.hidden ? 'Field is hidden from UI' : 'Click to hide from UI'">
+                                                <svg x-show="!field.hidden" class="size-3.5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                <svg x-show="field.hidden" class="size-3.5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+                                            </button>
                                         </td>
                                         <!-- Length / Options -->
                                         <td class="px-2.5 py-2">

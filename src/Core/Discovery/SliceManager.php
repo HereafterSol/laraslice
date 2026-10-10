@@ -706,22 +706,49 @@ class SliceManager
         }
 
         $norm = strtolower(str_replace([' ', '_', '-'], '', $name));
+        $singNorm = Str::singular($norm);
+        $plurNorm = Str::plural($norm);
 
         foreach ($this->slices as $slice) {
             $sliceNorm = strtolower(str_replace([' ', '_', '-'], '', $slice->name));
-            if ($sliceNorm === $norm) {
+            if ($sliceNorm === $norm || $sliceNorm === $singNorm || $sliceNorm === $plurNorm) {
                 return $slice;
             }
 
-            if (strtolower(basename($slice->path)) === strtolower($name) || strtolower(str_replace([' ', '_', '-'], '', basename($slice->path))) === $norm) {
+            $baseNorm = strtolower(str_replace([' ', '_', '-'], '', basename($slice->path)));
+            if ($baseNorm === $norm || $baseNorm === $singNorm || $baseNorm === $plurNorm) {
                 return $slice;
             }
 
-            if (isset($slice->title) && strtolower(str_replace([' ', '_', '-'], '', $slice->title)) === $norm) {
+            if (isset($slice->title)) {
+                $titleNorm = strtolower(str_replace([' ', '_', '-'], '', $slice->title));
+                if ($titleNorm === $norm || $titleNorm === $singNorm || $titleNorm === $plurNorm) {
+                    return $slice;
+                }
+            }
+
+            if (isset($slice->raw['handle'])) {
+                $handleNorm = strtolower(str_replace([' ', '_', '-'], '', $slice->raw['handle']));
+                if ($handleNorm === $norm || $handleNorm === $singNorm || $handleNorm === $plurNorm) {
+                    return $slice;
+                }
+            }
+
+            // Match by relative domain/slice path (e.g. ECommerce/Orders, ecommerce/orders)
+            $relPathNorm = strtolower(str_replace(['\\', '/', ' ', '_', '-'], '', $slice->path));
+            if (str_contains($relPathNorm, $norm) || str_contains($relPathNorm, $singNorm) || str_contains($relPathNorm, $plurNorm)) {
                 return $slice;
             }
 
-            if (isset($slice->raw['handle']) && strtolower(str_replace([' ', '_', '-'], '', $slice->raw['handle'])) === $norm) {
+            // Match by Model file in slice
+            $studlySing = Str::studly(Str::singular($name));
+            if (file_exists($slice->path.'/Models/'.$studlySing.'.php')) {
+                return $slice;
+            }
+
+            // Match by table name in slice
+            $tableCandidate = Str::snake(Str::plural($name));
+            if (! empty($slice->tables) && in_array($tableCandidate, $slice->tables, true)) {
                 return $slice;
             }
         }

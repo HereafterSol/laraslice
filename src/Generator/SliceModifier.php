@@ -1370,10 +1370,6 @@ REL;
         // 2. Process Deleted Fields
         $validatedDeletedFields = [];
         $protectedColumns = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'];
-        if ($isPrimary) {
-            // The generated model, service and views depend on these
-            $protectedColumns = array_merge($protectedColumns, ['title', 'description', 'status']);
-        }
         if (! empty($deletedFields)) {
             foreach ($deletedFields as $delCol) {
                 $delCol = Str::snake(trim((string) $delCol));
@@ -1499,6 +1495,8 @@ PHP;
                         'required' => ! empty($f['required']),
                         'nullable' => ! empty($f['nullable']),
                         'hidden' => ! empty($f['hidden']),
+                        'show_in_form' => isset($f['show_in_form']) ? (bool) $f['show_in_form'] : empty($f['hidden']),
+                        'show_in_list' => isset($f['show_in_list']) ? (bool) $f['show_in_list'] : empty($f['hidden']),
                         'length' => $f['length'] ?? null,
                         'default' => $f['default'] ?? null,
                         'added_in' => $existingAddedIn ?? $newVersion,

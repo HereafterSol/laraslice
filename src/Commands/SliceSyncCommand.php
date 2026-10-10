@@ -3,127 +3,135 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Symfony\Component\Yaml\Yaml;
+use LaraSlice\Core\Discovery\SliceManager;
 
 /**
- * Bidirectional Schema Drift & Sync Command.
+ * Enterprise Cross-Environment Slice State & Migration Synchronizer.
  *
- * Compares active database columns with app/Slices/{Slice}/slice.yaml,
- * detects schema drift, and non-destructively merges new fields.
+ * Synchronizes declarative slice manifests (slice.json), version histories,
+ * pending database migrations, and cached permissions across environments (Local -> Git -> Staging -> Production).
  */
 class SliceSyncCommand extends Command
 {
     protected $signature = 'slice:sync 
-                            {slice : The name of the vertical slice (e.g. HumanResources)}
-                            {--dry-run : Display detected schema drift without modifying slice.yaml}';
+                            {slice? : The name of the vertical slice (e.g. Orders, Billing/Invoices, or empty for all)}
+                            {--migrate : Automatically run pending slice migrations}
+                            {--dry-run : Inspect pending migrations and manifest status without applying changes}
+                            {--force : Force migration execution in production environments}';
 
-    protected $description = 'Detect database schema drift for a slice and sync new fields into slice.yaml';
+    protected $description = 'Synchronize slice schemas, version history, and migrations across environments (GitOps / CI/CD)';
 
-    public function handle(): int
+    public function handle(SliceManager $manager): int
     {
-        $sliceName = (string) $this->argument('slice');
+        $targetSlice = $this->argument('slice');
+        $runMigrations = (bool) $this->option('migrate');
         $dryRun = (bool) $this->option('dry-run');
+        $force = (bool) $this->option('force');
 
-        $slicesPath = config('laraslice.slices_path', app_path('Slices'));
-        $sliceDir = $slicesPath.'/'.$sliceName;
-        $yamlPath = $sliceDir.'/slice.yaml';
+        $manager->clearCache();
+        $manager->discover();
 
-        if (! File::isDirectory($sliceDir)) {
-            $this->error("Slice '{$sliceName}' not found at: {$sliceDir}");
-
-            return self::FAILURE;
-        }
-
-        if (! File::exists($yamlPath)) {
-            $this->error("No slice.yaml found in {$sliceDir}. Run blueprint generation first.");
-
-            return self::FAILURE;
-        }
-
-        $blueprint = Yaml::parse(File::get($yamlPath));
-        if (! is_array($blueprint) || empty($blueprint['models'])) {
-            $this->error("Invalid or empty slice.yaml format in {$yamlPath}.");
-
-            return self::FAILURE;
-        }
-
-        $this->info("Analyzing schema drift for slice: {$sliceName}...");
-        $driftDetected = false;
-        $totalAdded = 0;
-
-        foreach ($blueprint['models'] as &$model) {
-            $table = $model['table'] ?? ($model['handle'].'s');
-
-            if (! Schema::hasTable($table)) {
-                $this->warn("Table '{$table}' for model '{$model['handle']}' does not exist in database. Skipping.");
-
-                continue;
-            }
-
-            $existingHandles = array_column($model['fields'] ?? [], 'handle');
-            $dbColumns = Schema::getColumns($table);
-            $newFields = [];
-
-            foreach ($dbColumns as $col) {
-                $colName = $col['name'];
-                if (in_array($colName, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
-                    continue;
-                }
-
-                if (! in_array($colName, $existingHandles, true)) {
-                    $typeName = strtolower($col['type_name']);
-                    $type = match (true) {
-                        str_contains($typeName, 'int') && ($col['type'] === 'tinyint(1)' || $typeName === 'bool') => 'boolean',
-                        str_contains($typeName, 'int') => 'integer',
-                        str_contains($typeName, 'text') => 'text',
-                        str_contains($typeName, 'decimal') || str_contains($typeName, 'float') => 'decimal',
-                        str_contains($typeName, 'date') && ! str_contains($typeName, 'time') => 'date',
-                        str_contains($typeName, 'time') || str_contains($typeName, 'timestamp') => 'datetime',
-                        str_contains($typeName, 'json') => 'json',
-                        default => 'string',
-                    };
-
-                    $newFields[] = [
-                        'handle' => $colName,
-                        'label' => Str::headline($colName),
-                        'type' => $type,
-                        'required' => ! $col['nullable'] && ($col['default'] === null),
-                        'default' => $col['default'] ?? null,
-                    ];
-                }
-            }
-
-            if (! empty($newFields)) {
-                $driftDetected = true;
-                $this->warn("Model '{$model['handle']}' has ".count($newFields).' new column(s) in database:');
-                foreach ($newFields as $f) {
-                    $this->line("  + {$f['handle']} ({$f['type']})".($f['required'] ? ' [required]' : ''));
-                    $model['fields'][] = $f;
-                    $totalAdded++;
-                }
-            }
-        }
-        unset($model);
-
-        if (! $driftDetected) {
-            $this->info('✅ In sync! No schema drift detected between database and slice.yaml.');
-
+        $allSlices = $manager->getAllSlices();
+        if (empty($allSlices)) {
+            $this->warn('No vertical slices detected in this application.');
             return self::SUCCESS;
         }
 
+        $slicesToSync = [];
+        if ($targetSlice && strtolower($targetSlice) !== 'all') {
+            $matched = $manager->getSlice($targetSlice);
+            if (! $matched) {
+                $this->error("Slice [{$targetSlice}] not found.");
+                return self::FAILURE;
+            }
+            $slicesToSync = [$matched];
+        } else {
+            $slicesToSync = $allSlices;
+        }
+
+        $this->info("=== LaraSlice Enterprise State & Schema Synchronizer ===");
         if ($dryRun) {
-            $this->info("🔍 Dry run complete. {$totalAdded} drifted column(s) found. Run without --dry-run to sync slice.yaml.");
-
-            return self::SUCCESS;
+            $this->warn('[DRY-RUN MODE] Inspecting manifest versions and pending migrations without executing.');
         }
 
-        File::put($yamlPath, Yaml::dump($blueprint, 6, 2, Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK));
-        $this->info("🎉 Successfully synced {$totalAdded} drifted field(s) into {$yamlPath}!");
-        $this->info('Existing custom PHP code was preserved untouched.');
+        $tableRows = [];
+        $totalMigrated = 0;
 
+        foreach ($slicesToSync as $slice) {
+            $manifestPath = $slice->manifestPath ?? ($slice->path.'/slice.json');
+            $manifestData = [];
+            if (File::exists($manifestPath)) {
+                $manifestData = json_decode(File::get($manifestPath), true) ?: [];
+            } elseif (File::exists($slice->path.'/slice.yaml')) {
+                try {
+                    $manifestData = \Symfony\Component\Yaml\Yaml::parse(File::get($slice->path.'/slice.yaml')) ?: [];
+                } catch (\Throwable $e) {}
+            }
+
+            $version = $manifestData['version'] ?? $slice->version ?? 'v1.0.0';
+            $history = $manifestData['version_history'] ?? [];
+            $latestHistory = ! empty($history) ? end($history) : null;
+            $lastChangeDesc = $latestHistory['description'] ?? 'Initial baseline';
+            if (mb_strlen($lastChangeDesc) > 45) {
+                $lastChangeDesc = mb_substr($lastChangeDesc, 0, 42).'...';
+            }
+
+            // Inspect slice migrations
+            $migrationsDir = $slice->path.'/Migrations';
+            $pendingMigrations = [];
+            if (File::isDirectory($migrationsDir)) {
+                $migrationFiles = File::glob($migrationsDir.'/*_*.php') ?: [];
+                $ranMigrations = Schema::hasTable('migrations')
+                    ? \Illuminate\Support\Facades\DB::table('migrations')->pluck('migration')->toArray()
+                    : [];
+
+                foreach ($migrationFiles as $mFile) {
+                    $mName = basename($mFile, '.php');
+                    if (! in_array($mName, $ranMigrations, true)) {
+                        $pendingMigrations[] = $mName;
+                    }
+                }
+            }
+
+            $migStatus = count($pendingMigrations) > 0
+                ? '<comment>'.count($pendingMigrations).' pending</comment>'
+                : '<info>Up to date</info>';
+
+            // Run pending migrations if requested
+            if (! $dryRun && count($pendingMigrations) > 0 && ($runMigrations || $this->confirm("Run ".count($pendingMigrations)." pending migration(s) for slice [{$slice->name}]?", true))) {
+                $relMigrationPath = Str::after(str_replace('\\', '/', $migrationsDir), str_replace('\\', '/', base_path()).'/');
+                Artisan::call('migrate', [
+                    '--path' => $relMigrationPath,
+                    '--force' => $force || app()->environment('production'),
+                ], $this->output);
+                $totalMigrated += count($pendingMigrations);
+                $migStatus = '<info>Synced ('.count($pendingMigrations).' applied)</info>';
+            }
+
+            $tableRows[] = [
+                $slice->domain ?? 'General',
+                $slice->name,
+                $version,
+                $lastChangeDesc,
+                $migStatus,
+                $slice->active ? '<info>Active</info>' : '<comment>Inactive</comment>',
+            ];
+        }
+
+        $this->table(
+            ['Domain', 'Slice', 'Version', 'Latest Ledger History', 'Migrations', 'Status'],
+            $tableRows
+        );
+
+        // Re-cache slice state
+        $manager->clearCache();
+        $manager->discover();
+
+        $this->info('All slice manifests, permissions, and routes are synchronized with environment.');
         return self::SUCCESS;
     }
 }

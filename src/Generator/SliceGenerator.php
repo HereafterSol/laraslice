@@ -48,6 +48,15 @@ class SliceGenerator
             ? "{$this->namespace}\\{$domainFolder}\\{$pluralName}"
             : "{$this->namespace}\\{$pluralName}";
 
+        $isExplicitFields = ! empty($fields);
+        if (! $isExplicitFields) {
+            $fields = [
+                ['name' => 'title', 'label' => 'Title', 'type' => 'string', 'nullable' => false, 'rules' => ['required', 'string', 'max:255']],
+                ['name' => 'description', 'label' => 'Description', 'type' => 'text', 'nullable' => true, 'rules' => ['nullable', 'string']],
+                ['name' => 'status', 'label' => 'Status', 'type' => 'select', 'nullable' => false, 'default' => 'draft', 'rules' => ['required', 'string', 'in:draft,active,archived']],
+            ];
+        }
+
         $fields = $this->fieldNormalizer->normalize($fields);
         $fieldsByName = [];
         foreach ($fields as $field) {
@@ -56,7 +65,7 @@ class SliceGenerator
 
         $softDeletes = (bool) ($options['soft_deletes'] ?? false);
         $migrationSoftDeletes = $softDeletes ? "\n                \$table->softDeletes();" : '';
-        $encryptedColumns = array_column(array_filter($fields, fn (array $f) => $f['encrypted']), 'name');
+        $encryptedColumns = array_column(array_filter($fields, fn (array $f) => ! empty($f['encrypted'])), 'name');
         $modelCasts = $encryptedColumns === []
             ? ''
             : "\n    protected \$casts = ".var_export(array_fill_keys($encryptedColumns, 'encrypted'), true).';';
@@ -75,113 +84,115 @@ class SliceGenerator
             'nullable' => $field['nullable'],
             'default' => $field['default'],
             'options' => $field['options'] ?? [],
+            'hidden' => ! empty($field['hidden']),
+            'show_in_form' => isset($field['show_in_form']) ? (bool) $field['show_in_form'] : empty($field['hidden']),
+            'show_in_list' => isset($field['show_in_list']) ? (bool) $field['show_in_list'] : empty($field['hidden']),
         ], $fields);
 
-        $fillable = var_export(array_values(array_unique(array_merge(['title', 'description', 'status'], $customColumns))), true);
-        $sortableColumns = implode(', ', array_map(fn (string $column) => var_export($column, true), array_values(array_unique(array_merge(['id', 'title', 'status', 'created_at', 'updated_at'], $customColumns)))));
+        $fillable = var_export(array_values(array_unique($customColumns)), true);
+        $sortableColumns = implode(', ', array_map(fn (string $column) => var_export($column, true), array_values(array_unique(array_merge(['id'], $customColumns, ['created_at', 'updated_at'])))));
 
-        $dtoTitle = $this->fieldNormalizer->dtoProperty('title', $titleField, 'string', '');
-        $dtoDesc = $this->fieldNormalizer->dtoProperty('description', $descriptionField, '?string', null);
-        $dtoStatus = $this->fieldNormalizer->dtoProperty('status', $statusField, 'string', 'draft');
-
-        $dtoProperties = implode("\n", array_map(fn (array $field) => '    '.$this->fieldNormalizer->dtoProperty($field['name'], $field), $extraFields));
-        if ($dtoProperties !== '') {
-            $dtoProperties = "\n".$dtoProperties;
+        // Primary Search & Identity column discovery
+        $searchColumn = 'id';
+        foreach (['title', 'name', 'full_name', 'label', 'code', 'order_number', 'invoice_number', 'reference', 'number', 'email', 'slug'] as $candidate) {
+            if (isset($fieldsByName[$candidate])) {
+                $searchColumn = $candidate;
+                break;
+            }
+        }
+        if ($searchColumn === 'id') {
+            foreach ($fields as $f) {
+                if (in_array($f['type'], ['string', 'text', 'varchar'], true)) {
+                    $searchColumn = $f['name'];
+                    break;
+                }
+            }
         }
 
-        $migrationTitle = $titleField ? $titleField['migration'] : "\$table->string('title');";
-        $migrationDesc = $descriptionField ? $descriptionField['migration'] : "\$table->text('description')->nullable();";
-        $migrationStatus = $statusField ? $statusField['migration'] : "\$table->string('status')->default('draft');";
-        $migrationFields = implode("\n", array_map(fn (array $field) => '                '.$field['migration'], $extraFields));
-        if ($migrationFields !== '') {
-            $migrationFields = "\n".$migrationFields;
+        // DTO properties strictly for defined fields
+        $dtoFormList = [];
+        $dtoListingList = [];
+        foreach ($fields as $f) {
+            $dtoFormList[] = '    '.$this->fieldNormalizer->dtoProperty($f['name'], $f);
+            if (empty($f['hidden']) && ($f['show_in_list'] ?? true)) {
+                $dtoListingList[] = '    '.$this->fieldNormalizer->dtoProperty($f['name'], $f);
+            }
         }
+        $dtoFormBody = implode("\n", array_filter($dtoFormList));
+        $dtoListingBody = implode("\n", array_filter($dtoListingList));
 
-        $titleRulesExport = var_export($titleField['rules'] ?? ['required', 'string', 'max:255'], true);
-        $descRulesExport = var_export($descriptionField['rules'] ?? ['nullable', 'string'], true);
-        $statusRulesExport = var_export($statusField['rules'] ?? ['required', 'string', 'in:draft,active,archived'], true);
-        $validationRules = implode("\n", array_map(fn (array $field) => "            '{$field['name']}' => ".var_export($field['rules'], true).',', $extraFields));
-        if ($validationRules !== '') {
-            $validationRules = "\n".$validationRules;
+        // Migration columns strictly for defined fields
+        $migrationCols = [];
+        foreach ($fields as $f) {
+            $migrationCols[] = '                '.$f['migration'];
         }
+        $migrationBody = implode("\n", $migrationCols);
 
-        $schemaTitle = $titleField ? $titleField['schema'] : "Field::make('title')->label('Title')->required()->autofocus()";
-        $schemaDesc = $descriptionField ? $descriptionField['schema'] : "Field::make('description', 'textarea')->rows(3)";
-        if ($statusField) {
-            $schemaStatus = $statusField['schema'];
-        } else {
-            $schemaStatus = "Field::make('status', 'select')->options([\n                'draft' => 'Draft',\n                'active' => 'Active',\n                'archived' => 'Archived',\n            ])->default('draft')";
+        // Validation rules strictly for defined fields
+        $validationRuleLines = [];
+        foreach ($fields as $f) {
+            $validationRuleLines[] = "            '{$f['name']}' => ".var_export($f['rules'], true).',';
         }
-        $schemaFields = implode("\n", array_map(fn (array $field) => '            '.$field['schema'].',', $extraFields));
-        if ($schemaFields !== '') {
-            $schemaFields = "\n".$schemaFields;
-        }
+        $validationRules = implode("\n", $validationRuleLines);
 
-        $schemaTitleLabel = var_export($titleField['label'] ?? 'Title', true);
-        $schemaStatusLabel = var_export($statusField['label'] ?? 'Status', true);
-        $schemaTableColumns = implode("\n", array_map(fn (array $field) => "            Column::make('{$field['name']}')->label(".var_export($field['label'], true).'),', $extraFields));
-        if ($schemaTableColumns !== '') {
-            $schemaTableColumns = "\n".$schemaTableColumns;
+        // Declarative Schema Form fields
+        $schemaFormList = [];
+        foreach ($fields as $f) {
+            if (empty($f['hidden']) && ($f['show_in_form'] ?? true)) {
+                $schemaFormList[] = '            '.$f['schema'];
+            }
         }
+        $schemaFormBody = implode(",\n", $schemaFormList);
 
-        // Column definitions for the index data-table; SliceModifier appends new fields before the marker
+        // Declarative Schema Table columns
+        $schemaTableList = ["            Column::make('id')->label('ID')->sortable()"];
+        if ($searchColumn !== 'id' && isset($fieldsByName[$searchColumn])) {
+            $schemaTableList[] = "            Column::make('{$searchColumn}')->label(".var_export($fieldsByName[$searchColumn]['label'], true).")->sortable()->searchable()";
+        }
+        if ($statusField && empty($statusField['hidden']) && ($statusField['show_in_list'] ?? true)) {
+            $schemaTableList[] = "            Column::make('status')->label(".var_export($statusField['label'], true).")->badge()";
+        }
+        foreach ($fields as $f) {
+            if ($f['name'] === $searchColumn || $f['name'] === 'status') {
+                continue;
+            }
+            if (! empty($f['hidden']) || (isset($f['show_in_list']) && ! $f['show_in_list'])) {
+                continue;
+            }
+            $schemaTableList[] = "            Column::make('{$f['name']}')->label(".var_export($f['label'], true).')';
+        }
+        $schemaTableList[] = "            Column::make('created_at')->label('Created')->datetime()";
+        $schemaTableBody = implode(",\n", $schemaTableList);
+
+        // Column definitions for the index data-table
         $dataTableColumn = fn (string $key, string $label): string => "            ['key' => ".var_export($key, true).", 'label' => ".var_export($label, true).'],';
-        $dataTableColumns = implode("\n", array_merge(
-            [
-                $dataTableColumn('id', 'ID'),
-                $dataTableColumn('title', $titleField['label'] ?? 'Title'),
-                $dataTableColumn('status', $statusField['label'] ?? 'Status'),
-            ],
-            array_map(fn (array $field) => $dataTableColumn($field['name'], $field['label']), $extraFields)
-        ));
-
-        if ($titleField) {
-            $formTitle = $titleField['form'];
-        } else {
-            $formTitle = <<<'BLADE'
-                <div class="space-y-1.5">
-                    <x-ui.label for="title">Title *</x-ui.label>
-                    <x-ui.input id="title" name="title" value="{{ old('title', $form->title ?? '') }}" placeholder="Enter title..." required autofocus />
-                    @error('title')
-                        <p class="text-xs text-destructive font-medium">{{ $message }}</p>
-                    @enderror
-                </div>
-BLADE;
+        $dtCols = [$dataTableColumn('id', 'ID')];
+        if ($searchColumn !== 'id' && isset($fieldsByName[$searchColumn])) {
+            $dtCols[] = $dataTableColumn($searchColumn, $fieldsByName[$searchColumn]['label']);
         }
-
-        if ($descriptionField) {
-            $formDescription = $descriptionField['form'];
-        } else {
-            $formDescription = <<<'BLADE'
-                <div class="space-y-1.5">
-                    <x-ui.label for="description">Description</x-ui.label>
-                    <x-ui.textarea id="description" name="description" rows="3" placeholder="Enter description...">{{ old('description', $form->description ?? '') }}</x-ui.textarea>
-                    @error('description')
-                        <p class="text-xs text-destructive font-medium">{{ $message }}</p>
-                    @enderror
-                </div>
-BLADE;
+        if ($statusField && empty($statusField['hidden']) && ($statusField['show_in_list'] ?? true)) {
+            $dtCols[] = $dataTableColumn('status', $statusField['label']);
         }
-
-        if ($statusField) {
-            $formStatus = $statusField['form'];
-        } else {
-            $formStatus = <<<'BLADE'
-                <div class="space-y-1.5">
-                    <x-ui.label for="status">Publication Status</x-ui.label>
-                    <select id="status" name="status" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <option value="draft" {{ old('status', $form->status ?? '') === 'draft' ? 'selected' : '' }}>Draft</option>
-                        <option value="active" {{ old('status', $form->status ?? '') === 'active' ? 'selected' : '' }}>Active</option>
-                        <option value="archived" {{ old('status', $form->status ?? '') === 'archived' ? 'selected' : '' }}>Archived</option>
-                    </select>
-                </div>
-BLADE;
+        foreach ($fields as $f) {
+            if ($f['name'] === $searchColumn || $f['name'] === 'status') {
+                continue;
+            }
+            if (! empty($f['hidden']) || (isset($f['show_in_list']) && ! $f['show_in_list'])) {
+                continue;
+            }
+            $dtCols[] = $dataTableColumn($f['name'], $f['label']);
         }
+        $dtCols[] = $dataTableColumn('created_at', 'Created');
+        $dataTableColumns = implode("\n", $dtCols);
 
-        $formFields = implode("\n\n", array_column($extraFields, 'form'));
-        if ($formFields !== '') {
-            $formFields = "\n\n".$formFields;
+        // Form elements for Blade view (only visible fields)
+        $formInputs = [];
+        foreach ($fields as $f) {
+            if (empty($f['hidden']) && ($f['show_in_form'] ?? true)) {
+                $formInputs[] = $f['form'];
+            }
         }
+        $formFields = implode("\n\n", $formInputs);
         $includeApi = (bool) ($options['api'] ?? true);
         $description = isset($options['description']) && is_string($options['description']) && trim($options['description']) !== ''
             ? mb_substr(trim($options['description']), 0, 1000)
@@ -354,9 +365,7 @@ use LaraSlice\\Core\\Base\\BaseFormBusinessObject;
 
 class {$studlyName}FormBusinessObject extends BaseFormBusinessObject
 {
-    {$dtoTitle}
-    {$dtoDesc}
-    {$dtoStatus}{$dtoProperties}
+{$dtoFormBody}
 }
 PHP;
             $this->writeFile($sliceDir."/Contracts/{$studlyName}FormBusinessObject.php", $formDto);
@@ -370,8 +379,7 @@ use LaraSlice\\Core\\Base\\BaseListingBusinessObject;
 
 class {$studlyName}ListingBusinessObject extends BaseListingBusinessObject
 {
-    {$dtoTitle}
-    {$dtoStatus}{$dtoProperties}
+{$dtoListingBody}
 }
 PHP;
             $this->writeFile($sliceDir."/Contracts/{$studlyName}ListingBusinessObject.php", $listingDto);
@@ -659,19 +667,14 @@ class {$studlyName}Schema extends SliceSchema
     public static function form(): array
     {
         return [
-            {$schemaTitle},
-            {$schemaDesc},
-            {$schemaStatus},{$schemaFields}
+{$schemaFormBody}
         ];
     }
 
     public static function table(): array
     {
         return [
-            Column::make('id')->label('ID')->sortable(),
-            Column::make('title')->label({$schemaTitleLabel})->sortable()->searchable(),
-            Column::make('status')->label({$schemaStatusLabel})->badge(),
-            Column::make('created_at')->label('Created')->datetime(),{$schemaTableColumns}
+{$schemaTableBody}
         ];
     }
 }
@@ -702,7 +705,7 @@ PHP;
             @if((\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))
                 <form action="{{ route('laraslice.wizard.seed_slice') }}" method="POST" class="inline">
                     @csrf
-                    <input type="hidden" name="slice" value="{$studlyName}">
+                    <input type="hidden" name="slice" value="{$pluralName}">
                     <input type="hidden" name="count" value="10">
                     <x-ui.button type="submit" variant="outline" class="gap-1.5 shadow-2xs text-amber-500 border-amber-500/30 hover:bg-amber-500/10">
                         <x-lucide-sparkles class="size-3.5" />
@@ -774,7 +777,7 @@ PHP;
                         @if((\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))
                             <form action="{{ route('laraslice.wizard.seed_slice') }}" method="POST" class="inline">
                                 @csrf
-                                <input type="hidden" name="slice" value="{$studlyName}">
+                                <input type="hidden" name="slice" value="{$pluralName}">
                                 <input type="hidden" name="count" value="10">
                                 <x-ui.button type="submit" variant="secondary" size="sm" class="gap-1.5 text-amber-600 dark:text-amber-400">
                                     <x-lucide-sparkles class="size-3.5" />
@@ -847,11 +850,7 @@ BLADE;
                 @csrf
                 @if(!\$isNew) @method('PUT') @endif
 
-{$formTitle}
-
-{$formDescription}
-
-{$formStatus}{$formFields}
+{$formFields}
 
                 <div class="flex items-center justify-end gap-3 pt-4 border-t border-border/50">
                     <x-ui.button href="{{ route('{$pluralSnake}.index') }}" as="a" variant="outline">
