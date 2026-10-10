@@ -20,6 +20,9 @@ use LaraSlice\Commands\BlueprintPlanCommand;
 use LaraSlice\Commands\BlueprintValidateCommand;
 use LaraSlice\Commands\LaraSliceMcpCommand;
 use LaraSlice\Commands\SkillPublishCommand;
+use LaraSlice\Commands\WorkflowExportCommand;
+use LaraSlice\Commands\WorkflowSlaCheckCommand;
+use LaraSlice\Commands\WorkflowTransitionCommand;
 use LaraSlice\Commands\SliceAiCommand;
 use LaraSlice\Commands\SliceCacheCommand;
 use LaraSlice\Commands\SliceClearCommand;
@@ -51,7 +54,7 @@ use TailwindMerge\TailwindMerge;
 class LaraSliceServiceProvider extends ServiceProvider
 {
     /** Package version reported to MCP clients and the AI copilot. Bump with each release. */
-    public const VERSION = '1.5.3';
+    public const VERSION = '1.6.0';
 
     public function register(): void
     {
@@ -149,6 +152,9 @@ class LaraSliceServiceProvider extends ServiceProvider
                 AuditPruneCommand::class,
                 LaraSliceMcpCommand::class,
                 SkillPublishCommand::class,
+                WorkflowTransitionCommand::class,
+                WorkflowSlaCheckCommand::class,
+                WorkflowExportCommand::class,
             ]);
 
             if (config('laraslice.audit.auto_prune')) {

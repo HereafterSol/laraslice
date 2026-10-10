@@ -209,6 +209,29 @@ abstract class BaseSliceWebController extends Controller
         return array_merge($parameters, $extra);
     }
 
+    public function show(string|int $id)
+    {
+        $this->authorizeSlice('view');
+
+        $record = $this->getService()->getItemById($id);
+
+        if (! $record) {
+            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
+        }
+
+        $showView = $this->getViewPrefix().'show';
+        if (view()->exists($showView)) {
+            return view($showView, [
+                'record' => $record,
+                'routePrefix' => $this->getRoutePrefix(),
+                'routeParameters' => $this->routeParameters(),
+                'can' => $this->sliceAbilities(),
+            ]);
+        }
+
+        return $this->edit($id);
+    }
+
     public function edit(string|int $id)
     {
         $this->authorizeSlice('edit');

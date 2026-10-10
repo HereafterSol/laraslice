@@ -119,6 +119,31 @@ class SliceManifest
         return is_dir($path) ? $path : null;
     }
 
+    public function getModelClass(): ?string
+    {
+        $modelsDir = $this->path.'/Models';
+        if (is_dir($modelsDir)) {
+            $files = glob($modelsDir.'/*.php');
+            if (! empty($files)) {
+                $base = basename($files[0], '.php');
+                $cleanDomain = $this->domain ? str_replace([' ', '-'], '', $this->domain) : null;
+                $candidates = [
+                    $this->namespace ? $this->namespace.'\\Models\\'.$base : null,
+                    $cleanDomain ? 'App\\Slices\\'.$cleanDomain.'\\'.$this->name.'\\Models\\'.$base : null,
+                    'App\\Slices\\'.$this->name.'\\Models\\'.$base,
+                    'App\\Models\\'.$base,
+                ];
+                foreach (array_filter($candidates) as $c) {
+                    if (class_exists($c)) {
+                        return $c;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function getControllersPath(): ?string
     {
         $path = $this->path.'/Controllers';

@@ -1,0 +1,39 @@
+{
+    "name": "Workflows",
+    "title": "Workflow & State Machine Engine",
+    "version": "1.0.0",
+    "description": "Core Slice: Enterprise Workflow & State Machine Engine, dynamic multi-department role routing, multi-tier approvals, SLA escalations, and visual pipeline designer",
+    "author": "LaraSlice Core",
+    "icon": "git-merge",
+    "active": true,
+    "core": true,
+    "navigation": {
+        "label": "Workflow Engine",
+        "route": "workflows.index",
+        "icon": "git-merge",
+        "order": 35,
+        "children": [
+            {
+                "label": "All Workflows",
+                "route": "workflows.index",
+                "icon": "git-merge"
+            },
+            {
+                "label": "Approvals Inbox",
+                "route": "workflows.inbox",
+                "icon": "inbox"
+            },
+            {
+                "label": "Global Audit Logs",
+                "route": "workflows.logs",
+                "icon": "file-text"
+            }
+        ]
+    },
+    "permissions": [
+        "workflows.view",
+        "workflows.manage",
+        "workflows.transition",
+        "workflows.sla"
+    ]
+}

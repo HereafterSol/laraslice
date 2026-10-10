@@ -112,6 +112,18 @@ class SliceSyncCommand extends Command
                 $migStatus = '<info>Synced ('.count($pendingMigrations).' applied)</info>';
             }
 
+                        // Sync declarative workflow if defined in slice.json
+            if (! empty($manifestData['workflow']) && (is_array($manifestData['workflow']) || $manifestData['workflow'] === true)) {
+                try {
+                    $wfConfig = is_array($manifestData['workflow']) ? $manifestData['workflow'] : [];
+                    app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)->syncWorkflowFromManifest(
+                        $wfConfig,
+                        $slice->name,
+                        $slice->getModelClass()
+                    );
+                } catch (\Throwable) {}
+            }
+
             $tableRows[] = [
                 $slice->domain ?? 'General',
                 $slice->name,

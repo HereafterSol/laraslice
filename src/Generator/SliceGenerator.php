@@ -126,6 +126,15 @@ class SliceGenerator
         foreach ($fields as $f) {
             $migrationCols[] = '                '.$f['migration'];
         }
+        if ($includeWorkflow) {
+            if (! in_array('status', $customColumns, true)) {
+                $migrationCols[] = "                \\\->string('status', 50)->default('draft')->index();";
+            }
+            $migrationCols[] = "                \\\->unsignedBigInteger('assigned_to_user_id')->nullable()->index();";
+            $migrationCols[] = "                \\\->string('assigned_to_role', 100)->nullable();";
+            $migrationCols[] = "                \\\->string('assigned_to_department', 100)->nullable();";
+            $migrationCols[] = "                \\\->timestamp('workflow_state_entered_at')->nullable();";
+        }
         $migrationBody = implode("\n", $migrationCols);
 
         // Validation rules strictly for defined fields
@@ -234,7 +243,47 @@ class SliceGenerator
                 'description' => $description,
                 'author' => $author,
                 'active' => true,
-                'workflow' => $includeWorkflow,
+                'workflow' => $includeWorkflow ? [
+                    'enabled' => true,
+                    'slug' => $pluralSnake,
+                    'name' => "{\$studlyName} Workflow",
+                    'state_field' => 'status',
+                    'initial_state' => 'draft',
+                    'states' => [
+                        ['slug' => 'draft', 'label' => 'Draft', 'color' => 'slate', 'icon' => 'file-text', 'initial' => true],
+                        ['slug' => 'under_review', 'label' => 'Under Review', 'color' => 'amber', 'icon' => 'clock', 'sla_hours' => 24],
+                        ['slug' => 'approved', 'label' => 'Approved', 'color' => 'emerald', 'icon' => 'check-circle'],
+                        ['slug' => 'rejected', 'label' => 'Rejected', 'color' => 'rose', 'icon' => 'x-circle', 'terminal' => true],
+                    ],
+                    'transitions' => [
+                        [
+                            'slug' => 'submit',
+                            'name' => 'Submit for Review',
+                            'from' => ['draft'],
+                            'to' => 'under_review',
+                            'color' => 'primary',
+                            'routing' => ['type' => 'hierarchy_manager', 'notify' => true],
+                        ],
+                        [
+                            'slug' => 'approve',
+                            'name' => 'Approve',
+                            'from' => ['under_review'],
+                            'to' => 'approved',
+                            'permission' => "{\$snakeName}.edit",
+                            'requires_remarks' => true,
+                            'color' => 'success',
+                        ],
+                        [
+                            'slug' => 'reject',
+                            'name' => 'Reject back to Draft',
+                            'from' => ['under_review'],
+                            'to' => 'draft',
+                            'permission' => "{\$snakeName}.edit",
+                            'requires_remarks' => true,
+                            'color' => 'danger',
+                        ],
+                    ],
+                ] : false,
                 'fields' => ManifestRepository::fieldMap($manifestFields),
                 'permissions' => ! empty($options['permissions']) && is_array($options['permissions'])
                     ? $options['permissions']
@@ -868,6 +917,55 @@ BLADE;
             $this->writeFile($sliceDir.'/Resources/views/form.blade.php', $bladeForm);
             $this->writeFile($sliceDir.'/Resources/views/create.blade.php', $bladeForm);
             $this->writeFile($sliceDir.'/Resources/views/edit.blade.php', $bladeForm);
+
+            if ($includeWorkflow) {
+                $showView = <<<BLADE
+@extends('layouts.app')
+
+@section('content')
+<div class="w-full max-w-5xl mx-auto space-y-6">
+    <div class="flex items-center justify-between pb-2 border-b border-border/40">
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <a href="{{ route('{\$pluralSnake}.index') }}" class="hover:text-primary transition-colors">{\$pluralName}</a>
+            <span>/</span>
+            <span class="text-foreground font-medium">{{ \\\->title ?? '{\$studlyName} #' . \\\->id }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <x-ui.button href="{{ route('{\$pluralSnake}.edit', \\\->id) }}" as="a" variant="outline" size="sm">
+                Edit Record
+            </x-ui.button>
+        </div>
+    </div>
+
+    <!-- Stepper & Action Tray -->
+    <x-workflows::stepper :model="\\\" />
+    <x-workflows::action-tray :model="\\\" />
+
+    <!-- Details Card -->
+    <x-ui.card class="p-6">
+        <h3 class="text-base font-bold text-foreground mb-4">Record Details</h3>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <div>
+                <dt class="text-xs text-muted-foreground font-medium">Status</dt>
+                <dd class="font-bold text-foreground">{{ \\\->status ?? 'draft' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs text-muted-foreground font-medium">Assigned Department</dt>
+                <dd class="text-foreground">{{ \\\->assigned_to_department ?? 'None' }}</dd>
+            </div>
+        </dl>
+    </x-ui.card>
+
+    <!-- Timeline Audit History -->
+    <x-workflows::timeline :model="\\\" />
+
+    <!-- Forward Modal Dialog -->
+    <x-workflows::forward-modal />
+</div>
+@endsection
+BLADE;
+                $this->writeFile($sliceDir.'/Resources/views/show.blade.php', $showView);
+            }
 
             $renamed = false;
             if (! file_exists($targetDir) && ! is_link($targetDir)) {
