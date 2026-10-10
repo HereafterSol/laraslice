@@ -790,7 +790,7 @@ function larasliceWizard() {
             });
         },
 
-        rollbackVersion(hist) {
+        rollbackVersion(hist, hIdx) {
             if (!confirm(`Are you sure you want to rollback / restore '${this.selectedSlice.name}' to version ${hist.version}?`)) {
                 return;
             }
@@ -804,7 +804,9 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
-                    target_version: hist.version
+                    target_version: hist.version,
+                    target_index: (typeof hIdx === 'number') ? hIdx : null,
+                    target_date: hist.date || null
                 })
             }).then(r => r.json()).then(d => {
                 this.isRollingBack = false;
@@ -3295,7 +3297,7 @@ function larasliceWizard() {
 
                                 <div class="flex items-center gap-2 shrink-0">
                                     <button type="button"
-                                            @click="rollbackVersion(hist)"
+                                            @click="rollbackVersion(hist, hIdx)"
                                             :disabled="isRollingBack"
                                             class="px-3 py-1.5 bg-background hover:bg-rose-500/10 text-muted-foreground hover:text-rose-400 border border-border hover:border-rose-500/30 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-40"
                                             :title="'Restore slice to version ' + hist.version">

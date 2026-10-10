@@ -512,11 +512,18 @@ class WizardController extends Controller
         $validated = $request->validate([
             'slice' => 'required|string',
             'target_version' => 'required|string',
+            'target_index' => 'nullable|integer',
+            'target_date' => 'nullable|string',
         ]);
 
         try {
             $modifier = new SliceModifier;
-            $result = $modifier->rollbackVersion($validated['slice'], $validated['target_version']);
+            $result = $modifier->rollbackVersion(
+                $validated['slice'],
+                $validated['target_version'],
+                $validated['target_index'] ?? null,
+                $validated['target_date'] ?? null
+            );
 
             return response()->json($result);
         } catch (\Throwable $e) {

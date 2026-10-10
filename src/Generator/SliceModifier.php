@@ -578,6 +578,9 @@ PHP;
 
         $manifest = ManifestRepository::read($manifestFile);
         $current = $manifest['navigation'] ?? [];
+        $currentPermissions = $manifest['permissions'] ?? [];
+        $previousConfig = $current;
+
         $newUrl = ! empty($navConfig['url']) ? '/'.ltrim($navConfig['url'], '/') : ('/'.Str::snake($pluralName));
         $cleanPrefix = ltrim($newUrl, '/');
 
@@ -602,14 +605,57 @@ PHP;
             $changes[] = "Route URL changed from '{$oldUrl}' to '{$newUrl}'";
         }
         $oldTitle = $current['title'] ?? $current['label'] ?? $manifest['title'] ?? $sliceName;
-        if (! empty($navConfig['title']) && $navConfig['title'] !== $oldTitle) {
-            $changes[] = "Menu title changed to '{$navConfig['title']}'";
+        $newTitle = $navConfig['title'] ?? $navConfig['label'] ?? null;
+        if (! empty($newTitle) && $newTitle !== $oldTitle) {
+            $changes[] = "Menu title changed to '{$newTitle}'";
         }
-        if (! empty($navConfig['icon']) && $navConfig['icon'] !== ($current['icon'] ?? '')) {
-            $changes[] = "Icon changed to '{$navConfig['icon']}'";
+        $newIcon = $navConfig['icon'] ?? null;
+        if (! empty($newIcon) && $newIcon !== ($current['icon'] ?? '')) {
+            $changes[] = "Icon changed to '{$newIcon}'";
         }
         if (isset($navConfig['order']) && (int) $navConfig['order'] !== (int) ($current['order'] ?? 10)) {
             $changes[] = "Menu order set to {$navConfig['order']}";
+        }
+        $oldGroup = $current['group'] ?? $manifest['domain'] ?? '';
+        $newGroup = $navConfig['group'] ?? '';
+        if ($newGroup !== '' && $newGroup !== $oldGroup) {
+            $changes[] = "Group changed to '{$newGroup}'";
+        }
+        $oldPermGate = $current['permission'] ?? '';
+        $newPermGate = $navConfig['permission'] ?? '';
+        if ($newPermGate !== '' && $newPermGate !== $oldPermGate) {
+            $changes[] = "Navigation gate set to '{$newPermGate}'";
+        }
+
+        // Child submenu links
+        $oldChildren = $current['children'] ?? [];
+        $newChildren = isset($navConfig['children']) && is_array($navConfig['children'])
+            ? array_values(array_map(function ($c) {
+                $u = trim((string) ($c['url'] ?? $c['route'] ?? ''));
+                $item = [
+                    'label' => $c['label'] ?? $c['title'] ?? '',
+                    'url' => $u,
+                    'route' => $u,
+                ];
+                if (! empty($c['icon'])) {
+                    $item['icon'] = $c['icon'];
+                }
+                return $item;
+            }, array_filter($navConfig['children'], fn ($c) => is_array($c) && ! empty($c['label']))))
+            : ($current['children'] ?? []);
+
+        if (json_encode($oldChildren) !== json_encode($newChildren)) {
+            $changes[] = 'Submenu child links updated ('.count($newChildren).' item(s))';
+        }
+
+        // Slice declared permissions / capabilities
+        $oldPerms = $manifest['permissions'] ?? [];
+        $newPerms = isset($navConfig['permissions']) && is_array($navConfig['permissions'])
+            ? array_values(array_unique(array_filter($navConfig['permissions'])))
+            : $oldPerms;
+        if ($oldPerms !== $newPerms) {
+            $changes[] = 'Slice capabilities updated: '.implode(', ', $newPerms);
+            $manifest['permissions'] = $newPerms;
         }
 
         $defaultTitle = Str::title(Str::snake($pluralName, ' '));
@@ -622,26 +668,8 @@ PHP;
             'permission' => $navConfig['permission'] ?? $current['permission'] ?? null,
             'url' => $newUrl,
             'group' => $navConfig['group'] ?? $current['group'] ?? $manifest['domain'] ?? null,
-            // Sub-menu entries are kept unless new ones are supplied
-            'children' => isset($navConfig['children']) && is_array($navConfig['children'])
-                ? array_values(array_map(function ($c) {
-                    $u = trim((string) ($c['url'] ?? $c['route'] ?? ''));
-                    $item = [
-                        'label' => $c['label'] ?? $c['title'] ?? '',
-                        'url' => $u,
-                        'route' => $u,
-                    ];
-                    if (! empty($c['icon'])) {
-                        $item['icon'] = $c['icon'];
-                    }
-                    return $item;
-                }, array_filter($navConfig['children'], fn ($c) => is_array($c) && ! empty($c['label']))))
-                : ($current['children'] ?? null),
+            'children' => $newChildren,
         ], fn ($value) => $value !== null);
-
-        if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
-            $manifest['permissions'] = array_values(array_unique(array_filter($navConfig['permissions'])));
-        }
 
         if (! empty($changes)) {
             $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
@@ -653,6 +681,8 @@ PHP;
                 'description' => implode('; ', $changes),
                 'author' => $navConfig['author'] ?? 'Developer via Navigation Studio',
                 'date' => date('Y-m-d H:i:s'),
+                'previous_config' => $previousConfig,
+                'snapshot' => $this->buildSnapshot($manifest, $newVersion),
             ];
         }
 
@@ -691,6 +721,38 @@ PHP;
      * Every route group keeps its name, so route() calls and route:cache keep working; the
      * slug redirects follow the new URL, and a single marked 301 sends the old URL to the new one.
      */
+    
+    public function buildSnapshot(array $manifest, ?string $version = null): array
+    {
+        return [
+            'version' => $version ?? $manifest['version'] ?? '1.0.0',
+            'title' => $manifest['title'] ?? null,
+            'description' => $manifest['description'] ?? null,
+            'domain' => $manifest['domain'] ?? null,
+            'navigation' => $manifest['navigation'] ?? [],
+            'permissions' => $manifest['permissions'] ?? [],
+            'fields' => $manifest['fields'] ?? [],
+            'child_fields' => $manifest['child_fields'] ?? [],
+            'relations' => $manifest['relations'] ?? [],
+        ];
+    }
+
+    protected function revertRoutePrefix(string $sliceDir, string $oldUrl, string $newUrl): void
+    {
+        $webRouteFile = $sliceDir.'/Routes/web.php';
+        if (! file_exists($webRouteFile)) {
+            return;
+        }
+        $cleanOld = trim($oldUrl, '/');
+        $cleanNew = trim($newUrl, '/');
+        if ($cleanOld !== $cleanNew && self::isSafeRoutePrefix($cleanNew)) {
+            $routeContent = file_get_contents($webRouteFile);
+            if (preg_match('/Route::prefix\(\s*([\'"])'.preg_quote($cleanOld, '/').'\1\s*\)/', $routeContent)) {
+                $newRouteContent = $this->moveRoutePrefix($routeContent, $cleanOld, $cleanNew, false);
+                file_put_contents($webRouteFile, $newRouteContent, LOCK_EX);
+            }
+        }
+    }
     protected function moveRoutePrefix(string $content, string $oldPrefix, string $newPrefix, bool $redirectOld): string
     {
         $groupPattern = '/Route::prefix\(\s*([\'"])'.preg_quote($oldPrefix, '/').'\1\s*\)/';
@@ -1181,7 +1243,7 @@ REL;
     /**
      * Rollback a version or restore to a specific target version in slice history.
      */
-    public function rollbackVersion(string $sliceName, string $targetVersion): array
+    public function rollbackVersion(string $sliceName, string $targetVersion, ?int $targetIndex = null, ?string $targetDate = null): array
     {
         $studlyName = SliceName::canonical($sliceName);
         $pluralName = Str::plural($studlyName);
@@ -1203,33 +1265,60 @@ REL;
             throw new \RuntimeException("No version history available to rollback for [{$sliceName}].");
         }
 
-        // If target version matches current version, target becomes the entry right before it
-        $currentVersion = $manifest['version'] ?? '1.0.0';
-        if ($targetVersion === $currentVersion && count($history) > 1) {
-            $targetVersion = $history[count($history) - 2]['version'];
-        }
-
-        // Find items to undo (any items strictly after the target version)
-        $targetFound = false;
-        $undoneItems = [];
-        $keptHistory = [];
-
-        foreach ($history as $h) {
-            if (! $targetFound) {
-                $keptHistory[] = $h;
-                if ($h['version'] === $targetVersion) {
-                    $targetFound = true;
-                }
+        $targetFoundIndex = null;
+        if ($targetIndex !== null && isset($history[$targetIndex])) {
+            if ($targetIndex === count($history) - 1) {
+                // Clicking 'Undo This Change' on the latest entry reverts to the previous entry
+                $targetFoundIndex = $targetIndex - 1;
             } else {
-                $undoneItems[] = $h;
+                // Clicking 'Restore to this Version' on a specific historical entry
+                $targetFoundIndex = $targetIndex;
+            }
+        } elseif (! empty($targetDate)) {
+            foreach ($history as $idx => $h) {
+                if (($h['date'] ?? '') === $targetDate) {
+                    $targetFoundIndex = $idx;
+                    break;
+                }
             }
         }
 
-        // If target not found in linear order, undo the latest item
-        if (! $targetFound) {
-            $undoneItems = [array_pop($history)];
-            $keptHistory = $history;
-            $targetVersion = ! empty($keptHistory) ? end($keptHistory)['version'] : '1.0.0';
+        if ($targetFoundIndex === null) {
+            $currentVersion = $manifest['version'] ?? '1.0.0';
+            if ($targetVersion === $currentVersion && count($history) > 1) {
+                $targetFoundIndex = count($history) - 2;
+            } else {
+                foreach ($history as $idx => $h) {
+                    if ($h['version'] === $targetVersion && ($h['type'] ?? '') !== 'rollback') {
+                        $targetFoundIndex = $idx;
+                        break;
+                    }
+                }
+                if ($targetFoundIndex === null) {
+                    foreach ($history as $idx => $h) {
+                        if ($h['version'] === $targetVersion) {
+                            $targetFoundIndex = $idx;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($targetFoundIndex === null) {
+            $targetFoundIndex = count($history) - 2;
+        }
+
+        if ($targetFoundIndex < 0) {
+            $keptHistory = [];
+            $undoneItems = $history;
+            $targetEntry = null;
+            $targetVersion = '1.0.0';
+        } else {
+            $keptHistory = array_slice($history, 0, $targetFoundIndex + 1);
+            $undoneItems = array_slice($history, $targetFoundIndex + 1);
+            $targetEntry = $history[$targetFoundIndex] ?? null;
+            $targetVersion = $targetEntry['version'] ?? $targetVersion;
         }
 
         // Execute rollback for undone items (in reverse)
@@ -1237,7 +1326,6 @@ REL;
         foreach (array_reverse($undoneItems) as $item) {
             // 1. Revert migration if exists
             if (! empty($item['migration'])) {
-                // The name comes from slice.json; only plain migration file names inside Migrations/
                 if (! is_string($item['migration']) || ! preg_match('/^[A-Za-z0-9_]+\.php$/', $item['migration'])) {
                     throw new \RuntimeException('Version history names an invalid migration file; nothing was rolled back.');
                 }
@@ -1254,7 +1342,6 @@ REL;
                             DB::table('migrations')->where('migration', $migrationName)->delete();
                         }
                     } catch (\Throwable $e) {
-                        // Stop here: the manifest must not claim a version the database is not at
                         $done = $revertedMigrations === [] ? 'nothing was reverted' : 'already reverted: '.implode(', ', $revertedMigrations);
                         throw new \RuntimeException("Rolling back {$item['migration']} failed ({$done}): ".$e->getMessage(), 0, $e);
                     }
@@ -1279,13 +1366,69 @@ REL;
                 }
             }
 
-            // 2. Revert navigation / route if it was a navigation update
-            if (($item['type'] ?? '') === 'navigation_update' || str_contains($item['description'] ?? '', 'Route URL changed')) {
-                if (! empty($item['previous_config'])) {
-                    $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $item['previous_config']);
-                } elseif (preg_match("/Route URL changed from '([^']+)' to '([^']+)'/", $item['description'] ?? '', $rMatches)) {
-                    $manifest['navigation']['url'] = $rMatches[1];
+            // 2. Revert navigation / route if previous_config is present
+            if (! empty($item['previous_config']) && is_array($item['previous_config'])) {
+                $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $item['previous_config']);
+            }
+        }
+
+        // Restore target state
+        if ($targetEntry && ! empty($targetEntry['snapshot'])) {
+            $snapshot = $targetEntry['snapshot'];
+            if (! empty($snapshot['navigation']) && is_array($snapshot['navigation'])) {
+                $oldUrl = $manifest['navigation']['url'] ?? '';
+                $newUrl = $snapshot['navigation']['url'] ?? '';
+                if ($oldUrl && $newUrl && $oldUrl !== $newUrl) {
+                    $this->revertRoutePrefix($sliceDir, $oldUrl, $newUrl);
                 }
+                $manifest['navigation'] = $snapshot['navigation'];
+            }
+            if (isset($snapshot['permissions']) && is_array($snapshot['permissions'])) {
+                $manifest['permissions'] = $snapshot['permissions'];
+            }
+            if (isset($snapshot['fields']) && is_array($snapshot['fields'])) {
+                $manifest['fields'] = $snapshot['fields'];
+            }
+            if (isset($snapshot['child_fields']) && is_array($snapshot['child_fields'])) {
+                $manifest['child_fields'] = $snapshot['child_fields'];
+            }
+            if (isset($snapshot['relations']) && is_array($snapshot['relations'])) {
+                $manifest['relations'] = $snapshot['relations'];
+            }
+        } else {
+            // Legacy entry fallback: reconstruct from recorded descriptions
+            if ($targetEntry !== null) {
+                $desc = $targetEntry['description'] ?? '';
+                if (preg_match("/Icon changed to '([^']+)'/", $desc, $m)) {
+                    $manifest['navigation']['icon'] = $m[1];
+                }
+                if (preg_match("/Menu order set to (\d+)/", $desc, $m)) {
+                    $manifest['navigation']['order'] = (int) $m[1];
+                }
+                if (preg_match("/Menu title changed to '([^']+)'/", $desc, $m)) {
+                    $manifest['navigation']['title'] = $m[1];
+                    $manifest['navigation']['label'] = $m[1];
+                }
+                if (preg_match("/Group changed to '([^']+)'/", $desc, $m)) {
+                    $manifest['navigation']['group'] = $m[1];
+                }
+                if (preg_match("/Navigation gate set to '([^']+)'/", $desc, $m)) {
+                    $manifest['navigation']['permission'] = $m[1];
+                }
+                if (preg_match("/Route URL changed from '([^']+)' to '([^']+)'/", $desc, $m)) {
+                    $oldUrl = $manifest['navigation']['url'] ?? '';
+                    $manifest['navigation']['url'] = $m[2];
+                    $this->revertRoutePrefix($sliceDir, $oldUrl, $m[2]);
+                }
+                // Clear child submenu items if target version did not declare them
+                if (! str_contains($desc, 'Submenu') && ! str_contains($desc, 'children')) {
+                    $manifest['navigation']['children'] = [];
+                }
+            } else {
+                // Baseline v1.0.0 defaults
+                $manifest['navigation']['icon'] = 'cube';
+                $manifest['navigation']['order'] = 10;
+                $manifest['navigation']['children'] = [];
             }
         }
 
@@ -1293,9 +1436,10 @@ REL;
         $keptHistory[] = [
             'version' => $targetVersion,
             'type' => 'rollback',
-            'description' => "Restored slice to v{$targetVersion} (undid ".count($undoneItems).' modification(s))',
+            'description' => "Restored slice to v{$targetVersion}".(count($undoneItems) > 0 ? ' (undid '.count($undoneItems).' modification(s))' : ''),
             'author' => 'Developer via Version History',
             'date' => date('Y-m-d H:i:s'),
+            'snapshot' => $this->buildSnapshot($manifest, $targetVersion),
         ];
 
         $manifest['version'] = $targetVersion;
@@ -1314,6 +1458,14 @@ REL;
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
         } catch (\Throwable $e) {}
+
+        if (isset($manifest['permissions']) && is_array($manifest['permissions'])) {
+            try {
+                app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return [
             'success' => true,
