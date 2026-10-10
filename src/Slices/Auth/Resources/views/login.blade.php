@@ -3,11 +3,11 @@
 <head>
     @include('auth::partials.head', ['title' => 'Sign In - LaraSlice Core'])
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-6 relative overflow-y-auto">
     <!-- Ambient Background Glow -->
     <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-indigo-600/20 via-violet-600/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
 
-    <div class="w-full max-w-md relative z-10" x-data="{ passkeyLoading: false, passkeyError: '' }">
+    <div class="w-full max-w-md relative z-10 my-auto" x-data="{ passkeyLoading: false, passkeyError: '' }">
         <!-- Brand Logo Header -->
         <div class="text-center mb-8">
             <div class="inline-flex w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 items-center justify-center shadow-xl shadow-indigo-500/25 mb-4">

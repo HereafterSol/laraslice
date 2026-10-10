@@ -3,7 +3,7 @@
 <head>
     @include('auth::partials.head', ['title' => 'Two-Factor Device Enrollment - LaraSlice'])
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-6 relative overflow-hidden"
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-6 relative overflow-y-auto"
       x-data="{
           activeTab: '{{ ($preferredMethod ?? 'webauthn') === 'webauthn' ? 'passkey' : 'totp' }}',
           passkeyLoading: false,

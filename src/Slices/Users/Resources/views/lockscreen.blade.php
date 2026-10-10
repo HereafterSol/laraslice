@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="min-h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,7 +18,7 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="h-full bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden text-slate-100"
+<body class="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-y-auto text-slate-100"
       x-data="lockscreenState()">
     <!-- Ambient Backdrop Effects (LaraSlice Purple / Indigo) -->
     <div class="absolute -top-40 -left-40 w-96 h-96 bg-purple-600/20 rounded-full blur-[128px] pointer-events-none"></div>
@@ -53,7 +53,7 @@
         }
     @endphp
 
-    <div class="relative w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-black/80 flex flex-col items-center text-center">
+    <div class="relative w-full max-w-md my-auto bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-black/80 flex flex-col items-center text-center">
         <!-- Logo / Brand Badge -->
         <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-950/60 border border-purple-800/60 text-purple-400 text-xs font-semibold uppercase tracking-wider mb-6">
             <x-lucide-shield-alert class="size-3.5" />

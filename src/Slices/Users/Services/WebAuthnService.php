@@ -139,20 +139,27 @@ class WebAuthnService
         $webauthn = $this->getWebAuthnInstance();
         $challenge = new ByteBuffer($this->b64decode($challengeB64));
 
+        // Passkeys (multi-device credentials like Windows Hello, Apple Keychain, 1Password)
+        // do not maintain monotonic counters across devices/platforms and emit signCount = 0.
+        // Enforce counter only if explicitly configured for dedicated single-device hardware tokens (e.g. YubiKey).
+        $prevCounter = config('laraslice.auth.passkey_enforce_signature_counter', false) && (int) $passkey->sign_count > 0
+            ? (int) $passkey->sign_count
+            : null;
+
         $webauthn->processGet(
             $this->b64decode($clientDataJSON),
             $this->b64decode($authenticatorData),
             $this->b64decode($signature),
             $passkey->public_key,
             $challenge,
-            (int) $passkey->sign_count,
+            $prevCounter,
             (bool) config('laraslice.auth.passkey_require_user_verification', false),
             true
         );
 
         $counter = $webauthn->getSignatureCounter();
         $passkey->update([
-            'sign_count' => is_int($counter) ? $counter : $passkey->sign_count + 1,
+            'sign_count' => is_int($counter) && $counter > 0 ? $counter : 0,
             'last_used_at' => now(),
         ]);
 
