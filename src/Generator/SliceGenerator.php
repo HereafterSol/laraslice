@@ -435,15 +435,13 @@ class {$studlyName}SliceService extends BaseSliceService
 
     protected function applySearch(Builder \$query, string \$search): void
     {
-        \$query->where('title', 'LIKE', "%\$search%");
+        \$query->where('{$searchColumn}', 'LIKE', "%\$search%");
     }
 
     protected function validate(IBusinessObject \$form): void
     {
         Validator::make(\$form->toArray(), [
-            'title' => {$titleRulesExport},
-            'description' => {$descRulesExport},
-            'status' => {$statusRulesExport},{$validationRules}
+{$validationRules}
         ])->validate();
     }
 }
@@ -635,9 +633,7 @@ return new class extends Migration {
     {
         Schema::create('{$tableName}', function (Blueprint \$table) {
                 \$table->id();
-                {$migrationTitle}
-                {$migrationDesc}
-                {$migrationStatus}{$migrationFields}
+{$migrationBody}
                 \$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
                 \$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
                 \$table->timestamps();{$migrationSoftDeletes}
