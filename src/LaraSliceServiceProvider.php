@@ -51,7 +51,7 @@ use TailwindMerge\TailwindMerge;
 class LaraSliceServiceProvider extends ServiceProvider
 {
     /** Package version reported to MCP clients and the AI copilot. Bump with each release. */
-    public const VERSION = '1.5.2';
+    public const VERSION = '1.5.3';
 
     public function register(): void
     {

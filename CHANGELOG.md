@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.3] - 2026-10-10
+
+### Fixed
+- **WebAuthn Passkey signature counter validation**: Platform authenticators and synced passkeys (Windows Hello, Touch ID, Face ID, Apple Keychain, 1Password) do not increment monotonic signature counters across devices and emit `signCount = 0`. Previously, `WebAuthnService` artificially incremented `sign_count` on the first sign-in, causing subsequent sign-in or lockscreen unlock attempts to fail with `signature counter not valid` or `Passkey verification failed`. LaraSlice now aligns with W3C WebAuthn / FIDO2 standards by skipping counter comparison for passkeys unless explicitly enabled (`LARASLICE_PASSKEY_ENFORCE_SIGNATURE_COUNTER=true`) for dedicated hardware tokens (e.g. YubiKey).
+- **Full-screen Auth & Lockscreen scrollbar support**: Resolved an issue where `overflow-hidden` on `body` prevented scrolling when content expanded beyond the viewport height (e.g. on smaller screens, expanded backup MFA options, or lockscreen credentials). All authentication and lockscreen layouts now use `overflow-y-auto` and auto-centering margins (`my-auto`).
+
 ## [1.5.2] - 2026-10-10
 
 ### Fixed
