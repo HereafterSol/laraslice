@@ -1221,7 +1221,14 @@ function larasliceWizard() {
                 url: slice.navigation?.url || ('/' + (slice.tables_data?.[0]?.name || slice.name.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, ''))),
                 group: slice.navigation?.group || slice.domain || '',
                 redirect_old: true,
-                children: Array.isArray(slice.navigation?.children) ? JSON.parse(JSON.stringify(slice.navigation.children)) : []
+                children: Array.isArray(slice.navigation?.children)
+                    ? slice.navigation.children.map(c => ({
+                        label: c.label || c.title || '',
+                        url: c.url || c.route || '',
+                        route: c.route || c.url || '',
+                        icon: c.icon || ''
+                    }))
+                    : []
             };
             this.newPermInput = '';
 
@@ -1242,6 +1249,40 @@ function larasliceWizard() {
                     }
                 }));
             } catch (e) {}
+        },
+                renderNavIcon(icon) {
+            const name = (icon || 'box').toLowerCase().trim();
+            const svgs = {
+                'box': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+                'shopping-bag': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
+                'users': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+                'user': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+                'shield': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+                'shield-check': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+                'settings': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+                'file-text': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
+                'pie-chart': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>',
+                'layout-dashboard': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>',
+                'wallet': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>',
+                'bell': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+                'message-square': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+                'boxes': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="m7 16.5 5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3"/><path d="m17 16.5 4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15"/><path d="m12 8 4.74-2.85"/><path d="M12 13.5V8"/></svg>',
+                'tag': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>',
+                'activity': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+                'smartphone': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>',
+                'database': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
+                'folder': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+                'credit-card': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>',
+                'layers': '<svg class="size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.9a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>'
+            };
+            return svgs[name] || svgs['box'];
+        },
+        moveSubmenu(index, direction) {
+            if (!this.navConfig || !Array.isArray(this.navConfig.children)) return;
+            const target = index + direction;
+            if (target < 0 || target >= this.navConfig.children.length) return;
+            const item = this.navConfig.children.splice(index, 1)[0];
+            this.navConfig.children.splice(target, 0, item);
         },
         formatPerm(p) {
             if (typeof p === 'object' && p !== null) {
@@ -3006,9 +3047,9 @@ function larasliceWizard() {
                         <div>
                             <label class="block text-[10px] uppercase font-bold text-muted-foreground mb-1">Menu Icon & Live Preview</label>
                             <div class="flex items-center gap-2">
-                                <span class="size-9 shrink-0 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-base shadow-xs"
-                                      :title="'Live Preview: ' + (navConfig.icon || 'box')">
-                                    <svg class="inline-block size-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                                                                <span class="size-9 shrink-0 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-base shadow-xs transition"
+                                      :title="'Live Preview: ' + (navConfig.icon || 'box')"
+                                      x-html="renderNavIcon(navConfig.icon)">
                                 </span>
                                 <input type="text" x-model="navConfig.icon" placeholder="shopping-bag, settings, users, shield, file-text" class="flex-1 px-3 py-2 bg-muted/30 border border-border rounded-lg text-foreground text-xs focus:border-primary focus:outline-none font-mono">
                             </div>
@@ -3052,6 +3093,15 @@ function larasliceWizard() {
                             <input type="text" x-model="navConfig.group" placeholder="e.g. E-Commerce, System, Sales" class="w-full px-3 py-2 bg-muted/30 border border-border rounded-lg text-foreground text-xs focus:border-primary focus:outline-none">
                             <p class="text-[10px] text-muted-foreground mt-0.5">Grouping header in sidebar navigation</p>
                         </div>
+                                                    <div class="md:col-span-2 p-3 bg-muted/40 rounded-xl border border-border/80 text-[11px] text-muted-foreground space-y-1">
+                                <div class="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                                    <span>🌐</span> Domain & Group Navigation Ordering
+                                </div>
+                                <p>
+                                    Domains (e.g. <strong>Billing</strong>, <strong>CRM</strong>, <strong>E-Commerce</strong>) act as collapsible section headers grouping your slices.
+                                    The order of domain groups in the sidebar is determined by the lowest <strong>Menu Order</strong> among its member slices (e.g. order <code class="font-mono text-primary font-semibold">10</code> appears before order <code class="font-mono text-primary font-semibold">20</code>).
+                                </p>
+                            </div>
                         <div>
                             <label class="block text-[10px] uppercase font-bold text-muted-foreground mb-1">Menu Order</label>
                             <input type="number" x-model="navConfig.order" class="w-full px-3 py-2 bg-muted/30 border border-border rounded-lg text-foreground text-xs focus:border-primary focus:outline-none">
@@ -3122,17 +3172,30 @@ function larasliceWizard() {
                             </button>
                         </div>
 
-                        <div class="space-y-2" x-show="navConfig.children && navConfig.children.length > 0">
+                                                <div class="space-y-2" x-show="navConfig.children && navConfig.children.length > 0">
                             <template x-for="(sub, sIdx) in navConfig.children" :key="sIdx">
                                 <div class="flex items-center gap-2 bg-muted/20 p-2.5 rounded-xl border border-border/80">
+                                    <!-- Move Up / Down Buttons -->
+                                    <div class="flex items-center gap-1 shrink-0 mt-3.5">
+                                        <button type="button" @click="moveSubmenu(sIdx, -1)" :disabled="sIdx === 0"
+                                                class="size-7 rounded-lg bg-background border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition cursor-pointer text-[10px] font-bold"
+                                                title="Move item up">
+                                            ▲
+                                        </button>
+                                        <button type="button" @click="moveSubmenu(sIdx, 1)" :disabled="sIdx === navConfig.children.length - 1"
+                                                class="size-7 rounded-lg bg-background border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition cursor-pointer text-[10px] font-bold"
+                                                title="Move item down">
+                                            ▼
+                                        </button>
+                                    </div>
                                     <div class="flex-1">
                                         <label class="block text-[9px] uppercase font-bold text-muted-foreground mb-0.5">Label</label>
                                         <input type="text" x-model="sub.label" placeholder="e.g. Categories"
                                                class="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium focus:border-primary focus:outline-none">
                                     </div>
                                     <div class="flex-1">
-                                        <label class="block text-[9px] uppercase font-bold text-muted-foreground mb-0.5">URL or Route</label>
-                                        <input type="text" x-model="sub.url" placeholder="e.g. /products?view=categories"
+                                        <label class="block text-[9px] uppercase font-bold text-muted-foreground mb-0.5">URL or Route Name</label>
+                                        <input type="text" x-model="sub.url" placeholder="e.g. /products?view=categories or users.index"
                                                class="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-mono focus:border-primary focus:outline-none">
                                     </div>
                                     <button type="button" @click="navConfig.children.splice(sIdx, 1)"
@@ -3365,5 +3428,100 @@ function larasliceWizard() {
             </svg>
             <span class="text-xs font-bold" x-text="actionStatusText || 'Working on slices...'"></span>
         </div>
+        <!-- Delete Slice / Domain Confirmation Modal -->
+        <div x-show="deleteModal.open" x-cloak
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-150"
+             @keydown.escape.window="if (!deleteModal.isDeleting) deleteModal.open = false">
+            <div class="relative w-full max-w-lg bg-card border border-destructive/30 rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150"
+                 @click.outside="if (!deleteModal.isDeleting) deleteModal.open = false">
+                <!-- Header -->
+                <div class="flex items-start gap-4">
+                    <div class="size-11 rounded-xl bg-destructive/15 text-destructive border border-destructive/20 flex items-center justify-center shrink-0 text-xl font-bold">
+                        <span>🗑</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-base font-bold text-foreground flex items-center gap-2">
+                            <span>Remove</span>
+                            <span class="capitalize" x-text="deleteModal.targetType"></span>:
+                            <span class="text-destructive font-mono" x-text="deleteModal.targetName"></span>
+                        </h3>
+                        <p class="text-xs text-muted-foreground mt-1">
+                            Choose how you would like to handle the codebase, database tables, and routes for this <span x-text="deleteModal.targetType"></span>.
+                        </p>
+                    </div>
+                    <button type="button" @click="deleteModal.open = false" :disabled="deleteModal.isDeleting"
+                            class="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition cursor-pointer">
+                        ✕
+                    </button>
+                </div>
+
+                <!-- Error Notice -->
+                <div x-show="deleteModal.errorMessage" x-cloak class="p-3 bg-destructive/10 border border-destructive/30 rounded-xl text-destructive text-xs flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span x-text="deleteModal.errorMessage"></span>
+                </div>
+
+                <!-- Granular Removal Mode Selection -->
+                <div class="space-y-2">
+                    <label class="block text-[10px] uppercase font-bold text-muted-foreground">Select Deletion Scope</label>
+                    
+                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition"
+                           :class="deleteModal.mode === 'complete' ? 'border-destructive bg-destructive/10 text-foreground ring-1 ring-destructive/40' : 'border-border/60 bg-muted/20 hover:bg-muted/40 text-muted-foreground'">
+                        <input type="radio" name="deleteMode" value="complete" x-model="deleteModal.mode" class="mt-0.5 text-destructive focus:ring-destructive">
+                        <div>
+                            <div class="font-bold text-xs text-foreground flex items-center gap-1.5">
+                                <span>Complete Removal</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded bg-destructive text-destructive-foreground font-semibold">Recommended</span>
+                            </div>
+                            <p class="text-[11px] text-muted-foreground mt-0.5">Removes slice folder, views, controllers, routes, and drops all database tables.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition"
+                           :class="deleteModal.mode === 'code_only' ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary/40' : 'border-border/60 bg-muted/20 hover:bg-muted/40 text-muted-foreground'">
+                        <input type="radio" name="deleteMode" value="code_only" x-model="deleteModal.mode" class="mt-0.5 text-primary focus:ring-primary">
+                        <div>
+                            <div class="font-bold text-xs text-foreground">Code & Routes Only</div>
+                            <p class="text-[11px] text-muted-foreground mt-0.5">Deletes slice code, views, and routes, but keeps database tables and records intact.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition"
+                           :class="deleteModal.mode === 'db_only' ? 'border-amber-500 bg-amber-500/10 text-foreground ring-1 ring-amber-500/40' : 'border-border/60 bg-muted/20 hover:bg-muted/40 text-muted-foreground'">
+                        <input type="radio" name="deleteMode" value="db_only" x-model="deleteModal.mode" class="mt-0.5 text-amber-500 focus:ring-amber-500">
+                        <div>
+                            <div class="font-bold text-xs text-foreground">Database Tables Only</div>
+                            <p class="text-[11px] text-muted-foreground mt-0.5">Drops all database tables, but preserves PHP classes and Blade files.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition"
+                           :class="deleteModal.mode === 'wipe_data' ? 'border-amber-500 bg-amber-500/10 text-foreground ring-1 ring-amber-500/40' : 'border-border/60 bg-muted/20 hover:bg-muted/40 text-muted-foreground'">
+                        <input type="radio" name="deleteMode" value="wipe_data" x-model="deleteModal.mode" class="mt-0.5 text-amber-500 focus:ring-amber-500">
+                        <div>
+                            <div class="font-bold text-xs text-foreground">Wipe Data Only (Truncate)</div>
+                            <p class="text-[11px] text-muted-foreground mt-0.5">Truncates all records from associated tables while keeping table structures and code.</p>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="pt-3 border-t border-border/60 flex items-center justify-end gap-3">
+                    <button type="button" @click="deleteModal.open = false" :disabled="deleteModal.isDeleting"
+                            class="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold rounded-xl transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="button" @click="confirmDelete()" :disabled="deleteModal.isDeleting"
+                            class="px-5 py-2 bg-destructive hover:bg-destructive/90 text-white text-xs font-bold rounded-xl transition shadow flex items-center gap-2 cursor-pointer disabled:opacity-50">
+                        <svg x-show="deleteModal.isDeleting" class="animate-spin size-3.5 text-white" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        <span x-text="deleteModal.isDeleting ? 'Deleting...' : 'Confirm Remove'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
 @endsection

@@ -94,6 +94,7 @@
                 'title'    => $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice',
                 'url'      => $s['url'],
                 'icon'     => $resolveLucide($s['icon'] ?? 'box'),
+                'order'    => $s['order'] ?? 10,
                 'isOpen'   => collect($s['children'] ?? [])->contains(fn ($c) => !empty($c['active'])),
                 'isActive' => !empty($s['active']) && !collect($s['children'] ?? [])->contains(fn ($c) => !empty($c['active'])),
                 'children' => array_map(fn ($c) => [
@@ -132,6 +133,13 @@
                     $navUngrouped[] = $sliceNavItem($s);
                 }
             }
+            // Sort domains by lowest order of member slices
+            uasort($navDomains, function ($a, $b) {
+                $minA = min(array_map(fn ($i) => $i['order'] ?? 10, $a));
+                $minB = min(array_map(fn ($i) => $i['order'] ?? 10, $b));
+                return $minA <=> $minB;
+            });
+
             foreach ($navDomains as $groupName => $items) {
                 $navMain[] = ['title' => $groupName, 'items' => $items];
             }

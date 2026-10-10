@@ -611,7 +611,20 @@ PHP;
             'url' => $newUrl,
             'group' => $navConfig['group'] ?? $current['group'] ?? $manifest['domain'] ?? null,
             // Sub-menu entries are kept unless new ones are supplied
-            'children' => $navConfig['children'] ?? $current['children'] ?? null,
+            'children' => isset($navConfig['children']) && is_array($navConfig['children'])
+                ? array_values(array_map(function ($c) {
+                    $u = trim((string) ($c['url'] ?? $c['route'] ?? ''));
+                    $item = [
+                        'label' => $c['label'] ?? $c['title'] ?? '',
+                        'url' => $u,
+                        'route' => $u,
+                    ];
+                    if (! empty($c['icon'])) {
+                        $item['icon'] = $c['icon'];
+                    }
+                    return $item;
+                }, array_filter($navConfig['children'], fn ($c) => is_array($c) && ! empty($c['label']))))
+                : ($current['children'] ?? null),
         ], fn ($value) => $value !== null);
 
         if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {

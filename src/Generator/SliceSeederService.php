@@ -330,7 +330,7 @@ class SliceSeederService
             return $colLower === 'deleted_by' ? null : $this->resolveStampUserId();
         }
 
-        // 1. Foreign keys: pick from existing parent records
+        // 1. Foreign keys: pick from existing parent records (auto-seed parent if empty)
         if (str_ends_with($colLower, '_id')) {
             $parentBase = substr($colLower, 0, -3);
             $candidateTables = [
@@ -341,8 +341,13 @@ class SliceSeederService
             foreach ($candidateTables as $parentTbl) {
                 if ($parentTbl !== $table && Schema::hasTable($parentTbl)) {
                     $ids = DB::table($parentTbl)->pluck('id')->toArray();
+                    if (empty($ids)) {
+                        $this->autoSeedParentTable($parentTbl, $parentBase);
+                        $ids = DB::table($parentTbl)->pluck('id')->toArray();
+                    }
+
                     if (! empty($ids)) {
-                        return $ids[array_rand($ids)];
+                        return $ids[$index % count($ids)];
                     }
                 }
             }
@@ -494,6 +499,68 @@ class SliceSeederService
     /**
      * User id for created_by / updated_by: the authenticated user, else the first existing user.
      */
+    /**
+     * Auto-seed a parent table when child seeder runs and parent table is empty.
+     */
+    protected function autoSeedParentTable(string $parentTbl, string $parentBase): void
+    {
+        // 1. Try finding an active slice managing this table
+        foreach ($this->manager->getAllSlices() as $slice) {
+            $sliceTables = (array) ($slice->tables ?? []);
+            if (in_array($parentTbl, $sliceTables, true) || strtolower($slice->name) === strtolower($parentBase) || strtolower($slice->name) === strtolower(Str::plural($parentBase))) {
+                try {
+                    $this->seedTable($parentTbl, $slice, 10);
+                    return;
+                } catch (\Throwable $e) {
+                    // Fallback to direct insertion if slice seeder hits an edge case
+                }
+            }
+        }
+
+        // 2. Direct fallback insertion into parent table
+        try {
+            $cols = Schema::getColumnListing($parentTbl);
+            $nameCol = 'name';
+            foreach (['name', 'title', 'company_name', 'label'] as $c) {
+                if (in_array($c, $cols, true)) {
+                    $nameCol = $c;
+                    break;
+                }
+            }
+
+            $entities = [
+                'Acme Corporation', 'Globex Systems', 'Soylent Enterprises', 'Initech Global',
+                'Umbrella Solutions', 'Hooli Dynamics', 'Stark Technologies', 'Wayne Industries',
+                'Cyberdyne Labs', 'Massive Dynamic'
+            ];
+
+            $now = now()->toDateTimeString();
+            for ($i = 0; $i < 10; $i++) {
+                $row = [];
+                if (in_array($nameCol, $cols, true)) {
+                    $row[$nameCol] = $entities[$i] ?? (Str::studly($parentBase).' #'.($i + 1));
+                }
+                if (in_array('status', $cols, true)) {
+                    $row['status'] = 'active';
+                }
+                if (in_array('description', $cols, true)) {
+                    $row['description'] = 'Auto-seeded parent demonstration record.';
+                }
+                if (in_array('created_at', $cols, true)) {
+                    $row['created_at'] = $now;
+                }
+                if (in_array('updated_at', $cols, true)) {
+                    $row['updated_at'] = $now;
+                }
+                if (! empty($row)) {
+                    DB::table($parentTbl)->insert($row);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Log or ignore
+        }
+    }
+
     protected function resolveStampUserId(): ?int
     {
         if ($id = auth()->id()) {
