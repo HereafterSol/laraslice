@@ -777,6 +777,12 @@ class SliceManager
             if (isset($slice->navigation['visible']) && $slice->navigation['visible'] === false) {
                 continue;
             }
+            if (! empty($slice->navigation['hidden'])) {
+                continue;
+            }
+            if (isset($slice->navigation['show_in_navigation']) && $slice->navigation['show_in_navigation'] === false) {
+                continue;
+            }
 
             $studly = Str::studly($slice->name);
             $snake = Str::snake($slice->name);

@@ -1240,6 +1240,7 @@ function larasliceWizard() {
                 permissions: perms,
                 url: slice.navigation?.url || ('/' + (slice.tables_data?.[0]?.name || slice.name.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, ''))),
                 group: slice.navigation?.group || slice.domain || '',
+                hidden: !!(slice.navigation?.hidden || (slice.navigation?.visible === false)),
                 redirect_old: true,
                 children: Array.isArray(slice.navigation?.children)
                     ? slice.navigation.children.map(c => ({
@@ -3121,10 +3122,16 @@ function larasliceWizard() {
                             <label class="block text-[10px] uppercase font-bold text-muted-foreground mb-1">Route / Target URL</label>
                             <input type="text" x-model="navConfig.url" placeholder="e.g. /e-commerce/products" class="w-full px-3 py-2 bg-muted/30 border border-border rounded-lg text-foreground text-xs font-mono focus:border-primary focus:outline-none">
                             <p class="text-[10px] text-muted-foreground mt-0.5">Customize URL prefix (e.g. change /e-commerce/shop_products to /e-commerce/products)</p>
-                            <label class="flex items-center gap-1.5 mt-2 cursor-pointer select-none">
-                                <input type="checkbox" x-model="navConfig.redirect_old" class="rounded border-border text-primary size-3.5">
-                                <span class="text-[11px] font-medium text-foreground">Create 301 Permanent Redirect from old URL (Recommended)</span>
-                            </label>
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-3 mt-2">
+                                <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                                    <input type="checkbox" x-model="navConfig.redirect_old" class="rounded border-border text-primary size-3.5">
+                                    <span class="text-[11px] font-medium text-foreground">Create 301 Permanent Redirect from old URL</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer select-none text-rose-400">
+                                    <input type="checkbox" x-model="navConfig.hidden" class="rounded border-border text-rose-500 size-3.5">
+                                    <span class="text-[11px] font-medium">Hide from Sidebar Navigation</span>
+                                </label>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-[10px] uppercase font-bold text-muted-foreground mb-1">Sidebar Section / Group</label>

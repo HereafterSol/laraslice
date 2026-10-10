@@ -192,10 +192,12 @@ PHP;
         $desc = $note ?: ('Added '.count($fields)." column(s) to {$tableName}: ".implode(', ', $fieldSummaries));
         $manifest['version_history'][] = [
             'version' => $newVersion,
+            'type' => 'field_added',
             'migration' => "{$timestamp}_{$migrationSlug}.php",
             'description' => $desc,
             'author' => $author,
             'date' => date('Y-m-d H:i:s'),
+            'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
         ManifestRepository::write($manifestFile, $manifest);
@@ -627,6 +629,12 @@ PHP;
             $changes[] = "Navigation gate set to '{$newPermGate}'";
         }
 
+        $oldHidden = ! empty($current['hidden']) || (isset($current['visible']) && $current['visible'] === false);
+        $newHidden = ! empty($navConfig['hidden']);
+        if ($oldHidden !== $newHidden) {
+            $changes[] = $newHidden ? "Slice hidden from sidebar navigation" : "Slice made visible in sidebar navigation";
+        }
+
         // Child submenu links
         $oldChildren = $current['children'] ?? [];
         $newChildren = isset($navConfig['children']) && is_array($navConfig['children'])
@@ -668,6 +676,7 @@ PHP;
             'permission' => $navConfig['permission'] ?? $current['permission'] ?? null,
             'url' => $newUrl,
             'group' => $navConfig['group'] ?? $current['group'] ?? $manifest['domain'] ?? null,
+            'hidden' => ! empty($navConfig['hidden']),
             'children' => $newChildren,
         ], fn ($value) => $value !== null);
 
@@ -1082,6 +1091,22 @@ REL;
             'foreign_key' => $foreignKey,
             'method' => $relationMethod,
         ];
+
+        $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
+        $manifest['version'] = $newVersion;
+        if (! isset($manifest['version_history'])) {
+            $manifest['version_history'] = [];
+        }
+        $manifest['version_history'][] = [
+            'version' => $newVersion,
+            'type' => 'child_entity_added',
+            'migration' => "{$timestamp}_{$migrationSlug}.php",
+            'description' => "Added child table '{$childTable}' ({$relationType})",
+            'author' => 'Developer via CLI / Copilot',
+            'date' => date('Y-m-d H:i:s'),
+            'snapshot' => $this->buildSnapshot($manifest, $newVersion),
+        ];
+
         ManifestRepository::write($manifestFile, $manifest);
 
         // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
@@ -1736,6 +1761,7 @@ PHP;
             'description' => $desc,
             'author' => $author,
             'date' => date('Y-m-d H:i:s'),
+            'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
         ManifestRepository::write($manifestFile, $manifest);
@@ -1876,6 +1902,7 @@ PHP;
             'description' => 'Updated '.count($cleanedRelations).' Eloquent relationship(s)',
             'author' => $author,
             'date' => date('Y-m-d H:i:s'),
+            'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
         ManifestRepository::write($manifestFile, $manifest);
