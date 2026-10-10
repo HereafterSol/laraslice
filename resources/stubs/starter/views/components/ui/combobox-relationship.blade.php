@@ -15,6 +15,37 @@
     $cleanTitle = trim(str_replace('+', '', $resolvedTitle));
     $currentVal = (string) old($name, $selected ?? '');
     $optionsArray = is_array($options) ? $options : (is_iterable($options) ? iterator_to_array($options) : []);
+
+    // Resolve target table schema dynamically for accurate Quick-Add fields
+    $baseName = str_ends_with($name, '_id') ? substr($name, 0, -3) : $name;
+    $candidateTables = [\Illuminate\Support\Str::plural($baseName), $baseName];
+    $targetTbl = null;
+    $tableColumns = [];
+    foreach ($candidateTables as $ct) {
+        if (\Illuminate\Support\Facades\Schema::hasTable($ct)) {
+            $targetTbl = $ct;
+            $tableColumns = \Illuminate\Support\Facades\Schema::getColumnListing($ct);
+            break;
+        }
+    }
+
+    $excludedCols = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'remember_token'];
+    $editableCols = array_values(array_filter($tableColumns, fn ($c) => ! in_array($c, $excludedCols, true)));
+
+    // Primary label column
+    $primaryCol = null;
+    foreach (['title', 'name', 'company_name', 'label'] as $cand) {
+        if (in_array($cand, $editableCols, true)) {
+            $primaryCol = $cand;
+            break;
+        }
+    }
+    if (! $primaryCol && ! empty($editableCols)) {
+        $primaryCol = $editableCols[0];
+    }
+
+    $descCol = in_array('description', $editableCols, true) ? 'description' : (in_array('notes', $editableCols, true) ? 'notes' : null);
+    $secondaryCols = array_values(array_filter($editableCols, fn ($c) => $c !== $primaryCol && $c !== $descCol));
 @endphp
 
 <script>
@@ -28,12 +59,13 @@ if (!window.LaraSliceDrawer) {
         },
         async submit(url, payload, selectId, token, onSuccess, onError) {
             try {
-                if (!payload.name || !payload.name.trim()) {
-                    onError('Name is required.');
+                const primaryVal = payload.name || payload.title;
+                if (!primaryVal || !primaryVal.trim()) {
+                    onError('Primary name/title is required.');
                     return;
                 }
-                if (!payload.slug && payload.name) {
-                    payload.slug = this.slugify(payload.name);
+                if (!payload.slug && primaryVal) {
+                    payload.slug = this.slugify(primaryVal);
                 }
                 const response = await fetch(url, {
                     method: 'POST',
@@ -77,22 +109,21 @@ if (!window.LaraSliceDrawer) {
     drawerOpen: false,
     isSubmitting: false,
     errorMessage: '',
-    successToast: '',
-    name: '',
-    slug: '',
-    phone: '',
-    email: '',
-    website: '',
-    description: '',
+    fields: {
+        @if ($primaryCol) '{{ $primaryCol }}': '', @endif
+        @foreach ($secondaryCols as $sc)
+            '{{ $sc }}': '{{ $sc === 'status' ? 'draft' : ($sc === 'amount' ? '0.00' : '') }}',
+        @endforeach
+        @if ($descCol) '{{ $descCol }}': '', @endif
+    },
 
     openDrawer() {
-        this.name = '';
-        this.slug = '';
-        this.phone = '';
-        this.email = '';
-        this.website = '';
-        this.description = '';
         this.errorMessage = '';
+        @if ($primaryCol) this.fields['{{ $primaryCol }}'] = ''; @endif
+        @foreach ($secondaryCols as $sc)
+            this.fields['{{ $sc }}'] = '{{ $sc === 'status' ? 'draft' : ($sc === 'amount' ? '0.00' : '') }}';
+        @endforeach
+        @if ($descCol) this.fields['{{ $descCol }}'] = ''; @endif
         this.drawerOpen = true;
     },
 
@@ -105,33 +136,30 @@ if (!window.LaraSliceDrawer) {
         const self = this;
         self.isSubmitting = true;
         self.errorMessage = '';
-        
-        const payload = {
-            name: self.name.trim(),
-            title: self.name.trim(),
-        };
-        if (self.slug && self.slug.trim()) payload.slug = self.slug.trim();
-        if (self.phone && self.phone.trim()) payload.phone = self.phone.trim();
-        if (self.email && self.email.trim()) payload.email = self.email.trim();
-        if (self.website && self.website.trim()) payload.website = self.website.trim();
-        if (self.description && self.description.trim()) payload.description = self.description.trim();
+
+        const payload = Object.assign({}, self.fields);
+        @if ($primaryCol)
+            const pVal = (self.fields['{{ $primaryCol }}'] || '').trim();
+            if (!pVal) {
+                self.isSubmitting = false;
+                self.errorMessage = '{{ \Illuminate\Support\Str::headline($primaryCol) }} is required.';
+                return;
+            }
+            payload.name = pVal;
+            payload.title = pVal;
+            if (!payload.slug) {
+                payload.slug = window.LaraSliceDrawer.slugify(pVal);
+            }
+        @endif
 
         window.LaraSliceDrawer.submit(
             '{{ $quickAddUrl }}',
             payload,
             '{{ $name }}',
             '{{ csrf_token() }}',
-            function(label, id) {
+            function(newLabel, newId) {
                 self.isSubmitting = false;
-                self.drawerOpen = false;
-                self.name = '';
-                self.slug = '';
-                self.phone = '';
-                self.email = '';
-                self.website = '';
-                self.description = '';
-                self.successToast = label + ' created and selected!';
-                setTimeout(function() { self.successToast = ''; }, 4000);
+                self.closeDrawer();
             },
             function(err) {
                 self.isSubmitting = false;
@@ -139,9 +167,9 @@ if (!window.LaraSliceDrawer) {
             }
         );
     }
-}" class="space-y-1.5 relative {{ $class }}">
+}" class="space-y-1.5 {{ $class }}">
 
-    <!-- Header with Label and Quick Add Trigger -->
+    <!-- Label & Quick-Add Action Trigger -->
     <div class="flex items-center justify-between">
         @if ($label)
             <label for="{{ $name }}" class="flex items-center gap-2 text-sm leading-none font-medium select-none">
@@ -177,12 +205,12 @@ if (!window.LaraSliceDrawer) {
         @endforeach
     </select>
 
-    <!-- Slide-Over Drawer for Instant Quick-Add -->
+    <!-- Slide-Over Drawer for Instant Quick-Add (z-[80] sits above everything) -->
     @if ($quickAddUrl)
         <div x-show="drawerOpen"
              x-cloak
              @keydown.window.escape="closeDrawer()"
-             class="fixed inset-0 z-50 overflow-hidden"
+             class="fixed inset-0 z-[80] overflow-hidden"
              style="display: none;">
             
             <!-- Backdrop -->
@@ -238,106 +266,107 @@ if (!window.LaraSliceDrawer) {
                             <span x-text="errorMessage"></span>
                         </div>
 
-                        <!-- Name / Title Field -->
+                        <!-- Primary Name / Title Field -->
+                        @if ($primaryCol)
                         <div class="space-y-1.5">
                             <label class="text-xs font-semibold text-foreground flex items-center gap-1">
-                                <span>{{ $cleanTitle }} Name / Title</span>
+                                <span>{{ $cleanTitle }} {{ \Illuminate\Support\Str::headline($primaryCol) }}</span>
                                 <span class="text-destructive">*</span>
                             </label>
                             <input type="text"
-                                   x-model="name"
-                                   @input="slug = window.LaraSliceDrawer.slugify(name)"
-                                   placeholder="e.g. Acme Corporation..."
+                                   x-model="fields['{{ $primaryCol }}']"
+                                   placeholder="Enter {{ strtolower(\Illuminate\Support\Str::headline($primaryCol)) }}..."
                                    autofocus
                                    required
                                    class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
                         </div>
+                        @endif
 
-                        <!-- Optional Contact / Entity Details -->
+                        <!-- Dynamically Generated Entity Fields (Matching Target Table Schema) -->
+                        @if (!empty($secondaryCols))
                         <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1.5">
-                                <label class="text-xs font-semibold text-foreground">
-                                    Direct Phone
-                                </label>
-                                <input type="text"
-                                       x-model="phone"
-                                       placeholder="+1 (555) 000-0000"
-                                       class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
-                            </div>
-                            <div class="space-y-1.5">
-                                <label class="text-xs font-semibold text-foreground">
-                                    Email Address
-                                </label>
-                                <input type="email"
-                                       x-model="email"
-                                       placeholder="contact@example.com"
-                                       class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
-                            </div>
+                            @foreach ($secondaryCols as $sc)
+                                @php
+                                    $colLabel = \Illuminate\Support\Str::headline($sc);
+                                    if (str_contains($sc, 'amount') || str_contains($sc, 'price') || str_contains($sc, 'cost') || str_contains($sc, 'total')) {
+                                        $inputType = 'number';
+                                        $step = '0.01';
+                                    } elseif (str_contains($sc, 'date')) {
+                                        $inputType = 'date';
+                                        $step = null;
+                                    } elseif (str_contains($sc, 'email')) {
+                                        $inputType = 'email';
+                                        $step = null;
+                                    } elseif (str_contains($sc, 'phone')) {
+                                        $inputType = 'tel';
+                                        $step = null;
+                                    } elseif (str_contains($sc, 'website') || str_contains($sc, 'url')) {
+                                        $inputType = 'url';
+                                        $step = null;
+                                    } else {
+                                        $inputType = 'text';
+                                        $step = null;
+                                    }
+                                @endphp
+                                <div class="space-y-1.5 {{ in_array($inputType, ['url', 'email']) ? 'col-span-2' : '' }}">
+                                    <label class="text-xs font-semibold text-foreground">
+                                        {{ $colLabel }}
+                                    </label>
+                                    @if ($sc === 'status')
+                                        <select x-model="fields['status']"
+                                                class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
+                                            <option value="draft">Draft</option>
+                                            <option value="pending">Pending</option>
+                                            <option value="active">Active</option>
+                                            <option value="paid">Paid</option>
+                                            <option value="completed">Completed</option>
+                                        </select>
+                                    @else
+                                        <input type="{{ $inputType }}"
+                                               x-model="fields['{{ $sc }}']"
+                                               @if ($step) step="{{ $step }}" @endif
+                                               placeholder="{{ $colLabel }}..."
+                                               class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
+                                    @endif
+                                </div>
+                            @endforeach
                         </div>
+                        @endif
 
+                        <!-- Description / Notes Field -->
+                        @if ($descCol)
                         <div class="space-y-1.5">
                             <label class="text-xs font-semibold text-foreground">
-                                Website URL
+                                {{ \Illuminate\Support\Str::headline($descCol) }}
                             </label>
-                            <input type="text"
-                                   x-model="website"
-                                   placeholder="https://example.com"
-                                   class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
-                        </div>
-
-                        <!-- Description Field -->
-                        <div class="space-y-1.5">
-                            <label class="text-xs font-semibold text-foreground">
-                                Description / Notes
-                            </label>
-                            <textarea x-model="description"
+                            <textarea x-model="fields['{{ $descCol }}']"
                                       rows="3"
-                                      placeholder="Optional notes, industry, or details..."
-                                      class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary resize-none"></textarea>
+                                      placeholder="Optional notes or details..."
+                                      class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></textarea>
                         </div>
+                        @endif
                     </div>
 
-                    <!-- Drawer Footer -->
-                    <div class="px-6 py-4 border-t border-border/60 bg-muted/20 flex items-center justify-end gap-3">
+                    <!-- Drawer Footer (Clean, Unobstructed, Above Copilot) -->
+                    <div class="px-6 py-4 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-3 shrink-0">
                         <button type="button"
                                 @click="closeDrawer()"
-                                class="px-4 py-2 text-xs font-medium rounded-lg border border-input bg-background hover:bg-muted text-foreground transition cursor-pointer">
+                                class="px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition cursor-pointer">
                             Cancel
                         </button>
                         <button type="button"
                                 @click="submitDrawer()"
                                 :disabled="isSubmitting"
-                                class="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition shadow-sm cursor-pointer disabled:opacity-50">
-                            <svg x-show="isSubmitting" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" style="display: none;">
+                                class="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold rounded-lg shadow transition flex items-center gap-2 cursor-pointer disabled:opacity-50">
+                            <svg x-show="isSubmitting" class="animate-spin w-3.5 h-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                             </svg>
-                            <span x-text="isSubmitting ? 'Creating...' : 'Create & Select'"></span>
+                            <span x-text="isSubmitting ? 'Saving...' : 'Create {{ $cleanTitle }}'"></span>
                         </button>
                     </div>
                 </div>
             </div>
         </div>
     @endif
-
-    <!-- Toast Notification Popup -->
-    <div x-show="successToast"
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 translate-y-2"
-         x-transition:enter-end="opacity-100 translate-y-0"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-y-0"
-         x-transition:leave-end="opacity-0 translate-y-2"
-         style="display: none;"
-         class="fixed bottom-6 right-6 z-50 p-4 rounded-xl shadow-2xl border border-success/30 bg-card text-foreground flex items-center gap-3">
-        <div class="p-1 rounded-full bg-success/15 text-success">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-            </svg>
-        </div>
-        <div>
-            <p class="text-xs font-semibold text-foreground">Record Created</p>
-            <p class="text-xs text-muted-foreground" x-text="successToast"></p>
-        </div>
-    </div>
 </div>

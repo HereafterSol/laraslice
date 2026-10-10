@@ -200,6 +200,18 @@ PHP;
 
         ManifestRepository::write($manifestFile, $manifest);
 
+        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
+        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
+            $staleYaml = $sliceDir.'/'.$yamlExt;
+            if (file_exists($staleYaml)) {
+                @unlink($staleYaml);
+            }
+        }
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {}
+
         return [
             'success' => true,
             'slice' => $sliceName,
@@ -650,6 +662,18 @@ PHP;
         }
         ManifestRepository::write($manifestFile, $manifest);
 
+        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
+        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
+            $staleYaml = $sliceDir.'/'.$yamlExt;
+            if (file_exists($staleYaml)) {
+                @unlink($staleYaml);
+            }
+        }
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {}
+
         if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
             try {
                 app(SliceManager::class)->syncPermissions();
@@ -998,6 +1022,18 @@ REL;
         ];
         ManifestRepository::write($manifestFile, $manifest);
 
+        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
+        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
+            $staleYaml = $sliceDir.'/'.$yamlExt;
+            if (file_exists($staleYaml)) {
+                @unlink($staleYaml);
+            }
+        }
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {}
+
         $childGenerator = new ChildEntityGenerator;
         $childGenerator->generate($sliceDir, $baseSliceNamespace, $pluralSlice, $childTable, $parentTable, $foreignKey, $fields);
         $childModelClass = "{$baseSliceNamespace}\\{$pluralSlice}\\Models\\{$childModelName}";
@@ -1266,6 +1302,18 @@ REL;
         $manifest['version_history'] = $keptHistory;
 
         ManifestRepository::write($manifestFile, $manifest);
+
+        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
+        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
+            $staleYaml = $sliceDir.'/'.$yamlExt;
+            if (file_exists($staleYaml)) {
+                @unlink($staleYaml);
+            }
+        }
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {}
 
         return [
             'success' => true,
@@ -1542,6 +1590,18 @@ PHP;
 
         ManifestRepository::write($manifestFile, $manifest);
 
+        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
+        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
+            $staleYaml = $sliceDir.'/'.$yamlExt;
+            if (file_exists($staleYaml)) {
+                @unlink($staleYaml);
+            }
+        }
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {}
+
         return [
             'success' => true,
             'slice' => $sliceName,
@@ -1669,6 +1729,18 @@ PHP;
         ];
 
         ManifestRepository::write($manifestFile, $manifest);
+
+        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
+        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
+            $staleYaml = $sliceDir.'/'.$yamlExt;
+            if (file_exists($staleYaml)) {
+                @unlink($staleYaml);
+            }
+        }
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {}
 
         return [
             'success' => true,

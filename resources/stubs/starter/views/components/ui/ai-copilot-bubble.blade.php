@@ -1,6 +1,6 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 @php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
-<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" x-data="larasliceCopilot()" x-cloak>
+<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="posLeft !== null ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
     <!-- Floating Trigger Bubble -->
     <div class="relative group" x-show="!isOpen">
         <!-- Pulse Glow -->
@@ -38,7 +38,7 @@
         class="flex flex-col w-[380px] sm:w-[470px] h-[640px] max-h-[88vh] bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-3xl shadow-2xl overflow-hidden">
         
         <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800/80">
+        <div class="flex items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800/80 cursor-grab active:cursor-grabbing select-none" @mousedown="startDrag($event)" @touchstart="startDrag($event)">
             <div class="flex items-center gap-2.5">
                 <div class="relative flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-bold text-xs shadow-md">
                     <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

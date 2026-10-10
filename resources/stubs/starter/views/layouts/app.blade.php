@@ -163,11 +163,18 @@
                     @foreach ($navMain as $group)
                         <x-ui.collapsible :open="true" class="group/collapsible" ::data-state="open ? 'open' : 'closed'">
                             <x-ui.sidebar-group>
-                                <x-ui.collapsible-trigger
-                                    class="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ring-sidebar-ring flex h-8 w-full shrink-0 items-center rounded-md px-2 text-sm font-medium outline-none transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
-                                    {{ $group['title'] }}
-                                    <x-lucide-chevron-right class="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                                </x-ui.collapsible-trigger>
+                                <div class="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ring-sidebar-ring flex h-8 w-full shrink-0 items-center justify-between rounded-md px-2 text-sm font-medium outline-none transition-[margin,opacity] duration-200 ease-linear">
+                                    @if (!empty($group['items'][0]['url']))
+                                        <a href="{{ $group['items'][0]['url'] }}" class="flex-1 hover:text-primary transition-colors truncate font-semibold" title="Go to {{ $group['title'] }}">
+                                            {{ $group['title'] }}
+                                        </a>
+                                    @else
+                                        <span class="flex-1 truncate font-semibold">{{ $group['title'] }}</span>
+                                    @endif
+                                    <x-ui.collapsible-trigger class="p-1 rounded hover:bg-muted/60 transition cursor-pointer shrink-0 ml-1">
+                                        <x-lucide-chevron-right class="size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                    </x-ui.collapsible-trigger>
+                                </div>
                                 <x-ui.collapsible-content>
                                     <x-ui.sidebar-group-content>
                                         <x-ui.sidebar-menu>
