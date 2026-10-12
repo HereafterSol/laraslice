@@ -620,4 +620,88 @@ class SliceSeederService
     {
         Schema::enableForeignKeyConstraints();
     }
+
+    /**
+     * Provision scoped roles and demo user accounts for a slice from slice.json.
+     */
+    public function seedSliceRolesAndUsers(SliceManifest $slice): void
+    {
+        $manifestRoles = [];
+        $sliceJsonPath = $slice->path . '/slice.json';
+        if (file_exists($sliceJsonPath)) {
+            $data = json_decode(file_get_contents($sliceJsonPath), true);
+            $manifestRoles = $data['roles'] ?? ($data['workflow']['roles'] ?? []);
+        }
+
+        if (empty($manifestRoles)) {
+            return;
+        }
+
+        $this->seedCustomRolesAndUsers($manifestRoles);
+    }
+
+    /**
+     * Seed array of role definitions and matching demo users into database.
+     */
+    public function seedCustomRolesAndUsers(array $roles): void
+    {
+        if (empty($roles) || ! Schema::hasTable('roles')) {
+            return;
+        }
+
+        foreach ($roles as $r) {
+            $slug = is_array($r) ? ($r['slug'] ?? '') : $r->slug;
+            $name = is_array($r) ? ($r['name'] ?? Str::title(str_replace('_', ' ', $slug))) : $r->name;
+            $desc = is_array($r) ? ($r['description'] ?? "Operational role for {$name}") : ($r->description ?? '');
+            $shouldSeedUser = is_array($r) ? ($r['seedUser'] ?? true) : true;
+
+            if (empty($slug)) {
+                continue;
+            }
+
+            $role = DB::table('roles')->where('slug', $slug)->first();
+            if (! $role) {
+                $hyphenSlug = str_replace('_', '-', $slug);
+                $role = DB::table('roles')->where('slug', $hyphenSlug)->first();
+            }
+
+            $roleId = null;
+            if ($role) {
+                $roleId = $role->id;
+            } else {
+                $roleId = DB::table('roles')->insertGetId([
+                    'name' => $name,
+                    'slug' => $slug,
+                    'description' => $desc,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            if ($shouldSeedUser && Schema::hasTable('users') && $roleId) {
+                $cleanSlug = str_replace('_', '-', $slug);
+                $email = "{$cleanSlug}@laraslice.com";
+                $user = DB::table('users')->where('email', $email)->first();
+                $userId = null;
+                if (! $user) {
+                    $userId = DB::table('users')->insertGetId([
+                        'name' => "{$name} (Demo)",
+                        'email' => $email,
+                        'password' => bcrypt('password'),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } else {
+                    $userId = $user->id;
+                }
+
+                if (Schema::hasTable('role_user') && $userId) {
+                    DB::table('role_user')->updateOrInsert(
+                        ['role_id' => $roleId, 'user_id' => $userId],
+                        []
+                    );
+                }
+            }
+        }
+    }
 }

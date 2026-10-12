@@ -213,7 +213,11 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('view');
 
-        $record = $this->getService()->getItemById($id);
+        $service = $this->getService();
+        $record = method_exists($service, 'findModel') ? $service->findModel($id) : null;
+        if (! $record) {
+            $record = $service->getItemById($id);
+        }
 
         if (! $record) {
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');

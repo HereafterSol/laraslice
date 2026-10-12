@@ -35,7 +35,14 @@ function larasliceWizard() {
         auditActionFilter: 'all',
         auditCounts: {},
         isLoadingAuditLogs: false,
-        expandedAuditLogId: null,
+                expandedAuditLogId: null,
+        presetCategory: 'enterprise',
+        workflowConfig: null,
+        workflowRoles: [],
+        showAddStateModal: false,
+        showAddRoleModal: false,
+        newState: { label: '', slug: '', color: 'slate', icon: 'clock', sla_hours: '', terminal: false },
+        newRole: { name: '', slug: '', description: '', permissions: [] },
 
         sliceSearchQuery: '',
         collapsedDomains: {},
@@ -190,8 +197,410 @@ function larasliceWizard() {
             });
         },
 
-        applyPreset(preset) {
-            if (preset === 'crm_suite') {
+                        applyPreset(preset) {
+            if (preset === 'legal_dispute_adjudication') {
+                this.presetCategory = 'enterprise';
+                this.includeWorkflow = true;
+                this.projectName = 'Complaints, Hearings, Notices, Orders, FieldInquiries, MasterData';
+                this.domain = 'Adjudication';
+                this.description = 'Federal Ombudsman statutory dispute adjudication suite (Workplace Harassment & Women Property Rights) encompassing petition intake, multi-party respondents, summons dispatch, court cause lists, field inquiries, and dual-track speaking orders.';
+                
+                this.multiSliceData = {
+                    'Complaints': {
+                        fields: [
+                            { name: 'complaint_no', label: 'Diary / Complaint #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                            { name: 'title', label: 'Complaint Title', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                            { name: 'complaint_type', label: 'Statutory Act / Type', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'harassment_workplace,property_rights_women', default: 'harassment_workplace' },
+                            { name: 'complaint_subtype', label: 'Specific Sub-Type', type: 'select', width: '50%', required: false, nullable: true, optionsText: 'workplace_harassment,govt_office,private_sector,property_ownership,possession_deprivation', default: 'workplace_harassment' },
+                            { name: 'region', label: 'Regional Ombudsman Office', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'head_office_islamabad,lahore,karachi,peshawar,quetta', default: 'head_office_islamabad' },
+                            { name: 'filing_date', label: 'Date of Lodging', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'is_short_order', label: 'Order Track', type: 'select', width: '50%', required: false, nullable: true, optionsText: 'short_order,detailed_order', default: 'detailed_order' },
+                            { name: 'status', label: 'Judicial Stage', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'lodged,deficient,maintainability_verified,preliminary_hearing,notice_issued,regular_hearing,evidence_recording,report_sought,orders_reserved,final_judgment,disposed_off', default: 'lodged' }
+                        ],
+                        childTables: [
+                            {
+                                name: 'accused',
+                                label: 'Accused / Respondent Parties',
+                                relation: 'hasMany',
+                                fields: [
+                                    { name: 'name', label: 'Respondent Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                                    { name: 'cnic', label: 'CNIC / National ID', type: 'string', width: '50%', required: false, nullable: true, optionsText: '20', default: '' },
+                                    { name: 'designation', label: 'Designation / Post', type: 'string', width: '50%', required: false, nullable: true, optionsText: '100', default: '' },
+                                    { name: 'address', label: 'Service Address for Summons', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' }
+                                ]
+                            },
+                            {
+                                name: 'complaint_properties',
+                                label: 'Disputed Properties & Assets',
+                                relation: 'hasMany',
+                                fields: [
+                                    { name: 'property_nature', label: 'Property Nature', type: 'string', width: '50%', required: true, nullable: false, optionsText: 'residential,commercial,agricultural', default: 'residential' },
+                                    { name: 'acquisition_mode', label: 'Mode of Acquisition', type: 'string', width: '50%', required: false, nullable: true, optionsText: 'inheritance,gift,purchase', default: 'inheritance' },
+                                    { name: 'khasra_survey_no', label: 'Khasra / Survey #', type: 'string', width: '50%', required: false, nullable: true, optionsText: '100', default: '' },
+                                    { name: 'location_address', label: 'Complete Property Location', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' }
+                                ]
+                            },
+                            {
+                                name: 'harassment_attributes',
+                                label: 'Harassment EAV Attributes',
+                                relation: 'hasOne',
+                                fields: [
+                                    { name: 'harassment_nature', label: 'Harassment Nature', type: 'string', width: '50%', required: true, nullable: false, optionsText: 'physical,verbal,psychological,quid_pro_quo', default: 'verbal' },
+                                    { name: 'is_cross_organization', label: 'Cross-Organization Matter', type: 'boolean', width: '50%', required: false, nullable: true, optionsText: '', default: '0' },
+                                    { name: 'incident_date', label: 'Date of Incident', type: 'date', width: '50%', required: false, nullable: true, optionsText: '', default: '' }
+                                ]
+                            }
+                        ]
+                    },
+                    'Hearings': {
+                        fields: [
+                            { name: 'complaint_id', label: 'Complaint / Case #', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'hearing_date', label: 'Hearing Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'hearing_time', label: 'Session Time', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '10:00 AM' },
+                            { name: 'hearing_type', label: 'Hearing Type', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'preliminary,regular,evidence_of_parties,cross_examination,final_arguments', default: 'preliminary' },
+                            { name: 'presiding_bench', label: 'Presiding Officer / Bench', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: 'Federal Ombudsperson Bench I' },
+                            { name: 'attendance_record', label: 'Parties Attendance Summary', type: 'string', width: '50%', required: false, nullable: true, optionsText: '255', default: 'Complainant Present, Respondent Absent' },
+                            { name: 'daily_order_sheet', label: 'Daily Interim Order Sheet', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' }
+                        ],
+                        childTables: [
+                            {
+                                name: 'hearing_attendees',
+                                label: 'Hearing Appearance Roster',
+                                relation: 'hasMany',
+                                fields: [
+                                    { name: 'party_type', label: 'Party Type', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'complainant,respondent,counsel,witness', default: 'complainant' },
+                                    { name: 'name', label: 'Attendee Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                                    { name: 'is_present', label: 'Present in Court', type: 'boolean', width: '50%', required: true, nullable: false, optionsText: '', default: '1' }
+                                ]
+                            }
+                        ]
+                    },
+                    'Notices': {
+                        fields: [
+                            { name: 'complaint_id', label: 'Complaint Ref #', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'diary_no', label: 'Summons / Notice Diary #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                            { name: 'notice_title', label: 'Summons Title / Purpose', type: 'string', width: '50%', required: true, nullable: false, optionsText: '200', default: 'Summons for Appearance & Written Reply' },
+                            { name: 'recipient_party', label: 'Recipient (Accused / Org)', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                            { name: 'hearing_date', label: 'Appearance Hearing Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'dispatch_date', label: 'Dispatch Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'delivery_status', label: 'Service / Delivery Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'pending_dispatch,dispatched_tcs,served_verified,unserved_returned', default: 'dispatched_tcs' },
+                            { name: 'tcs_consignment_no', label: 'Courier Tracking #', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '' },
+                            { name: 'notice_content', label: 'Formal Notice Legal Body', type: 'text', width: '100%', required: true, nullable: false, optionsText: '', default: '' }
+                        ],
+                        childTables: [
+                            {
+                                name: 'notice_templates',
+                                label: 'Statutory Notice Letter Templates',
+                                relation: 'hasMany',
+                                fields: [
+                                    { name: 'title', label: 'Template Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                                    { name: 'matter_type', label: 'Applicable Matter', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'harassment,property', default: 'harassment' },
+                                    { name: 'template_body_html', label: 'HTML Letter Template', type: 'text', width: '100%', required: true, nullable: false, optionsText: '', default: '' }
+                                ]
+                            }
+                        ]
+                    },
+                    'Orders': {
+                        fields: [
+                            { name: 'complaint_id', label: 'Complaint Ref #', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'order_type', label: 'Order Track', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'short_order,detailed_order', default: 'detailed_order' },
+                            { name: 'decision_type', label: 'Judicial Decision Verdict', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'ex_parte,allowed,dismissed_maintainability,penalty_imposed,restoration_decreed', default: 'penalty_imposed' },
+                            { name: 'summary_findings', label: 'Adjudication Findings Summary', type: 'text', width: '100%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'law_officer_vetted', label: 'Vetted by Law Officer', type: 'boolean', width: '50%', required: false, nullable: true, optionsText: '', default: '1' },
+                            { name: 'ombudsperson_signed', label: 'Signed by Federal Ombudsperson', type: 'boolean', width: '50%', required: true, nullable: false, optionsText: '', default: '0' },
+                            { name: 'signed_at', label: 'Date of Execution', type: 'datetime', width: '50%', required: false, nullable: true, optionsText: '', default: '' }
+                        ],
+                        childTables: [
+                            {
+                                name: 'harassment_penalties',
+                                label: 'Statutory Penalties Imposed',
+                                relation: 'hasMany',
+                                fields: [
+                                    { name: 'penalty_type', label: 'Penalty Category', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'minor_censure,withholding_promotion,fine_compensation,dismissal_from_service', default: 'fine_compensation' },
+                                    { name: 'compensation_amount', label: 'Fine / Quantum Compensation', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '12,2', default: '50000.00' },
+                                    { name: 'enforcement_authority', label: 'Executing Organization / Officer', type: 'string', width: '50%', required: false, nullable: true, optionsText: '150', default: '' }
+                                ]
+                            }
+                        ]
+                    },
+                    'FieldInquiries': {
+                        fields: [
+                            { name: 'complaint_id', label: 'Complaint Ref #', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'authority_type', label: 'Inquiry Agency / Authority', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'deputy_commissioner,district_police_officer,workplace_inquiry_committee,revenue_tehsildar', default: 'deputy_commissioner' },
+                            { name: 'authority_name', label: 'Officer / Agency Designation', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: 'Deputy Commissioner Islamabad' },
+                            { name: 'request_date', label: 'Requisition Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'due_date', label: 'Compliance Due Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'report_status', label: 'Report Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'awaiting_submission,submitted_received,reminder_issued', default: 'awaiting_submission' },
+                            { name: 'findings_summary', label: 'Executive Findings of Field Report', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' }
+                        ],
+                        childTables: []
+                    },
+                    'MasterData': {
+                        fields: [
+                            { name: 'catalog_type', label: 'Taxonomy Catalog', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'complaint_types,subtypes,statuses,employment_natures,organization_types,regions', default: 'statuses' },
+                            { name: 'code', label: 'Code / Slug', type: 'string', width: '50%', required: true, nullable: false, optionsText: '50', default: '' },
+                            { name: 'name', label: 'Display Name / Title', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                            { name: 'is_active', label: 'Active', type: 'boolean', width: '50%', required: true, nullable: false, optionsText: '', default: '1' }
+                        ],
+                        childTables: [
+                            {
+                                name: 'statutory_subtypes',
+                                label: 'Matter Sub-Types & Categories',
+                                relation: 'hasMany',
+                                fields: [
+                                    { name: 'parent_type', label: 'Parent Matter Type', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'harassment,property', default: 'harassment' },
+                                    { name: 'subtype_name', label: 'Subtype Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                                    { name: 'statutory_act', label: 'Governing Statutory Act', type: 'string', width: '50%', required: true, nullable: false, optionsText: '200', default: 'Act IV of 2010' }
+                                ]
+                            }
+                        ]
+                    }
+                };
+
+                this.customFields = JSON.parse(JSON.stringify(this.multiSliceData['Complaints'].fields));
+                this.childTables = JSON.parse(JSON.stringify(this.multiSliceData['Complaints'].childTables));
+                this.activeSliceIdx = 0;
+
+                this.workflowConfig = {
+                    enabled: true,
+                    slug: 'adjudication_pipeline',
+                    name: 'Ombudsman Judicial Adjudication Pipeline',
+                    states: [
+                        { slug: 'lodged', label: 'Fresh Complaint / Lodged', color: 'slate', icon: 'inbox', initial: true, sla_hours: 0 },
+                        { slug: 'deficient', label: 'Deficient Notice Issued', color: 'rose', icon: 'alert-triangle', sla_hours: 0 },
+                        { slug: 'maintainability_verified', label: 'Maintainability Scrutinized', color: 'indigo', icon: 'check-square', sla_hours: 0 },
+                        { slug: 'preliminary_hearing', label: 'Preliminary Hearing Fixed', color: 'amber', icon: 'calendar', sla_hours: 0 },
+                        { slug: 'notice_issued', label: 'Summons / Notice Issued', color: 'sky', icon: 'send', sla_hours: 0 },
+                        { slug: 'regular_hearing', label: 'Regular Hearing in Progress', color: 'purple', icon: 'scale', sla_hours: 0 },
+                        { slug: 'evidence_recording', label: 'Evidence of Parties / Cross-Exam', color: 'blue', icon: 'file-text', sla_hours: 0 },
+                        { slug: 'report_sought', label: 'Field Inquiry Report Sought', color: 'cyan', icon: 'search', sla_hours: 0 },
+                        { slug: 'orders_reserved', label: 'Arguments Concluded / Orders Reserved', color: 'orange', icon: 'clock', sla_hours: 0 },
+                        { slug: 'final_judgment', label: 'Final Speaking Order Pronounced', color: 'emerald', icon: 'award', terminal: true },
+                        { slug: 'disposed_off', label: 'Disposed Off / Inadmissible', color: 'zinc', icon: 'x-circle', terminal: true }
+                    ],
+                    transitions: [
+                        { slug: 'scrutinize_deficiency', name: 'Mark Deficient & Notify Complainant', from: ['lodged'], to: 'deficient', permission: 'complaint.scrutiny', color: 'danger', requires_remarks: true, target_role: 'assistant_registrar' },
+                        { slug: 'rectify_deficiency', name: 'Rectified - Re-submit for Scrutiny', from: ['deficient'], to: 'lodged', permission: 'complaint.lodge', color: 'secondary', requires_remarks: true, target_role: 'assistant_registrar' },
+                        { slug: 'admit_preliminary', name: 'Formulate Maintainability Opinion -> Registrar', from: ['lodged'], to: 'maintainability_verified', permission: 'complaint.scrutiny', color: 'primary', requires_remarks: true, target_role: 'registrar' },
+                        { slug: 'refer_to_ombudsperson', name: 'Forward Admissibility -> Ombudsperson', from: ['maintainability_verified'], to: 'maintainability_verified', permission: 'complaint.admissibility', color: 'indigo', requires_remarks: true, target_role: 'ombudsperson' },
+                        { slug: 'dismiss_maintainability', name: 'Dismiss as Non-Maintainable', from: ['maintainability_verified'], to: 'disposed_off', permission: 'complaint.judicial_rule', color: 'danger', requires_remarks: true, target_role: 'ombudsperson' },
+                        { slug: 'fix_hearing_cause_list', name: 'Fix for Hearing & Issue Summons', from: ['maintainability_verified'], to: 'notice_issued', permission: 'complaint.fix_hearing', color: 'sky', requires_remarks: true, target_role: 'registrar' },
+                        { slug: 'commence_regular_hearing', name: 'Notices Served -> Forward File to Legal Advisor', from: ['notice_issued'], to: 'regular_hearing', permission: 'complaint.hear', color: 'purple', requires_remarks: true, target_role: 'legal_advisor' },
+                        { slug: 'seek_inquiry_report', name: 'Seek Field Report (DC/Police/Org)', from: ['regular_hearing'], to: 'report_sought', permission: 'complaint.hear', color: 'cyan', requires_remarks: true, target_role: 'legal_advisor' },
+                        { slug: 'record_evidence', name: 'Record Evidence & Cross Examination', from: ['regular_hearing', 'report_sought'], to: 'evidence_recording', permission: 'complaint.hear', color: 'blue', requires_remarks: true, target_role: 'legal_advisor' },
+                        { slug: 'reserve_orders', name: 'Conclude Arguments & Draft Order', from: ['evidence_recording', 'regular_hearing'], to: 'orders_reserved', permission: 'complaint.draft_order', color: 'amber', requires_remarks: true, target_role: 'legal_advisor' },
+                        { slug: 'law_officer_scrutiny', name: 'Forward Detailed Order -> Law Officer Scrutiny', from: ['orders_reserved'], to: 'orders_reserved', permission: 'complaint.draft_order', color: 'indigo', requires_remarks: true, target_role: 'law_officer' },
+                        { slug: 'submit_to_ombudsperson', name: 'Submit Vetted Order -> Ombudsperson for Signature', from: ['orders_reserved'], to: 'orders_reserved', permission: 'complaint.vet_order', color: 'purple', requires_remarks: true, target_role: 'ombudsperson' },
+                        { slug: 'pronounce_speaking_order', name: 'Sign & Pronounce Final Order', from: ['orders_reserved'], to: 'final_judgment', permission: 'complaint.judicial_rule', color: 'success', requires_remarks: true, requires_attachment: true, target_role: 'registrar' }
+                    ]
+                };
+                this.workflowRoles = [
+                    { slug: 'assistant_registrar', name: 'Assistant Registrar', description: 'Scrutinizes petitions for legal maintainability and prepares case index/brief', seed: true, seedUser: true, permissions: ['complaint.view', 'complaint.scrutiny'] },
+                    { slug: 'registrar', name: 'Registrar', description: 'Verifies admissibility, manages cause lists, issues summons, and maintains judicial records', seed: true, seedUser: true, permissions: ['complaint.view', 'complaint.admissibility', 'complaint.fix_hearing'] },
+                    { slug: 'legal_advisor', name: 'Legal Advisor', description: 'Conducts formal hearings, examines evidence/witnesses, and drafts short & detailed orders', seed: true, seedUser: true, permissions: ['complaint.view', 'complaint.hear', 'complaint.draft_order'] },
+                    { slug: 'law_officer', name: 'Law Officer', description: 'Vets statutory drafting, legal grounds, and legal precedents of detailed orders', seed: true, seedUser: true, permissions: ['complaint.view', 'complaint.vet_order'] },
+                    { slug: 'ombudsperson', name: 'Ombudsperson', description: 'Federal Ombudsperson: judicial rulings on maintainability and signing speaking judgments', seed: true, seedUser: true, permissions: ['complaint.view', 'complaint.judicial_rule'] }
+                ];
+                this.refreshRbacList();
+                this.wizardTargetTable = 'root';
+            } else if (preset === 'grant_subsidy_pipeline') {
+                this.presetCategory = 'enterprise';
+                this.includeWorkflow = true;
+                this.projectName = 'GrantApplications';
+                this.domain = 'Grants & Subsidies';
+                this.description = 'Social welfare grant disbursement pipeline with eligibility scrutiny, committee sanction, pre-audit, and bank disbursement.';
+                this.customFields = [
+                    { name: 'application_number', label: 'Application #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                    { name: 'applicant_name', label: 'Applicant Full Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                    { name: 'identification_number', label: 'National ID / Passport', type: 'string', width: '50%', required: true, nullable: false, optionsText: '50', default: '' },
+                    { name: 'grant_type', label: 'Grant Category', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'education_stipend,marriage_grant,medical_aid,welfare_assistance', default: 'education_stipend' },
+                    { name: 'requested_amount', label: 'Requested Grant ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
+                    { name: 'approved_amount', label: 'Sanctioned Amount ($)', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '14,2', default: '0.00' },
+                    { name: 'disbursement_bank', label: 'Banking Channel', type: 'string', width: '50%', required: false, nullable: true, optionsText: '100', default: '' },
+                    { name: 'status', label: 'Pipeline State', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'submitted,eligibility_verified,committee_sanctioned,pre_audit_cleared,fund_disbursed,rejected', default: 'submitted' }
+                ];
+                this.childTables = [
+                    {
+                        name: 'disbursement_ledgers',
+                        label: 'Disbursement Ledger',
+                        relation: 'hasMany',
+                        fields: [
+                            { name: 'transaction_ref', label: 'Bank Ref #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                            { name: 'amount_released', label: 'Amount Released ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
+                            { name: 'cleared_date', label: 'Settlement Date', type: 'date', width: '50%', required: false, nullable: true, optionsText: '', default: '' }
+                        ]
+                    }
+                ];
+                this.workflowConfig = {
+                    enabled: true,
+                    slug: 'grant_applications',
+                    name: 'Social Grant & Capital Disbursement Pipeline',
+                    states: [
+                        { slug: 'submitted', label: 'Submitted / Desk Intake', color: 'slate', icon: 'file-text', initial: true, sla_hours: 24 },
+                        { slug: 'eligibility_verified', label: 'Eligibility Verified', color: 'sky', icon: 'check-square', sla_hours: 48 },
+                        { slug: 'committee_sanctioned', label: 'Committee Sanction Approved', color: 'purple', icon: 'users', sla_hours: 72 },
+                        { slug: 'pre_audit_cleared', label: 'Pre-Audit Passed', color: 'amber', icon: 'shield-check', sla_hours: 48 },
+                        { slug: 'fund_disbursed', label: 'Bank Fund Disbursed', color: 'emerald', icon: 'credit-card', terminal: true },
+                        { slug: 'rejected', label: 'Application Rejected', color: 'rose', icon: 'x-circle', terminal: true }
+                    ],
+                    transitions: [
+                        { slug: 'verify_eligibility', name: 'Verify Applicant Eligibility', from: ['submitted'], to: 'eligibility_verified', permission: 'grant.scrutiny', color: 'primary', requires_remarks: true, target_role: 'eligibility_scrutineer' },
+                        { slug: 'reject_intake', name: 'Reject for Non-Compliance', from: ['submitted'], to: 'rejected', permission: 'grant.scrutiny', color: 'danger', requires_remarks: true },
+                        { slug: 'submit_committee_batch', name: 'Submit to Grants Committee', from: ['eligibility_verified'], to: 'committee_sanctioned', permission: 'grant.committee', color: 'purple', requires_remarks: true, target_role: 'committee_secretary' },
+                        { slug: 'clear_pre_audit', name: 'Pre-Audit Regulatory Clearance', from: ['committee_sanctioned'], to: 'pre_audit_cleared', permission: 'grant.audit', color: 'amber', requires_remarks: true, target_role: 'audit_controller' },
+                        { slug: 'release_disbursement', name: 'Authorize Bank Release & Disburse', from: ['pre_audit_cleared'], to: 'fund_disbursed', permission: 'grant.disburse', color: 'success', requires_remarks: true, requires_attachment: true, target_role: 'disbursement_treasurer' }
+                    ]
+                };
+                this.workflowRoles = [
+                    { slug: 'intake_officer', name: 'Intake Verification Officer', description: 'Verifies applicant identity and completeness of documentation', seed: true, seedUser: true, permissions: ['grant.view', 'grant.intake'] },
+                    { slug: 'eligibility_scrutineer', name: 'Eligibility Scrutiny Officer', description: 'Calculates quota eligibility and applies statutory formula', seed: true, seedUser: true, permissions: ['grant.view', 'grant.scrutiny'] },
+                    { slug: 'committee_secretary', name: 'Grants Committee Secretary', description: 'Records committee consensus and sanctions grant batches', seed: true, seedUser: true, permissions: ['grant.view', 'grant.committee'] },
+                    { slug: 'audit_controller', name: 'Pre-Audit Controller', description: 'Ensures statutory compliance and voucher authorization', seed: true, seedUser: true, permissions: ['grant.view', 'grant.audit'] },
+                    { slug: 'disbursement_treasurer', name: 'Disbursement Treasurer', description: 'Transmits payment instructions and reconciles banking records', seed: true, seedUser: true, permissions: ['grant.view', 'grant.disburse'] }
+                ];
+                this.wizardTargetTable = 'root';
+            } else if (preset === 'executive_procurement_approval') {
+                this.presetCategory = 'enterprise';
+                this.includeWorkflow = true;
+                this.projectName = 'Requisitions';
+                this.domain = 'Procurement & Operations';
+                this.description = 'Executive capital expenditure requisition pipeline with budget verification, committee endorsement, and PO generation.';
+                this.customFields = [
+                    { name: 'requisition_number', label: 'Requisition Ref #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                    { name: 'title', label: 'Requisition Title', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                    { name: 'department_name', label: 'Requesting Department', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                    { name: 'estimated_cost', label: 'Estimated Expenditure ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
+                    { name: 'budget_code', label: 'GL / Budget Code', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '' },
+                    { name: 'justification', label: 'Business Justification', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' },
+                    { name: 'status', label: 'Authorization Stage', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'draft,department_endorsed,budget_scrutinized,board_sanctioned,po_generated,returned_observation', default: 'draft' }
+                ];
+                this.childTables = [
+                    {
+                        name: 'requisition_items',
+                        label: 'Requisition Line Items',
+                        relation: 'hasMany',
+                        fields: [
+                            { name: 'item_name', label: 'Item Description', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                            { name: 'quantity', label: 'Quantity', type: 'integer', width: '25%', required: true, nullable: false, optionsText: '', default: '1' },
+                            { name: 'unit_price', label: 'Unit Price ($)', type: 'decimal', width: '25%', required: true, nullable: false, optionsText: '10,2', default: '0.00' }
+                        ]
+                    }
+                ];
+                this.workflowConfig = {
+                    enabled: true,
+                    slug: 'requisitions',
+                    name: 'Executive Requisition & Capital Expenditure Approval',
+                    states: [
+                        { slug: 'draft', label: 'Draft / Requisitioned', color: 'slate', icon: 'file-text', initial: true, sla_hours: 24 },
+                        { slug: 'department_endorsed', label: 'Department Endorsed', color: 'sky', icon: 'user-check', sla_hours: 48 },
+                        { slug: 'budget_scrutinized', label: 'Budget Scrutinized', color: 'amber', icon: 'calculator', sla_hours: 48 },
+                        { slug: 'board_sanctioned', label: 'Executive Board Sanctioned', color: 'purple', icon: 'shield-check', sla_hours: 72 },
+                        { slug: 'po_generated', label: 'Purchase Order Issued', color: 'emerald', icon: 'shopping-cart', terminal: true },
+                        { slug: 'returned_observation', label: 'Returned with Observation', color: 'rose', icon: 'alert-triangle', terminal: false }
+                    ],
+                    transitions: [
+                        { slug: 'endorse_department', name: 'Endorse Departmental Requisition', from: ['draft', 'returned_observation'], to: 'department_endorsed', permission: 'procurement.endorse', color: 'primary', requires_remarks: true, target_role: 'department_director' },
+                        { slug: 'scrutinize_budget', name: 'Verify Budget & Allocation Codes', from: ['department_endorsed'], to: 'budget_scrutinized', permission: 'procurement.scrutiny', color: 'amber', requires_remarks: true, target_role: 'budget_scrutineer' },
+                        { slug: 'return_with_observation', name: 'Mark Back with Budget Observation', from: ['department_endorsed', 'budget_scrutinized'], to: 'returned_observation', permission: 'procurement.scrutiny', color: 'danger', requires_remarks: true, target_role: 'requisition_author' },
+                        { slug: 'board_sanction', name: 'Grant Executive Board Approval', from: ['budget_scrutinized'], to: 'board_sanctioned', permission: 'procurement.sanction', color: 'purple', requires_remarks: true, requires_attachment: true, target_role: 'executive_board' },
+                        { slug: 'issue_purchase_order', name: 'Generate & Dispatch Purchase Order', from: ['board_sanctioned'], to: 'po_generated', permission: 'procurement.issue', color: 'success', requires_remarks: true }
+                    ]
+                };
+                this.workflowRoles = [
+                    { slug: 'requisition_author', name: 'Requisition Author', description: 'Drafts procurement requests and responds to observations', seed: true, seedUser: true, permissions: ['procurement.view', 'procurement.create'] },
+                    { slug: 'department_director', name: 'Department Director', description: 'Endorses departmental requisitions before financial submission', seed: true, seedUser: true, permissions: ['procurement.view', 'procurement.endorse'] },
+                    { slug: 'budget_scrutineer', name: 'Budget Scrutineer', description: 'Verifies ledger codes, availability of funds, and compliance', seed: true, seedUser: true, permissions: ['procurement.view', 'procurement.scrutiny'] },
+                    { slug: 'executive_board', name: 'Executive Sanctioning Authority', description: 'Grants final corporate financial approval for capital purchases', seed: true, seedUser: true, permissions: ['procurement.view', 'procurement.sanction', 'procurement.issue'] }
+                ];
+                this.wizardTargetTable = 'root';
+            } else if (preset === 'support_service_ticket') {
+                this.presetCategory = 'enterprise';
+                this.includeWorkflow = true;
+                this.projectName = 'Tickets';
+                this.domain = 'Customer Service';
+                this.description = 'Multi-tier customer support ticket lifecycle with triage, engineering escalation, SLA timers, and resolution.';
+                this.customFields = [
+                    { name: 'ticket_number', label: 'Ticket #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                    { name: 'subject', label: 'Ticket Subject', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                    { name: 'priority', label: 'Priority Tier', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'low,medium,high,urgent', default: 'medium' },
+                    { name: 'customer_email', label: 'Requester Email', type: 'email', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                    { name: 'category', label: 'Category', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'technical,billing,feature_request,incident', default: 'technical' },
+                    { name: 'status', label: 'Lifecycle Stage', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'new,triaged,in_progress,escalated_engineering,resolved,closed', default: 'new' }
+                ];
+                this.childTables = [
+                    {
+                        name: 'ticket_replies',
+                        label: 'Ticket Responses',
+                        relation: 'hasMany',
+                        fields: [
+                            { name: 'reply_body', label: 'Reply Message', type: 'text', width: '100%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'author_name', label: 'Author Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                            { name: 'is_internal_note', label: 'Internal Staff Note', type: 'boolean', width: '50%', required: false, nullable: true, optionsText: '', default: '0' }
+                        ]
+                    }
+                ];
+                this.workflowConfig = {
+                    enabled: true,
+                    slug: 'tickets',
+                    name: 'Enterprise Support Ticket & SLA Escalation',
+                    states: [
+                        { slug: 'new', label: 'New / Unassigned', color: 'slate', icon: 'inbox', initial: true, sla_hours: 2 },
+                        { slug: 'triaged', label: 'Triaged & Assigned', color: 'sky', icon: 'user-check', sla_hours: 8 },
+                        { slug: 'in_progress', label: 'Under Investigation', color: 'amber', icon: 'clock', sla_hours: 24 },
+                        { slug: 'escalated_engineering', label: 'Escalated to Engineering', color: 'purple', icon: 'code', sla_hours: 48 },
+                        { slug: 'resolved', label: 'Resolved / Solved', color: 'emerald', icon: 'check-circle', sla_hours: null },
+                        { slug: 'closed', label: 'Closed & Archived', color: 'slate', icon: 'check-check', terminal: true, sla_hours: null }
+                    ],
+                    transitions: [
+                        { slug: 'triage', name: 'Assign to Support Agent', from: ['new'], to: 'triaged', permission: 'tickets.triage', color: 'primary', requires_remarks: false, target_role: 'support_agent' },
+                        { slug: 'escalate_engineering', name: 'Escalate to Engineering Team', from: ['triaged', 'in_progress'], to: 'escalated_engineering', permission: 'tickets.escalate', color: 'purple', requires_remarks: true, target_role: 'software_engineer' },
+                        { slug: 'resolve', name: 'Mark Ticket Resolved', from: ['triaged', 'in_progress', 'escalated_engineering'], to: 'resolved', permission: 'tickets.resolve', color: 'success', requires_remarks: true, target_role: 'support_lead' },
+                        { slug: 'close', name: 'Close & Archive Ticket', from: ['resolved'], to: 'closed', permission: 'tickets.close', color: 'secondary' },
+                        { slug: 'reopen', name: 'Reopen Ticket', from: ['resolved', 'closed'], to: 'in_progress', permission: 'tickets.reopen', color: 'warning', requires_remarks: true, target_role: 'support_agent' }
+                    ]
+                };
+                this.workflowRoles = [
+                    { slug: 'support_agent', name: 'Customer Support Agent', description: 'Handles first-line support ticket response and triage', seed: true, seedUser: true, permissions: ['tickets.view', 'tickets.triage', 'tickets.edit'] },
+                    { slug: 'support_lead', name: 'Support Team Lead', description: 'Supervises ticket queues and SLA escalations', seed: true, seedUser: true, permissions: ['tickets.view', 'tickets.resolve', 'tickets.edit'] },
+                    { slug: 'software_engineer', name: 'Software Engineer', description: 'Resolves technical bugs and infrastructure issues', seed: true, seedUser: true, permissions: ['tickets.view', 'tickets.edit'] }
+                ];
+                this.wizardTargetTable = 'root';
+            } else if (preset === 'asset_inventory') {
+                this.presetCategory = 'crud';
+                this.includeWorkflow = false;
+                this.workflowConfig = null;
+                this.workflowRoles = [];
+                this.projectName = 'Assets';
+                this.domain = 'Inventory';
+                this.description = 'Corporate asset inventory, equipment allocation, and serial maintenance tracking';
+                this.customFields = [
+                    { name: 'asset_tag', label: 'Asset Barcode / Tag', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
+                    { name: 'name', label: 'Equipment Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                    { name: 'category', label: 'Hardware Category', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'laptop,workstation,server,mobile,peripheral', default: 'laptop' },
+                    { name: 'purchase_cost', label: 'Purchase Cost ($)', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '10,2', default: '0.00' },
+                    { name: 'purchase_date', label: 'Purchase Date', type: 'date', width: '50%', required: false, nullable: true, optionsText: '', default: '' },
+                    { name: 'serial_number', label: 'Serial Number', type: 'string', width: '50%', required: false, nullable: true, optionsText: '100', default: '' },
+                    { name: 'status', label: 'Deployment State', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'in_stock,assigned,under_repair,retired', default: 'in_stock' }
+                ];
+                this.childTables = [
+                    {
+                        name: 'maintenance_logs',
+                        label: 'Service Records',
+                        relation: 'hasMany',
+                        fields: [
+                            { name: 'service_date', label: 'Service Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
+                            { name: 'technician_name', label: 'Technician', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                            { name: 'service_cost', label: 'Repair Cost ($)', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '10,2', default: '0.00' },
+                            { name: 'notes', label: 'Diagnostic Notes', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' }
+                        ]
+                    }
+                ];
+                this.wizardTargetTable = 'root';
+            } else if (preset === 'crm_suite') {
+                this.presetCategory = 'crud';
+                this.includeWorkflow = false;
+                this.workflowConfig = null;
+                this.workflowRoles = [];
                 this.projectName = 'Companies, Contacts, Deals';
                 this.domain = 'CRM';
                 this.description = 'Complete B2B CRM Suite with Account Companies, People Contacts, and Sales Pipeline Deals';
@@ -221,7 +630,7 @@ function larasliceWizard() {
                     'Deals': {
                         fields: [
                             { name: 'title', label: 'Deal Title', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                            { name: 'amount', label: 'Deal Amount ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
+                            { name: 'value', label: 'Deal Value ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
                             { name: 'stage', label: 'Pipeline Stage', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'lead,qualified,proposal,negotiation,won,lost', default: 'lead' },
                             { name: 'close_date', label: 'Expected Close Date', type: 'date', width: '50%', required: false, nullable: true, optionsText: '', default: '' },
                             { name: 'company_id', label: 'Company ID', type: 'integer', width: '50%', required: false, nullable: true, optionsText: '', default: '' }
@@ -234,42 +643,37 @@ function larasliceWizard() {
                 this.childTables = [];
                 this.wizardTargetTable = 'root';
             } else if (preset === 'ecommerce_suite') {
-                this.projectName = 'Products, Orders, Customers, Categories';
-                this.domain = 'E-Commerce';
-                this.description = 'Complete E-Commerce Store with Products catalog, Customer Orders, Customers, and Categories';
+                this.presetCategory = 'crud';
+                this.includeWorkflow = false;
+                this.workflowConfig = null;
+                this.workflowRoles = [];
+                this.projectName = 'Products, Orders, Customers';
+                this.domain = 'Commerce';
+                this.description = 'Full E-Commerce suite with catalog items, buyer checkouts, and customer profiles';
                 this.multiSliceData = {
                     'Products': {
                         fields: [
+                            { name: 'sku', label: 'SKU Code', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
                             { name: 'name', label: 'Product Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                            { name: 'sku', label: 'SKU', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
                             { name: 'price', label: 'Price ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '10,2', default: '0.00' },
                             { name: 'stock_quantity', label: 'Stock Qty', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '0' },
-                            { name: 'status', label: 'Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'draft,published,archived', default: 'published' }
+                            { name: 'status', label: 'Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'draft,active,archived', default: 'draft' }
                         ],
                         childTables: []
                     },
                     'Orders': {
                         fields: [
-                            { name: 'order_number', label: 'Order Number', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
-                            { name: 'customer_id', label: 'Customer ID', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
-                            { name: 'total_amount', label: 'Total Amount ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '12,2', default: '0.00' },
-                            { name: 'status', label: 'Order Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'pending,processing,shipped,completed,cancelled', default: 'pending' }
+                            { name: 'order_number', label: 'Order #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '50', default: '' },
+                            { name: 'total_amount', label: 'Total ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
+                            { name: 'status', label: 'Fulfillment Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'pending,processing,shipped,delivered,cancelled', default: 'pending' }
                         ],
                         childTables: []
                     },
                     'Customers': {
                         fields: [
-                            { name: 'name', label: 'Full Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
-                            { name: 'email', label: 'Customer Email', type: 'email', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                            { name: 'phone', label: 'Phone Number', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '' }
-                        ],
-                        childTables: []
-                    },
-                    'Categories': {
-                        fields: [
-                            { name: 'name', label: 'Category Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
-                            { name: 'slug', label: 'URL Slug', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
-                            { name: 'description', label: 'Description', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' }
+                            { name: 'full_name', label: 'Customer Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
+                            { name: 'email', label: 'Email', type: 'email', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
+                            { name: 'phone', label: 'Phone', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '' }
                         ],
                         childTables: []
                     }
@@ -278,148 +682,94 @@ function larasliceWizard() {
                 this.customFields = JSON.parse(JSON.stringify(this.multiSliceData['Products'].fields));
                 this.childTables = [];
                 this.wizardTargetTable = 'root';
-            } else if (preset === 'billing_suite') {
-                this.projectName = 'Invoices, Payments, Subscriptions';
-                this.domain = 'Billing';
-                this.description = 'Enterprise Billing & Invoicing Suite with recurring Subscriptions and Payment ledgers';
-                this.multiSliceData = {
-                    'Invoices': {
-                        fields: [
-                            { name: 'invoice_number', label: 'Invoice #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '50', default: '' },
-                            { name: 'amount', label: 'Total Amount ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
-                            { name: 'due_date', label: 'Due Date', type: 'date', width: '50%', required: true, nullable: false, optionsText: '', default: '' },
-                            { name: 'status', label: 'Invoice Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'draft,sent,paid,overdue,void', default: 'draft' }
-                        ],
-                        childTables: []
-                    },
-                    'Payments': {
-                        fields: [
-                            { name: 'reference', label: 'Payment Ref #', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
-                            { name: 'invoice_id', label: 'Invoice ID', type: 'integer', width: '50%', required: false, nullable: true, optionsText: '', default: '' },
-                            { name: 'amount', label: 'Paid Amount ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '14,2', default: '0.00' },
-                            { name: 'method', label: 'Payment Method', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'card,bank_transfer,stripe,cash', default: 'card' },
-                            { name: 'status', label: 'Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'pending,succeeded,failed', default: 'succeeded' }
-                        ],
-                        childTables: []
-                    },
-                    'Subscriptions': {
-                        fields: [
-                            { name: 'plan_name', label: 'Plan Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: 'Pro Plan' },
-                            { name: 'billing_cycle', label: 'Billing Cycle', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'monthly,yearly,quarterly', default: 'monthly' },
-                            { name: 'price', label: 'Subscription Price ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '10,2', default: '29.00' },
-                            { name: 'status', label: 'Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'trial,active,past_due,cancelled', default: 'active' }
-                        ],
-                        childTables: []
-                    }
-                };
-                this.activeSliceIdx = 0;
-                this.customFields = JSON.parse(JSON.stringify(this.multiSliceData['Invoices'].fields));
-                this.childTables = [];
-                this.wizardTargetTable = 'root';
-            } else if (preset === 'ecommerce') {
-                this.projectName = 'Product';
-                this.domain = 'E-Commerce';
-                this.description = 'Catalog products with variants, pricing, inventory, and categorization';
-                this.customFields = [
-                    { name: 'sku', label: 'SKU', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
-                    { name: 'price', label: 'Price ($)', type: 'decimal', width: '50%', required: true, nullable: false, optionsText: '10,2', default: '0.00' },
-                    { name: 'cost_price', label: 'Cost Price ($)', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '10,2', default: '0.00' },
-                    { name: 'stock_quantity', label: 'Stock Qty', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '0' },
-                    { name: 'is_featured', label: 'Featured Product', type: 'boolean', width: '33%', required: false, nullable: true, optionsText: '', default: '0' },
-                    { name: 'status', label: 'Status', type: 'select', width: '33%', required: true, nullable: false, optionsText: 'draft,published,archived', default: 'draft' }
-                ];
-                this.childTables = [
-                    {
-                        name: 'product_variants',
-                        label: 'Product Variants',
-                        relation: 'hasMany',
-                        fields: [
-                            { name: 'sku', label: 'Variant SKU', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
-                            { name: 'title', label: 'Option Title', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                            { name: 'price_override', label: 'Price Override', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '10,2', default: '' },
-                            { name: 'stock_quantity', label: 'Variant Stock', type: 'integer', width: '50%', required: true, nullable: false, optionsText: '', default: '0' }
-                        ]
-                    }
-                ];
-                this.wizardTargetTable = 'root';
-            } else if (preset === 'crm') {
-                this.projectName = 'Company';
-                this.domain = 'CRM';
-                this.description = 'B2B Enterprise accounts, pipeline leads, and multi-contact relationships';
-                this.customFields = [
-                    { name: 'industry', label: 'Industry', type: 'string', width: '50%', required: false, nullable: true, optionsText: '150', default: '' },
-                    { name: 'website', label: 'Website URL', type: 'string', width: '50%', required: false, nullable: true, optionsText: '255', default: '' },
-                    { name: 'phone', label: 'Office Phone', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '' },
-                    { name: 'annual_revenue', label: 'Annual Revenue', type: 'decimal', width: '50%', required: false, nullable: true, optionsText: '14,2', default: '0.00' },
-                    { name: 'status', label: 'Account Tier', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'prospect,customer,churned', default: 'prospect' }
-                ];
-                this.childTables = [
-                    {
-                        name: 'contacts',
-                        label: 'Key Contacts',
-                        relation: 'hasMany',
-                        fields: [
-                            { name: 'first_name', label: 'First Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
-                            { name: 'last_name', label: 'Last Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '100', default: '' },
-                            { name: 'email', label: 'Work Email', type: 'email', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                            { name: 'phone', label: 'Direct Phone', type: 'string', width: '50%', required: false, nullable: true, optionsText: '50', default: '' },
-                            { name: 'job_title', label: 'Job Title', type: 'string', width: '50%', required: false, nullable: true, optionsText: '150', default: '' }
-                        ]
-                    }
-                ];
-                this.wizardTargetTable = 'root';
-            } else if (preset === 'helpdesk') {
-                this.projectName = 'Ticket';
-                this.domain = 'Helpdesk';
-                this.description = 'Customer support ticketing, SLA prioritization, and threaded responses';
-                this.customFields = [
-                    { name: 'ticket_number', label: 'Ticket #', type: 'string', width: '33%', required: true, nullable: false, optionsText: '50', default: '' },
-                    { name: 'priority', label: 'Priority', type: 'select', width: '33%', required: true, nullable: false, optionsText: 'low,medium,high,urgent', default: 'medium' },
-                    { name: 'category', label: 'Category', type: 'string', width: '33%', required: false, nullable: true, optionsText: '100', default: 'General' },
-                    { name: 'status', label: 'Status', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'open,in_progress,pending,resolved,closed', default: 'open' },
-                    { name: 'due_date', label: 'SLA Due Date', type: 'datetime', width: '50%', required: false, nullable: true, optionsText: '', default: '' }
-                ];
-                this.childTables = [
-                    {
-                        name: 'ticket_replies',
-                        label: 'Ticket Responses',
-                        relation: 'hasMany',
-                        fields: [
-                            { name: 'reply_body', label: 'Reply Message', type: 'text', width: '100%', required: true, nullable: false, optionsText: '', default: '' },
-                            { name: 'author_name', label: 'Author Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
-                            { name: 'is_internal_note', label: 'Internal Staff Note', type: 'boolean', width: '50%', required: false, nullable: true, optionsText: '', default: '0' }
-                        ]
-                    }
-                ];
-                this.wizardTargetTable = 'root';
-            } else if (preset === 'blog') {
-                this.projectName = 'Article';
-                this.domain = 'Content';
-                this.description = 'Editorial articles, publishing lifecycle, and discussion comments';
-                this.customFields = [
-                    { name: 'slug', label: 'URL Slug', type: 'string', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                    { name: 'excerpt', label: 'Article Excerpt', type: 'text', width: '100%', required: false, nullable: true, optionsText: '', default: '' },
-                    { name: 'status', label: 'Publish State', type: 'select', width: '50%', required: true, nullable: false, optionsText: 'draft,in_review,published,archived', default: 'draft' },
-                    { name: 'published_at', label: 'Publication Date', type: 'datetime', width: '50%', required: false, nullable: true, optionsText: '', default: '' }
-                ];
-                this.childTables = [
-                    {
-                        name: 'comments',
-                        label: 'Discussion Comments',
-                        relation: 'hasMany',
-                        fields: [
-                            { name: 'author_name', label: 'Commenter Name', type: 'string', width: '50%', required: true, nullable: false, optionsText: '150', default: '' },
-                            { name: 'author_email', label: 'Commenter Email', type: 'email', width: '50%', required: true, nullable: false, optionsText: '255', default: '' },
-                            { name: 'comment_body', label: 'Comment Body', type: 'text', width: '100%', required: true, nullable: false, optionsText: '', default: '' },
-                            { name: 'is_approved', label: 'Approved', type: 'boolean', width: '50%', required: false, nullable: true, optionsText: '', default: '0' }
-                        ]
-                    }
-                ];
-                this.wizardTargetTable = 'root';
             }
             this.refreshRbacList();
         },
+        initDefaultWorkflow() {
+            const slug = (this.projectName || 'item').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            const studly = (this.projectName || 'Item').replace(/[^a-zA-Z0-9]/g, '');
+            this.workflowConfig = {
+                enabled: true,
+                slug: slug,
+                name: (this.projectName || 'Item') + ' Lifecycle Workflow',
+                states: [
+                    { slug: 'draft', label: 'Draft', color: 'slate', icon: 'file-text', initial: true, sla_hours: null },
+                    { slug: 'under_review', label: 'Under Review', color: 'amber', icon: 'clock', initial: false, sla_hours: 24 },
+                    { slug: 'approved', label: 'Approved', color: 'emerald', icon: 'check-circle', initial: false, sla_hours: null },
+                    { slug: 'rejected', label: 'Rejected', color: 'rose', icon: 'x-circle', initial: false, terminal: true, sla_hours: null }
+                ],
+                transitions: [
+                    { slug: 'submit', name: 'Submit for Review', from: ['draft'], to: 'under_review', permission: null, color: 'primary', requires_remarks: false, target_role: 'reviewer' },
+                    { slug: 'approve', name: 'Approve Record', from: ['under_review'], to: 'approved', permission: `${slug}.edit`, color: 'success', requires_remarks: true, target_role: 'approver' },
+                    { slug: 'reject', name: 'Reject back to Draft', from: ['under_review'], to: 'draft', permission: `${slug}.edit`, color: 'danger', requires_remarks: true, target_role: 'reviewer' }
+                ]
+            };
+            this.workflowRoles = [
+                { slug: `${slug}_reviewer`, name: `${studly} Reviewer`, description: `Reviews and triages ${this.projectName || 'item'} records`, seed: true, seedUser: true, permissions: [`${slug}.view`, `${slug}.edit`] },
+                { slug: `${slug}_approver`, name: `${studly} Approver`, description: `Authorizes and signs off on ${this.projectName || 'item'} records`, seed: true, seedUser: true, permissions: [`${slug}.view`, `${slug}.edit`] }
+            ];
+        },
 
+        toggleWorkflow(val) {
+            this.includeWorkflow = val;
+            if (val && (!this.workflowConfig || !this.workflowConfig.states || this.workflowConfig.states.length === 0)) {
+                this.initDefaultWorkflow();
+            }
+        },
+
+        addWorkflowState() {
+            if (!this.newState.label.trim()) return;
+            const sSlug = this.newState.slug.trim() || this.newState.label.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            if (!this.workflowConfig) this.initDefaultWorkflow();
+            this.workflowConfig.states.push({
+                slug: sSlug,
+                label: this.newState.label.trim(),
+                color: this.newState.color || 'slate',
+                icon: this.newState.icon || 'clock',
+                sla_hours: this.newState.sla_hours ? parseInt(this.newState.sla_hours) : null,
+                initial: false,
+                terminal: !!this.newState.terminal
+            });
+            this.newState = { label: '', slug: '', color: 'slate', icon: 'clock', sla_hours: '', terminal: false };
+            this.showAddStateModal = false;
+        },
+
+        removeWorkflowState(idx) {
+            if (this.workflowConfig && this.workflowConfig.states) {
+                this.workflowConfig.states.splice(idx, 1);
+            }
+        },
+
+        addCustomRole() {
+            if (!this.newRole.name.trim()) return;
+            const rSlug = this.newRole.slug.trim() || this.newRole.name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            const basePerm = (this.projectName || 'item').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            this.workflowRoles.push({
+                slug: rSlug,
+                name: this.newRole.name.trim(),
+                description: this.newRole.description.trim() || `Operational role for ${this.newRole.name}`,
+                seed: true,
+                seedUser: true,
+                permissions: [`${basePerm}.view`, `${basePerm}.edit`]
+            });
+            this.newRole = { name: '', slug: '', description: '', permissions: [] };
+            this.showAddRoleModal = false;
+        },
+
+        removeWorkflowRole(idx) {
+            this.workflowRoles.splice(idx, 1);
+        },
+
+        selectedRolesForGeneration() {
+            if (!this.includeWorkflow) return [];
+            return (this.workflowRoles || []).filter(r => r.seed !== false).map(r => ({
+                slug: r.slug,
+                name: r.name,
+                description: r.description,
+                seedUser: r.seedUser !== false,
+                permissions: r.permissions || []
+            }));
+        },
         refreshRbacList() {
             if (!this.autoGenerateRbac) return;
             let defaults = [];
@@ -949,6 +1299,8 @@ function larasliceWizard() {
             this.newPermInput = '';
         },
         init() {
+            if (!this.projectName) { this.applyPreset('legal_dispute_adjudication'); }
+
             this.loadSlices();
         },
         loadSlices() {
@@ -1427,6 +1779,8 @@ function larasliceWizard() {
                     namespace: this.namespace,
                     author: this.author,
                     workflow: this.includeWorkflow,
+                    workflowConfig: this.includeWorkflow ? this.workflowConfig : null,
+                    roles: this.selectedRolesForGeneration(),
                     includeApi: this.includeApi,
                     flutter: this.includeFlutter,
                     runMigration: this.autoMigrate
@@ -1497,6 +1851,9 @@ function larasliceWizard() {
                     includeDatabase: this.includeDatabase,
                     includeApi: this.includeApi,
                     includeWorkflow: this.includeWorkflow,
+                    workflow: this.includeWorkflow,
+                    workflowConfig: this.includeWorkflow ? this.workflowConfig : null,
+                    roles: this.selectedRolesForGeneration(),
                     fields: this.fieldsForGeneration(),
                     childTables: this.childTables.map(ct => ({
                         name: ct.name,
@@ -1694,6 +2051,12 @@ function larasliceWizard() {
                 <span aria-hidden="true">⌘</span>
                 <span>Blueprint Studio</span>
             </a>
+            <a href="{{ route('laraslice.wizard.blueprint') }}?port=1"
+               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+               title="Reverse-engineer and port legacy application">
+                <span>🚀</span>
+                <span>Port Legacy App</span>
+            </a>
             <a href="{{ route('laraslice.wizard.schema_studio') }}"
                class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-border text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50">
                 <span>⚡</span>
@@ -1736,8 +2099,8 @@ function larasliceWizard() {
                             3
                         </div>
                         <div>
-                            <p class="text-sm font-semibold" :class="step === 3 ? 'text-foreground' : 'text-muted-foreground'">Features & Modules</p>
-                            <p class="text-xs text-muted-foreground">Database & workflows</p>
+                            <p class="text-sm font-semibold" :class="step === 3 ? 'text-foreground' : 'text-muted-foreground'">Workflow & Roles Studio</p>
+                            <p class="text-xs text-muted-foreground">Stages, gates & scoped roles</p>
                         </div>
                     </div>
 
@@ -1748,8 +2111,20 @@ function larasliceWizard() {
                             4
                         </div>
                         <div>
-                            <p class="text-sm font-semibold" :class="step === 4 ? 'text-foreground' : 'text-muted-foreground'">Review & Generate</p>
-                            <p class="text-xs text-muted-foreground">Generate solution</p>
+                            <p class="text-sm font-semibold" :class="step === 4 ? 'text-foreground' : 'text-muted-foreground'">Access Control & RBAC</p>
+                            <p class="text-xs text-muted-foreground">Capabilities & security</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 5 Indicator -->
+                    <div class="flex items-center space-x-4 cursor-pointer" @click="step = 5">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition"
+                             :class="step >= 5 ? 'bg-primary text-white shadow-lg shadow-amber-500/30' : 'bg-gray-800 text-muted-foreground'">
+                            5
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold" :class="step === 5 ? 'text-foreground' : 'text-muted-foreground'">Review & Generate</p>
+                            <p class="text-xs text-muted-foreground">Scaffold solution</p>
                         </div>
                     </div>
                 </div>
@@ -1775,7 +2150,7 @@ function larasliceWizard() {
                     </div>
                     <div class="flex justify-between py-1">
                         <span class="text-muted-foreground">Workflow:</span>
-                        <span class="text-green-400 font-bold" x-text="includeWorkflow ? 'Enabled' : 'Standard'"></span>
+                        <span class="text-green-400 font-bold" x-text="includeWorkflow ? ((workflowConfig?.states?.length || 0) + ' States, ' + selectedRolesForGeneration().length + ' Roles') : 'Standard CRUD'"></span>
                     </div>
                 </div>
             </div>
@@ -1792,33 +2167,155 @@ function larasliceWizard() {
                             <p class="text-xs text-muted-foreground mt-1">Configure your vertical slice core identity</p>
                         </div>
 
-                        <!-- 1-Click Starter Presets -->
-                        <div class="space-y-2">
-                            <div class="flex items-center justify-between">
-                                <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Starter Templates & Domain Suites</label>
-                                <span class="text-[10px] font-semibold text-primary">✨ Multi-Slice Domain Supported</span>
+                                                <!-- Legacy Reverse-Engineering Callout Banner -->
+                        <div class="rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-transparent p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="text-3xl">🚀</span>
+                                <div>
+                                    <h4 class="text-xs font-bold text-foreground">Reverse-Engineer & Port Legacy Laravel Monolith</h4>
+                                    <p class="text-[11px] text-muted-foreground mt-0.5">Auto-classify legacy database tables into Bounded Domains, generate zero-blank-dropdown seeders (system-base) or perform full historical migration.</p>
+                                </div>
                             </div>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                <button type="button" @click="applyPreset('crm_suite')" class="p-3 rounded-xl border border-blue-500/40 bg-blue-500/5 hover:bg-blue-500/15 text-left transition cursor-pointer group">
-                                    <div class="text-base mb-1">💼</div>
-                                    <div class="text-xs font-bold text-foreground group-hover:text-blue-500">CRM Suite (3 Slices)</div>
-                                    <div class="text-[10px] text-muted-foreground">Companies, Contacts, Deals</div>
+                            <a href="{{ route('laraslice.wizard.blueprint') }}?port=1" class="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-xs">
+                                <span>Launch Porting Wizard</span>
+                                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                            </a>
+                        </div>
+
+                        <!-- Blueprint Starter Templates & Categories -->
+                        <div class="space-y-3.5">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-2.5">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Blueprint Starter Template</label>
+                                    <p class="text-[11px] text-muted-foreground">Choose between full role-governed enterprise pipelines or clean transactional CRUD entities.</p>
+                                </div>
+                                <!-- Segmented Category Tabs -->
+                                <div class="inline-flex rounded-xl p-1 bg-muted/60 border border-border shrink-0">
+                                    <button type="button" @click="presetCategory = 'enterprise'"
+                                            :class="presetCategory === 'enterprise' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'"
+                                            class="px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center gap-1.5">
+                                        <span>⚡ Enterprise Workflows</span>
+                                        <span class="text-[10px] px-1.5 py-0.2 rounded-full" :class="presetCategory === 'enterprise' ? 'bg-white/20' : 'bg-primary/10 text-primary'">4 Models</span>
+                                    </button>
+                                    <button type="button" @click="presetCategory = 'crud'"
+                                            :class="presetCategory === 'crud' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'"
+                                            class="px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center gap-1.5">
+                                        <span>📦 Standard CRUD</span>
+                                        <span class="text-[10px] px-1.5 py-0.2 rounded-full" :class="presetCategory === 'crud' ? 'bg-white/20' : 'bg-primary/10 text-primary'">3 Models</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Category B: Full Enterprise Workflows Grid -->
+                            <div x-show="presetCategory === 'enterprise'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                                <button type="button" @click="applyPreset('legal_dispute_adjudication')" class="p-3.5 rounded-xl border border-indigo-500/40 bg-indigo-500/5 hover:bg-indigo-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">⚖️</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">11 States · 5 Roles · 6 Slices</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-indigo-400">Dispute Adjudication Suite</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1 line-clamp-2">Scrutiny → Hearings → Evidence → Speaking Order</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-indigo-400 pt-2 mt-2 border-t border-border/40">Includes Judicial Roles & Summons</div>
                                 </button>
-                                <button type="button" @click="applyPreset('ecommerce_suite')" class="p-3 rounded-xl border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/15 text-left transition cursor-pointer group">
-                                    <div class="text-base mb-1">🛒</div>
-                                    <div class="text-xs font-bold text-foreground group-hover:text-amber-500">E-Commerce Suite (4 Slices)</div>
-                                    <div class="text-[10px] text-muted-foreground">Products, Orders, Customers...</div>
+
+                                <button type="button" @click="applyPreset('grant_subsidy_pipeline')" class="p-3.5 rounded-xl border border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">💰</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">6 States · 5 Roles</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-emerald-400">Grant & Capital Disbursement</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1 line-clamp-2">Intake → Scrutiny → Committee Sanction → Pre-Audit → Bank Release</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-emerald-400 pt-2 mt-2 border-t border-border/40">Includes Committee & Audit Roles</div>
                                 </button>
-                                <button type="button" @click="applyPreset('billing_suite')" class="p-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/15 text-left transition cursor-pointer group">
-                                    <div class="text-base mb-1">💳</div>
-                                    <div class="text-xs font-bold text-foreground group-hover:text-emerald-500">Billing Suite (3 Slices)</div>
-                                    <div class="text-[10px] text-muted-foreground">Invoices, Payments, Subs</div>
+
+                                <button type="button" @click="applyPreset('executive_procurement_approval')" class="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">📋</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">6 States · 4 Roles</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-amber-400">Executive Requisition Approval</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1 line-clamp-2">Draft → Scrutiny → Board Sanction → PO Generation</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-amber-400 pt-2 mt-2 border-t border-border/40">Includes Executive Signoff Gates</div>
                                 </button>
-                                <button type="button" @click="applyPreset('helpdesk')" class="p-3 rounded-xl border border-purple-500/40 bg-purple-500/5 hover:bg-purple-500/15 text-left transition cursor-pointer group">
-                                    <div class="text-base mb-1">🎫</div>
-                                    <div class="text-xs font-bold text-foreground group-hover:text-purple-500">Helpdesk Ticket</div>
-                                    <div class="text-[10px] text-muted-foreground">Single Slice + Workflow</div>
+
+                                <button type="button" @click="applyPreset('support_service_ticket')" class="p-3.5 rounded-xl border border-purple-500/40 bg-purple-500/5 hover:bg-purple-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">🎫</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">6 States · 3 Roles</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-purple-400">Support Ticket & Escalation</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1 line-clamp-2">Triage → In-Progress → Engineering Bug Escalation → Resolved</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-purple-400 pt-2 mt-2 border-t border-border/40">Includes SLA Timers & Triage Roles</div>
                                 </button>
+                            </div>
+
+                            <!-- Category A: Standard CRUD Blueprints Grid -->
+                            <div x-show="presetCategory === 'crud'" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                <button type="button" @click="applyPreset('asset_inventory')" class="p-3.5 rounded-xl border border-cyan-500/40 bg-cyan-500/5 hover:bg-cyan-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">💻</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400">Single Slice · 7 Fields</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-cyan-400">Asset & Equipment Inventory</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1">Hardware asset tags, serial numbers, allocation state, and maintenance logs</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-cyan-400 pt-2 mt-2 border-t border-border/40">Pure CRUD · Workflow Optional</div>
+                                </button>
+
+                                <button type="button" @click="applyPreset('crm_suite')" class="p-3.5 rounded-xl border border-blue-500/40 bg-blue-500/5 hover:bg-blue-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">💼</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">3 Slices Suite</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-blue-400">CRM Suite (Companies, Contacts, Deals)</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1">B2B accounts, people contacts, deal pipeline stages</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-blue-400 pt-2 mt-2 border-t border-border/40">Multi-Slice Domain Suite</div>
+                                </button>
+
+                                <button type="button" @click="applyPreset('ecommerce_suite')" class="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/15 text-left transition cursor-pointer group flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-xl">🛒</span>
+                                            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">4 Slices Suite</span>
+                                        </div>
+                                        <div class="text-xs font-bold text-foreground group-hover:text-amber-400">E-Commerce Suite (Catalog & Orders)</div>
+                                        <div class="text-[10px] text-muted-foreground mt-1">Products, variants, customer orders, and store inventory</div>
+                                    </div>
+                                    <div class="text-[10px] font-semibold text-amber-400 pt-2 mt-2 border-t border-border/40">Multi-Slice Domain Suite</div>
+                                </button>
+                            </div>
+
+                            <!-- Dedicated Toggleable Workflow Pipeline Checkbox Card -->
+                            <div class="p-3.5 rounded-xl border border-border bg-card flex items-center justify-between gap-3">
+                                <label class="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" x-model="includeWorkflow" @change="toggleWorkflow(includeWorkflow)" class="size-4.5 rounded border-input text-primary focus:ring-primary">
+                                    <div>
+                                        <span class="text-xs font-bold text-foreground flex items-center gap-2">
+                                            <span>Enable Workflow Pipeline & State Machine Engine</span>
+                                            <template x-if="includeWorkflow">
+                                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">Active</span>
+                                            </template>
+                                        </span>
+                                        <p class="text-[10px] text-muted-foreground mt-0.5">Scaffolds stage transitions, forwarding columns, and audit history. You can configure stages & roles in Step 3.</p>
+                                    </div>
+                                </label>
+                                <template x-if="includeWorkflow && workflowConfig?.states">
+                                    <div class="text-right shrink-0">
+                                        <span class="text-xs font-bold font-mono text-primary" x-text="workflowConfig.states.length + ' States'"></span>
+                                        <span class="text-[10px] text-muted-foreground block" x-text="(selectedRolesForGeneration()?.length ?? 0) + ' Roles pre-mapped'"></span>
+                                    </div>
+                                </template>
                             </div>
                         </div>
 
@@ -2104,35 +2601,152 @@ function larasliceWizard() {
                         </div>
                     </div>
 
-                    <!-- Step 3: Features & Database -->
+                    <!-- Step 3: Workflow & Roles Studio -->
                     <div x-show="step === 3" class="space-y-6">
                         <div class="border-b border-border pb-4">
                             <h2 class="text-xl font-bold text-foreground flex items-center gap-2">
-                                <span class="text-primary">⚙️</span> Features & Database
+                                <span class="text-primary">⚙️</span> Workflow & Roles Studio
                             </h2>
-                            <p class="text-xs text-muted-foreground mt-1">Select modular capabilities and database engine</p>
+                            <p class="text-xs text-muted-foreground mt-1">Configure lifecycle progression stages, turnaround SLA hours, and domain-scoped operational roles</p>
                         </div>
 
+                        <!-- Workflow Master Toggle -->
                         <div class="space-y-3">
-                            <label class="flex items-center space-x-3 cursor-pointer p-3 bg-muted/30 rounded-xl border border-border">
+                            <label class="flex items-center space-x-3 cursor-pointer p-4 bg-card rounded-xl border border-border shadow-xs hover:border-primary/40 transition">
                                 <input type="checkbox" x-model="includeWorkflow" class="w-4 h-4 rounded text-primary">
                                 <div>
                                     <span class="font-bold text-sm text-foreground">Workflow & State Machine Engine</span>
-                                    <p class="text-xs text-muted-foreground">Declarative state transitions, guards, and status tracking</p>
+                                    <p class="text-xs text-muted-foreground">Declarative state transitions, guards, desk forwarding, and SLA tracking</p>
                                 </div>
                             </label>
-                            <label class="flex items-center space-x-3 cursor-pointer p-3 bg-muted/30 rounded-xl border border-border">
+                        </div>
+
+                        <!-- Active Workflow Configuration Cards -->
+                        <div x-show="includeWorkflow" x-transition class="space-y-5">
+                            <!-- 1. Pipeline Stages & SLA Card -->
+                            <div class="rounded-xl border border-border bg-card p-5 space-y-3 shadow-xs">
+                                <div class="flex items-center justify-between border-b border-border/60 pb-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <svg class="size-4 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        <h3 class="font-bold text-sm text-foreground">Workflow Pipeline Stages & SLA</h3>
+                                        <span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary" x-text="workflowConfig?.states?.length ?? 0"></span>
+                                    </div>
+                                    <button type="button" @click="showAddStateModal = true" class="h-8 px-3 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
+                                        <span>+ Add Stage</span>
+                                    </button>
+                                </div>
+                                <p class="text-xs text-muted-foreground">Lifecycle progression milestones. Each stage defines resolution SLA targets and whether it marks terminal completion.</p>
+
+                                <!-- Stages Grid -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                    <template x-for="(st, sIdx) in (workflowConfig?.states ?? [])" :key="sIdx">
+                                        <div class="flex items-center justify-between p-3 rounded-xl border border-border/80 bg-muted/20 hover:bg-muted/40 transition gap-2">
+                                            <div class="flex items-center gap-2.5 min-w-0">
+                                                <span class="size-2.5 rounded-full shrink-0"
+                                                    :class="{
+                                                        'bg-amber-500 shadow-xs shadow-amber-500/50': st.color === 'amber',
+                                                        'bg-sky-500 shadow-xs shadow-sky-500/50': st.color === 'sky',
+                                                        'bg-indigo-500 shadow-xs shadow-indigo-500/50': st.color === 'indigo',
+                                                        'bg-purple-500 shadow-xs shadow-purple-500/50': st.color === 'purple',
+                                                        'bg-emerald-500 shadow-xs shadow-emerald-500/50': st.color === 'emerald',
+                                                        'bg-rose-500 shadow-xs shadow-rose-500/50': st.color === 'rose',
+                                                        'bg-slate-400': !st.color || st.color === 'slate'
+                                                    }"></span>
+                                                <div class="min-w-0">
+                                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                                        <span class="font-bold text-xs text-foreground truncate" x-text="st.label"></span>
+                                                        <span x-show="st.terminal" class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-destructive/15 text-destructive border border-destructive/20">Terminal</span>
+                                                        <span x-show="st.initial" class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/20">Initial</span>
+                                                    </div>
+                                                    <div class="text-[11px] font-mono text-muted-foreground truncate" x-text="st.slug"></div>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2 shrink-0">
+                                                <span x-show="st.sla_hours" class="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[10px] font-bold flex items-center gap-1 border border-amber-500/20">
+                                                    <svg class="size-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                                    <span x-text="st.sla_hours + 'h SLA'"></span>
+                                                </span>
+                                                <button type="button" @click="removeWorkflowState(sIdx)" class="text-muted-foreground hover:text-destructive text-sm font-bold px-1 cursor-pointer" title="Remove stage">✕</button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- 2. Domain Roles & Personas Card -->
+                            <div class="rounded-xl border border-border bg-card p-5 space-y-3 shadow-xs">
+                                <div class="flex items-center justify-between border-b border-border/60 pb-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <svg class="size-4 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                        <h3 class="font-bold text-sm text-foreground">Domain Personas & Scoped Roles</h3>
+                                        <span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary" x-text="workflowRoles.length"></span>
+                                    </div>
+                                    <button type="button" @click="showAddRoleModal = true" class="h-8 px-3 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
+                                        <span>+ Add Role</span>
+                                    </button>
+                                </div>
+                                <p class="text-xs text-muted-foreground">Domain-scoped roles eligible for forward handoffs and transitions. Demo user accounts can be seeded automatically.</p>
+
+                                <!-- Roles List -->
+                                <div class="space-y-2 pt-1">
+                                    <template x-for="(role, rIdx) in workflowRoles" :key="rIdx">
+                                        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border border-border/80 bg-muted/20 hover:bg-muted/40 transition gap-3">
+                                            <div class="min-w-0 space-y-1">
+                                                <div class="flex items-center gap-2 flex-wrap">
+                                                    <span class="font-bold text-xs text-foreground" x-text="role.name"></span>
+                                                    <code class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-primary border border-border/60" x-text="role.slug"></code>
+                                                </div>
+                                                <p class="text-[11px] text-muted-foreground leading-snug" x-text="role.description"></p>
+                                            </div>
+                                            <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                                                <label class="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none bg-muted/40 px-2.5 py-1 rounded-lg border border-border/50 hover:bg-muted">
+                                                    <input type="checkbox" x-model="role.seedUser" class="rounded text-primary size-3.5 border-input">
+                                                    <span class="text-[11px] font-medium text-foreground">Demo Account</span>
+                                                </label>
+                                                <button type="button" @click="removeWorkflowRole(rIdx)" class="text-muted-foreground hover:text-destructive text-sm font-bold px-1.5 py-0.5 cursor-pointer" title="Remove role">✕</button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Workflow Disabled Info -->
+                        <div x-show="!includeWorkflow" class="p-6 rounded-xl border border-dashed border-border text-center space-y-2 bg-muted/10">
+                            <p class="text-sm font-bold text-foreground">Workflow Engine is Disabled</p>
+                            <p class="text-xs text-muted-foreground max-w-md mx-auto">Enable the checkbox above to design custom lifecycle stages, configure turnaround SLA hours, and manage scoped operational roles.</p>
+                        </div>
+
+                        <div class="flex justify-between pt-4">
+                            <button @click="step = 2" class="px-5 py-2.5 text-muted-foreground hover:text-foreground text-sm cursor-pointer">← Previous</button>
+                            <button @click="step = 4" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-sm transition cursor-pointer">
+                                Next: Access Control & RBAC →
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Access Control & RBAC -->
+                    <div x-show="step === 4" class="space-y-6">
+                        <div class="border-b border-border pb-4">
+                            <h2 class="text-xl font-bold text-foreground flex items-center gap-2">
+                                <span class="text-primary">🛡️</span> Access Control & RBAC
+                            </h2>
+                            <p class="text-xs text-muted-foreground mt-1">Configure granular capabilities, CRUD policies, and API services</p>
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="flex items-center space-x-3 cursor-pointer p-4 bg-card rounded-xl border border-border shadow-xs hover:border-primary/40 transition">
                                 <input type="checkbox" x-model="includeApi" class="w-4 h-4 rounded text-primary" checked>
                                 <div>
                                     <span class="font-bold text-sm text-foreground">REST API Controller</span>
-                                    <p class="text-xs text-muted-foreground">Pre-wired endpoints for Mobile, Web, and External Integrations</p>
+                                    <p class="text-xs text-muted-foreground">Pre-wired endpoints with OpenAPI specifications for Mobile, Web, and External Integrations</p>
                                 </div>
                             </label>
                         </div>
 
                         <!-- RBAC & Security Capabilities Card -->
-                        <div class="rounded-xl border border-border bg-card p-4 space-y-3">
-                            <div class="flex items-center justify-between border-b border-border/50 pb-2">
+                        <div class="rounded-xl border border-border bg-card p-5 space-y-3 shadow-xs">
+                            <div class="flex items-center justify-between border-b border-border/50 pb-3">
                                 <div class="flex items-center gap-2">
                                     <svg class="inline-block size-4 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
                                     <span class="font-bold text-sm text-foreground">RBAC & Security Capabilities</span>
@@ -2150,28 +2764,28 @@ function larasliceWizard() {
                                 <template x-for="(perm, pIdx) in permissions" :key="pIdx">
                                     <span class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/30 px-2.5 py-1 text-xs font-mono text-foreground">
                                         <span x-text="perm"></span>
-                                        <button type="button" @click="removeRbac(pIdx)" class="text-muted-foreground hover:text-destructive text-xs cursor-pointer">×</button>
+                                        <button type="button" @click="removeRbac(pIdx)" class="text-muted-foreground hover:text-destructive text-xs cursor-pointer">✕</button>
                                     </span>
                                 </template>
                             </div>
 
                             <!-- Add Custom Capability -->
-                            <div class="flex items-center gap-2 pt-1">
+                            <div class="flex items-center gap-2 pt-2">
                                 <input type="text" x-model="newPermInput" @keydown.enter.prevent="addCustomRbac()" placeholder="e.g. publish, export, approve" class="h-8 rounded-lg border border-input bg-background px-3 text-xs font-mono text-foreground flex-1 max-w-xs focus:ring-1 focus:ring-primary">
                                 <button type="button" @click="addCustomRbac()" class="h-8 px-3 rounded-lg border border-border bg-muted/30 text-xs font-semibold hover:bg-muted transition cursor-pointer">+ Add</button>
                             </div>
                         </div>
 
                         <div class="flex justify-between pt-4">
-                            <button @click="step = 2" class="px-5 py-2.5 text-muted-foreground hover:text-foreground text-sm">← Previous</button>
-                            <button @click="step = 4" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-sm transition cursor-pointer">
+                            <button @click="step = 3" class="px-5 py-2.5 text-muted-foreground hover:text-foreground text-sm cursor-pointer">← Previous</button>
+                            <button @click="step = 5" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-sm transition cursor-pointer">
                                 Review & Generate →
                             </button>
                         </div>
                     </div>
 
-                    <!-- Step 4: Review & Generate -->
-                    <div x-show="step === 4" class="space-y-6">
+                    <!-- Step 5: Review & Generate -->
+                    <div x-show="step === 5" class="space-y-6">
                         <div class="border-b border-border pb-4">
                             <h2 class="text-xl font-bold text-foreground flex items-center gap-2">
                                 <span class="text-primary">🚀</span> Review & Generate Solution
@@ -2351,7 +2965,7 @@ function larasliceWizard() {
                         </div>
 
                         <div class="pt-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-                            <button @click="step = 3" class="px-5 py-2.5 text-muted-foreground hover:text-foreground text-sm cursor-pointer self-start sm:self-auto">← Previous</button>
+                            <button @click="step = 4" class="px-5 py-2.5 text-muted-foreground hover:text-foreground text-sm cursor-pointer self-start sm:self-auto">← Previous</button>
                             <div class="flex flex-wrap items-center gap-4">
                                 <label class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
                                     <input type="checkbox" x-model="autoMigrate" class="rounded border-border text-amber-500 focus:ring-amber-400">
@@ -2399,7 +3013,7 @@ function larasliceWizard() {
                                 </div>
                             </div>
 
-                            <!-- Multi-Slice Breakdown: Show ALL Generated Slices with Direct Links -->
+                                                <!-- Multi-Slice Breakdown: Show ALL Generated Slices with Direct Links -->
                             <div x-show="resultData?.allSlices && resultData.allSlices.length > 0" class="space-y-2.5 pt-2 border-t border-border/80">
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs font-bold text-foreground uppercase tracking-wider">📦 All Slices in this Suite (<span x-text="resultData?.allSlices?.length ?? 0"></span>)</span>
@@ -2467,6 +3081,85 @@ function larasliceWizard() {
             </div>
         </div>
 
+<!-- Modal: Add Pipeline Stage -->
+                    <div x-show="showAddStateModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+                        <div @click.away="showAddStateModal = false" class="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4">
+                            <div class="flex items-center justify-between border-b border-border pb-3">
+                                <h3 class="font-bold text-sm text-foreground">Add Pipeline Stage</h3>
+                                <button type="button" @click="showAddStateModal = false" class="text-muted-foreground hover:text-foreground text-xs cursor-pointer">✕</button>
+                            </div>
+                            <div class="space-y-3 text-xs">
+                                <div>
+                                    <label class="block font-semibold text-muted-foreground mb-1">Stage Label *</label>
+                                    <input type="text" x-model="newState.label" placeholder="e.g. Scrutiny Review" class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none">
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block font-semibold text-muted-foreground mb-1">Slug</label>
+                                        <input type="text" x-model="newState.slug" placeholder="e.g. scrutiny_review" class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block font-semibold text-muted-foreground mb-1">Theme Color</label>
+                                        <select x-model="newState.color" class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs focus:outline-none cursor-pointer">
+                                            <option value="slate">Slate (Neutral)</option>
+                                            <option value="amber">Amber (Pending)</option>
+                                            <option value="sky">Sky (Action)</option>
+                                            <option value="indigo">Indigo (Review)</option>
+                                            <option value="purple">Purple (Escalated)</option>
+                                            <option value="emerald">Emerald (Success)</option>
+                                            <option value="rose">Rose (Rejected)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block font-semibold text-muted-foreground mb-1">SLA Hours (Optional)</label>
+                                        <input type="number" x-model="newState.sla_hours" placeholder="e.g. 48" class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none">
+                                    </div>
+                                    <div class="flex items-center pt-5">
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" x-model="newState.terminal" class="size-4 rounded border-input text-primary">
+                                            <span class="font-medium text-foreground text-xs">Terminal Final State</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-2 pt-3 border-t border-border">
+                                <button type="button" @click="showAddStateModal = false" class="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                                <button type="button" @click="addWorkflowState()" class="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90">Add Stage</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Modal: Add Custom Role -->
+                    <div x-show="showAddRoleModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+                        <div @click.away="showAddRoleModal = false" class="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4">
+                            <div class="flex items-center justify-between border-b border-border pb-3">
+                                <h3 class="font-bold text-sm text-foreground">Add Slice-Scoped Role</h3>
+                                <button type="button" @click="showAddRoleModal = false" class="text-muted-foreground hover:text-foreground text-xs cursor-pointer">✕</button>
+                            </div>
+                            <div class="space-y-3 text-xs">
+                                <div>
+                                    <label class="block font-semibold text-muted-foreground mb-1">Role Title *</label>
+                                    <input type="text" x-model="newRole.name" placeholder="e.g. Compliance Officer" class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-semibold text-muted-foreground mb-1">Slug</label>
+                                    <input type="text" x-model="newRole.slug" placeholder="e.g. compliance_officer" class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs font-mono focus:ring-1 focus:ring-primary focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-semibold text-muted-foreground mb-1">Functional Description</label>
+                                    <input type="text" x-model="newRole.description" placeholder="Responsible for regulatory scrutiny..." class="w-full px-3 py-2 bg-muted/30 border border-input rounded-xl text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none">
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-2 pt-3 border-t border-border">
+                                <button type="button" @click="showAddRoleModal = false" class="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                                <button type="button" @click="addCustomRole()" class="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90">Add Role</button>
+                            </div>
+                        </div>
+                    </div>
+
+                            
         <!-- October CMS Builder Style Studio Mode -->
         <div x-show="mainTab === 'studio'" class="grid grid-cols-1 md:grid-cols-12 gap-6">
             <!-- Left: Slice Selector (Grouped by Domain with Accordion) -->

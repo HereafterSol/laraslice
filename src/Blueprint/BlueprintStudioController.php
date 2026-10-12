@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Ai\JevDecisionService;
 use LaraSlice\Core\Security\Access;
+use LaraSlice\Generator\SliceName;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
 use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
@@ -183,6 +184,7 @@ final class BlueprintStudioController extends Controller
             'format' => ['required', 'in:yaml,yml,json'],
             'slices_json' => ['nullable', 'string'],
             'active_slice_idx' => ['nullable', 'integer'],
+            'plan_scope' => ['nullable', 'in:domain,slice'],
         ]);
 
         $slicesPath = config('laraslice.slices_path', app_path('Slices'));
@@ -190,10 +192,179 @@ final class BlueprintStudioController extends Controller
         $dbTables = $this->getDatabaseTables();
         $allSlicesJson = $request->input('slices_json');
         $activeSliceIdx = (int) $request->input('active_slice_idx', 0);
+        $planScope = $request->input('plan_scope');
+
+        $slicesList = [];
+        if (! empty($allSlicesJson)) {
+            try {
+                $decoded = json_decode($allSlicesJson, true);
+                if (is_array($decoded) && count($decoded) > 0) {
+                    $slicesList = $decoded;
+                }
+            } catch (Throwable) {}
+        }
+
+        if ($planScope === null) {
+            $planScope = count($slicesList) > 1 ? 'domain' : 'slice';
+        }
 
         try {
-            $blueprint = $validator->validate($loader->parse($input['source'], $input['format']));
+            if ($planScope === 'domain' && count($slicesList) > 1) {
+                // Execute domain-wide plan for all slices in the suite
+                $slicePlans = [];
+                $allCompiledModels = [];
+                $allDatabaseOps = [];
+                $allFiles = [];
+                $allExistingTables = [];
+                $allSupported = true;
+                $allSupportMessages = [];
+                $anyConflict = false;
+                $domainName = null;
+                $applier = new BlueprintApplier(static fn (string $table): bool => Schema::hasTable($table));
+
+                foreach ($slicesList as $sIdx => $sl) {
+                    $sliceName = $sl['name'] ?? "Slice ".($sIdx + 1);
+                    $sliceSource = $sl['source'] ?? '';
+                    if (empty($sliceSource) && isset($sl['blueprint'])) {
+                        $sliceSource = Yaml::dump($sl['blueprint'], 4, 2);
+                    }
+
+                    $sliceParsed = $loader->parse($sliceSource, 'yaml');
+                    if (isset($sliceParsed['models']) && is_array($sliceParsed['models'])) {
+                        foreach ($sliceParsed['models'] as &$m) {
+                            if (isset($m['handle']) && is_string($m['handle'])) {
+                                $m['handle'] = Str::snake($m['handle']);
+                            }
+                        }
+                        unset($m);
+                    }
+
+                    $validBp = $validator->validate($sliceParsed);
+                    if (! $domainName && ! empty($validBp['domain'])) {
+                        $domainName = $validBp['domain'];
+                    }
+
+                    $sPlan = $planner->plan($validBp, $slicesPath);
+                    $sSupported = true;
+                    $sSupportMessage = null;
+
+                    try {
+                        $applier->assertSupported($validBp);
+                    } catch (Throwable $e) {
+                        $sSupported = false;
+                        $sSupportMessage = $e->getMessage();
+                        $allSupported = false;
+                        $allSupportMessages[] = "[{$sliceName}]: {$sSupportMessage}";
+                    }
+
+                    if ($sPlan['conflict']) {
+                        $anyConflict = true;
+                    }
+
+                    foreach ($sPlan['database_operations'] as $op) {
+                        if ($op['kind'] === 'create_table' && Schema::hasTable($op['table'])) {
+                            $allExistingTables[] = $op['table'];
+                        }
+                        $allDatabaseOps[] = $op;
+                    }
+
+                    foreach ($sPlan['files'] as $f) {
+                        $allFiles[] = $f;
+                    }
+
+                    foreach ($sPlan['models'] as $m) {
+                        $m['slice_name'] = $sliceName;
+                        $m['slice_handle'] = $validBp['handle'] ?? Str::snake($sliceName);
+                        $allCompiledModels[] = $m;
+                    }
+
+                    $slicePlans[] = [
+                        'name' => $sliceName,
+                        'handle' => $validBp['handle'] ?? Str::snake($sliceName),
+                        'target' => $sPlan['target'],
+                        'conflict' => $sPlan['conflict'],
+                        'supported' => $sSupported,
+                        'support_message' => $sSupportMessage,
+                        'models_count' => count($sPlan['models']),
+                        'files_count' => count($sPlan['files']),
+                        'database_operations_count' => count($sPlan['database_operations']),
+                        'plan_hash' => $sPlan['plan_hash'],
+                        'models' => $sPlan['models'],
+                        'files' => $sPlan['files'],
+                        'database_operations' => $sPlan['database_operations'],
+                    ];
+                }
+
+                // Deduplicate operations
+                $uniqueOps = [];
+                foreach ($allDatabaseOps as $op) {
+                    $k = json_encode($op, JSON_UNESCAPED_SLASHES);
+                    $uniqueOps[$k] = $op;
+                }
+                $allDatabaseOps = array_values($uniqueOps);
+                $allExistingTables = array_values(array_unique($allExistingTables));
+                $allFiles = array_values(array_unique($allFiles));
+
+                $domainName = $domainName ?: ($slicesList[0]['domain'] ?? 'Domain');
+                $domainFolder = SliceName::domainSegment($domainName);
+                $domainTarget = rtrim($slicesPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$domainFolder;
+
+                $jev = new JevDecisionService;
+                $archetypeDecision = $jev->classifyArchetype("Domain Suite for {$domainName} containing ".count($slicesList)." vertical slices");
+                $riskDecision = $jev->evaluateMigrationRisk(
+                    $this->getDatabaseTables(),
+                    $allDatabaseOps
+                );
+
+                $domainPlanHash = hash('sha256', json_encode([
+                    'domain' => $domainName,
+                    'slices' => array_column($slicePlans, 'plan_hash'),
+                ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+                $plan = [
+                    'is_domain_plan' => true,
+                    'domain_name' => $domainName,
+                    'slices_count' => count($slicesList),
+                    'target' => $domainTarget.' ('.count($slicesList).' Slices in ['.$domainName.'])',
+                    'conflict' => $anyConflict,
+                    'models' => $allCompiledModels,
+                    'database_operations' => $allDatabaseOps,
+                    'files' => $allFiles,
+                    'slice_plans' => $slicePlans,
+                    'plan_hash' => $domainPlanHash,
+                ];
+
+                return view('laraslice::blueprint-studio', [
+                    'source' => $input['source'],
+                    'format' => $input['format'],
+                    'blueprint' => $slicesList[$activeSliceIdx]['blueprint'] ?? ['name' => $domainName, 'domain' => $domainName],
+                    'plan' => $plan,
+                    'supported' => $allSupported,
+                    'supportMessage' => ! empty($allSupportMessages) ? implode('; ', $allSupportMessages) : null,
+                    'existingTables' => $allExistingTables,
+                    'installedSlices' => $installedSlices,
+                    'dbTables' => $dbTables,
+                    'archetypeDecision' => $archetypeDecision,
+                    'riskDecision' => $riskDecision,
+                    'allSlicesJson' => $allSlicesJson,
+                    'activeSliceIdx' => $activeSliceIdx,
+                    'planScope' => 'domain',
+                ]);
+            }
+
+            // Single Slice Plan
+            $parsed = $loader->parse($input['source'], $input['format']);
+            if (isset($parsed['models']) && is_array($parsed['models'])) {
+                foreach ($parsed['models'] as &$m) {
+                    if (isset($m['handle']) && is_string($m['handle'])) {
+                        $m['handle'] = Str::snake($m['handle']);
+                    }
+                }
+                unset($m);
+            }
+            $blueprint = $validator->validate($parsed);
             $plan = $planner->plan($blueprint, $slicesPath);
+            $plan['is_domain_plan'] = false;
             $supported = true;
             $supportMessage = null;
 
@@ -233,6 +404,7 @@ final class BlueprintStudioController extends Controller
                 'riskDecision' => $riskDecision,
                 'allSlicesJson' => $allSlicesJson,
                 'activeSliceIdx' => $activeSliceIdx,
+                'planScope' => 'slice',
             ]);
         } catch (Throwable $exception) {
             return view('laraslice::blueprint-studio', [
@@ -243,6 +415,7 @@ final class BlueprintStudioController extends Controller
                 'dbTables' => $dbTables,
                 'allSlicesJson' => $allSlicesJson,
                 'activeSliceIdx' => $activeSliceIdx,
+                'planScope' => $planScope,
             ]);
         }
     }
@@ -262,8 +435,10 @@ final class BlueprintStudioController extends Controller
             'plan_hash' => ['required', 'regex:/^[a-f0-9]{64}$/'],
             'confirm_apply' => ['accepted'],
             'auto_migrate' => ['nullable'],
+            'overwrite_existing' => ['nullable'],
             'slices_json' => ['nullable', 'string'],
             'active_slice_idx' => ['nullable', 'integer'],
+            'plan_scope' => ['nullable', 'in:domain,slice'],
         ]);
 
         $slicesPath = config('laraslice.slices_path', app_path('Slices'));
@@ -271,9 +446,89 @@ final class BlueprintStudioController extends Controller
         $installedSlices = $this->getInstalledSlices($slicesPath);
         $allSlicesJson = $request->input('slices_json');
         $activeSliceIdx = (int) $request->input('active_slice_idx', 0);
+        $planScope = $request->input('plan_scope');
+        $overwriteExisting = $request->boolean('overwrite_existing', false);
 
         try {
-            $blueprint = $validator->validate($loader->parse($input['source'], $input['format']));
+            if ($planScope === 'domain' && ! empty($allSlicesJson)) {
+                $slicesList = json_decode($allSlicesJson, true) ?: [];
+                $generatedTargets = [];
+                $applier = new BlueprintApplier(static fn (string $table): bool => Schema::hasTable($table));
+                $namespace = config('laraslice.slices_namespace', 'App\\Slices');
+
+                foreach ($slicesList as $sIdx => $sl) {
+                    $sliceSource = $sl['source'] ?? '';
+                    if (empty($sliceSource) && isset($sl['blueprint'])) {
+                        $sliceSource = Yaml::dump($sl['blueprint'], 4, 2);
+                    }
+                    $sliceParsed = $loader->parse($sliceSource, 'yaml');
+                    if (isset($sliceParsed['models']) && is_array($sliceParsed['models'])) {
+                        foreach ($sliceParsed['models'] as &$m) {
+                            if (isset($m['handle']) && is_string($m['handle'])) {
+                                $m['handle'] = Str::snake($m['handle']);
+                            }
+                        }
+                        unset($m);
+                    }
+                    $validBp = $validator->validate($sliceParsed);
+                    $sPlan = $planner->plan($validBp, $slicesPath);
+                    $target = $applier->apply($validBp, $sPlan, $slicesPath, $namespace, $overwriteExisting);
+                    $generatedTargets[] = $target;
+                }
+
+                $installedSlices = $this->getInstalledSlices($slicesPath);
+
+                $migrated = false;
+                $migrationMessage = null;
+                $domainName = $slicesList[0]['domain'] ?? 'Domain';
+                $mayMigrate = Access::allows($request->user(), ['studio.migrate', 'studio.*']);
+                if ($request->boolean('auto_migrate', false) && ! $mayMigrate) {
+                    $migrationMessage = 'Migrations were not run: running migrations requires the studio.migrate permission.';
+                } elseif ($request->boolean('auto_migrate', false)) {
+                    try {
+                        $outputs = $this->executeMigrations();
+                        $seeded = $this->runDomainSeeders($domainName);
+                        $migrated = true;
+                        $migrationMessage = ! empty($outputs) ? implode("\n", $outputs) : 'Database migrations applied.';
+                        if (! empty($seeded)) {
+                            $migrationMessage .= ' Master data seeders executed.';
+                        }
+                    } catch (Throwable $e) {
+                        $migrationMessage = 'Migration warning: '.$e->getMessage();
+                    }
+                }
+
+                $successMsg = "Successfully generated all ".count($generatedTargets)." vertical slices in [{$domainName}] domain suite with persisted slice.yaml files!";
+                if ($migrated) {
+                    $successMsg .= ' Database migrations were automatically executed.';
+                } else {
+                    $successMsg .= " Click '⚡ Run Migrations' or run 'php artisan migrate' to apply database tables.";
+                }
+
+                return view('laraslice::blueprint-studio', [
+                    'source' => $input['source'],
+                    'format' => $input['format'],
+                    'blueprint' => $slicesList[$activeSliceIdx]['blueprint'] ?? ['name' => $domainName, 'domain' => $domainName],
+                    'installedSlices' => $installedSlices,
+                    'dbTables' => $this->getDatabaseTables(),
+                    'success' => $successMsg,
+                    'migrationMessage' => $migrationMessage,
+                    'generatedSliceUrl' => url('/'.Str::slug($domainName)),
+                    'allSlicesJson' => $allSlicesJson,
+                    'activeSliceIdx' => $activeSliceIdx,
+                ]);
+            }
+
+            $parsed = $loader->parse($input['source'], $input['format']);
+            if (isset($parsed['models']) && is_array($parsed['models'])) {
+                foreach ($parsed['models'] as &$m) {
+                    if (isset($m['handle']) && is_string($m['handle'])) {
+                        $m['handle'] = Str::snake($m['handle']);
+                    }
+                }
+                unset($m);
+            }
+            $blueprint = $validator->validate($parsed);
             $plan = $planner->plan($blueprint, $slicesPath);
 
             if (! hash_equals($plan['plan_hash'], $input['plan_hash'])) {
@@ -281,7 +536,7 @@ final class BlueprintStudioController extends Controller
             }
 
             $target = (new BlueprintApplier(static fn (string $table): bool => Schema::hasTable($table)))
-                ->apply($blueprint, $plan, $slicesPath, config('laraslice.slices_namespace', 'App\\Slices'));
+                ->apply($blueprint, $plan, $slicesPath, config('laraslice.slices_namespace', 'App\\Slices'), $overwriteExisting);
 
             // Refresh installed slices list so the newly created slice appears immediately in the UI dropdown
             $installedSlices = $this->getInstalledSlices($slicesPath);
@@ -349,16 +604,20 @@ final class BlueprintStudioController extends Controller
     public function runMigrations(Request $request): mixed
     {
         try {
-            Artisan::call('migrate', ['--force' => true]);
-            $output = trim(Artisan::output());
-            $message = ! empty($output) ? $output : 'Database migrations executed successfully.';
+            $outputs = $this->executeMigrations();
+            $message = ! empty($outputs) ? implode("\n", $outputs) : 'Database migrations executed successfully.';
+
+            // Also seed any master data if present
+            foreach (glob(app_path('Slices/*'), GLOB_ONLYDIR) as $domainDir) {
+                $this->runDomainSeeders(basename($domainDir));
+            }
 
             if ($request->wantsJson()) {
                 return response()->json(['success' => true, 'message' => $message]);
             }
 
             return redirect()->route('laraslice.wizard.blueprint')
-                ->with('success', "⚡ Migrations executed successfully: {$message}");
+                ->with('success', "⚡ Migrations & master data executed successfully: {$message}");
         } catch (Throwable $e) {
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
@@ -367,6 +626,107 @@ final class BlueprintStudioController extends Controller
             return redirect()->route('laraslice.wizard.blueprint')
                 ->with('error', 'Migration failed: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Discover and execute all core and slice migrations across the project.
+     *
+     * @return array<int, string>
+     */
+    protected function executeMigrations(): array
+    {
+        $outputs = [];
+        $slicesBasePath = config('laraslice.slices_path', app_path('Slices'));
+        $migrationPaths = [];
+
+        if (is_dir($slicesBasePath)) {
+            $rdi = new \RecursiveDirectoryIterator($slicesBasePath, \RecursiveDirectoryIterator::SKIP_DOTS);
+            $rii = new \RecursiveIteratorIterator($rdi, \RecursiveIteratorIterator::SELF_FIRST);
+            foreach ($rii as $item) {
+                if ($item->isDir() && strtolower($item->getFilename()) === 'migrations') {
+                    $mp = $item->getRealPath();
+                    if ($mp && ! in_array($mp, $migrationPaths, true)) {
+                        $migrationPaths[] = $mp;
+                    }
+                }
+            }
+        }
+
+        // 1. Run standard migrate
+        Artisan::call('migrate', ['--force' => true]);
+        $defaultOut = trim(Artisan::output());
+        if ($defaultOut && ! str_contains($defaultOut, 'Nothing to migrate')) {
+            $outputs[] = $defaultOut;
+        }
+
+        // 2. Explicitly migrate each discovered slice migration folder
+        foreach (array_unique($migrationPaths) as $mp) {
+            if (is_dir($mp)) {
+                $relative = str_replace([base_path().DIRECTORY_SEPARATOR, base_path().'/'], '', $mp);
+                $relative = str_replace('\\', '/', $relative);
+                try {
+                    Artisan::call('migrate', [
+                        '--force' => true,
+                        '--path' => $relative,
+                    ]);
+                    $out = trim(Artisan::output());
+                    if ($out && ! str_contains($out, 'Nothing to migrate')) {
+                        $outputs[] = $out;
+                    }
+                } catch (\Throwable $pe) {
+                    try {
+                        Artisan::call('migrate', [
+                            '--force' => true,
+                            '--realpath' => true,
+                            '--path' => $mp,
+                        ]);
+                        $out = trim(Artisan::output());
+                        if ($out && ! str_contains($out, 'Nothing to migrate')) {
+                            $outputs[] = $out;
+                        }
+                    } catch (\Throwable $e) {
+                        $outputs[] = 'Error in '.$relative.': '.$e->getMessage();
+                    }
+                }
+            }
+        }
+
+        return $outputs;
+    }
+
+    /**
+     * Seed master data taxonomies and domain roles so dropdowns are pre-populated.
+     */
+    protected function runDomainSeeders(string $domainName): array
+    {
+        $seeded = [];
+        $seederClass = 'Database\\Seeders\\'.Str::studly($domainName).'MasterDataSeeder';
+        $hostSeederFile = database_path('seeders/'.Str::studly($domainName).'MasterDataSeeder.php');
+        if (file_exists($hostSeederFile)) {
+            require_once $hostSeederFile;
+            if (class_exists($seederClass)) {
+                try {
+                    (new $seederClass)->run();
+                    $seeded[] = $seederClass;
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+
+        $sliceSeederPath = app_path("Slices/{$domainName}/MasterData/Database/Seeders/".Str::studly($domainName)."MasterDataSeeder.php");
+        if (file_exists($sliceSeederPath)) {
+            require_once $sliceSeederPath;
+            $sliceClass = "App\\Slices\\{$domainName}\\MasterData\\Database\\Seeders\\".Str::studly($domainName)."MasterDataSeeder";
+            if (class_exists($sliceClass)) {
+                try {
+                    (new $sliceClass)->run();
+                    $seeded[] = $sliceClass;
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+
+        return $seeded;
     }
 
     /**
@@ -637,4 +997,51 @@ final class BlueprintStudioController extends Controller
             return '';
         }
     }
+
+    /**
+     * Inspect a legacy application directory and return table classification & slice mapping.
+     */
+    public function portInspect(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
+    {
+        $source = (string) $request->input('source', '');
+        $domain = (string) $request->input('domain', 'Adjudication');
+
+        try {
+            $data = $portService->inspect($source, $domain);
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Execute the porting and migration pipeline for a legacy application.
+     */
+    public function portExecute(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
+    {
+        $source = (string) $request->input('source', '');
+        $domain = (string) $request->input('domain', 'Adjudication');
+        $mode = (string) $request->input('mode', 'system-base');
+        $withFiles = (bool) $request->input('with_files', false);
+
+        try {
+            $result = $portService->execute($source, $domain, $mode, $withFiles);
+            return response()->json([
+                'success' => true,
+                'result' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
 }

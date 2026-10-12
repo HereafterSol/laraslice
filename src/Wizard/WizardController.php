@@ -78,6 +78,8 @@ class WizardController extends Controller
             'childTables' => 'nullable|array|max:20',
             'permissions' => 'nullable|array|max:50',
             'workflow' => 'nullable|boolean',
+            'workflowConfig' => 'nullable|array',
+            'roles' => 'nullable|array',
             'includeApi' => 'nullable|boolean',
             'flutter' => 'nullable|boolean',
             'runMigration' => 'nullable|boolean',
@@ -95,6 +97,8 @@ class WizardController extends Controller
                     'author' => $validated['author'] ?? null,
                     'domain' => $validated['domain'] ?? null,
                     'permissions' => $validated['permissions'] ?? null,
+                    'workflowConfig' => $request->input('workflowConfig'),
+                    'roles' => $request->input('roles'),
                     'api' => $includeApi,
                 ]
             );
@@ -1013,6 +1017,8 @@ class WizardController extends Controller
             'namespace' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*$/'],
             'author' => 'nullable|string|max:120',
             'workflow' => 'nullable|boolean',
+            'workflowConfig' => 'nullable|array',
+            'roles' => 'nullable|array',
             'includeApi' => 'nullable|boolean',
             'flutter' => 'nullable|boolean',
             'runMigration' => 'nullable|boolean',
@@ -1037,6 +1043,8 @@ class WizardController extends Controller
                     [
                         'domain' => $domain,
                         'author' => $validated['author'] ?? null,
+                        'workflowConfig' => $request->input('workflowConfig'),
+                        'roles' => $request->input('roles'),
                         'api' => (bool) ($validated['includeApi'] ?? true),
                     ]
                 );

@@ -100,9 +100,15 @@ class SliceManifest
 
     public function getMigrationsPath(): ?string
     {
-        $path = $this->path.'/Migrations';
+        if (is_dir($this->path.'/Migrations')) {
+            return $this->path.'/Migrations';
+        }
 
-        return is_dir($path) ? $path : null;
+        if (is_dir($this->path.'/Database/Migrations')) {
+            return $this->path.'/Database/Migrations';
+        }
+
+        return null;
     }
 
     public function getViewsPath(): ?string

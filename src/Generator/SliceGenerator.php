@@ -128,12 +128,12 @@ class SliceGenerator
         }
         if ($includeWorkflow) {
             if (! in_array('status', $customColumns, true)) {
-                $migrationCols[] = "                \\\->string('status', 50)->default('draft')->index();";
+                $migrationCols[] = "                \$table->string('status', 50)->default('draft')->index();";
             }
-            $migrationCols[] = "                \\\->unsignedBigInteger('assigned_to_user_id')->nullable()->index();";
-            $migrationCols[] = "                \\\->string('assigned_to_role', 100)->nullable();";
-            $migrationCols[] = "                \\\->string('assigned_to_department', 100)->nullable();";
-            $migrationCols[] = "                \\\->timestamp('workflow_state_entered_at')->nullable();";
+            $migrationCols[] = "                \$table->unsignedBigInteger('assigned_to_user_id')->nullable()->index();";
+            $migrationCols[] = "                \$table->string('assigned_to_role', 100)->nullable();";
+            $migrationCols[] = "                \$table->string('assigned_to_department', 100)->nullable();";
+            $migrationCols[] = "                \$table->timestamp('workflow_state_entered_at')->nullable();";
         }
         $migrationBody = implode("\n", $migrationCols);
 
@@ -236,6 +236,54 @@ class SliceGenerator
             }
 
             // 1. slice.json Manifest
+            $manifestWorkflow = false;
+            if ($includeWorkflow) {
+                if (! empty($options['workflowConfig']) && is_array($options['workflowConfig'])) {
+                    $manifestWorkflow = $options['workflowConfig'];
+                } else {
+                    $manifestWorkflow = [
+                        'enabled' => true,
+                        'slug' => $pluralSnake,
+                        'name' => "{$studlyName} Workflow",
+                        'state_field' => 'status',
+                        'initial_state' => 'draft',
+                        'states' => [
+                            ['slug' => 'draft', 'label' => 'Draft', 'color' => 'slate', 'icon' => 'file-text', 'initial' => true],
+                            ['slug' => 'under_review', 'label' => 'Under Review', 'color' => 'amber', 'icon' => 'clock', 'sla_hours' => 24],
+                            ['slug' => 'approved', 'label' => 'Approved', 'color' => 'emerald', 'icon' => 'check-circle'],
+                            ['slug' => 'rejected', 'label' => 'Rejected', 'color' => 'rose', 'icon' => 'x-circle', 'terminal' => true],
+                        ],
+                        'transitions' => [
+                            [
+                                'slug' => 'submit',
+                                'name' => 'Submit for Review',
+                                'from' => ['draft'],
+                                'to' => 'under_review',
+                                'color' => 'primary',
+                                'routing' => ['type' => 'hierarchy_manager', 'notify' => true],
+                            ],
+                            [
+                                'slug' => 'approve',
+                                'name' => 'Approve',
+                                'from' => ['under_review'],
+                                'to' => 'approved',
+                                'permission' => "{$snakeName}.edit",
+                                'requires_remarks' => true,
+                                'color' => 'success',
+                            ],
+                            [
+                                'slug' => 'reject',
+                                'name' => 'Reject back to Draft',
+                                'from' => ['under_review'],
+                                'to' => 'draft',
+                                'permission' => "{$snakeName}.edit",
+                                'requires_remarks' => true,
+                                'color' => 'danger',
+                            ],
+                        ],
+                    ];
+                }
+            }
             $manifestData = [
                 'name' => $pluralName,
                 'title' => Str::title(Str::snake($pluralName, ' ')),
@@ -243,47 +291,8 @@ class SliceGenerator
                 'description' => $description,
                 'author' => $author,
                 'active' => true,
-                'workflow' => $includeWorkflow ? [
-                    'enabled' => true,
-                    'slug' => $pluralSnake,
-                    'name' => "{\$studlyName} Workflow",
-                    'state_field' => 'status',
-                    'initial_state' => 'draft',
-                    'states' => [
-                        ['slug' => 'draft', 'label' => 'Draft', 'color' => 'slate', 'icon' => 'file-text', 'initial' => true],
-                        ['slug' => 'under_review', 'label' => 'Under Review', 'color' => 'amber', 'icon' => 'clock', 'sla_hours' => 24],
-                        ['slug' => 'approved', 'label' => 'Approved', 'color' => 'emerald', 'icon' => 'check-circle'],
-                        ['slug' => 'rejected', 'label' => 'Rejected', 'color' => 'rose', 'icon' => 'x-circle', 'terminal' => true],
-                    ],
-                    'transitions' => [
-                        [
-                            'slug' => 'submit',
-                            'name' => 'Submit for Review',
-                            'from' => ['draft'],
-                            'to' => 'under_review',
-                            'color' => 'primary',
-                            'routing' => ['type' => 'hierarchy_manager', 'notify' => true],
-                        ],
-                        [
-                            'slug' => 'approve',
-                            'name' => 'Approve',
-                            'from' => ['under_review'],
-                            'to' => 'approved',
-                            'permission' => "{\$snakeName}.edit",
-                            'requires_remarks' => true,
-                            'color' => 'success',
-                        ],
-                        [
-                            'slug' => 'reject',
-                            'name' => 'Reject back to Draft',
-                            'from' => ['under_review'],
-                            'to' => 'draft',
-                            'permission' => "{\$snakeName}.edit",
-                            'requires_remarks' => true,
-                            'color' => 'danger',
-                        ],
-                    ],
-                ] : false,
+                'workflow' => $manifestWorkflow,
+                'roles' => ! empty($options['roles']) && is_array($options['roles']) ? $options['roles'] : (! empty($options['workflowConfig']['roles']) ? $options['workflowConfig']['roles'] : []),
                 'fields' => ManifestRepository::fieldMap($manifestFields),
                 'permissions' => ! empty($options['permissions']) && is_array($options['permissions'])
                     ? $options['permissions']
@@ -308,6 +317,16 @@ class SliceGenerator
             }
 
             $this->writeFile($sliceDir.'/slice.json', json_encode($manifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+            if (! empty($manifestData['roles']) && is_array($manifestData['roles'])) {
+                try {
+                    $seeder = new SliceSeederService;
+                    if (method_exists($seeder, 'seedCustomRolesAndUsers')) {
+                        $seeder->seedCustomRolesAndUsers($manifestData['roles']);
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
 
             // 1b. Canonical slice.yaml Blueprint
             $yamlData = [
@@ -626,6 +645,7 @@ Route::prefix('{$routePrefix}')->name('{$pluralSnake}.')->middleware(config('lar
     Route::get('/', [{$studlyName}WebController::class, 'index'])->name('index');
     Route::get('/create', [{$studlyName}WebController::class, 'create'])->name('create');
     Route::post('/', [{$studlyName}WebController::class, 'store'])->name('store');
+    Route::get('/{id}', [{$studlyName}WebController::class, 'show'])->name('show');
     Route::get('/{id}/edit', [{$studlyName}WebController::class, 'edit'])->name('edit');
     Route::put('/{id}', [{$studlyName}WebController::class, 'update'])->name('update');
     Route::delete('/{id}', [{$studlyName}WebController::class, 'destroy'])->name('destroy');
@@ -670,6 +690,14 @@ PHP;
 
             // 8. Migration
             $timestamp = date('Y_m_d_His');
+            $auditCols = '';
+            if (! in_array('created_by', $customColumns, true)) {
+                $auditCols .= "\n                \$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();";
+            }
+            if (! in_array('updated_by', $customColumns, true)) {
+                $auditCols .= "\n                \$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();";
+            }
+
             $migration = <<<PHP
 <?php
 
@@ -682,9 +710,7 @@ return new class extends Migration {
     {
         Schema::create('{$tableName}', function (Blueprint \$table) {
                 \$table->id();
-{$migrationBody}
-                \$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-                \$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+{$migrationBody}{$auditCols}
                 \$table->timestamps();{$migrationSoftDeletes}
         });
     }
@@ -835,6 +861,11 @@ PHP;
             @else
                 <x-ui.data-table :columns="\$columns" :rows="\$rows" :page-size="10" search-placeholder="Filter {$pluralName}...">
                     <x-slot:actions>
+                        @if(\$can['view'] ?? true)
+                        <x-ui.button as="a" ::href="item.r.show_url" variant="ghost" size="sm" class="gap-1 text-muted-foreground hover:text-foreground">
+                            <x-lucide-eye class="size-4" /> View
+                        </x-ui.button>
+                        @endif
                         @if(\$can['edit'] ?? true)
                         <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
                             <x-lucide-pencil class="size-4" /> Edit
@@ -918,54 +949,268 @@ BLADE;
             $this->writeFile($sliceDir.'/Resources/views/create.blade.php', $bladeForm);
             $this->writeFile($sliceDir.'/Resources/views/edit.blade.php', $bladeForm);
 
-            if ($includeWorkflow) {
-                $showView = <<<BLADE
+            $showView = <<<BLADE
 @extends('layouts.app')
 
 @section('content')
-<div class="w-full max-w-5xl mx-auto space-y-6">
-    <div class="flex items-center justify-between pb-2 border-b border-border/40">
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <a href="{{ route('{\$pluralSnake}.index') }}" class="hover:text-primary transition-colors">{\$pluralName}</a>
-            <span>/</span>
-            <span class="text-foreground font-medium">{{ \\\->title ?? '{\$studlyName} #' . \\\->id }}</span>
+@php
+    \$id = \$record->id ?? 1;
+    \$label = \$record->title ?? \$record->name ?? ('{$studlyName} #' . \$id);
+    \$workflow = method_exists(\$record, 'getWorkflowDefinition') ? \$record->getWorkflowDefinition() : null;
+    \$transitions = method_exists(\$record, 'getAvailableTransitions') ? \$record->getAvailableTransitions() : [];
+    \$sla = method_exists(\$record, 'getSlaStatus') ? \$record->getSlaStatus() : null;
+    \$currentState = (string) (\$record->status ?? 'draft');
+    \$currentStateModel = \$workflow ? \$workflow->states->firstWhere('slug', \$currentState) : null;
+    \$stateLabel = \$currentStateModel?->label ?? ucwords(str_replace('_', ' ', \$currentState));
+    \$badgeColor = \$currentStateModel?->badge_color ?? 'indigo';
+    \$actionUrl = route('workflows.transition', ['slice' => '{$studlyName}', 'id' => \$id], false);
+@endphp
+
+<div class="space-y-6">
+    <!-- Top Header & Breadcrumbs -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-border/40">
+        <div>
+            <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                <a href="{{ route('{$pluralSnake}.index') }}" class="hover:text-primary transition-colors flex items-center gap-1">
+                    <x-lucide-arrow-left class="size-3" />
+                    <span>{$pluralName} Catalog</span>
+                </a>
+                <span>/</span>
+                <span class="text-foreground font-medium">{{ \$label }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-bold tracking-tight text-foreground">
+                    {{ \$label }}
+                </h1>
+                <x-ui.badge variant="outline" class="font-mono text-xs">
+                    #{{ \$id }}
+                </x-ui.badge>
+            </div>
         </div>
-        <div class="flex items-center gap-2">
-            <x-ui.button href="{{ route('{\$pluralSnake}.edit', \\\->id) }}" as="a" variant="outline" size="sm">
-                Edit Record
+
+        <div class="flex items-center gap-2.5">
+            <x-ui.button href="{{ route('{$pluralSnake}.index') }}" as="a" variant="outline" size="sm" class="gap-1.5">
+                <x-lucide-arrow-left class="size-3.5" />
+                <span>Back to Listing</span>
+            </x-ui.button>
+            <x-ui.button href="{{ route('{$pluralSnake}.edit', \$id) }}" as="a" variant="outline" size="sm" class="gap-1.5">
+                <x-lucide-pencil class="size-3.5" />
+                <span>Edit Record</span>
             </x-ui.button>
         </div>
     </div>
 
-    <!-- Stepper & Action Tray -->
-    <x-workflows::stepper :model="\\\" />
-    <x-workflows::action-tray :model="\\\" />
+    @if (session('success'))
+        <div class="p-4 rounded-xl border border-success/30 bg-success/10 text-success text-sm font-medium flex items-center gap-2 shadow-xs">
+            <x-lucide-check-circle class="size-4" />
+            <span>{{ session('success') }}</span>
+        </div>
+    @endif
 
-    <!-- Details Card -->
-    <x-ui.card class="p-6">
-        <h3 class="text-base font-bold text-foreground mb-4">Record Details</h3>
-        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div>
-                <dt class="text-xs text-muted-foreground font-medium">Status</dt>
-                <dd class="font-bold text-foreground">{{ \\\->status ?? 'draft' }}</dd>
-            </div>
-            <div>
-                <dt class="text-xs text-muted-foreground font-medium">Assigned Department</dt>
-                <dd class="text-foreground">{{ \\\->assigned_to_department ?? 'None' }}</dd>
-            </div>
-        </dl>
-    </x-ui.card>
+    @if (session('error'))
+        <div class="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2 shadow-xs">
+            <x-lucide-alert-circle class="size-4" />
+            <span>{{ session('error') }}</span>
+        </div>
+    @endif
 
-    <!-- Timeline Audit History -->
-    <x-workflows::timeline :model="\\\" />
+" . ($includeWorkflow ? "
+    <!-- Workflow Visual Stepper Pipeline -->
+    <x-workflows::stepper :model=\"\\\$record\" />
+" : "") . "
+    <!-- Two-Column Workspace: Left Main Content & Right Action Sidebar -->
+    <div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6 items-start\">
+        <!-- Left Main Column (2/3) -->
+        <div class=\"lg:col-span-2 space-y-6\">
+            <!-- Record Details Card -->
+            <x-ui.card variant=\"sectioned\" class=\"border shadow-xs bg-card\">
+                <x-ui.card-header class=\"border-b pb-4 px-6 pt-6\">
+                    <div class=\"flex items-center justify-between\">
+                        <div>
+                            <x-ui.card-title class=\"text-base font-semibold flex items-center gap-2\">
+                                <x-lucide-file-text class=\"size-4 text-indigo-500\" />
+                                <span>Record Details</span>
+                            </x-ui.card-title>
+                            <x-ui.card-description>Vertical slice record parameters and field attributes</x-ui.card-description>
+                        </div>
+                        <span class=\"text-xs px-2.5 py-1 rounded-full font-semibold uppercase tracking-wider
+                            {{ match(\\\$badgeColor) {
+                                'emerald', 'green', 'success' => 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+                                'rose', 'red', 'danger' => 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800',
+                                'amber', 'yellow', 'warning' => 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
+                                'purple' => 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800',
+                                'sky', 'cyan' => 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800',
+                                default => 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800',
+                            } }}\">
+                            {{ \\\$stateLabel }}
+                        </span>
+                    </div>
+                </x-ui.card-header>
 
-    <!-- Forward Modal Dialog -->
+                <x-ui.card-content class=\"p-6\">
+                    <div class=\"grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-6\">
+                        @foreach((\\\$record->getAttributes() ?? []) as \\\$k => \\\$v)
+                            @if(! in_array(\\\$k, ['id', 'created_at', 'updated_at', 'workflow_state_entered_at']) && ! is_array(\\\$v))
+                                <div>
+                                    <dt class=\"text-xs font-semibold uppercase tracking-wider text-muted-foreground\">{{ ucwords(str_replace('_', ' ', \\\$k)) }}</dt>
+                                    <dd class=\"mt-1 text-sm font-medium text-foreground\">{{ is_scalar(\\\$v) ? (string) \\\$v : '—' }}</dd>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </x-ui.card-content>
+            </x-ui.card>
+" . ($includeWorkflow ? "
+            <!-- Immutable Timeline & Decision Audit History -->
+            <x-workflows::timeline :model=\"\\\$record\" />
+" : "") . "
+        </div>
+
+        <!-- Right Side Bar Column (1/3) -->
+        <div class=\"space-y-6\">
+" . ($includeWorkflow ? "
+            <!-- Workflow State & Forward Options Card -->
+            <x-ui.card variant=\"sectioned\" class=\"border shadow-xs bg-card ring-1 ring-border/60\">
+                <x-ui.card-header class=\"border-b pb-4 px-6 pt-5 bg-muted/20\">
+                    <div class=\"flex items-center gap-2 text-foreground font-semibold text-sm\">
+                        <x-lucide-arrow-right-circle class=\"size-4 text-indigo-500\" />
+                        <span>Workflow Forward & Actions</span>
+                    </div>
+                    <x-ui.card-description class=\"text-xs\">Execute authorized state machine transitions</x-ui.card-description>
+                </x-ui.card-header>
+
+                <x-ui.card-content class=\"p-6 space-y-5\">
+                    <!-- Current Status Display -->
+                    <div class=\"p-3.5 rounded-xl bg-muted/40 border border-border/60 space-y-2\">
+                        <div class=\"flex items-center justify-between text-xs\">
+                            <span class=\"text-muted-foreground font-medium\">Current Stage:</span>
+                            <span class=\"font-bold text-foreground\">{{ \\\$stateLabel }}</span>
+                        </div>
+
+                        @if(\\\$sla && (\\\$sla['has_sla'] ?? false))
+                            <div class=\"pt-2 border-t border-border/40 flex items-center justify-between text-xs\">
+                                <span class=\"text-muted-foreground font-medium\">SLA Clock:</span>
+                                @if(\\\$sla['is_breached'] ?? false)
+                                    <span class=\"font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1\">
+                                        <x-lucide-alert-triangle class=\"size-3\" />
+                                        <span>Breached ({{ abs(\\\$sla['hours_remaining']) }}h overdue)</span>
+                                    </span>
+                                @else
+                                    <span class=\"font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1\">
+                                        <x-lucide-clock class=\"size-3\" />
+                                        <span>{{ \\\$sla['hours_remaining'] }}h remaining</span>
+                                    </span>
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+
+                    <!-- Forward Transition Actions -->
+                    <div>
+                        <h4 class=\"text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5\">
+                            <x-lucide-corner-down-right class=\"size-3.5 text-indigo-500\" />
+                            <span>Available Forward Actions</span>
+                        </h4>
+
+                        @if(! empty(\\\$transitions))
+                            <div class=\"space-y-2.5\">
+                                @foreach(\\\$transitions as \\\$trans)
+                                    @php
+                                        \\\$slug = is_object(\\\$trans) ? \\\$trans->slug : \\\$trans['slug'];
+                                        \\\$label = is_object(\\\$trans) ? (\\\$trans->label ?? \\\$trans->slug) : (\\\$trans['label'] ?? \\\$trans['slug']);
+                                        \\\$color = is_object(\\\$trans) ? (\\\$trans->button_color ?? 'primary') : (\\\$trans['button_color'] ?? 'primary');
+                                        \\\$requiresRemarks = is_object(\\\$trans) ? (! empty(\\\$trans->requires_remarks)) : (! empty(\\\$trans['requires_remarks']));
+                                        \\\$requiresAttachment = is_object(\\\$trans) ? (! empty(\\\$trans->requires_attachment)) : (! empty(\\\$trans['requires_attachment']));
+
+                                        \\\$colorClasses = match(\\\$color) {
+                                            'success', 'emerald' => 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm ring-1 ring-emerald-500/20',
+                                            'danger', 'rose' => 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm ring-1 ring-rose-500/20',
+                                            'warning', 'amber' => 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm ring-1 ring-amber-500/20',
+                                            'purple' => 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm ring-1 ring-purple-500/20',
+                                            'indigo' => 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm ring-1 ring-indigo-500/20',
+                                            default => 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm',
+                                        };
+                                    @endphp
+
+                                    <button
+                                        type="button"
+                                        onclick=\"window.openWorkflowModal('{{ \\\$slug }}', '{{ addslashes(\\\$label) }}', '{{ \\\$actionUrl }}', {{ \\\$requiresRemarks ? 'true' : 'false' }}, {{ \\\$requiresAttachment ? 'true' : 'false' }})\"
+                                        class=\"w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer {{ \\\$colorClasses }}\"
+                                    >
+                                        <span class=\"truncate\">{{ \\\$label }}</span>
+                                        <x-lucide-arrow-right class=\"size-3.5 shrink-0 ml-2\" />
+                                    </button>
+                                @endforeach
+                            </div>
+                        @else
+                            <div class=\"p-3.5 rounded-xl bg-muted/30 border border-dashed border-border text-center text-xs text-muted-foreground\">
+                                <x-lucide-check-circle-2 class=\"size-5 mx-auto text-emerald-500 mb-1.5\" />
+                                <p class=\"font-semibold text-foreground\">Terminal Stage Reached</p>
+                                <p class=\"text-[11px] mt-0.5\">No further forward transitions available for this record.</p>
+                            </div>
+                        @endif
+                    </div>
+                </x-ui.card-content>
+            </x-ui.card>
+" : "") . "
+            <!-- Ownership & Responsibility Card -->
+            <x-ui.card variant=\"sectioned\" class=\"border shadow-xs bg-card\">
+                <x-ui.card-header class=\"border-b pb-3 px-6 pt-5\">
+                    <x-ui.card-title class=\"text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5\">
+                        <x-lucide-shield-check class=\"size-3.5 text-indigo-500\" />
+                        <span>Ownership & Responsibility</span>
+                    </x-ui.card-title>
+                </x-ui.card-header>
+
+                <x-ui.card-content class=\"p-6 space-y-3.5 text-xs\">
+                    <div>
+                        <span class=\"text-muted-foreground font-medium block\">Assigned Role:</span>
+                        <span class=\"font-bold text-foreground text-sm mt-0.5 block\">
+                            {{ \\\$record->assigned_to_role ?: 'Unassigned' }}
+                        </span>
+                    </div>
+                    <div>
+                        <span class=\"text-muted-foreground font-medium block\">Department:</span>
+                        <span class=\"font-semibold text-foreground mt-0.5 block\">
+                            {{ \\\$record->assigned_to_department ?: 'Operations' }}
+                        </span>
+                    </div>
+                    <div class=\"pt-2 border-t border-border/40\">
+                        <span class=\"text-muted-foreground font-medium block\">Stage Entered At:</span>
+                        <span class=\"font-mono text-[11px] text-muted-foreground mt-0.5 block\">
+                            {{ \\\$record->workflow_state_entered_at ? \Carbon\Carbon::parse(\\\$record->workflow_state_entered_at)->format('M d, Y H:i') : (\\\$record->updated_at?->format('M d, Y H:i') ?? '—') }}
+                        </span>
+                    </div>
+                </x-ui.card-content>
+            </x-ui.card>
+
+            <!-- Record Metadata & Timestamps Card -->
+            <x-ui.card variant=\"sectioned\" class=\"border shadow-xs bg-card\">
+                <x-ui.card-content class=\"p-5 space-y-2.5 text-xs text-muted-foreground\">
+                    <div class=\"flex items-center justify-between\">
+                        <span>Created:</span>
+                        <span class=\"font-medium text-foreground\">{{ \\\$record->created_at?->format('M d, Y') ?? '—' }}</span>
+                    </div>
+                    <div class=\"flex items-center justify-between\">
+                        <span>Last Updated:</span>
+                        <span class=\"font-medium text-foreground">{{ \\\$record->updated_at?->diffForHumans() ?? '—' }}</span>
+                    </div>
+                    <div class=\"flex items-center justify-between\">
+                        <span>Record ID:</span>
+                        <span class=\"font-mono text-foreground\">#{{ \\\$record->id }}</span>
+                    </div>
+                </x-ui.card-content>
+            </x-ui.card>
+        </div>
+    </div>
+" . ($includeWorkflow ? "
+    <!-- Forward Action Modal Dialog -->
     <x-workflows::forward-modal />
+" : "") . "
 </div>
 @endsection
 BLADE;
-                $this->writeFile($sliceDir.'/Resources/views/show.blade.php', $showView);
-            }
+            $this->writeFile($sliceDir.'/Resources/views/show.blade.php', $showView);
 
             $renamed = false;
             if (! file_exists($targetDir) && ! is_link($targetDir)) {

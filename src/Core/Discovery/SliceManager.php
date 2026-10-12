@@ -1116,6 +1116,50 @@ class SliceManager
             }
         }
 
+        // 3b. Prune orphaned roles from destroyed slices
+        if ($prune && Schema::hasTable('roles')) {
+            $protectedRoleSlugs = ['super-admin', 'super_admin', 'admin', 'administrator', 'manager', 'user', 'standard-user', 'guest', 'system'];
+            $activeRoleSlugs = [];
+            foreach ($this->slices as $s) {
+                $manifestRoles = $s->raw['roles'] ?? ($s->raw['workflow']['roles'] ?? []);
+                if (empty($manifestRoles) && file_exists($s->path.'/slice.json')) {
+                    $sJson = json_decode(@file_get_contents($s->path.'/slice.json'), true) ?: [];
+                    $manifestRoles = $sJson['roles'] ?? ($sJson['workflow']['roles'] ?? []);
+                }
+                foreach ($manifestRoles as $r) {
+                    $slug = is_array($r) ? ($r['slug'] ?? '') : (is_string($r) ? $r : ($r->slug ?? ''));
+                    if ($slug) {
+                        $activeRoleSlugs[] = $slug;
+                        $activeRoleSlugs[] = str_replace('_', '-', $slug);
+                        $activeRoleSlugs[] = str_replace('-', '_', $slug);
+                    }
+                }
+            }
+            $activeRoleSlugs = array_values(array_unique(array_filter($activeRoleSlugs)));
+
+            $candidateRoles = DB::table('roles')
+                ->whereNotIn('slug', array_merge($protectedRoleSlugs, $activeRoleSlugs))
+                ->get();
+
+            foreach ($candidateRoles as $crole) {
+                $cleanSlug = str_replace('_', '-', $crole->slug);
+                $demoEmails = ["{$cleanSlug}@laraslice.com", "{$crole->slug}@laraslice.com"];
+                $hasDemoUser = Schema::hasTable('users') && DB::table('users')->whereIn('email', $demoEmails)->exists();
+                if ($hasDemoUser || str_contains(strtolower($crole->description ?? ''), 'operational role') || str_contains(strtolower($crole->description ?? ''), 'laraslice')) {
+                    if (Schema::hasTable('permission_role')) {
+                        DB::table('permission_role')->where('role_id', $crole->id)->delete();
+                    }
+                    if (Schema::hasTable('role_user')) {
+                        DB::table('role_user')->where('role_id', $crole->id)->delete();
+                    }
+                    if (Schema::hasTable('users')) {
+                        DB::table('users')->whereIn('email', $demoEmails)->delete();
+                    }
+                    DB::table('roles')->where('id', $crole->id)->delete();
+                }
+            }
+        }
+
         // Ensure super-admin role automatically receives all synced permissions by default
         try {
             $superAdminRole = Schema::hasTable('roles')
@@ -1341,6 +1385,27 @@ class SliceManager
 
         $tables = array_values(array_diff($this->getSliceTables($slice), $this->protectedTables()));
 
+        // Collect role slugs associated with this slice before code deletion
+        $sliceRoleSlugs = [];
+        $sliceManifestRoles = $slice->raw['roles'] ?? ($slice->raw['workflow']['roles'] ?? []);
+        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.json')) {
+            $sJson = json_decode(@file_get_contents($slice->path.'/slice.json'), true) ?: [];
+            $sliceManifestRoles = $sJson['roles'] ?? ($sJson['workflow']['roles'] ?? []);
+        }
+        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+            $sYaml = \Symfony\Component\Yaml\Yaml::parse(@file_get_contents($slice->path.'/slice.yaml')) ?: [];
+            $sliceManifestRoles = $sYaml['roles'] ?? ($sYaml['workflow']['roles'] ?? []);
+        }
+        foreach ($sliceManifestRoles as $r) {
+            $slug = is_array($r) ? ($r['slug'] ?? '') : (is_string($r) ? $r : ($r->slug ?? ''));
+            if ($slug) {
+                $sliceRoleSlugs[] = $slug;
+                $sliceRoleSlugs[] = str_replace('_', '-', $slug);
+                $sliceRoleSlugs[] = str_replace('-', '_', $slug);
+            }
+        }
+        $sliceRoleSlugs = array_values(array_unique(array_filter($sliceRoleSlugs)));
+
         $droppedTables = [];
         $wipedTables = [];
         $codeRemoved = false;
@@ -1367,6 +1432,62 @@ class SliceManager
                 }
             } catch (\Throwable) {
             }
+
+            // Remove workflows associated with this slice
+            try {
+                if (Schema::hasTable('laraslice_workflows')) {
+                    $sliceWfs = DB::table('laraslice_workflows')
+                        ->where('slice_name', $slice->name)
+                        ->orWhere('slice_name', strtolower($slice->name))
+                        ->orWhere('slice_name', Str::snake($slice->name))
+                        ->get();
+
+                    foreach ($sliceWfs as $mw) {
+                        if (Schema::hasTable('laraslice_workflow_transitions')) {
+                            $transIds = DB::table('laraslice_workflow_transitions')->where('workflow_id', $mw->id)->pluck('id');
+                            if (Schema::hasTable('laraslice_workflow_routing_rules') && $transIds->isNotEmpty()) {
+                                DB::table('laraslice_workflow_routing_rules')->whereIn('transition_id', $transIds)->delete();
+                            }
+                            DB::table('laraslice_workflow_transitions')->where('workflow_id', $mw->id)->delete();
+                        }
+                        if (Schema::hasTable('laraslice_workflow_states')) {
+                            DB::table('laraslice_workflow_states')->where('workflow_id', $mw->id)->delete();
+                        }
+                        if (Schema::hasTable('laraslice_workflow_logs')) {
+                            DB::table('laraslice_workflow_logs')->where('workflow_id', $mw->id)->delete();
+                        }
+                        DB::table('laraslice_workflows')->where('id', $mw->id)->delete();
+                    }
+                }
+            } catch (\Throwable) {
+            }
+
+            // Remove slice-defined roles and their demo users
+            try {
+                if (Schema::hasTable('roles') && ! empty($sliceRoleSlugs)) {
+                    $protectedRoleSlugs = ['super-admin', 'super_admin', 'admin', 'administrator', 'manager', 'user', 'standard-user', 'guest', 'system'];
+                    $rolesToRemove = DB::table('roles')
+                        ->whereIn('slug', $sliceRoleSlugs)
+                        ->whereNotIn('slug', $protectedRoleSlugs)
+                        ->get();
+
+                    foreach ($rolesToRemove as $rObj) {
+                        if (Schema::hasTable('permission_role')) {
+                            DB::table('permission_role')->where('role_id', $rObj->id)->delete();
+                        }
+                        if (Schema::hasTable('role_user')) {
+                            DB::table('role_user')->where('role_id', $rObj->id)->delete();
+                        }
+                        if (Schema::hasTable('users')) {
+                            $cleanSlug = str_replace('_', '-', $rObj->slug);
+                            DB::table('users')->whereIn('email', ["{$cleanSlug}@laraslice.com", "{$rObj->slug}@laraslice.com"])->delete();
+                        }
+                        DB::table('roles')->where('id', $rObj->id)->delete();
+                    }
+                }
+            } catch (\Throwable) {
+            }
+
             Schema::enableForeignKeyConstraints();
         } elseif ($mode === 'wipe_data') {
             Schema::disableForeignKeyConstraints();
@@ -1436,12 +1557,36 @@ class SliceManager
         }
 
         if ($mode === 'complete' || $mode === 'code_only') {
+            // 1. Remove master data seeder files from database/seeders
+            $studlyDomain = Str::studly($domainName);
+            $seederFiles = array_filter(array_unique(array_merge(
+                [
+                    database_path("seeders/{$studlyDomain}MasterDataSeeder.php"),
+                    database_path("seeders/{$domainName}MasterDataSeeder.php"),
+                    database_path('seeders/'.Str::slug($domainName).'MasterDataSeeder.php'),
+                ],
+                glob(database_path("seeders/*{$studlyDomain}*Seeder.php")) ?: []
+            )));
+            foreach ($seederFiles as $sf) {
+                if (file_exists($sf)) {
+                    @unlink($sf);
+                }
+            }
+
+            // 2. Remove entire domain folder under app/Slices (including MasterData, leftovers)
+            $slicesBasePath = realpath((string) config('laraslice.slices_path', app_path('Slices')));
+            if ($slicesBasePath && is_dir($slicesBasePath)) {
+                $domainFolders = glob($slicesBasePath.'/*', GLOB_ONLYDIR) ?: [];
+                foreach ($domainFolders as $df) {
+                    if (strtolower(basename($df)) === strtolower(trim($domainName))) {
+                        $this->recursiveDeleteDir($df);
+                    }
+                }
+            }
+
             foreach (array_unique($domainDirs) as $dDir) {
                 if (is_dir($dDir)) {
-                    $remaining = glob($dDir.'/*');
-                    if (empty($remaining)) {
-                        @rmdir($dDir);
-                    }
+                    $this->recursiveDeleteDir($dDir);
                 }
             }
         }

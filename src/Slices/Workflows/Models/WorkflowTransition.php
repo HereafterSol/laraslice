@@ -27,6 +27,11 @@ class WorkflowTransition extends Model
         return $this->belongsTo(Workflow::class, 'workflow_id');
     }
 
+    public function routingRule(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(WorkflowRoutingRule::class, 'transition_id');
+    }
+
     public function routingRules(): HasMany
     {
         return $this->hasMany(WorkflowRoutingRule::class, 'transition_id');

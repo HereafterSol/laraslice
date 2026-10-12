@@ -193,7 +193,7 @@ PHP;
         $manifest['version_history'][] = [
             'version' => $newVersion,
             'type' => 'field_added',
-            'migration' => "{$timestamp}_{$migrationSlug}.php",
+            'migration' => basename($migrationFile),
             'description' => $desc,
             'author' => $author,
             'date' => date('Y-m-d H:i:s'),
@@ -1100,7 +1100,7 @@ REL;
         $manifest['version_history'][] = [
             'version' => $newVersion,
             'type' => 'child_entity_added',
-            'migration' => "{$timestamp}_{$migrationSlug}.php",
+            'migration' => basename($migrationFile),
             'description' => "Added child table '{$childTable}' ({$relationType})",
             'author' => 'Developer via CLI / Copilot',
             'date' => date('Y-m-d H:i:s'),

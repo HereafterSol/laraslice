@@ -22,7 +22,7 @@ final class BlueprintValidator
     public function validate(array $blueprint): array
     {
         $errors = [];
-        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'navigation', 'permissions'], 'blueprint', $errors);
+        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'navigation', 'permissions', 'workflow', 'roles', 'icon', 'priority', 'taxonomy'], 'blueprint', $errors);
 
         if (($blueprint['schema_version'] ?? null) !== 1) {
             $errors[] = 'schema_version must be the integer 1.';
@@ -54,7 +54,7 @@ final class BlueprintValidator
 
                 continue;
             }
-            $this->checkKeys($model, ['handle', 'table', 'root', 'fields', 'relations', 'tenant', 'timestamps', 'soft_deletes'], $path, $errors);
+            $this->checkKeys($model, ['handle', 'table', 'root', 'fields', 'relations', 'tenant', 'timestamps', 'soft_deletes', 'description', 'name'], $path, $errors);
 
             if (isset($model['tenant']) && ! is_bool($model['tenant'])) {
                 $errors[] = "{$path}.tenant must be a boolean.";
@@ -71,6 +71,10 @@ final class BlueprintValidator
             }
 
             $modelHandle = $model['handle'] ?? null;
+            if (is_string($modelHandle) && preg_match('/^[A-Z][A-Za-z0-9_]{0,62}$/', $modelHandle)) {
+                $modelHandle = \Illuminate\Support\Str::snake($modelHandle);
+                $model['handle'] = $modelHandle;
+            }
             if (! $this->isHandle($modelHandle)) {
                 $errors[] = "{$path}.handle must be a lowercase snake_case identifier.";
             } elseif (isset($modelHandles[$modelHandle])) {
@@ -108,7 +112,7 @@ final class BlueprintValidator
 
                     continue;
                 }
-                $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'encrypted', 'width', 'length'], $fieldPath, $errors);
+                $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'encrypted', 'width', 'length', 'input_type', 'optionsText', 'hidden'], $fieldPath, $errors);
 
                 $fieldHandle = $field['handle'] ?? null;
                 if (! $this->isHandle($fieldHandle)) {
@@ -198,7 +202,11 @@ final class BlueprintValidator
             }
         }
 
-        if ($rootHandle !== null && isset($modelHandles[$rootHandle])) {
+        $isCatalog = ($blueprint['taxonomy'] ?? false) === true
+            || str_contains(strtolower($blueprint['name'] ?? ''), 'master')
+            || str_contains(strtolower($blueprint['name'] ?? ''), 'catalog');
+
+        if (! $isCatalog && $rootHandle !== null && isset($modelHandles[$rootHandle])) {
             $reachable = [$rootHandle => true];
             do {
                 $previousCount = count($reachable);

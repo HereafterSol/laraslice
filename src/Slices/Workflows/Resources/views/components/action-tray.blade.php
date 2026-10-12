@@ -1,18 +1,42 @@
 @props(['model', 'actionUrl' => null])
 
 @php
-    $transitions = method_exists($model, 'getAvailableTransitions') ? $model->getAvailableTransitions() : [];
+    $resolvedModel = $model;
+    $id = is_object($model) && method_exists($model, 'getKey') ? $model->getKey() : (data_get($model, 'id') ?: 1);
+    $rawName = class_basename($model);
+    $cleanSlice = str_replace(['FormBusinessObject', 'ListingBusinessObject', 'FilterBusinessObject'], '', $rawName);
+
+    // If it is a DTO or not yet possessing HasWorkflow, resolve underlying Eloquent Model
+    if (! method_exists($resolvedModel, 'getAvailableTransitions')) {
+        $candidates = [
+            "App\\Slices\\Support\\{$cleanSlice}\\Models\\".\Illuminate\Support\Str::singular($cleanSlice),
+            "App\\Slices\\Billing\\{$cleanSlice}\\Models\\".\Illuminate\Support\Str::singular($cleanSlice),
+            "App\\Slices\\Support\\Tickets\\Models\\Ticket",
+            "App\\Slices\\Billing\\Invoices\\Models\\Invoice",
+        ];
+        foreach ($candidates as $cand) {
+            if (class_exists($cand)) {
+                $found = $cand::find($id);
+                if ($found) {
+                    $resolvedModel = $found;
+                    break;
+                }
+            }
+        }
+    }
+
+    $transitions = method_exists($resolvedModel, 'getAvailableTransitions') ? $resolvedModel->getAvailableTransitions() : [];
     $actionUrl = $actionUrl ?: route('workflows.transition', [
-        'slice' => class_basename($model),
-        'id' => $model->getKey()
+        'slice' => class_basename($resolvedModel),
+        'id' => $id,
     ], false);
 @endphp
 
 @if(! empty($transitions))
-<div class="flex flex-wrap items-center gap-2.5 p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl">
-    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-2 flex items-center gap-1.5">
-        <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        Workflow Actions:
+<div class="flex flex-wrap items-center gap-2.5 p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-2 flex items-center gap-1.5">
+        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Authorized Actions:
     </span>
 
     @foreach($transitions as $trans)
@@ -36,7 +60,7 @@
             <button
                 type="button"
                 onclick="window.openWorkflowModal('{{ $slug }}', '{{ addslashes($label) }}', '{{ $actionUrl }}', {{ $requiresRemarks ? 'true' : 'false' }}, {{ $requiresAttachment ? 'true' : 'false' }})"
-                class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 {{ $btnClasses }}"
+                class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-150 {{ $btnClasses }}"
             >
                 <span>{{ $label }}</span>
                 <svg class="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
@@ -47,7 +71,7 @@
                 <input type="hidden" name="transition" value="{{ $slug }}">
                 <button
                     type="submit"
-                    class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 {{ $btnClasses }}"
+                    class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-150 {{ $btnClasses }}"
                 >
                     <span>{{ $label }}</span>
                     <svg class="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>

@@ -4,6 +4,7 @@ namespace LaraSlice\Slices\Workflows\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Slices\Workflows\Services\WorkflowEngineService;
@@ -68,7 +69,18 @@ class WorkflowActionController extends Controller
     {
         $manager = app(SliceManager::class);
 
-        // 1. Try finding slice manifest
+        // 1. Try finding via workflow configuration entity_model
+        $wf = DB::table('laraslice_workflows')
+            ->where('slice_name', $slice)
+            ->orWhere('slice_name', Str::studly($slice))
+            ->orWhere('slug', $slice)
+            ->first();
+
+        if ($wf && $wf->entity_model && class_exists($wf->entity_model)) {
+            return $wf->entity_model::find($id);
+        }
+
+        // 2. Try finding slice manifest
         $manifest = $manager->getSlice($slice) ?: $manager->getSlice(Str::studly($slice));
         if ($manifest) {
             $modelClass = $manifest->getModelClass();
@@ -77,13 +89,17 @@ class WorkflowActionController extends Controller
             }
         }
 
-        // 2. Try common model conventions
+        // 3. Try common model conventions
+        $studlySlice = Str::studly($slice);
+        $singularModel = Str::studly(Str::singular($slice));
+
         $candidates = [
-            "App\\Slices\\Billing\\{$slice}\\Models\\".Str::singular($slice),
-            "App\\Slices\\Support\\{$slice}\\Models\\".Str::singular($slice),
-            "App\\Slices\\Legal\\{$slice}\\Models\\".Str::singular($slice),
-            "App\\Models\\".Str::singular($slice),
-            "App\\Models\\".Str::studly($slice),
+            "App\\Slices\\Support\\{$studlySlice}\\Models\\{$singularModel}",
+            "App\\Slices\\Billing\\{$studlySlice}\\Models\\{$singularModel}",
+            "App\\Slices\\Legal\\{$studlySlice}\\Models\\{$singularModel}",
+            "App\\Slices\\Grants\\{$studlySlice}\\Models\\{$singularModel}",
+            "App\\Models\\{$singularModel}",
+            "App\\Models\\{$studlySlice}",
         ];
 
         foreach ($candidates as $cls) {

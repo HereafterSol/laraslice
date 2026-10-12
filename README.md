@@ -232,6 +232,43 @@ All lifecycle actions are also available in the **Slice Studio UI** (`/laraslice
 
 ---
 
+### 6. Monolith Reverse-Engineering & Legacy System Porting (`slice:port`)
+
+Porting a legacy monolithic Laravel application (such as statutory dispute adjudication portals, education management systems, or internal enterprise ERPs) to clean vertical slices? LaraSlice provides a reverse-engineering engine that automates schema introspection, table classification, taxonomy seeder extraction, and production data migration.
+
+#### Dual-Mode Porting Strategy:
+1. **🌱 System Base Mode (`--mode=system-base`) [Clean Development Slate]**:
+   - Inspects legacy database schemas and extracts reference master tables (e.g. `complaint_statuses`, `categories`, `regions`, `hearing_types`).
+   - Generates deterministic seeders into `database/seeders/` to guarantee **0 blank dropdowns** and an immaculate development slate for testing new workflows.
+2. **📦 Full Production Data Mode (`--mode=full-data`) [Production Cutover]**:
+   - Topologically migrates all historical records (petitions, notices, hearings, evidence files, approvals) while preserving parent-child IDs and foreign keys.
+   - Use `--with-files` to automatically copy physical uploads and document attachments from legacy `storage/app/public`.
+
+#### CLI Execution:
+```bash
+# Reverse-engineer and port with clean reference seeders
+php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --mode=system-base
+
+# Full production migration with files and attachments
+php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --mode=full-data --with-files
+
+# Preview classification and table-to-slice mappings without writing changes
+php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --dry-run
+```
+
+#### Visual Studio GUI (Wizard & Blueprint Studio):
+- Launch from `/laraslice/wizard` or `/laraslice/wizard/blueprint` using the **🚀 Port Legacy App** button.
+- Provide source project root path and target domain name.
+- Click **🔍 Analyze & Preview Mapping** to review the live side-by-side Table-to-Slice Architecture comparison table (Aggregate Roots, Child Tables, Taxonomies, and Pivots).
+- Select between **System Base Only** or **Full Production Data**, toggle file attachment copying, and execute in 1 click.
+
+#### Autonomous AI Agent Interaction:
+- If working with an AI coding assistant (Antigravity, Cursor, Claude Code) without the UI, the LaraSlice skill instructs the AI to proactively prompt you for:
+  1. *Legacy Project Path*
+  2. *Target Domain / Bounded Context*
+  3. *Data Mode (`system-base` clean slate vs `full-data` production migration)*
+
+
 ## 🛡️ Enterprise Compliance & Audit Logging
 
 Simply attach `AuditableSlice` to any slice model:

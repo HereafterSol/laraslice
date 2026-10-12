@@ -8,6 +8,8 @@ use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Generator\SliceName;
+use LaraSlice\Generator\SliceSeederService;
+use LaraSlice\Slices\Workflows\Services\WorkflowEngineService;
 use LaraSlice\Support\Directory;
 use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
@@ -29,68 +31,74 @@ final class BlueprintApplier
         if ($root === null) {
             throw new RuntimeException('The blueprint has no root model.');
         }
-        $rootClass = SliceName::canonical($blueprint['name']);
-        $rootTable = Str::plural(Str::snake($rootClass));
-        if ($root['table'] !== $rootTable) {
-            throw new RuntimeException("Blueprint apply v1 requires the root model table to match the slice name ({$rootTable}).");
-        }
+        $isCatalog = ($blueprint['taxonomy'] ?? false) === true
+            || str_contains(strtolower($blueprint['name'] ?? ''), 'master')
+            || str_contains(strtolower($blueprint['name'] ?? ''), 'catalog');
 
-        foreach ($blueprint['models'] as $model) {
-            if (($model['root'] ?? false) === true) {
-                continue;
+        if (! $isCatalog) {
+            $rootClass = SliceName::canonical($blueprint['name']);
+            $rootTable = Str::plural(Str::snake($rootClass));
+            if ($root['table'] !== $rootTable) {
+                throw new RuntimeException("Blueprint apply v1 requires the root model table to match the slice name ({$rootTable}).");
             }
-            $hasRootBelongsTo = false;
-            foreach ($model['relations'] ?? [] as $relation) {
-                if ($relation['type'] === 'belongsTo' && $relation['model'] === $root['handle']) {
-                    $hasRootBelongsTo = true;
-                    break;
-                }
-            }
-            if (! $hasRootBelongsTo) {
-                throw new RuntimeException("Child model [{$model['handle']}] must have an inverse belongsTo relation to the root model [{$root['handle']}].");
-            }
-        }
 
-        foreach ($root['relations'] ?? [] as $relation) {
-            if ($relation['type'] === 'hasMany') {
-                $child = $this->model($blueprint['models'], $relation['model']);
-                if (empty($relation['name']) || ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $relation['name'])) {
-                    throw new RuntimeException("Blueprint apply requires a valid snake_case relation name for child table [{$child['table']}].");
-                }
-            } elseif ($relation['type'] === 'belongsTo') {
-                if (empty($relation['name']) || ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $relation['name'])) {
-                    throw new RuntimeException('Blueprint apply requires a valid snake_case relation name for belongsTo relation.');
-                }
-            } else {
-                throw new RuntimeException("Blueprint apply does not support root relation type [{$relation['type']}].");
-            }
-        }
-
-        $childHandles = [];
-        foreach ($root['relations'] ?? [] as $relation) {
-            if ($relation['type'] === 'hasMany') {
-                $childHandles[$relation['model']] = $relation['foreign_key'];
-            }
-        }
-        foreach ($blueprint['models'] as $model) {
-            if (($model['root'] ?? false) === true) {
-                continue;
-            }
-            if (! isset($childHandles[$model['handle']])) {
-                throw new RuntimeException('Blueprint apply supports only direct child models related to the root.');
-            }
-            if (($model['soft_deletes'] ?? false) === true) {
-                throw new RuntimeException("Blueprint apply does not support soft_deletes on child model [{$model['handle']}].");
-            }
-            foreach ($model['fields'] ?? [] as $field) {
-                if ($field['handle'] === $childHandles[$model['handle']]) {
+            foreach ($blueprint['models'] as $model) {
+                if (($model['root'] ?? false) === true) {
                     continue;
                 }
-                if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'json', 'email', 'url', 'foreign_id'], true)) {
-                    throw new RuntimeException("Blueprint apply does not support child field type [{$field['type']}].");
+                $hasRootBelongsTo = false;
+                foreach ($model['relations'] ?? [] as $relation) {
+                    if ($relation['type'] === 'belongsTo' && $relation['model'] === $root['handle']) {
+                        $hasRootBelongsTo = true;
+                        break;
+                    }
                 }
-                if (($field['encrypted'] ?? false) === true) {
-                    throw new RuntimeException("Blueprint apply supports encrypted fields on the root model only (child field [{$field['handle']}]).");
+                if (! $hasRootBelongsTo) {
+                    throw new RuntimeException("Child model [{$model['handle']}] must have an inverse belongsTo relation to the root model [{$root['handle']}].");
+                }
+            }
+
+            foreach ($root['relations'] ?? [] as $relation) {
+                if ($relation['type'] === 'hasMany') {
+                    $child = $this->model($blueprint['models'], $relation['model']);
+                    if (empty($relation['name']) || ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $relation['name'])) {
+                        throw new RuntimeException("Blueprint apply requires a valid snake_case relation name for child table [{$child['table']}].");
+                    }
+                } elseif ($relation['type'] === 'belongsTo') {
+                    if (empty($relation['name']) || ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $relation['name'])) {
+                        throw new RuntimeException('Blueprint apply requires a valid snake_case relation name for belongsTo relation.');
+                    }
+                } else {
+                    throw new RuntimeException("Blueprint apply does not support root relation type [{$relation['type']}].");
+                }
+            }
+
+            $childHandles = [];
+            foreach ($root['relations'] ?? [] as $relation) {
+                if ($relation['type'] === 'hasMany') {
+                    $childHandles[$relation['model']] = $relation['foreign_key'];
+                }
+            }
+            foreach ($blueprint['models'] as $model) {
+                if (($model['root'] ?? false) === true) {
+                    continue;
+                }
+                if (! isset($childHandles[$model['handle']])) {
+                    throw new RuntimeException('Blueprint apply supports only direct child models related to the root.');
+                }
+                if (($model['soft_deletes'] ?? false) === true) {
+                    throw new RuntimeException("Blueprint apply does not support soft_deletes on child model [{$model['handle']}].");
+                }
+                foreach ($model['fields'] ?? [] as $field) {
+                    if ($field['handle'] === $childHandles[$model['handle']]) {
+                        continue;
+                    }
+                    if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'json', 'email', 'url', 'foreign_id'], true)) {
+                        throw new RuntimeException("Blueprint apply does not support child field type [{$field['type']}].");
+                    }
+                    if (($field['encrypted'] ?? false) === true) {
+                        throw new RuntimeException("Blueprint apply supports encrypted fields on the root model only (child field [{$field['handle']}]).");
+                    }
                 }
             }
         }
@@ -102,10 +110,10 @@ final class BlueprintApplier
         }
     }
 
-    public function apply(array $blueprint, array $plan, string $slicesPath, string $namespace): string
+    public function apply(array $blueprint, array $plan, string $slicesPath, string $namespace, bool $allowOverwrite = false): string
     {
         $this->assertSupported($blueprint);
-        if (($plan['conflict'] ?? true) || ! hash_equals((string) ($plan['plan_hash'] ?? ''), $this->hashPlan($plan))) {
+        if ((($plan['conflict'] ?? true) && ! $allowOverwrite) || ! hash_equals((string) ($plan['plan_hash'] ?? ''), $this->hashPlan($plan))) {
             throw new RuntimeException('The reviewed plan is stale or its destination is no longer available. Generate and review a fresh plan.');
         }
 
@@ -113,7 +121,7 @@ final class BlueprintApplier
             throw new RuntimeException("Unable to create slices directory [{$slicesPath}].");
         }
         $target = $plan['target'];
-        if (file_exists($target) || is_link($target)) {
+        if (! $allowOverwrite && (file_exists($target) || is_link($target))) {
             throw new RuntimeException("Destination [{$target}] already exists; no files were changed.");
         }
         if ($this->tableExists !== null) {
@@ -159,11 +167,14 @@ final class BlueprintApplier
         $staging = $slicesPath.DIRECTORY_SEPARATOR.'.laraslice-blueprint-'.bin2hex(random_bytes(8));
         $stagingSlices = $staging;
         try {
-            $generatedSliceDir = (new SliceGenerator($stagingSlices, $namespace))->generate($blueprint['name'], $rootFields, false, [
+            $includeWorkflow = ! empty($blueprint['workflow']);
+            $generatedSliceDir = (new SliceGenerator($stagingSlices, $namespace))->generate($blueprint['name'], $rootFields, $includeWorkflow, [
                 'description' => $blueprint['description'] ?? '',
                 'domain' => $blueprint['domain'] ?? null,
                 'api' => true,
                 'soft_deletes' => (bool) ($root['soft_deletes'] ?? false),
+                'workflowConfig' => $blueprint['workflow'] ?? null,
+                'roles' => $blueprint['roles'] ?? [],
             ]);
 
             foreach ($root['relations'] ?? [] as $relation) {
@@ -265,6 +276,12 @@ final class BlueprintApplier
         if (! empty($blueprint['permissions']) && is_array($blueprint['permissions'])) {
             $manifest['permissions'] = $blueprint['permissions'];
         }
+        if (! empty($blueprint['workflow'])) {
+            $manifest['workflow'] = $blueprint['workflow'];
+        }
+        if (! empty($blueprint['roles'])) {
+            $manifest['roles'] = $blueprint['roles'];
+        }
         $manifest['tables'] = array_values(array_map(static fn (array $model): string => $model['table'], $models));
         $manifest['fields'] = ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
             'name' => $field['handle'],
@@ -278,6 +295,33 @@ final class BlueprintApplier
 
         $yamlPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.yaml';
         file_put_contents($yamlPath, Yaml::dump($blueprint, 10, 2), LOCK_EX);
+
+        // Seed declared roles and demo users immediately
+        if (! empty($manifest['roles']) && is_array($manifest['roles'])) {
+            try {
+                $seeder = new SliceSeederService;
+                $seeder->seedCustomRolesAndUsers($manifest['roles']);
+            } catch (Throwable) {
+            }
+        }
+
+        // Synchronize workflow into database state machine engine
+        if (! empty($manifest['workflow']) && is_array($manifest['workflow'])) {
+            try {
+                if (function_exists('app') && app()->bound(WorkflowEngineService::class)) {
+                    $engine = app(WorkflowEngineService::class);
+                    $rootModel = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
+                    $modelClass = null;
+                    if ($rootModel) {
+                        $modelName = Str::studly(Str::singular($rootModel['handle'] ?? $blueprint['name']));
+                        $domainPart = ! empty($blueprint['domain']) ? Str::studly(Str::slug($blueprint['domain'])).'\\' : '';
+                        $modelClass = config('laraslice.slices_namespace', 'App\\Slices').'\\'.$domainPart.Str::studly($blueprint['name']).'\\Models\\'.$modelName;
+                    }
+                    $engine->syncWorkflowFromManifest($manifest['workflow'], $blueprint['name'], $modelClass);
+                }
+            } catch (Throwable) {
+            }
+        }
 
         try {
             if (function_exists('app') && app()->bound(SliceManager::class)) {

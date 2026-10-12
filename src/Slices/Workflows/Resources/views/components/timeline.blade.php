@@ -1,18 +1,41 @@
 @props(['model', 'history' => null])
 
 @php
-    $logs = $history ?: (method_exists($model, 'getWorkflowHistory') ? $model->getWorkflowHistory() : collect());
+    $resolvedModel = $model;
+    $id = is_object($model) && method_exists($model, 'getKey') ? $model->getKey() : (data_get($model, 'id') ?: 1);
+    $rawName = class_basename($model);
+    $cleanSlice = str_replace(['FormBusinessObject', 'ListingBusinessObject', 'FilterBusinessObject'], '', $rawName);
+
+    if (! method_exists($resolvedModel, 'getWorkflowHistory')) {
+        $candidates = [
+            "App\\Slices\\Support\\{$cleanSlice}\\Models\\".\Illuminate\Support\Str::singular($cleanSlice),
+            "App\\Slices\\Billing\\{$cleanSlice}\\Models\\".\Illuminate\Support\Str::singular($cleanSlice),
+            "App\\Slices\\Support\\Tickets\\Models\\Ticket",
+            "App\\Slices\\Billing\\Invoices\\Models\\Invoice",
+        ];
+        foreach ($candidates as $cand) {
+            if (class_exists($cand)) {
+                $found = $cand::find($id);
+                if ($found) {
+                    $resolvedModel = $found;
+                    break;
+                }
+            }
+        }
+    }
+
+    $logs = $history ?: (method_exists($resolvedModel, 'getWorkflowHistory') ? $resolvedModel->getWorkflowHistory() : collect());
 @endphp
 
-<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm mt-6">
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mt-6">
     <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
         <div class="flex items-center gap-2.5">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </span>
             <div>
                 <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Audit Trail & History</h4>
-                <p class="text-sm font-semibold text-slate-900 dark:text-white">Immutable Decision Log</p>
+                <p class="text-sm font-bold text-slate-900 dark:text-white">Immutable Decision Log</p>
             </div>
         </div>
         <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -28,7 +51,6 @@
         <div class="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
             @foreach($logs as $log)
                 <div class="relative group">
-                    <!-- Bullet dot -->
                     <div class="absolute -left-6 top-1.5 w-5 h-5 rounded-full bg-white dark:bg-slate-900 border-2 border-indigo-500 flex items-center justify-center">
                         <div class="w-2 h-2 rounded-full bg-indigo-600"></div>
                     </div>

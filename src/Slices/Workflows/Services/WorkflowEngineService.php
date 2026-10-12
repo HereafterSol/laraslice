@@ -23,6 +23,22 @@ class WorkflowEngineService
     /**
      * Locate the Workflow definition for a given Model instance or class.
      */
+    public function getWorkflowForSlice(string $sliceName): ?Workflow
+    {
+        $slug = Str::snake(Str::plural($sliceName));
+        $studly = Str::studly($sliceName);
+
+        return Workflow::with(['states', 'transitions.routingRules'])
+            ->where(function ($q) use ($sliceName, $slug, $studly) {
+                $q->where('slice_name', $sliceName)
+                  ->orWhere('slice_name', $studly)
+                  ->orWhere('slug', $slug)
+                  ->orWhere('slug', Str::snake($sliceName));
+            })
+            ->where('is_active', true)
+            ->first();
+    }
+
     public function getWorkflowForModel($model): ?Workflow
     {
         $modelClass = is_object($model) ? get_class($model) : $model;
@@ -48,6 +64,24 @@ class WorkflowEngineService
     /**
      * Check if a model can undergo a specific transition.
      */
+    /**
+     * Resolve model state with automatic fallback to initial stage if state is unlisted or legacy draft.
+     */
+    public function resolveCurrentState($workflow, $model): string
+    {
+        $rawState = method_exists($model, 'getCurrentState')
+            ? $model->getCurrentState()
+            : ($model->status ?? null);
+
+        if ($rawState && $workflow->states->contains('slug', $rawState)) {
+            return $rawState;
+        }
+
+        $initial = $workflow->states->firstWhere('is_initial', true) ?: $workflow->states->first();
+
+        return $initial ? $initial->slug : ($rawState ?: 'draft');
+    }
+
     public function canTransition($model, string $transitionSlug, $user = null): bool
     {
         $workflow = $this->getWorkflowForModel($model);
@@ -60,9 +94,7 @@ class WorkflowEngineService
             return false;
         }
 
-        $currentState = method_exists($model, 'getCurrentState')
-            ? $model->getCurrentState()
-            : ($model->status ?? 'draft');
+        $currentState = $this->resolveCurrentState($workflow, $model);
 
         return $transition->canApply($currentState, $model, $user);
     }
@@ -79,9 +111,7 @@ class WorkflowEngineService
             return [];
         }
 
-        $currentState = method_exists($model, 'getCurrentState')
-            ? $model->getCurrentState()
-            : ($model->status ?? 'draft');
+        $currentState = $this->resolveCurrentState($workflow, $model);
 
         $transitions = $workflow->transitions;
         $available = [];
@@ -111,9 +141,7 @@ class WorkflowEngineService
         }
 
         $currentUser = $user ?: auth()->user();
-        $currentState = method_exists($model, 'getCurrentState')
-            ? $model->getCurrentState()
-            : ($model->status ?? 'draft');
+        $currentState = $this->resolveCurrentState($workflow, $model);
 
         if (! $transition->canApply($currentState, $model, $currentUser)) {
             throw new \LogicException("Cannot apply transition '{$transitionSlug}' from current state '{$currentState}'");

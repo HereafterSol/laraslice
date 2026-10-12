@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.1] - 2026-10-12
+
+### Added
+- **Vertical Slice Workflow State Machine Engine**:
+  - Native lifecycle orchestration engine (`WorkflowEngineService`, `HasWorkflow` trait, `WorkflowWebController`, `WorkflowActionController`).
+  - Interactive visual UI components for state transitions: `x-workflows.stepper`, `x-workflows.timeline`, `x-workflows.action-tray`, and `x-workflows.forward-modal`.
+  - Robust state transition gating, role-scoped permission guards, transition remarks enforcement, electronic file movement/handoffs, and historical audit trail logging.
+  - Built-in Enterprise Workflow templates: `DisputeAdjudicationWorkflow`, `ExecutiveProcurementWorkflow`, and `GrantDisbursementWorkflow`.
+- **Dual-Flow Statutory Adjudication & Citizen Intake Architecture**:
+  - Production-grade dual-flow intake separating **Admin Docket / Inward Registry Intake** (inward delivery mode, courier tracking/consignment, diary date/time stamping, prior petition linkage) from **Citizen Grievance Submission** (streamlined public filing defaulting to online intake).
+  - Multi-stream dispute partitioning:
+    - *Stream A*: Workplace Harassment & Statutory Inquiries (harassment nature, organization classification, employment nature, postings).
+    - *Stream B*: Property Rights & Asset Restitution with dynamic multi-unit repeatable Property Dispute blocks (`+ Add Another Property` with district, acquisition mode, property nature, secretariat region, and parcel/khasra details).
+  - Multi-respondent accused repeater (`+ Add Another Accused`) supporting unidentified respondent flags, corporate designations, and postal summons service addresses.
+  - Documentary evidence file upload repeaters and statutory solemn declarations.
+- **Enterprise Porting Engine & Monolith Reverse-Engineering Improvements**:
+  - Real-world monolith reverse-engineering with schema introspection and automatic classification into Aggregate Roots, Child Sub-tables, and Shared Reference Taxonomies.
+  - Automated taxonomy seeder generation: extracts multi-table reference registries into clean, deterministic database seeders, eliminating blank select dropdowns on clean slate deployments.
+  - Clean bounded domain navigation architecture: automatically scopes non-aggregate child tables (`accused`, `properties`, `approvals`) under primary aggregate root controllers, eliminating raw table clutter from navigation menus.
+  - Automated role provisioning and permission synchronization with cascade cleanup during slice removal and domain reconstruction.
+- **Blueprint Studio Enterprise Suite**:
+  - Added enterprise-ready **Dispute Adjudication Suite** preset (6 Slices: Complaints, Hearings, Notices, Orders, Inquiries, MasterData) modeled after real-world judicial dispute adjudication workflows.
+  - Synchronized two-way Domain YAML editor and visual slice designer with multi-table aggregate configuration.
+
+## [1.6.0] - 2026-10-11
+
+### Added
+- **Monolith Reverse-Engineering & Legacy App Porting Engine (`slice:port`)**: Reverse-engineers legacy monolithic Laravel applications (such as statutory dispute adjudication portals, education management systems, or internal ERPs) into Clean Architecture vertical slices grouped by Bounded Domains.
+- **Dual Data Porting & Migration Modes**:
+  - `system-base` (Clean Development Slate): Automatically scans legacy database schemas, extracts reference master taxonomy tables (e.g. `complaint_statuses`, `categories`, `hearing_types`, `districts`), and generates deterministic database seeders in `database/seeders/` to guarantee 0 blank dropdowns on clean slate deployments.
+  - `full-data` (Production Migration Cutover): Topologically migrates all historical transactional records, preserving parent-child IDs and foreign key integrity. Includes `--with-files` to automatically copy physical uploads and document attachments from legacy `storage/app/public`.
+- **Interactive Visual Studio UI (Wizard & Blueprint Studio)**:
+  - Added **🚀 Port Legacy App** modal in Blueprint Studio (`/laraslice/wizard/blueprint`) and launch button/banner in Wizard (`/laraslice/wizard?port=1`).
+  - Interactive **🔍 Analyze & Preview Mapping** displays live side-by-side Table-to-Slice Architecture comparison before executing migrations.
+- **Conversational AI Agent Protocol**: Enhanced `SKILL.md` with instructions requiring AI coding assistants to proactively prompt developers for project path, target domain, and data mode (`system-base` vs `full-data`) when invoked in chat/CLI environments.
+
 ## [1.5.3] - 2026-10-10
 
 ### Fixed

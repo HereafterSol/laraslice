@@ -33,6 +33,7 @@ use LaraSlice\Commands\SliceInstallCommand;
 use LaraSlice\Commands\SliceListCommand;
 use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SlicePublishCommand;
+use LaraSlice\Commands\SlicePortCommand;
 use LaraSlice\Commands\SliceRepairCommand;
 use LaraSlice\Commands\SliceSeedCommand;
 use LaraSlice\Commands\SliceSyncCommand;
@@ -145,6 +146,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 BlueprintPlanCommand::class,
                 BlueprintApplyCommand::class,
                 SliceSyncCommand::class,
+            SlicePortCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
                 SliceClearCommand::class,
@@ -226,6 +228,8 @@ class LaraSliceServiceProvider extends ServiceProvider
                 Route::middleware(["{$studio}:studio.access", "{$studio}:studio.migrate", $guard])->group(function () {
                     Route::post('/migrate', [WizardController::class, 'runMigration'])->name('laraslice.wizard.migrate');
                     Route::post('/blueprint/migrate', [BlueprintStudioController::class, 'runMigrations'])->name('laraslice.wizard.blueprint.migrate');
+            Route::post('/blueprint/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.blueprint.port-inspect');
+            Route::post('/blueprint/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.blueprint.port-execute');
                 });
 
                 Route::middleware(["{$studio}:studio.access", "{$studio}:studio.wipe", $guard])->group(function () {

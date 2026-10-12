@@ -46,6 +46,11 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         return $model->getKey();
     }
 
+    public function findModel(string|int $id): ?Model
+    {
+        return $this->newQuery()->find($id);
+    }
+
     public function getItemById(string|int $id): ?IBusinessObject
     {
         $model = $this->newQuery()->find($id);
