@@ -16,15 +16,17 @@ final class BlueprintValidator
 
     private const RESERVED_FIELDS = ['id', 'created_at', 'updated_at', 'deleted_at'];
 
+    public const ALLOWED_FORMATTERS = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'date_time', 'text'];
+
     /** @param array<string, mixed> $blueprint
      * @return array<string, mixed> Validated blueprint.
      */
     public function validate(array $blueprint): array
     {
         $errors = [];
-        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'navigation', 'permissions', 'workflow', 'roles', 'icon', 'priority', 'taxonomy'], 'blueprint', $errors);
+        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'app', 'module', 'table_prefix', 'multitenant', 'tenant_key', 'navigation', 'permissions', 'workflow', 'roles', 'icon', 'priority', 'taxonomy', 'ui', 'dependencies'], 'blueprint', $errors);
 
-        if (($blueprint['schema_version'] ?? null) !== 1) {
+        if (! in_array(($blueprint['schema_version'] ?? null), [1, 2], true)) {
             $errors[] = 'schema_version must be the integer 1.';
         }
 
@@ -291,29 +293,27 @@ final class BlueprintValidator
 
                 if ($type === 'belongsTo') {
                     $foreignKey = $relation['foreign_key'] ?? null;
-                    if (! $this->isHandle($foreignKey) || ! isset($model['_validated_fields'][$foreignKey])) {
-                        $errors[] = "{$relationPath}.foreign_key must reference a field on the belongsTo model.";
-                    } else {
+                    if (! $this->isHandle($foreignKey)) {
+                        $errors[] = "{$relationPath}.foreign_key must be a lowercase snake_case identifier.";
+                    } elseif (isset($model['_validated_fields'][$foreignKey])) {
                         $field = $this->findField($model, $foreignKey);
-                        if (! in_array($field['type'] ?? null, ['foreign_id', 'integer'], true)) {
+                        if (! in_array($field['type'] ?? null, ['foreign_id', 'integer', 'bigInteger', 'string'], true)) {
                             $errors[] = "{$relationPath}.foreign_key must use a foreign_id or integer field.";
                         }
                     }
                 } elseif (in_array($type, ['hasOne', 'hasMany'], true)) {
                     $foreignKey = $relation['foreign_key'] ?? null;
-                    if ($isInternal) {
+                    if (! $this->isHandle($foreignKey)) {
+                        $errors[] = "{$relationPath}.foreign_key must be a lowercase snake_case identifier.";
+                    } elseif ($isInternal) {
                         $targetModel = $models[$modelHandles[$targetHandle]] ?? [];
-                        if (! $this->isHandle($foreignKey) || ! isset($targetModel['_validated_fields'][$foreignKey])) {
+                        if (! isset($targetModel['_validated_fields'][$foreignKey])) {
                             $errors[] = "{$relationPath}.foreign_key must reference a field on the related model.";
                         } else {
                             $field = $this->findField($targetModel, $foreignKey);
-                            if (! in_array($field['type'] ?? null, ['foreign_id', 'integer'], true)) {
+                            if (! in_array($field['type'] ?? null, ['foreign_id', 'integer', 'bigInteger', 'string'], true)) {
                                 $errors[] = "{$relationPath}.foreign_key must use a foreign_id or integer field.";
                             }
-                        }
-                    } else {
-                        if (! $this->isHandle($foreignKey)) {
-                            $errors[] = "{$relationPath}.foreign_key must be a valid foreign key identifier.";
                         }
                     }
                 } elseif ($type === 'belongsToMany' && ! $this->isHandle($relation['pivot_table'] ?? null)) {
@@ -332,6 +332,10 @@ final class BlueprintValidator
 
         if (isset($blueprint['navigation']) && ! is_array($blueprint['navigation'])) {
             $errors[] = 'navigation must be a map.';
+        }
+
+                if (isset($blueprint['ui'])) {
+            $this->validateUiBlock($blueprint['ui'], $blueprint, $errors);
         }
 
         if (isset($blueprint['permissions'])) {
@@ -358,6 +362,231 @@ final class BlueprintValidator
         $blueprint['models'] = $models;
 
         return $blueprint;
+    }
+    /**
+     * Validate an isolated sub-part of a blueprint.
+     */
+    public function validatePart(string $part, mixed $data): mixed
+    {
+        $errors = [];
+        match ($part) {
+            'ui' => $this->validateUiBlock($data, [], $errors, 'ui'),
+            'directory' => $this->validateUiBlock(['directory' => $data], [], $errors, 'directory'),
+            'forms' => $this->validateUiBlock(['forms' => $data], [], $errors, 'forms'),
+            default => throw new \InvalidArgumentException("Unsupported part '{$part}'. Allowed: ui, directory, forms."),
+        };
+
+        if ($errors !== []) {
+            throw new BlueprintValidationException($errors);
+        }
+
+        return $data;
+    }
+
+    /**
+     * Validate the declarative UI presentation, directory, and form layouts.
+     */
+    public function validateUiBlock(mixed $ui, array $blueprint, array &$errors, string $path = 'ui'): void
+    {
+        if (! is_array($ui)) {
+            $errors[] = "{$path} must be a map.";
+
+            return;
+        }
+
+        $this->checkKeys($ui, ['presentation', 'directory', 'forms', 'workspace'], $path, $errors);
+
+        // 1. Presentation
+        if (isset($ui['presentation'])) {
+            if (! is_array($ui['presentation'])) {
+                $errors[] = "{$path}.presentation must be a map.";
+            } else {
+                $this->checkKeys($ui['presentation'], ['create', 'edit', 'drawer_width'], "{$path}.presentation", $errors);
+                foreach (['create', 'edit'] as $mode) {
+                    if (isset($ui['presentation'][$mode]) && ! in_array($ui['presentation'][$mode], ['drawer', 'page'], true)) {
+                        $errors[] = "{$path}.presentation.{$mode} must be either 'drawer' or 'page'.";
+                    }
+                }
+            }
+        }
+
+        // 2. Directory
+        if (isset($ui['directory'])) {
+            if (! is_array($ui['directory'])) {
+                $errors[] = "{$path}.directory must be a map.";
+            } else {
+                $this->checkKeys($ui['directory'], ['columns', 'quick_filters', 'sidebar_filters', 'row_actions'], "{$path}.directory", $errors);
+
+                if (isset($ui['directory']['columns'])) {
+                    if (! is_array($ui['directory']['columns'])) {
+                        $errors[] = "{$path}.directory.columns must be a list.";
+                    } else {
+                        foreach ($ui['directory']['columns'] as $colIdx => $col) {
+                            $colPath = "{$path}.directory.columns.{$colIdx}";
+                            if (! is_array($col)) {
+                                $errors[] = "{$colPath} must be a map.";
+
+                                continue;
+                            }
+                            $this->checkKeys($col, ['handle', 'label', 'formatter', 'sortable', 'subtitle_handle', 'avatar_handle'], $colPath, $errors);
+                            if (empty($col['handle']) || ! is_string($col['handle'])) {
+                                $errors[] = "{$colPath}.handle must be a non-empty string.";
+                            }
+                            if (empty($col['label']) || ! is_string($col['label'])) {
+                                $errors[] = "{$colPath}.label must be a non-empty string.";
+                            }
+                            if (isset($col['formatter']) && ! in_array($col['formatter'], self::ALLOWED_FORMATTERS, true)) {
+                                $errors[] = "{$colPath}.formatter '{$col['formatter']}' is invalid. Allowed: ".implode(', ', self::ALLOWED_FORMATTERS).'.';
+                            }
+                            if (isset($col['sortable']) && ! is_bool($col['sortable'])) {
+                                $errors[] = "{$colPath}.sortable must be a boolean.";
+                            }
+                        }
+                    }
+                }
+
+                if (isset($ui['directory']['quick_filters'])) {
+                    if (! is_array($ui['directory']['quick_filters'])) {
+                        $errors[] = "{$path}.directory.quick_filters must be a list.";
+                    } else {
+                        foreach ($ui['directory']['quick_filters'] as $fIdx => $f) {
+                            $fPath = "{$path}.directory.quick_filters.{$fIdx}";
+                            if (! is_array($f)) {
+                                $errors[] = "{$fPath} must be a map.";
+
+                                continue;
+                            }
+                            $this->checkKeys($f, ['handle', 'label', 'is_searchable', 'options_from'], $fPath, $errors);
+                            if (empty($f['handle']) || ! is_string($f['handle'])) {
+                                $errors[] = "{$fPath}.handle must be a non-empty string.";
+                            }
+                            if (empty($f['label']) || ! is_string($f['label'])) {
+                                $errors[] = "{$fPath}.label must be a non-empty string.";
+                            }
+                            if (isset($f['is_searchable']) && ! is_bool($f['is_searchable'])) {
+                                $errors[] = "{$fPath}.is_searchable must be a boolean.";
+                            }
+                        }
+                    }
+                }
+
+                if (isset($ui['directory']['sidebar_filters'])) {
+                    if (! is_array($ui['directory']['sidebar_filters'])) {
+                        $errors[] = "{$path}.directory.sidebar_filters must be a map or list.";
+                    } else {
+                        foreach ($ui['directory']['sidebar_filters'] as $fIdx => $f) {
+                            $fPath = "{$path}.directory.sidebar_filters.{$fIdx}";
+                            if (! is_array($f)) {
+                                $errors[] = "{$fPath} must be a map.";
+
+                                continue;
+                            }
+                            $this->checkKeys($f, ['handle', 'label', 'type', 'is_searchable', 'options_from'], $fPath, $errors);
+                            if (empty($f['handle']) || ! is_string($f['handle'])) {
+                                $errors[] = "{$fPath}.handle must be a non-empty string.";
+                            }
+                            if (empty($f['label']) || ! is_string($f['label'])) {
+                                $errors[] = "{$fPath}.label must be a non-empty string.";
+                            }
+                        }
+                    }
+                }
+
+                if (isset($ui['directory']['row_actions'])) {
+                    if (! is_array($ui['directory']['row_actions'])) {
+                        $errors[] = "{$path}.directory.row_actions must be a map.";
+                    } else {
+                        $this->checkKeys($ui['directory']['row_actions'], ['display', 'items'], "{$path}.directory.row_actions", $errors);
+                        if (isset($ui['directory']['row_actions']['items']) && is_array($ui['directory']['row_actions']['items'])) {
+                            foreach ($ui['directory']['row_actions']['items'] as $actIdx => $act) {
+                                $actPath = "{$path}.directory.row_actions.items.{$actIdx}";
+                                if (is_array($act)) {
+                                    $this->checkKeys($act, ['handle', 'label', 'icon', 'placement', 'type', 'danger'], $actPath, $errors);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Forms
+        if (isset($ui['forms'])) {
+            if (! is_array($ui['forms'])) {
+                $errors[] = "{$path}.forms must be a map.";
+            } else {
+                $this->checkKeys($ui['forms'], ['sections', 'presentation', 'mode', 'drawer_width'], "{$path}.forms", $errors);
+
+                if (isset($ui['forms']['sections'])) {
+                    if (! is_array($ui['forms']['sections'])) {
+                        $errors[] = "{$path}.forms.sections must be a list or map.";
+                    } else {
+                        foreach ($ui['forms']['sections'] as $secIdx => $sec) {
+                            $secPath = "{$path}.forms.sections.{$secIdx}";
+                            if (! is_array($sec)) {
+                                $errors[] = "{$secPath} must be a map.";
+
+                                continue;
+                            }
+                            $this->checkKeys($sec, ['key', 'title', 'grid', 'fields'], $secPath, $errors);
+                            if (empty($sec['key']) || ! is_string($sec['key'])) {
+                                $errors[] = "{$secPath}.key must be a non-empty string.";
+                            }
+                            if (empty($sec['title']) || ! is_string($sec['title'])) {
+                                $errors[] = "{$secPath}.title must be a non-empty string.";
+                            }
+                            $grid = $sec['grid'] ?? 3;
+                            if (! is_int($grid) || ! in_array($grid, [1, 2, 3, 4], true)) {
+                                $errors[] = "{$secPath}.grid must be an integer (1, 2, 3, or 4).";
+                            }
+                            if (isset($sec['fields'])) {
+                                if (! is_array($sec['fields'])) {
+                                    $errors[] = "{$secPath}.fields must be a list.";
+                                } else {
+                                    foreach ($sec['fields'] as $fldIdx => $fld) {
+                                        $fldPath = "{$secPath}.fields.{$fldIdx}";
+                                        if (! is_array($fld)) {
+                                            $errors[] = "{$fldPath} must be a map.";
+
+                                            continue;
+                                        }
+                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help'], $fldPath, $errors);
+                                        if (empty($fld['handle']) || ! is_string($fld['handle'])) {
+                                            $errors[] = "{$fldPath}.handle must be a non-empty string.";
+                                        }
+                                        if (isset($fld['span'])) {
+                                            if (! is_int($fld['span']) || $fld['span'] < 1 || $fld['span'] > 4) {
+                                                $errors[] = "{$fldPath}.span must be an integer between 1 and 4.";
+                                            }
+                                        }
+                                        if (isset($fld['is_searchable']) && ! is_bool($fld['is_searchable'])) {
+                                            $errors[] = "{$fldPath}.is_searchable must be a boolean.";
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Workspace (Tabs)
+        if (isset($ui['workspace'])) {
+            if (! is_array($ui['workspace'])) {
+                $errors[] = "{$path}.workspace must be a map.";
+            } else {
+                $this->checkKeys($ui['workspace'], ['tabs'], "{$path}.workspace", $errors);
+                if (isset($ui['workspace']['tabs']) && is_array($ui['workspace']['tabs'])) {
+                    foreach ($ui['workspace']['tabs'] as $tIdx => $t) {
+                        $tPath = "{$path}.workspace.tabs.{$tIdx}";
+                        if (is_array($t)) {
+                            $this->checkKeys($t, ['key', 'label', 'icon', 'relation', 'badge'], $tPath, $errors);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private function isHandle(mixed $value): bool

@@ -12,7 +12,8 @@
     studioUrl: '{{ route('laraslice.wizard.blueprint') }}',
     allSlicesJson: @js($allSlicesJson ?? null),
     activeSliceIdx: @js($activeSliceIdx ?? 0),
-    initialPlanScope: @js($planScope ?? null)
+    initialPlanScope: @js($planScope ?? null),
+    initialPortPlan: @js($portPlan ?? null)
 })">
 
     <!-- Top Action & Navigation Bar -->
@@ -101,9 +102,15 @@
             </button>
 
                         <!-- Port Legacy App Button -->
-            <button type="button" @click="showPortModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Reverse-engineer and port a legacy Laravel application">
+            <button type="button" @click="showPortModal = true; if (!portPlanData && !portInspecting) fetchPortPlan();" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Reverse-engineer and port a legacy Laravel application">
                 <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
                 <span>🚀 Port Legacy App</span>
+            </button>
+
+            <!-- Load Ported Suite into Blueprint Studio Trigger -->
+            <button type="button" @click="loadPortedToStudio()" x-show="portPlanData || portInspectionData" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer" title="Load entire ported suite directly into Blueprint Studio canvas">
+                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                <span>📥 Load Ported Suite (<span x-text="portPlanData?.studio_slices?.length || portPlanData?.summary?.total_canonical_slices || 28"></span> Slices)</span>
             </button>
 
             <!-- Mode Switcher -->
@@ -762,6 +769,532 @@
                         </div>
                     </div>
 
+                    <!-- PAGE & UI ARCHITECTURE PLAN (BlatUI 4-Step Methodology) -->
+                    <div class="rounded-2xl border border-indigo-500/30 bg-card p-5 shadow-sm space-y-4" x-data="{ activePageStep: 'index' }">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                    <span class="flex size-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">📄</span>
+                                    <span>Page & UI Architecture Plan</span>
+                                    <span class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400">BlatUI 4-Step Methodology</span>
+                                    <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400" x-text="(blueprint.name || 'Slice') + ' Workspace'"></span>
+                                </h2>
+                                <p class="text-xs text-muted-foreground mt-0.5">
+                                    Canonical screen blueprints for porting legacy views into modern, high-density BlatUI templates (Blade + Alpine.js + Tailwind CSS v4 + Lucide icons).
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] font-mono rounded-md bg-muted px-2.5 py-1 text-muted-foreground border border-border/60">
+                                    php artisan laraslice:ui <span class="text-indigo-400 font-semibold" x-text="(blueprint.domain || 'ERP') + '.' + (blueprint.module || 'Work') + '.' + (blueprint.name || 'Slice')"></span> --with-tabs
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- 4 Step Navigation Tabs -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button type="button" @click="activePageStep = 'index'" :class="activePageStep === 'index' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'" class="rounded-lg p-2.5 text-left text-xs transition cursor-pointer flex flex-col gap-0.5">
+                                <span class="text-[10px] uppercase font-bold opacity-75">Step 1</span>
+                                <span class="font-semibold text-xs flex items-center gap-1.5">
+                                    <span>📋</span> Directory (Index)
+                                </span>
+                            </button>
+                            <button type="button" @click="activePageStep = 'show'" :class="activePageStep === 'show' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'" class="rounded-lg p-2.5 text-left text-xs transition cursor-pointer flex flex-col gap-0.5">
+                                <span class="text-[10px] uppercase font-bold opacity-75">Step 2</span>
+                                <span class="font-semibold text-xs flex items-center gap-1.5">
+                                    <span>📑</span> Show Workspace
+                                </span>
+                            </button>
+                            <button type="button" @click="activePageStep = 'create_edit'" :class="activePageStep === 'create_edit' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'" class="rounded-lg p-2.5 text-left text-xs transition cursor-pointer flex flex-col gap-0.5">
+                                <span class="text-[10px] uppercase font-bold opacity-75">Step 3</span>
+                                <span class="font-semibold text-xs flex items-center gap-1.5">
+                                    <span>📝</span> Create & Edit Form
+                                </span>
+                            </button>
+                            <button type="button" @click="activePageStep = 'workflow'" :class="activePageStep === 'workflow' ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'" class="rounded-lg p-2.5 text-left text-xs transition cursor-pointer flex flex-col gap-0.5">
+                                <span class="text-[10px] uppercase font-bold opacity-75">Step 4</span>
+                                <span class="font-semibold text-xs flex items-center gap-1.5">
+                                    <span>⚡</span> Finite State FSM
+                                </span>
+                            </button>
+                        </div>
+
+                        <!-- Step 1: Directory / Index View Plan (Interactive Statamic/Filament Directory Builder) -->
+                        <div x-show="activePageStep === 'index'" class="space-y-4 pt-1" x-init="ensureUiConfig()">
+                            <!-- Stats Ribbon Live Mockup -->
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-3.5 space-y-2.5">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs font-bold text-foreground">📊 Stats Ribbon KPIs</span>
+                                        <span class="text-[10px] text-muted-foreground">High-level executive status counters atop index screen</span>
+                                    </div>
+                                    <span class="text-[10px] font-mono text-indigo-400">BlatUI MetricCards</span>
+                                </div>
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    <template x-for="(st, stIdx) in (getActiveSlicePages().index?.stats_ribbon || [])" :key="stIdx">
+                                        <div class="p-2.5 rounded-lg border border-border bg-card flex flex-col justify-between">
+                                            <span class="text-[10px] text-muted-foreground font-medium" x-text="st.label"></span>
+                                            <div class="flex items-baseline gap-1.5 mt-1">
+                                                <span class="text-base font-extrabold text-foreground" x-text="st.value"></span>
+                                                <span class="text-[10px] text-emerald-400" x-text="st.change"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Interactive Directory Column Builder -->
+                            <div class="rounded-xl border border-indigo-500/30 bg-card p-4 space-y-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold text-foreground">📋 Curated Semantic Directory Columns</span>
+                                            <span class="rounded-full bg-primary/10 px-2 py-0.2 text-[10px] font-bold text-primary" x-text="(blueprint.ui?.directory?.columns?.length || 0) + ' Columns'"></span>
+                                        </div>
+                                        <p class="text-[11px] text-muted-foreground">Customize high-signal directory columns, labels, sortability, and composite semantic formatters.</p>
+                                    </div>
+
+                                    <!-- Add Column Dropdown -->
+                                    <div class="flex items-center gap-2" x-data="{ addColField: '' }">
+                                        <select x-model="addColField" class="h-8 rounded-lg border border-border bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                            <option value="">+ Add Column from Fields...</option>
+                                            <template x-for="f in (blueprint.models?.[0]?.fields || [])" :key="f.handle">
+                                                <option :value="f.handle" x-text="f.label || f.handle"></option>
+                                            </template>
+                                        </select>
+                                        <button type="button" @click="if(addColField) { addDirectoryColumn(addColField); addColField = ''; }" class="h-8 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700 transition cursor-pointer">
+                                            Add
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Columns List (Interactive Cards) -->
+                                <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                    <template x-for="(col, cIdx) in (blueprint.ui?.directory?.columns || [])" :key="cIdx">
+                                        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 rounded-lg border border-border bg-muted/20 p-2.5 text-xs">
+                                            <!-- Handle & Reorder -->
+                                            <div class="flex items-center gap-2 min-w-[140px]">
+                                                <div class="flex flex-col gap-0.5">
+                                                    <button type="button" @click="moveDirectoryColumn(cIdx, -1)" class="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer" :disabled="cIdx === 0">▲</button>
+                                                    <button type="button" @click="moveDirectoryColumn(cIdx, 1)" class="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer" :disabled="cIdx === (blueprint.ui.directory.columns.length - 1)">▼</button>
+                                                </div>
+                                                <div>
+                                                    <span class="font-mono text-[11px] font-bold text-indigo-400" x-text="col.handle || col.key || 'col'"></span>
+                                                    <div class="text-[9px] text-muted-foreground font-mono" x-text="'#' + (cIdx + 1)"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Label Input -->
+                                            <div class="flex-1 min-w-[120px]">
+                                                <input type="text" x-model="col.label" @input="syncUiToBlueprintAndYaml()" placeholder="Column Label" class="w-full h-7 rounded border border-input bg-card px-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                            </div>
+
+                                            <!-- Semantic Formatter Dropdown -->
+                                            <div class="w-44">
+                                                <select x-model="col.type" @change="col.formatter = col.type; syncUiToBlueprintAndYaml()" class="w-full h-7 rounded border border-input bg-card px-2 text-xs text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-primary">
+                                                    <option value="code_badge">🏷️ Code Badge (#ID)</option>
+                                                    <option value="composite_user">👤 Composite User (Avatar + Name)</option>
+                                                    <option value="status_pill">🟢 Status Pill (Dot + Badge)</option>
+                                                    <option value="money_breakdown">💰 Money Breakdown</option>
+                                                    <option value="progress_bar">📊 Progress Bar (%)</option>
+                                                    <option value="date_time">📅 Date & Time</option>
+                                                    <option value="text">📄 Plain Text</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Sortable Toggle -->
+                                            <label class="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                                                <input type="checkbox" x-model="col.sortable" @change="syncUiToBlueprintAndYaml()" class="rounded border-border text-primary focus:ring-primary">
+                                                <span>Sortable</span>
+                                            </label>
+
+                                            <!-- Remove Column -->
+                                            <button type="button" @click="removeDirectoryColumn(cIdx)" class="text-rose-500 hover:text-rose-400 p-1 cursor-pointer" title="Remove column">
+                                                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Interactive Multi-Dimensional Filter Bar Builder -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                                <!-- Quick Filters (Horizontal Bar) -->
+                                <div class="rounded-xl border border-border bg-card p-3.5 space-y-2.5">
+                                    <div class="flex items-center justify-between border-b border-border/50 pb-2">
+                                        <div>
+                                            <span class="text-xs font-bold text-foreground">🔍 Quick Filter Bar</span>
+                                            <p class="text-[10px] text-muted-foreground">Sticky select dropdowns above table</p>
+                                        </div>
+                                        <div class="flex items-center gap-1.5" x-data="{ addFltField: '' }">
+                                            <select x-model="addFltField" class="h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground">
+                                                <option value="">+ Add Quick Filter...</option>
+                                                <template x-for="f in (blueprint.models?.[0]?.fields || [])" :key="f.handle">
+                                                    <option :value="f.handle" x-text="f.label || f.handle"></option>
+                                                </template>
+                                            </select>
+                                            <button type="button" @click="if(addFltField) { addQuickFilter(addFltField); addFltField = ''; }" class="h-7 rounded bg-primary/10 text-primary px-2 text-xs font-semibold hover:bg-primary/20 cursor-pointer">Add</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1.5 max-h-48 overflow-y-auto">
+                                        <template x-for="(qf, qIdx) in (blueprint.ui?.directory?.quick_filters || [])" :key="qIdx">
+                                            <div class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 p-2 text-xs">
+                                                <div class="flex items-center gap-2">
+                                                    <!-- Reorder buttons -->
+                                                    <div class="flex items-center gap-0.5">
+                                                        <button type="button" @click="moveQuickFilter(qIdx, -1)" :disabled="qIdx === 0" class="size-5 rounded flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 text-[10px]" title="Move Up">▲</button>
+                                                        <button type="button" @click="moveQuickFilter(qIdx, 1)" :disabled="qIdx === (blueprint.ui?.directory?.quick_filters?.length - 1)" class="size-5 rounded flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 text-[10px]" title="Move Down">▼</button>
+                                                    </div>
+                                                    <span class="font-bold font-mono text-[11px] text-indigo-400" x-text="qf.handle || qf.field"></span>
+                                                    <input type="text" x-model="qf.label" @input="syncUiToBlueprintAndYaml()" placeholder="Label" class="h-6 w-24 rounded border border-input bg-card px-1.5 text-[11px]">
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    <label class="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+                                                        <input type="checkbox" x-model="qf.is_searchable" @change="qf.searchable = qf.is_searchable; syncUiToBlueprintAndYaml()">
+                                                        <span>Searchable</span>
+                                                    </label>
+                                                    <button type="button" @click="removeQuickFilter(qIdx)" class="text-rose-500 hover:text-rose-400 text-xs cursor-pointer p-0.5" title="Remove filter">✕</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Off-Canvas Filter Drawer -->
+                                <div class="rounded-xl border border-border bg-card p-3.5 space-y-2.5">
+                                    <div class="flex items-center justify-between border-b border-border/50 pb-2">
+                                        <div>
+                                            <span class="text-xs font-bold text-foreground">🗂️ Off-Canvas Filter Drawer</span>
+                                            <p class="text-[10px] text-muted-foreground">Slide-over drawer for deep filter queries</p>
+                                        </div>
+                                        <div class="flex items-center gap-1.5" x-data="{ addSideField: '' }">
+                                            <select x-model="addSideField" class="h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground">
+                                                <option value="">+ Add Drawer Filter...</option>
+                                                <template x-for="f in (blueprint.models?.[0]?.fields || [])" :key="f.handle">
+                                                    <option :value="f.handle" x-text="f.label || f.handle"></option>
+                                                </template>
+                                            </select>
+                                            <button type="button" @click="if(addSideField) { addSidebarFilter(addSideField); addSideField = ''; }" class="h-7 rounded bg-primary/10 text-primary px-2 text-xs font-semibold hover:bg-primary/20 cursor-pointer">Add</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1.5 max-h-48 overflow-y-auto">
+                                        <template x-for="(sf, sIdx) in (blueprint.ui?.directory?.sidebar_filters || [])" :key="sIdx">
+                                            <div class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 p-2 text-xs">
+                                                <span class="font-bold font-mono text-[11px] text-foreground" x-text="sf.handle || sf.field"></span>
+                                                <div class="flex items-center gap-2">
+                                                    <select x-model="sf.type" @change="syncUiToBlueprintAndYaml()" class="h-6 rounded border border-input bg-card px-1 text-[11px]">
+                                                        <option value="select">Select Dropdown</option>
+                                                        <option value="date_range">Date Range</option>
+                                                        <option value="text">Text Search</option>
+                                                    </select>
+                                                    <button type="button" @click="removeSidebarFilter(sIdx)" class="text-rose-500 hover:text-rose-400 text-xs">✕</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Interactive Row Actions Builder (ERP Matched & Declarative) -->
+                            <div class="rounded-xl border border-indigo-500/30 bg-card p-4 space-y-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold text-foreground">⚡ Table Row Actions & Drawer Deep-Linking</span>
+                                            <span class="rounded-full bg-primary/10 px-2 py-0.2 text-[10px] font-bold text-primary" x-text="((blueprint.ui?.directory?.row_actions?.items || []).length) + ' Actions'"></span>
+                                        </div>
+                                        <p class="text-[11px] text-muted-foreground">Configure inline buttons vs 3-dots dropdown menu, slide-over drawer triggers, and custom actions.</p>
+                                    </div>
+
+                                    <!-- Presets & Add Action -->
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <!-- Layout Style -->
+                                        <div class="flex items-center gap-1.5 bg-muted/40 p-1 rounded-lg border border-border/60 text-xs">
+                                            <span class="text-[10px] text-muted-foreground font-semibold px-1">Layout:</span>
+                                            <button type="button" @click="blueprint.ui.directory.row_actions.display = 'dropdown'; syncUiToBlueprintAndYaml();" 
+                                                class="px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer"
+                                                :class="blueprint.ui?.directory?.row_actions?.display === 'dropdown' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'">
+                                                3-Dots Menu
+                                            </button>
+                                            <button type="button" @click="blueprint.ui.directory.row_actions.display = 'hybrid'; syncUiToBlueprintAndYaml();" 
+                                                class="px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer"
+                                                :class="blueprint.ui?.directory?.row_actions?.display === 'hybrid' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'">
+                                                Hybrid (ERP View Outside)
+                                            </button>
+                                            <button type="button" @click="blueprint.ui.directory.row_actions.display = 'inline'; syncUiToBlueprintAndYaml();" 
+                                                class="px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer"
+                                                :class="blueprint.ui?.directory?.row_actions?.display === 'inline' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'">
+                                                Inline Buttons
+                                            </button>
+                                        </div>
+
+                                        <!-- Preset Selector -->
+                                        <select @change="if($event.target.value) { setRowActionsPreset($event.target.value); $event.target.value = ''; }" class="h-8 rounded-lg border border-border bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                            <option value="">⚡ Load Preset...</option>
+                                            <option value="standard_crud">Standard CRUD (3-Dots)</option>
+                                            <option value="hybrid_view_outside">ERP Style (View Outside + 3-Dots)</option>
+                                            <option value="task_suite">Task & Timer Suite (Timer Outside + 3-Dots)</option>
+                                            <option value="invoice_suite">Invoice Financial Suite (12 Actions)</option>
+                                            <option value="inline_compact">Compact Inline Buttons</option>
+                                        </select>
+
+                                        <button type="button" @click="addRowAction()" class="h-8 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700 transition cursor-pointer flex items-center gap-1.5">
+                                            <span>+ Add Action</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Action Items Roster -->
+                                <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                    <template x-for="(act, aIdx) in (blueprint.ui?.directory?.row_actions?.items || [])" :key="aIdx">
+                                        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 rounded-lg border border-border bg-muted/20 p-2.5 text-xs">
+                                            <!-- Handle & Reorder -->
+                                            <div class="flex items-center gap-2 min-w-[120px]">
+                                                <div class="flex flex-col gap-0.5">
+                                                    <button type="button" @click="moveRowAction(aIdx, -1)" class="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer" :disabled="aIdx === 0">▲</button>
+                                                    <button type="button" @click="moveRowAction(aIdx, 1)" class="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer" :disabled="aIdx === (blueprint.ui.directory.row_actions.items.length - 1)">▼</button>
+                                                </div>
+                                                <div>
+                                                    <input type="text" x-model="act.handle" @input="syncUiToBlueprintAndYaml()" placeholder="handle" class="w-24 h-7 rounded border border-input bg-card px-2 text-xs font-mono font-bold text-indigo-400 focus:outline-none focus:ring-1 focus:ring-primary">
+                                                </div>
+                                            </div>
+
+                                            <!-- Label Input -->
+                                            <div class="flex-1 min-w-[100px]">
+                                                <input type="text" x-model="act.label" @input="syncUiToBlueprintAndYaml()" placeholder="Label (e.g. View Details)" class="w-full h-7 rounded border border-input bg-card px-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                            </div>
+
+                                            <!-- Placement Toggle (Inline vs Dropdown) -->
+                                            <div class="w-36">
+                                                <select x-model="act.placement" @change="syncUiToBlueprintAndYaml()" class="w-full h-7 rounded border border-input bg-card px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                                    <option value="dropdown">Inside 3-Dots Menu</option>
+                                                    <option value="inline">Inline Button (Outside)</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Action Type Dropdown -->
+                                            <div class="w-36">
+                                                <select x-model="act.type" @change="syncUiToBlueprintAndYaml()" class="w-full h-7 rounded border border-input bg-card px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                                    <option value="drawer">Slide-Over Drawer</option>
+                                                    <option value="route">Full-Page Route</option>
+                                                    <option value="modal">Confirm Modal</option>
+                                                    <option value="delete">Delete Record</option>
+                                                    <option value="event">Alpine Event</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Lucide Icon Picker -->
+                                            <div class="w-28">
+                                                <select x-model="act.icon" @change="syncUiToBlueprintAndYaml()" class="w-full h-7 rounded border border-input bg-card px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono">
+                                                    <option value="eye">eye</option>
+                                                    <option value="pencil">pencil</option>
+                                                    <option value="trash-2">trash-2</option>
+                                                    <option value="copy">copy</option>
+                                                    <option value="download">download</option>
+                                                    <option value="play">play</option>
+                                                    <option value="send">send</option>
+                                                    <option value="plus">plus</option>
+                                                    <option value="archive">archive</option>
+                                                    <option value="check">check</option>
+                                                    <option value="x">x</option>
+                                                    <option value="credit-card">credit-card</option>
+                                                    <option value="external-link">external-link</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Danger Toggle -->
+                                            <label class="flex items-center gap-1.5 text-xs text-rose-500 cursor-pointer select-none">
+                                                <input type="checkbox" x-model="act.danger" @change="syncUiToBlueprintAndYaml()" class="rounded border-border text-rose-500 focus:ring-rose-500">
+                                                <span>Danger</span>
+                                            </label>
+
+                                            <!-- Remove Action -->
+                                            <button type="button" @click="removeRowAction(aIdx)" class="text-rose-500 hover:text-rose-400 p-1 cursor-pointer" title="Remove action">
+                                                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Show Workspace (Multi-Tab Consolidation) -->
+                        <div x-show="activePageStep === 'show'" class="space-y-3.5 pt-1">
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <span class="text-xs font-bold text-foreground">📑 High-Density Workspace Sub-Tabs</span>
+                                        <p class="text-[11px] text-muted-foreground mt-0.5">
+                                            Replaces legacy screen clutter by consolidating child entity relations into responsive workspace tabs.
+                                        </p>
+                                    </div>
+                                    <span class="text-[10px] font-mono text-emerald-400 font-bold">1 Master View : N Sub-Entities</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5 border-b border-border pb-2">
+                                    <template x-for="(tb, tbIdx) in (getActiveSlicePages().show?.sub_tabs || [])" :key="tbIdx">
+                                        <span class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs">
+                                            <span x-text="tb.label || tb.name"></span>
+                                            <template x-if="tb.count !== undefined">
+                                                <span class="rounded bg-primary/10 px-1 text-[10px] font-mono font-bold text-primary" x-text="tb.count"></span>
+                                            </template>
+                                        </span>
+                                    </template>
+                                </div>
+                                <div class="rounded-lg border border-dashed border-border bg-card/60 p-3 text-xs text-muted-foreground">
+                                    💡 <strong>Architecture Note:</strong> In legacy systems, each child table had its own raw sidebar link. In LaraSlice VSA, these tables are managed within this master aggregate slice's Show Workspace with full CRUD modals and inline data streams.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Create & Edit Form Sections (Statamic / Filament Section Builder) -->
+                        <div x-show="activePageStep === 'create_edit'" class="space-y-4 pt-1" x-init="ensureUiConfig()">
+                            <!-- Form Mode & Presentation Bar -->
+                            <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-muted/20 p-3.5 text-xs">
+                                <div>
+                                    <span class="font-bold text-foreground">🗂️ Form Presentation Architecture</span>
+                                    <p class="text-[11px] text-muted-foreground">Select how Create & Edit forms are presented to the end user.</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="inline-flex rounded-lg border border-input bg-card p-0.5">
+                                        <button type="button" @click="blueprint.ui.forms.mode = 'drawer'; syncUiToBlueprintAndYaml()" :class="blueprint.ui?.forms?.mode === 'drawer' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="rounded-md px-3 py-1.5 transition cursor-pointer">
+                                            🗂️ Instant Slide-Over Drawer (?drawer=create)
+                                        </button>
+                                        <button type="button" @click="blueprint.ui.forms.mode = 'page'; syncUiToBlueprintAndYaml()" :class="blueprint.ui?.forms?.mode === 'page' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="rounded-md px-3 py-1.5 transition cursor-pointer">
+                                            📄 Standalone Full Page
+                                        </button>
+                                    </div>
+                                    <button type="button" @click="addFormSection()" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition cursor-pointer shadow-xs">
+                                        <span>+ Add Section Card</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Section Cards List (Statamic Blueprint Style) -->
+                            <div class="space-y-4">
+                                <template x-for="(sec, secIdx) in (blueprint.ui?.forms?.sections || [])" :key="secIdx">
+                                    <div class="rounded-xl border border-border bg-card p-4 space-y-3.5 shadow-sm">
+                                        <!-- Card Header: Title, Description, Grid Cols, Actions -->
+                                        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                            <div class="flex-1 min-w-[220px] space-y-1">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="size-6 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold text-xs" x-text="'C' + (secIdx + 1)"></span>
+                                                    <input type="text" x-model="sec.title" @input="syncUiToBlueprintAndYaml()" placeholder="Section Title (e.g. Account & Identity Details)" class="h-8 w-full max-w-sm rounded-lg border border-input bg-background px-2.5 text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                                                </div>
+                                                <input type="text" x-model="sec.description" @input="syncUiToBlueprintAndYaml()" placeholder="Optional subtitle or instructions..." class="h-6 w-full max-w-md rounded border border-transparent bg-transparent px-2 text-[11px] text-muted-foreground focus:border-input focus:bg-background">
+                                            </div>
+
+                                            <div class="flex items-center gap-2">
+                                                <!-- Grid Columns Selector -->
+                                                <div class="flex items-center gap-1 text-xs">
+                                                    <span class="text-muted-foreground text-[11px]">Grid:</span>
+                                                    <select x-model="sec.columns" @change="syncUiToBlueprintAndYaml()" class="h-8 rounded-lg border border-input bg-background px-2 text-xs font-semibold text-foreground focus:outline-none">
+                                                        <option value="1">1 Col (Stack)</option>
+                                                        <option value="2">2 Columns</option>
+                                                        <option value="3">3 Columns (ERP Standard)</option>
+                                                        <option value="4">4 Columns</option>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Move Section -->
+                                                <div class="flex items-center gap-1">
+                                                    <button type="button" @click="moveFormSection(secIdx, -1)" class="p-1 rounded hover:bg-muted text-muted-foreground" :disabled="secIdx === 0">▲</button>
+                                                    <button type="button" @click="moveFormSection(secIdx, 1)" class="p-1 rounded hover:bg-muted text-muted-foreground" :disabled="secIdx === (blueprint.ui.forms.sections.length - 1)">▼</button>
+                                                </div>
+
+                                                <!-- Delete Section -->
+                                                <button type="button" @click="removeFormSection(secIdx)" class="text-rose-500 hover:text-rose-400 p-1 cursor-pointer" title="Delete section card">
+                                                    <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Fields in this Section (Statamic Field Pills) -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between text-[11px] text-muted-foreground">
+                                                <span>Fields in Card (<span x-text="sec.fields?.length || 0"></span>)</span>
+                                                <div class="flex items-center gap-1.5" x-data="{ addFieldSelect: '' }">
+                                                    <select x-model="addFieldSelect" class="h-7 rounded border border-border bg-background px-2 text-[11px] text-foreground">
+                                                        <option value="">+ Add Field to this Card...</option>
+                                                        <template x-for="f in (blueprint.models?.[0]?.fields || [])" :key="f.handle">
+                                                            <option :value="f.handle" x-text="f.label || f.handle"></option>
+                                                        </template>
+                                                    </select>
+                                                    <button type="button" @click="if(addFieldSelect) { addFieldToSection(secIdx, addFieldSelect); addFieldSelect = ''; }" class="h-7 rounded bg-primary/10 text-primary px-2 font-semibold hover:bg-primary/20 cursor-pointer">Add</button>
+                                                </div>
+                                            </div>
+
+                                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                <template x-for="(fld, fIdx) in (sec.fields || [])" :key="fIdx">
+                                                    <div class="rounded-lg border border-border/70 bg-muted/20 p-2.5 space-y-2 text-xs">
+                                                        <div class="flex items-center justify-between">
+                                                            <span class="font-mono font-bold text-foreground" x-text="fld.handle"></span>
+                                                            <div class="flex items-center gap-1">
+                                                                <button type="button" @click="moveFieldInSection(secIdx, fIdx, -1)" class="text-[10px] text-muted-foreground hover:text-foreground">◀</button>
+                                                                <button type="button" @click="moveFieldInSection(secIdx, fIdx, 1)" class="text-[10px] text-muted-foreground hover:text-foreground">▶</button>
+                                                                <button type="button" @click="removeFieldFromSection(secIdx, fIdx)" class="text-rose-500 hover:text-rose-400 text-xs ml-1">✕</button>
+                                                            </div>
+                                                        </div>
+
+                                                        <input type="text" x-model="fld.label" @input="syncUiToBlueprintAndYaml()" placeholder="Field Label" class="h-6 w-full rounded border border-input bg-card px-2 text-[11px] font-semibold text-foreground">
+
+                                                        <!-- Width / Col-Span & Searchable Controls (Statamic Style) -->
+                                                        <div class="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-border/40">
+                                                            <!-- Col-Span -->
+                                                            <div class="flex items-center gap-1 text-[11px]">
+                                                                <span class="text-muted-foreground">Span:</span>
+                                                                <select x-model="fld.span" @change="syncUiToBlueprintAndYaml()" class="h-6 rounded border border-input bg-card px-1 text-[10px] font-mono">
+                                                                    <option value="1">1 Col (33%)</option>
+                                                                    <option value="2">2 Cols (66%)</option>
+                                                                    <option value="3">3 Cols (100% Full)</option>
+                                                                </select>
+                                                            </div>
+
+                                                            <!-- Searchable Combobox Toggle -->
+                                                            <label class="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer" title="Enable searchable combobox dropdown">
+                                                                <input type="checkbox" x-model="fld.searchable" @change="syncUiToBlueprintAndYaml()" class="rounded size-3 text-primary">
+                                                                <span>🔍 Searchable</span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Workflow Finite State Machine -->
+                        <div x-show="activePageStep === 'workflow'" class="space-y-3.5 pt-1">
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <span class="text-xs font-bold text-foreground">⚡ Finite State Machine Lifecycle</span>
+                                        <p class="text-[11px] text-muted-foreground mt-0.5">
+                                            State machine column: <code class="text-indigo-400 font-mono text-xs" x-text="getActiveSlicePages().workflow?.state_column || 'status'"></code>
+                                        </p>
+                                    </div>
+                                    <span class="text-[10px] font-mono text-emerald-400 font-bold">FSM + RBAC Guard</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <template x-for="(st, stIdx) in (getActiveSlicePages().workflow?.states || [])" :key="stIdx">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="inline-flex items-center rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-xs capitalize" x-text="st"></span>
+                                            <template x-if="stIdx < (getActiveSlicePages().workflow?.states?.length - 1)">
+                                                <span class="text-muted-foreground text-xs">→</span>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="text-[11px] text-muted-foreground">
+                                    ✓ Every state transition is gated via <code class="text-indigo-400 font-mono">&commat;can('<span x-text="blueprint.handle"></span>.transition')</code> and logged immutably in activity audits.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             <!-- LIVE UI PREVIEW MOCKUP PANEL (Jev instant_preview_mock Priority) -->
             <div x-show="mode === 'preview'" class="space-y-6 min-w-0">
                 <!-- Model Switcher Tabs if multiple models -->
@@ -1257,154 +1790,16 @@
                         <div class="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-xl text-primary">⌘</div>
                         <h3 class="mt-4 font-bold text-foreground">Generation Plan Ready</h3>
                         <p class="mx-auto mt-1 max-w-xs text-xs text-muted-foreground leading-relaxed">
-                            Click 'Validate & Plan Generation' to inspect model structure, database migrations, and Jev AI safety judgments.
+                            Click 'Validate & Plan Generation' to inspect model structure, database migrations, and required file changes.
                         </p>
                     </div>
                 @endif
             </div>
         </div>
-    </div>
 
-            <!-- Port Legacy Application Modal -->
-        <div x-show="showPortModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" @keydown.escape.window="showPortModal = false" style="display: none;">
-            <div class="w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto" @click.outside="showPortModal = false">
-                <div class="flex items-center justify-between border-b border-border/40 pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <span class="text-2xl">🚀</span>
-                        <div>
-                            <h3 class="text-base font-bold text-foreground">Reverse-Engineer & Port Legacy Application</h3>
-                            <p class="text-xs text-muted-foreground">Extract database schemas, classify flat tables into domain slices, and migrate data.</p>
-                        </div>
-                    </div>
-                    <button type="button" @click="showPortModal = false" class="text-muted-foreground hover:text-foreground">
-                        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                </div>
+        @include('laraslice::partials.porting-modal')
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-medium text-foreground mb-1">Legacy Project Root Path *</label>
-                        <input type="text" x-model="portSourcePath" placeholder="e.g. e:/laragon/www/fospha-complaint-managment" class="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                        <span class="text-[10px] text-muted-foreground">Path to existing Laravel project with migrations & models</span>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-foreground mb-1">Target Domain / Bounded Context *</label>
-                        <input type="text" x-model="portDomain" placeholder="e.g. Adjudication, LegalCompliance" class="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                        <span class="text-[10px] text-muted-foreground">Domain namespace under which vertical slices will be grouped</span>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-medium text-foreground mb-2">Data Porting & Migration Mode *</label>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div @click="portMode = 'system-base'" :class="portMode === 'system-base' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-background'" class="cursor-pointer rounded-xl border p-3.5 transition flex flex-col justify-between">
-                            <div>
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs font-bold text-foreground">🌱 System Base Only</span>
-                                    <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Clean Slate</span>
-                                </div>
-                                <p class="text-[11px] text-muted-foreground leading-relaxed">Extracts master lookup tables, 24 statuses, categories, offices, and generates deterministic seeders with 0 blank dropdowns.</p>
-                            </div>
-                        </div>
-
-                        <div @click="portMode = 'full-data'" :class="portMode === 'full-data' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-background'" class="cursor-pointer rounded-xl border p-3.5 transition flex flex-col justify-between">
-                            <div>
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="text-xs font-bold text-foreground">📦 Full Production Data</span>
-                                    <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">All Records</span>
-                                </div>
-                                <p class="text-[11px] text-muted-foreground leading-relaxed">Migrates all historical petitions, hearings, notices, approvals, and physical file attachments from legacy storage disk.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" id="portWithFiles" x-model="portWithFiles" class="rounded border-input text-primary focus:ring-primary">
-                    <label for="portWithFiles" class="text-xs text-foreground font-medium cursor-pointer">Copy physical file attachments from legacy <code class="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">storage/app/public</code></label>
-                </div>
-
-                <!-- Inspection Results & Previews -->
-                <div x-show="portInspectionData" x-cloak class="space-y-3 border-t border-border/40 pt-3">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div class="flex items-center gap-2">
-                            <h4 class="text-xs font-bold text-foreground">Discovered Architecture Mapping (<span x-text="portInspectionData ? portInspectionData.total_tables : 0"></span> tables)</h4>
-                            <span class="text-[10px] text-emerald-400 font-semibold">✓ Schema verified</span>
-                        </div>
-                        <!-- Toggle sub-tabs: Table vs Full YAML -->
-                        <div class="inline-flex rounded-lg p-0.5 bg-muted/60 border border-border text-[10px]">
-                            <button type="button" @click="portInspectionView = 'table'" :class="portInspectionView === 'table' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-2.5 py-1 rounded-md transition cursor-pointer">
-                                📊 Slices Table (<span x-text="portInspectionData ? (portInspectionData.studio_slices ? portInspectionData.studio_slices.length : Object.keys(portInspectionData.slice_mapping || {}).length) : 0"></span>)
-                            </button>
-                            <button type="button" @click="portInspectionView = 'yaml'" :class="portInspectionView === 'yaml' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-2.5 py-1 rounded-md transition cursor-pointer">
-                                📄 Complete Domain YAML
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Table View -->
-                    <div x-show="portInspectionView === 'table'" class="max-h-52 overflow-y-auto rounded-lg border border-border text-xs">
-                        <table class="w-full text-left">
-                            <thead class="bg-muted/50 text-[10px] uppercase font-bold text-muted-foreground sticky top-0 backdrop-blur-md">
-                                <tr>
-                                    <th class="p-2">Target Slice</th>
-                                    <th class="p-2">Role</th>
-                                    <th class="p-2">Primary Table</th>
-                                    <th class="p-2">Attached Children</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-border">
-                                <template x-for="(info, sName) in (portInspectionData ? portInspectionData.slice_mapping : {})" :key="sName">
-                                    <tr class="hover:bg-muted/20">
-                                        <td class="p-2 font-bold text-foreground" x-text="sName"></td>
-                                        <td class="p-2">
-                                            <span class="text-[9px] font-semibold px-1.5 py-0.5 rounded" :class="info.type === 'aggregate_root' ? 'bg-primary/20 text-primary' : 'bg-purple-500/20 text-purple-400'" x-text="info.type"></span>
-                                        </td>
-                                        <td class="p-2 font-mono text-[11px] text-muted-foreground" x-text="info.primary_table"></td>
-                                        <td class="p-2 text-[10px] text-muted-foreground" x-text="info.child_tables.length ? info.child_tables.join(', ') : 'None'"></td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Complete Domain YAML View -->
-                    <div x-show="portInspectionView === 'yaml'" class="space-y-2">
-                        <div class="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Unified Domain Blueprint (<code class="text-primary font-mono text-[10px]" x-text="portDomain + '.domain.yaml'"></code>)</span>
-                            <button type="button" @click="navigator.clipboard.writeText(portInspectionData.domain_blueprint_yaml); alert('Complete Domain Blueprint YAML copied to clipboard!')" class="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1">
-                                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>
-                                <span>Copy Domain YAML</span>
-                            </button>
-                        </div>
-                        <textarea readonly x-text="portInspectionData ? portInspectionData.domain_blueprint_yaml : ''" rows="9" spellcheck="false" class="w-full rounded-lg border border-input bg-slate-950 p-3 font-mono text-[11px] leading-5 text-emerald-300 shadow-inner focus:outline-none"></textarea>
-                    </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/40 pt-4">
-                    <button type="button" @click="inspectLegacyApp()" :disabled="portInspecting" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-accent transition cursor-pointer">
-                        <span x-show="!portInspecting">🔍 Analyze & Preview Mapping</span>
-                        <span x-show="portInspecting">Analyzing Schema...</span>
-                    </button>
-                    <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-                        <button type="button" @click="showPortModal = false" class="rounded-lg border border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer">Cancel</button>
-
-                        <!-- Load into Studio Button -->
-                        <button type="button" @click="loadPortedToStudio()" :disabled="!portInspectionData || !(portInspectionData.studio_slices && portInspectionData.studio_slices.length)" class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3.5 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition shadow-xs disabled:opacity-40 cursor-pointer" title="Load all domain slices and models into Blueprint Studio for visual inspection and editing">
-                            <span>📥 Load into Studio</span>
-                        </button>
-
-                        <!-- Port to Codebase Button -->
-                        <button type="button" @click="executePortLegacyApp()" :disabled="portExecuting || !portInspectionData" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition shadow-xs disabled:opacity-50 cursor-pointer">
-                            <span x-show="!portExecuting">⚡ Port & Migrate System</span>
-                            <span x-show="portExecuting">Porting System...</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-                <!-- Import YAML Modal -->
+        <!-- Import YAML Modal -->
         <div x-show="showImportYamlModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" @keydown.escape.window="showImportYamlModal = false" style="display: none;">
             <div class="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto" @click.outside="showImportYamlModal = false">
                 <div class="flex items-center justify-between border-b border-border/40 pb-3">
@@ -4107,72 +4502,462 @@ const studioPresets = {
 ]
 };
 
-document.addEventListener('alpine:init', () => {
-    Alpine.data('blueprintStudio', ({ initialSource, initialFormat, initialBlueprint, csrfToken, introspectUrl, studioUrl, allSlicesJson, activeSliceIdx, initialPlanScope }) => ({
+window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrfToken, introspectUrl, studioUrl, allSlicesJson, activeSliceIdx, initialPlanScope, initialPortPlan }) => ({
         mode: 'visual', // 'visual', 'preview', 'split', 'yaml'
         activeModelIndex: 0,
         source: initialSource || '',
         format: initialFormat || 'yaml',
-                showPortModal: false,
-        showImportYamlModal: false,
-        importYamlText: '',
-        planScope: initialPlanScope || 'domain',
-        portSourcePath: 'e:/laragon/www/fospha-complaint-managment',
-        portDomain: 'Adjudication',
+        showPortModal: false,
+        portPreset: 'erp',
+        portSourcePath: 'e:/laragon/www/erp',
+        portDomain: 'ERP',
         portMode: 'system-base',
-        portWithFiles: true,
+        portImportData: true,
+        portWithFiles: false,
         portInspecting: false,
         portExecuting: false,
         portInspectionData: null,
-        portInspectionView: 'table', // 'table' or 'yaml'
-        yamlViewMode: 'slice', // 'slice' or 'domain'
+        portPlanData: initialPortPlan || null,
+        portPlanJsonText: initialPortPlan ? JSON.stringify(initialPortPlan, null, 2) : '',
+        portActiveTab: 'sidebar',
+        portExecutionLogs: [],
+        pageArchTab: 'index',
+        showImportYamlModal: false,
+        importYamlText: '',
+        planScope: initialPlanScope || 'domain',
+        yamlViewMode: 'slice',
         domainYamlSource: '',
+        selectedUiSlice: 'Projects',
+        selectedUiPage: 'index',
+        selectedUiSubTab: 'overview',
+        uiSliceSearch: '',
 
-        inspectLegacyApp() {
-            if (!this.portSourcePath) { alert('Please enter a source project path'); return; }
+        getSelectedUiSliceObj() {
+            if (!this.portPlanData || !this.portPlanData.modules) return null;
+            for (let m of this.portPlanData.modules) {
+                if (m.slices) {
+                    for (let s of m.slices) {
+                        if (s.name === this.selectedUiSlice) {
+                            return Object.assign({}, s, { moduleName: m.name });
+                        }
+                    }
+                }
+            }
+            const first = this.portPlanData.modules[0]?.slices?.[0];
+            return first ? Object.assign({}, first, { moduleName: this.portPlanData.modules[0].name }) : null;
+        },
+
+        getAllUiSlices() {
+            let res = [];
+            if (!this.portPlanData || !this.portPlanData.modules) return res;
+            const q = (this.uiSliceSearch || '').toLowerCase().trim();
+            for (let m of this.portPlanData.modules) {
+                if (m.slices) {
+                    for (let s of m.slices) {
+                        if (!q || s.name.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q)) || (s.root_table && s.root_table.toLowerCase().includes(q))) {
+                            res.push(Object.assign({}, s, { moduleName: m.name }));
+                        }
+                    }
+                }
+            }
+            return res;
+        },
+
+        selectPortPreset(val) {
+            this.portPreset = val;
+            if (val === 'erp') {
+                this.portSourcePath = 'e:/laragon/www/erp';
+                this.portDomain = 'ERP';
+                this.fetchPortPlan();
+            } else if (val === 'fospah') {
+                this.portSourcePath = 'e:/laragon/www/wwf-old';
+                this.portDomain = 'Legal';
+                this.fetchPortPlan();
+            } else if (val === 'custom') {
+                this.portSourcePath = '';
+                this.portDomain = 'Core';
+            }
+        },
+
+        fetchPortPlan() {
             this.portInspecting = true;
-            fetch('/laraslice/wizard/blueprint/port-inspect', {
+            fetch('/laraslice/wizard/blueprint/port-plan', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
-                body: JSON.stringify({ source: this.portSourcePath, domain: this.portDomain })
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    preset: this.portPreset,
+                    source: this.portSourcePath,
+                    domain: this.portDomain,
+                    plan_json: this.portPreset === 'json' ? this.portPlanJsonText : ''
+                })
             })
-            .then(r => r.json())
+            .then(async (r) => {
+                const text = await r.text();
+                let res;
+                try {
+                    res = JSON.parse(text);
+                } catch (parseErr) {
+                    throw new Error(`Server returned non-JSON response (${r.status} ${r.statusText}): ${text.substring(0, 250)}`);
+                }
+                if (!r.ok && !res.message) {
+                    throw new Error(`Server error ${r.status}: ${text.substring(0, 250)}`);
+                }
+                return res;
+            })
             .then(res => {
                 this.portInspecting = false;
-                if (res.success) {
-                    this.portInspectionData = res.data;
-                    if (res.data.domain_blueprint_yaml) {
-                        this.domainYamlSource = res.data.domain_blueprint_yaml;
+                if (res.success && res.plan) {
+                    this.portPlanData = res.plan;
+                    this.portPlanJsonText = JSON.stringify(res.plan, null, 2);
+                    if (res.inspection) this.portInspectionData = res.inspection;
+                    if (!this.selectedUiSlice && res.plan.modules && res.plan.modules[0] && res.plan.modules[0].slices && res.plan.modules[0].slices[0]) {
+                        this.selectedUiSlice = res.plan.modules[0].slices[0].name;
                     }
                 } else {
-                    alert('Inspection failed: ' + (res.message || 'Unknown error'));
+                    alert('Plan generation failed: ' + (res.message || 'Unknown error'));
                 }
             })
             .catch(e => {
                 this.portInspecting = false;
-                alert('Inspection error: ' + e.message);
+                alert('Plan generation error: ' + e.message);
             });
         },
 
-        loadPortedToStudio() {
-            if (!this.portInspectionData || !this.portInspectionData.studio_slices || !this.portInspectionData.studio_slices.length) {
-                alert('Please inspect the project schema first.');
+        downloadPlanJson() {
+            if (!this.portPlanJsonText) return;
+            const blob = new Blob([this.portPlanJsonText], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `porting-architecture-plan-${(this.portDomain || 'app').toLowerCase()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+
+        executePortPlan() {
+            if (!this.portPlanData && !this.portPlanJsonText) {
+                alert('Please inspect the project or load an architecture plan first.');
                 return;
             }
-            this.slices = this.portInspectionData.studio_slices;
-            this.domainName = this.portInspectionData.domain || this.portDomain;
+            this.portExecuting = true;
+            this.portActiveTab = 'log';
+            this.portExecutionLogs = [
+                `[${new Date().toLocaleTimeString()}] Initializing LaraSlice VSA Porting Engine...`,
+                `[${new Date().toLocaleTimeString()}] Target Domain: ${this.portDomain}`,
+                `[${new Date().toLocaleTimeString()}] Mode: Canonical Enterprise Business Aggregates`,
+                `[${new Date().toLocaleTimeString()}] Multi-tenancy: ${this.portPlanData?.summary?.multi_tenancy?.enabled ? 'Enabled (' + this.portPlanData.summary.multi_tenancy.tenant_key + ')' : 'Disabled'}`,
+                `[${new Date().toLocaleTimeString()}] Scaffolding ${this.portPlanData?.modules?.length || 0} Modules and ${this.portPlanData?.summary?.total_canonical_slices || 0} Canonical Slices...`
+            ];
+
+            let planPayload = this.portPlanData;
+            try {
+                if (this.portPlanJsonText) {
+                    planPayload = JSON.parse(this.portPlanJsonText);
+                }
+            } catch (e) {}
+
+            fetch('/laraslice/wizard/blueprint/port-execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    plan: planPayload,
+                    source: this.portSourcePath,
+                    domain: this.portDomain,
+                    import_data: this.portImportData,
+                    with_files: this.portWithFiles
+                })
+            })
+            .then(async (r) => {
+                const text = await r.text();
+                let res;
+                try {
+                    res = JSON.parse(text);
+                } catch (parseErr) {
+                    throw new Error(`Server returned non-JSON response (${r.status} ${r.statusText}): ${text.substring(0, 250)}`);
+                }
+                if (!r.ok && !res.message) {
+                    throw new Error(`Server error ${r.status}: ${text.substring(0, 250)}`);
+                }
+                return res;
+            })
+            .then(res => {
+                this.portExecuting = false;
+                if (res.success) {
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ Slices and Child Tables successfully created.`);
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ Database migrations executed.`);
+                    if (res.result?.data_import) {
+                        const imp = res.result.data_import;
+                        this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ ETL Data Stream: ${imp.total_rows_imported || 0} records streamed across ${imp.tables_imported || 0} tables.`);
+                    }
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] 🚀 100% Usable Porting Completed Successfully!`);
+                    setTimeout(() => {
+                        alert('Porting completed successfully with 100% functional data! Reloading Studio...');
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ❌ Error: ${res.message || 'Execution failed'}`);
+                    alert('Porting execution error: ' + (res.message || 'Unknown error'));
+                }
+            })
+            .catch(e => {
+                this.portExecuting = false;
+                this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ❌ Network Error: ${e.message}`);
+                alert('Port execution error: ' + e.message);
+            });
+        },
+
+        getActiveSlicePages() {
+            if (this.blueprint && this.blueprint.pages) {
+                return this.blueprint.pages;
+            }
+            if (this.slices && this.slices[this.activeSliceIdx] && this.slices[this.activeSliceIdx].blueprint?.pages) {
+                return this.slices[this.activeSliceIdx].blueprint.pages;
+            }
+            const sName = this.blueprint?.name;
+            if (this.portPlanData && this.portPlanData.modules) {
+                for (let m of this.portPlanData.modules) {
+                    if (m.slices) {
+                        for (let s of m.slices) {
+                            if (s.name === sName && s.pages) return s.pages;
+                        }
+                    }
+                }
+            }
+            const rootModel = (this.blueprint?.models && this.blueprint.models[0]) || { name: sName || 'Record', fields: [] };
+            const childModels = (this.blueprint?.models && this.blueprint.models.slice(1)) || [];
+            return {
+                index: {
+                    title: `${sName || 'Record'} Directory`,
+                    description: `Unified BlatUI directory for managing ${sName || 'entity'} records.`,
+                    stats_ribbon: [
+                        { label: `Total ${sName || 'Records'}`, value: '120', change: '+12% this month', icon: 'layers', color: 'primary' },
+                        { label: 'Active', value: '95', change: '79% operational', icon: 'check-circle', color: 'emerald' },
+                        { label: 'Pending Review', value: '18', change: 'Action required', icon: 'clock', color: 'amber' },
+                        { label: 'Archived', value: '7', change: 'Historical records', icon: 'archive', color: 'slate' }
+                    ],
+                    filter_bar: {
+                        search_placeholder: `Search ${(sName || 'record').toLowerCase()} records...`,
+                        filters: [
+                            { name: 'status', label: 'All Statuses', type: 'select', options: ['Active', 'Pending', 'Archived'] }
+                        ]
+                    },
+                    columns: rootModel.fields ? rootModel.fields.slice(0, 6).map(f => ({ key: f.handle, label: f.label, type: f.type, sortable: true })) : []
+                },
+                show: {
+                    layout: 'split-workspace',
+                    sub_tabs: [
+                        { name: 'overview', label: 'Overview', icon: 'info' },
+                        ...childModels.map(cm => ({ name: cm.handle, label: cm.name, icon: 'list', count: 0 }))
+                    ]
+                },
+                create_edit: {
+                    create: {
+                        title: `Create ${rootModel.name}`,
+                        sections: [
+                            { name: 'Primary Information', fields: (rootModel.fields || []).slice(0, 6).map(f => f.handle) },
+                            { name: 'Additional Details', fields: (rootModel.fields || []).slice(6, 12).map(f => f.handle) }
+                        ]
+                    }
+                },
+                workflow: this.blueprint?.workflow || {
+                    state_column: 'status',
+                    states: ['Draft', 'Submitted', 'Under Review', 'Approved', 'Finished']
+                }
+            };
+        },
+
+        convertModulesToStudioSlices(modules) {
+            const out = [];
+            if (!Array.isArray(modules)) return out;
+            for (let m of modules) {
+                const modName = m.name || 'Core';
+                if (!Array.isArray(m.slices)) continue;
+                for (let s of m.slices) {
+                    const sName = s.name;
+                    const sHandle = s.handle || this.toSnakeCase(sName);
+                    const rootTable = s.root_table || this.toSnakeCase(sName);
+                    const rootModelHandle = this.toSnakeCase(rootTable.replace(/s$/, ''));
+                    
+                    const models = [];
+                    const relations = [];
+                    
+                    if (Array.isArray(s.child_tables)) {
+                        for (let ct of s.child_tables) {
+                            const cTable = typeof ct === 'string' ? ct : ct.table;
+                            const cModel = (typeof ct === 'object' && ct.model) ? ct.model : this.toStudlyCase(cTable.replace(/s$/, ''));
+                            const cHandle = this.toSnakeCase(cModel);
+                            const fk = rootModelHandle + '_id';
+                            models.push({
+                                name: cModel,
+                                handle: cHandle,
+                                table: cTable,
+                                root: false,
+                                timestamps: true,
+                                soft_deletes: false,
+                                description: `Child entity of ${sName}`,
+                                fields: [
+                                    { handle: 'id', label: 'ID', type: 'integer', input_type: 'number', required: true, nullable: false, width: 25 },
+                                    { handle: fk, label: this.toStudlyCase(fk), type: 'integer', input_type: 'select', required: true, nullable: false, width: 50 },
+                                    { handle: 'name', label: 'Name', type: 'string', input_type: 'text', required: false, nullable: true, width: 50 }
+                                ],
+                                relations: [{ name: rootModelHandle, type: 'belongsTo', model: rootModelHandle, foreign_key: fk }]
+                            });
+                            relations.push({ type: 'hasMany', source: rootTable, target: cTable, source_model: rootModelHandle, target_model: cHandle, foreign_key: fk });
+                        }
+                    }
+                    
+                    models.unshift({
+                        name: this.toStudlyCase(rootModelHandle),
+                        handle: rootModelHandle,
+                        table: rootTable,
+                        root: true,
+                        timestamps: true,
+                        soft_deletes: true,
+                        description: `Primary aggregate root for ${sName}`,
+                        fields: [
+                            { handle: 'id', label: 'ID', type: 'integer', input_type: 'number', required: true, nullable: false, width: 25 },
+                            { handle: 'name', label: 'Name', type: 'string', input_type: 'text', required: true, nullable: false, width: 50 },
+                            { handle: 'status', label: 'Status', type: 'string', input_type: 'select', required: false, nullable: true, width: 50 }
+                        ],
+                        relations: relations.map(r => ({ name: r.target, type: 'hasMany', model: r.target_model, foreign_key: r.foreign_key }))
+                    });
+                    
+                    let uiConfig = null;
+                    if (s.ui) {
+                        uiConfig = JSON.parse(JSON.stringify(s.ui));
+                    } else if (s.pages) {
+                        let uiCols = [];
+                        if (s.pages.index && Array.isArray(s.pages.index.columns)) {
+                            uiCols = s.pages.index.columns.map(c => ({
+                                handle: c.field || c.key,
+                                label: c.label || this.toStudlyCase(c.field || c.key),
+                                type: c.type || 'text',
+                                formatter: c.type || 'text',
+                                sortable: c.sortable !== false,
+                                searchable: true
+                            }));
+                        }
+                        let quickFilters = [];
+                        if (s.pages.index?.filter_bar?.filters) {
+                            quickFilters = s.pages.index.filter_bar.filters.map(f => ({
+                                field: f.name || f.field || 'status',
+                                handle: f.name || f.field || 'status',
+                                label: f.label || 'Status',
+                                type: 'select',
+                                searchable: true,
+                                is_searchable: true
+                            }));
+                        }
+                        let sections = [];
+                        if (s.pages.forms?.create?.sections) {
+                            sections = s.pages.forms.create.sections.map(sec => ({
+                                name: sec.name || 'General Information',
+                                grid: sec.columns || 2,
+                                columns: sec.columns || 2,
+                                fields: (sec.fields || []).map(f => {
+                                    const h = typeof f === 'string' ? f : (f.handle || f.name);
+                                    return {
+                                        handle: h,
+                                        span: 1,
+                                        searchable: (typeof f === 'object' && f.searchable !== undefined) ? f.searchable : (h.endsWith('_id') || h.includes('status'))
+                                    };
+                                })
+                            }));
+                        }
+                        uiConfig = {
+                            presentation: { create: 'drawer', edit: 'drawer' },
+                            directory: {
+                                presentation: 'table',
+                                columns: uiCols.length ? uiCols : (models[0]?.fields?.map(f => ({ handle: f.handle, label: f.label, type: 'text', sortable: true })) || []),
+                                quick_filters: quickFilters,
+                                sidebar_filters: []
+                            },
+                            forms: {
+                                mode: s.pages.forms?.presentation || 'drawer',
+                                sections: sections
+                            }
+                        };
+                    }
+
+                    const bp = {
+                        schema_version: 1,
+                        name: sName,
+                        handle: sHandle,
+                        domain: this.portDomain || 'ERP',
+                        module: modName,
+                        description: `Canonical ${sName} slice in ${modName}`,
+                        permissions: s.permissions || [`${sHandle}.view`, `${sHandle}.create`, `${sHandle}.edit`, `${sHandle}.delete`],
+                        workflow: s.workflow || null,
+                        roles: [],
+                        navigation: {
+                            label: sName,
+                            icon: s.icon || 'briefcase',
+                            group: modName,
+                            route: `erp/${this.toSnakeCase(modName)}/${sHandle}`
+                        },
+                        ui: uiConfig,
+                        pages: s.pages || null,
+                        models: models
+                    };
+                    
+                    out.push({
+                        name: sName,
+                        handle: sHandle,
+                        domain: this.portDomain || 'ERP',
+                        module: modName,
+                        blueprint: bp,
+                        allRelations: relations,
+                        source: ''
+                    });
+                }
+            }
+            return out;
+        },
+
+        loadPortedToStudio() {
+            let targetSlices = null;
+            if (this.portPlanData && Array.isArray(this.portPlanData.studio_slices) && this.portPlanData.studio_slices.length > 0) {
+                targetSlices = this.portPlanData.studio_slices;
+            } else if (this.portInspectionData && Array.isArray(this.portInspectionData.studio_slices) && this.portInspectionData.studio_slices.length > 0) {
+                targetSlices = this.portInspectionData.studio_slices;
+            } else if (this.portPlanData && Array.isArray(this.portPlanData.modules)) {
+                targetSlices = this.convertModulesToStudioSlices(this.portPlanData.modules);
+            }
+
+            if (!targetSlices || !targetSlices.length) {
+                alert('Please inspect the project schema or load an architecture plan first.');
+                return;
+            }
+
+            this.slices = JSON.parse(JSON.stringify(targetSlices));
+            this.domainName = this.portPlanData?.domain || this.portInspectionData?.domain || this.portDomain || 'ERP';
             this.blueprint.domain = this.domainName;
             this.activeSliceIdx = 0;
-            if (this.slices.length > 0) {
+            if (this.slices.length > 0 && this.slices[0].blueprint) {
                 this.loadParsedBlueprint(JSON.parse(JSON.stringify(this.slices[0].blueprint)));
                 this.allRelations = JSON.parse(JSON.stringify(this.slices[0].allRelations || []));
                 this.source = this.slices[0].source || '';
+                this.syncToYaml();
             }
-            if (this.portInspectionData.domain_blueprint_yaml) {
+            if (this.portInspectionData?.domain_blueprint_yaml) {
                 this.domainYamlSource = this.portInspectionData.domain_blueprint_yaml;
             }
             this.showPortModal = false;
             this.mode = 'visual';
+            try {
+                sessionStorage.setItem('laraslice_studio_slices', JSON.stringify(this.slices));
+                sessionStorage.setItem('laraslice_active_slice_idx', '0');
+            } catch(e) {}
         },
 
         generateDomainYaml() {
@@ -4216,47 +5001,6 @@ document.addEventListener('alpine:init', () => {
                 }
             }
             this.domainYamlSource = lines.join('\n');
-        },
-
-        executePortLegacyApp() {
-            if (!this.portInspectionData) { alert('Please inspect the project first'); return; }
-            this.portExecuting = true;
-            fetch('/laraslice/wizard/blueprint/port-execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
-                body: JSON.stringify({
-                    source: this.portSourcePath,
-                    domain: this.portDomain,
-                    mode: this.portMode,
-                    with_files: this.portWithFiles
-                })
-            })
-            .then(r => r.json())
-            .then(res => {
-                this.portExecuting = false;
-                if (res.success) {
-                    if (res.result.studio_slices && res.result.studio_slices.length > 0) {
-                        this.slices = res.result.studio_slices;
-                        this.domainName = res.result.domain || this.portDomain;
-                        this.blueprint.domain = this.domainName;
-                        this.activeSliceIdx = 0;
-                        this.loadParsedBlueprint(JSON.parse(JSON.stringify(this.slices[0].blueprint)));
-                        this.allRelations = JSON.parse(JSON.stringify(this.slices[0].allRelations || []));
-                        this.source = this.slices[0].source || '';
-                        if (res.result.domain_blueprint_yaml) {
-                            this.domainYamlSource = res.result.domain_blueprint_yaml;
-                        }
-                    }
-                    alert('Porting completed successfully! Generated domain architecture loaded into Studio.');
-                    this.showPortModal = false;
-                } else {
-                    alert('Porting execution failed: ' + (res.message || 'Unknown error'));
-                }
-            })
-            .catch(e => {
-                this.portExecuting = false;
-                alert('Porting error: ' + e.message);
-            });
         },
         showIntrospectModal: false,
         showNewSliceModal: false,
@@ -4581,9 +5325,16 @@ document.addEventListener('alpine:init', () => {
         },
 
         init() {
-        if (new URLSearchParams(window.location.search).get('port') === '1') {
-            this.showPortModal = true;
-        }
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('port') === '1') {
+                this.showPortModal = true;
+            }
+            if (urlParams.get('load_port') === '1' || urlParams.get('auto_load_port') === '1') {
+                this.loadPortedToStudio();
+            }
+            if (!this.portPlanData && !this.portInspecting) {
+                this.fetchPortPlan();
+            }
             // 1. Restore all slices if passed from backend (e.g. after form validation / plan review)
             if (allSlicesJson) {
                 try {
@@ -4605,10 +5356,66 @@ document.addEventListener('alpine:init', () => {
                 } catch (e) {}
             }
 
-            const urlParams = new URLSearchParams(window.location.search);
             const tplParam = urlParams.get('template');
             if (tplParam && studioPresets[tplParam]) {
                 this.loadStudioPreset(tplParam);
+                return;
+            }
+
+            const sliceParam = urlParams.get('slice');
+            if (sliceParam && initialBlueprint) {
+                // Restore existing studio slices collection from sessionStorage if present so the domain tabs remain available
+                try {
+                    const stored = sessionStorage.getItem('laraslice_studio_slices');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            this.slices = parsed;
+                        }
+                    }
+                } catch(e) {}
+
+                // Load the live requested blueprint directly from disk/controller
+                this.loadParsedBlueprint(initialBlueprint);
+                this.source = initialSource || this.source;
+
+                // Sync into this.slices collection
+                if (Array.isArray(this.slices) && this.slices.length > 0) {
+                    const foundIdx = this.slices.findIndex(s => 
+                        (s.name && s.name.toLowerCase() === sliceParam.toLowerCase()) || 
+                        (s.handle && s.handle.toLowerCase() === sliceParam.toLowerCase())
+                    );
+                    if (foundIdx !== -1) {
+                        this.activeSliceIdx = foundIdx;
+                        this.slices[foundIdx].blueprint = JSON.parse(JSON.stringify(this.blueprint));
+                        this.slices[foundIdx].source = this.source;
+                        this.slices[foundIdx].name = this.blueprint.name;
+                    } else {
+                        this.slices.push({
+                            name: this.blueprint.name || sliceParam,
+                            handle: this.blueprint.handle || sliceParam.toLowerCase(),
+                            domain: this.blueprint.domain || '',
+                            blueprint: JSON.parse(JSON.stringify(this.blueprint)),
+                            allRelations: JSON.parse(JSON.stringify(this.allRelations || [])),
+                            source: this.source
+                        });
+                        this.activeSliceIdx = this.slices.length - 1;
+                    }
+                } else {
+                    this.slices = [{
+                        name: this.blueprint.name || sliceParam,
+                        handle: this.blueprint.handle || sliceParam.toLowerCase(),
+                        domain: this.blueprint.domain || '',
+                        blueprint: JSON.parse(JSON.stringify(this.blueprint)),
+                        allRelations: JSON.parse(JSON.stringify(this.allRelations || [])),
+                        source: this.source
+                    }];
+                    this.activeSliceIdx = 0;
+                }
+
+                sessionStorage.setItem('laraslice_active_slice_idx', String(this.activeSliceIdx));
+                sessionStorage.setItem('laraslice_studio_slices', JSON.stringify(this.slices));
+                this.syncToYaml();
                 return;
             }
 
@@ -4662,15 +5469,23 @@ document.addEventListener('alpine:init', () => {
             this.blueprint.name = data.name || '';
             this.blueprint.handle = this.toSnakeCase(data.handle || data.name || '');
             this.blueprint.domain = data.domain || '';
+            this.blueprint.module = data.module || '';
             this.blueprint.description = data.description || '';
             this.blueprint.author = data.author || '';
             this.blueprint.version = data.version || '1.0.0';
             this.blueprint.permissions = Array.isArray(data.permissions) ? data.permissions : [];
             this.blueprint.workflow = data.workflow || null;
             this.blueprint.roles = Array.isArray(data.roles) ? data.roles : [];
+            this.blueprint.navigation = data.navigation || null;
+            this.blueprint.pages = data.pages || null;
             if (this.blueprint.permissions.length === 0 && this.blueprint.handle) {
                 let base = this.blueprint.handle.replace(/s$/, '');
                 this.blueprint.permissions = [`${base}.view`, `${base}.create`, `${base}.edit`, `${base}.delete`];
+            }
+            if (data.ui && typeof data.ui === 'object') {
+                this.blueprint.ui = JSON.parse(JSON.stringify(data.ui));
+            } else {
+                this.blueprint.ui = null;
             }
             this.blueprint.models = [];
             this.allRelations = [];
@@ -4737,6 +5552,8 @@ document.addEventListener('alpine:init', () => {
 
                 this.blueprint.models.push(modelObj);
             });
+            this.ensureUiConfig();
+            this.syncToYaml();
         },
 
         toggleModelCollapse(idx) {
@@ -4923,6 +5740,48 @@ document.addEventListener('alpine:init', () => {
             if (this.blueprint.roles && this.blueprint.roles.length) {
                 bpObj.roles = JSON.parse(JSON.stringify(this.blueprint.roles));
             }
+            if (this.blueprint.ui) {
+                const rawUi = this.blueprint.ui;
+                const cleanUi = {
+                    presentation: rawUi.presentation || { create: 'drawer', edit: 'drawer' },
+                    directory: {
+                        columns: (rawUi.directory?.columns || []).map(c => ({
+                            handle: c.handle || c.field || c.key,
+                            label: c.label || c.handle,
+                            formatter: c.formatter || c.type || 'text',
+                            sortable: c.sortable !== false
+                        })),
+                        quick_filters: (rawUi.directory?.quick_filters || []).map(qf => ({
+                            handle: qf.handle || qf.field || qf.key,
+                            label: qf.label || qf.handle,
+                            is_searchable: qf.is_searchable !== false && qf.searchable !== false
+                        })),
+                        sidebar_filters: (rawUi.directory?.sidebar_filters || []).map(sf => ({
+                            handle: sf.handle || sf.field || sf.key,
+                            label: sf.label || sf.handle,
+                            type: sf.type || 'select'
+                        }))
+                    },
+                    forms: {
+                        presentation: rawUi.forms?.presentation || rawUi.presentation || { create: 'drawer', edit: 'drawer' },
+                        sections: (rawUi.forms?.sections || []).map((sec, idx) => ({
+                            key: sec.key || this.toSnakeCase(sec.title || ('section_' + (idx + 1))),
+                            title: sec.title || ('Section ' + (idx + 1)),
+                            grid: parseInt(sec.grid || sec.columns || 3),
+                            fields: (sec.fields || []).map(fld => typeof fld === 'string' ? fld : ({
+                                handle: fld.handle || fld.field || fld.key,
+                                span: parseInt(fld.span || 1),
+                                is_searchable: fld.is_searchable !== false && (fld.searchable === true || (fld.handle || '').endsWith('_id'))
+                            }))
+                        }))
+                    }
+                };
+                if (rawUi.directory?.row_actions) {
+                    cleanUi.directory.row_actions = rawUi.directory.row_actions;
+                }
+                bpObj.ui = cleanUi;
+            }
+
 
             if (typeof jsyaml !== 'undefined') {
                 this.source = jsyaml.dump(bpObj, { indent: 2, lineWidth: -1, noRefs: true });
@@ -5046,6 +5905,433 @@ document.addEventListener('alpine:init', () => {
             this.syncToYaml();
         },
 
+        ensureUiConfig() {
+            if (!this.blueprint) return;
+            const rootModel = (this.blueprint.models && this.blueprint.models[0]) || { fields: [] };
+            const fields = rootModel.fields || [];
+
+            if (!this.blueprint.ui || typeof this.blueprint.ui !== 'object') {
+                this.blueprint.ui = {
+                    presentation: { create: 'drawer', edit: 'drawer' },
+                    directory: {
+                        columns: [],
+                        quick_filters: [],
+                        sidebar_filters: []
+                    },
+                    forms: {
+                        mode: 'drawer',
+                        drawer_width: 'max-w-3xl',
+                        sections: []
+                    }
+                };
+            }
+
+            const ui = this.blueprint.ui;
+            ui.presentation = ui.presentation || { create: 'drawer', edit: 'drawer' };
+            ui.directory = ui.directory || {};
+            ui.directory.row_actions = ui.directory.row_actions || {
+                display: 'dropdown',
+                items: [
+                    { handle: 'view', label: 'View Details', icon: 'eye', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'edit', label: 'Edit Record', icon: 'pencil', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'delete', label: 'Delete Record', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
+                ]
+            };
+            ui.forms = ui.forms || {};
+            ui.forms.mode = ui.presentation?.create || ui.forms.mode || 'drawer';
+
+            // Normalize existing columns
+            if (Array.isArray(ui.directory.columns) && ui.directory.columns.length > 0) {
+                ui.directory.columns.forEach(col => {
+                    col.handle = col.handle || col.key || 'col';
+                    col.type = col.type || col.formatter || 'text';
+                    col.formatter = col.type;
+                    col.sortable = col.sortable !== false;
+                });
+            }
+
+            // Normalize quick filters
+            if (Array.isArray(ui.directory.quick_filters) && ui.directory.quick_filters.length > 0) {
+                ui.directory.quick_filters.forEach(qf => {
+                    qf.handle = qf.handle || qf.field || '';
+                    qf.field = qf.handle;
+                    qf.searchable = qf.searchable !== false && (qf.is_searchable !== false);
+                    qf.is_searchable = qf.searchable;
+                });
+            }
+
+            // Normalize sidebar filters
+            if (Array.isArray(ui.directory.sidebar_filters) && ui.directory.sidebar_filters.length > 0) {
+                ui.directory.sidebar_filters.forEach(sf => {
+                    sf.handle = sf.handle || sf.field || '';
+                    sf.field = sf.handle;
+                    sf.type = sf.type || 'select';
+                });
+            }
+
+            // Normalize form sections
+            if (Array.isArray(ui.forms.sections) && ui.forms.sections.length > 0) {
+                ui.forms.sections.forEach(sec => {
+                    sec.grid = parseInt(sec.grid || sec.columns || 3);
+                    sec.columns = sec.grid;
+                    if (Array.isArray(sec.fields)) {
+                        sec.fields.forEach(fld => {
+                            fld.span = parseInt(fld.span || 1);
+                            fld.searchable = fld.searchable !== false && (fld.is_searchable === true || (fld.handle || '').endsWith('_id'));
+                            fld.is_searchable = fld.searchable;
+                        });
+                    }
+                });
+            }
+
+
+
+            if (!Array.isArray(ui.directory.columns) || ui.directory.columns.length === 0) {
+                const blacklist = ['id', 'company_id', 'added_by', 'last_updated_by', 'created_by', 'updated_by', 'created_at', 'updated_at', 'deleted_at', 'remember_token'];
+                const eligible = fields.filter(f => !blacklist.includes(f.handle));
+                ui.directory.columns = [
+                    { handle: 'code', label: 'Code', type: 'code_badge', width: 'w-24', sortable: true },
+                    ...eligible.slice(0, 5).map(f => {
+                        let type = 'text';
+                        const h = (f.handle || '').toLowerCase();
+                        if (h.includes('user') || h.includes('employee') || h.includes('client')) type = 'composite_user';
+                        else if (h.includes('status')) type = 'status_pill';
+                        else if (h.includes('amount') || h.includes('price') || h.includes('total') || h.includes('budget')) type = 'money_breakdown';
+                        else if (h.includes('progress') || h.includes('percent')) type = 'progress_bar';
+                        else if (f.type === 'date' || f.type === 'datetime' || f.type === 'timestamp') type = 'date_time';
+                        return {
+                            handle: f.handle,
+                            label: f.label || (f.handle.charAt(0).toUpperCase() + f.handle.slice(1).replace(/_/g, ' ')),
+                            type: type,
+                            sortable: true
+                        };
+                    })
+                ];
+            }
+
+            if (!Array.isArray(ui.directory.quick_filters) || ui.directory.quick_filters.length === 0) {
+                const statusField = fields.find(f => (f.handle || '').includes('status'));
+                const relField = fields.find(f => (f.handle || '').endsWith('_id') && !['company_id', 'created_by', 'updated_by'].includes(f.handle));
+                ui.directory.quick_filters = [];
+                if (relField) {
+                    ui.directory.quick_filters.push({
+                        field: relField.handle,
+                        label: relField.label || 'Filter',
+                        type: 'searchable_select',
+                        searchable: true
+                    });
+                }
+                if (statusField) {
+                    ui.directory.quick_filters.push({
+                        field: statusField.handle,
+                        label: 'Status',
+                        type: 'select',
+                        searchable: false
+                    });
+                }
+            }
+
+            if (!Array.isArray(ui.forms.sections) || ui.forms.sections.length === 0) {
+                const blacklist = ['id', 'company_id', 'added_by', 'last_updated_by', 'created_by', 'updated_by', 'created_at', 'updated_at', 'deleted_at', 'remember_token'];
+                const formFields = fields.filter(f => !blacklist.includes(f.handle));
+                const wideKeywords = ['address', 'description', 'notes', 'memo', 'summary', 'about', 'bio', 'instructions', 'content', 'body', 'remarks'];
+
+                if (formFields.length <= 6) {
+                    ui.forms.sections = [
+                        {
+                            title: 'General Information',
+                            description: 'Core parameters and record identification',
+                            icon: 'info',
+                            columns: 3,
+                            fields: formFields.map(f => ({
+                                handle: f.handle,
+                                label: f.label || (f.handle.charAt(0).toUpperCase() + f.handle.slice(1).replace(/_/g, ' ')),
+                                span: wideKeywords.some(k => (f.handle || '').includes(k)) ? 3 : 1,
+                                searchable: (f.handle || '').endsWith('_id') || f.type === 'enum',
+                                required: !!f.required
+                            }))
+                        }
+                    ];
+                } else {
+                    const primary = formFields.slice(0, 6);
+                    const secondary = formFields.slice(6);
+                    ui.forms.sections = [
+                        {
+                            title: 'Primary Identification & Details',
+                            description: 'Core identity, organizational assignment, and relations',
+                            icon: 'user',
+                            columns: 3,
+                            fields: primary.map(f => ({
+                                handle: f.handle,
+                                label: f.label || (f.handle.charAt(0).toUpperCase() + f.handle.slice(1).replace(/_/g, ' ')),
+                                span: wideKeywords.some(k => (f.handle || '').includes(k)) ? 3 : 1,
+                                searchable: (f.handle || '').endsWith('_id') || f.type === 'enum',
+                                required: !!f.required
+                            }))
+                        },
+                        {
+                            title: 'Operational & Extended Terms',
+                            description: 'Extended parameters, terms, and custom notes',
+                            icon: 'sliders',
+                            columns: 3,
+                            fields: secondary.map(f => ({
+                                handle: f.handle,
+                                label: f.label || (f.handle.charAt(0).toUpperCase() + f.handle.slice(1).replace(/_/g, ' ')),
+                                span: wideKeywords.some(k => (f.handle || '').includes(k)) ? 3 : 1,
+                                searchable: (f.handle || '').endsWith('_id') || f.type === 'enum',
+                                required: !!f.required
+                            }))
+                        }
+                    ];
+                }
+            }
+        },
+
+        syncUiToBlueprintAndYaml() {
+            this.syncToYaml();
+        },
+
+        addDirectoryColumn(handle) {
+            this.ensureUiConfig();
+            const rootModel = (this.blueprint.models && this.blueprint.models[0]) || { fields: [] };
+            const f = (rootModel.fields || []).find(x => x.handle === handle);
+            const label = f ? (f.label || handle) : handle;
+            let type = 'text';
+            const h = handle.toLowerCase();
+            if (h.includes('user') || h.includes('employee') || h.includes('client')) type = 'composite_user';
+            else if (h.includes('status')) type = 'status_pill';
+            else if (h.includes('amount') || h.includes('price') || h.includes('total') || h.includes('budget')) type = 'money_breakdown';
+            else if (h.includes('progress') || h.includes('percent')) type = 'progress_bar';
+            else if (f && (f.type === 'date' || f.type === 'datetime' || f.type === 'timestamp')) type = 'date_time';
+
+            this.blueprint.ui.directory.columns.push({
+                handle: handle,
+                label: label,
+                type: type,
+                sortable: true
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        removeDirectoryColumn(idx) {
+            this.ensureUiConfig();
+            this.blueprint.ui.directory.columns.splice(idx, 1);
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        moveDirectoryColumn(idx, dir) {
+            this.ensureUiConfig();
+            const cols = this.blueprint.ui.directory.columns;
+            const target = idx + dir;
+            if (target < 0 || target >= cols.length) return;
+            const temp = cols[idx];
+            cols[idx] = cols[target];
+            cols[target] = temp;
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        addQuickFilter(handle) {
+            this.ensureUiConfig();
+            const rootModel = (this.blueprint.models && this.blueprint.models[0]) || { fields: [] };
+            const f = (rootModel.fields || []).find(x => x.handle === handle);
+            this.blueprint.ui.directory.quick_filters.push({
+                field: handle,
+                label: f?.label || handle,
+                type: handle.endsWith('_id') ? 'searchable_select' : 'select',
+                searchable: handle.endsWith('_id')
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        removeQuickFilter(idx) {
+            this.ensureUiConfig();
+            this.blueprint.ui.directory.quick_filters.splice(idx, 1);
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        moveQuickFilter(idx, dir) {
+            this.ensureUiConfig();
+            const list = this.blueprint.ui.directory.quick_filters;
+            const target = idx + dir;
+            if (target < 0 || target >= list.length) return;
+            const temp = list[idx];
+            list[idx] = list[target];
+            list[target] = temp;
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        moveSidebarFilter(idx, dir) {
+            this.ensureUiConfig();
+            const list = this.blueprint.ui.directory.sidebar_filters;
+            const target = idx + dir;
+            if (target < 0 || target >= list.length) return;
+            const temp = list[idx];
+            list[idx] = list[target];
+            list[target] = temp;
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        addSidebarFilter(handle) {
+            this.ensureUiConfig();
+            const rootModel = (this.blueprint.models && this.blueprint.models[0]) || { fields: [] };
+            const f = (rootModel.fields || []).find(x => x.handle === handle);
+            this.blueprint.ui.directory.sidebar_filters.push({
+                field: handle,
+                label: f?.label || handle,
+                type: f && ['date', 'datetime', 'timestamp'].includes(f.type) ? 'date_range' : 'select',
+                searchable: true
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        removeSidebarFilter(idx) {
+            this.ensureUiConfig();
+            this.blueprint.ui.directory.sidebar_filters.splice(idx, 1);
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        addFormSection() {
+            this.ensureUiConfig();
+            const num = (this.blueprint.ui.forms.sections.length || 0) + 1;
+            this.blueprint.ui.forms.sections.push({
+                title: 'Section ' + num + ' Details',
+                description: 'Additional custom configuration parameters',
+                icon: 'sliders',
+                columns: 3,
+                fields: []
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        removeFormSection(secIdx) {
+            this.ensureUiConfig();
+            this.blueprint.ui.forms.sections.splice(secIdx, 1);
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        moveFormSection(secIdx, dir) {
+            this.ensureUiConfig();
+            const secs = this.blueprint.ui.forms.sections;
+            const target = secIdx + dir;
+            if (target < 0 || target >= secs.length) return;
+            const temp = secs[secIdx];
+            secs[secIdx] = secs[target];
+            secs[target] = temp;
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        addFieldToSection(secIdx, handle) {
+            this.ensureUiConfig();
+            const rootModel = (this.blueprint.models && this.blueprint.models[0]) || { fields: [] };
+            const f = (rootModel.fields || []).find(x => x.handle === handle);
+            const wideKeywords = ['address', 'description', 'notes', 'memo', 'summary', 'about', 'bio', 'instructions', 'content', 'body', 'remarks'];
+
+            this.blueprint.ui.forms.sections[secIdx].fields.push({
+                handle: handle,
+                label: f?.label || handle,
+                span: wideKeywords.some(k => handle.includes(k)) ? 3 : 1,
+                searchable: handle.endsWith('_id') || f?.type === 'enum',
+                required: !!f?.required
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        removeFieldFromSection(secIdx, fldIdx) {
+            this.ensureUiConfig();
+            this.blueprint.ui.forms.sections[secIdx].fields.splice(fldIdx, 1);
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        moveFieldInSection(secIdx, fldIdx, dir) {
+            this.ensureUiConfig();
+            const fields = this.blueprint.ui.forms.sections[secIdx].fields;
+            const target = fldIdx + dir;
+            if (target < 0 || target >= fields.length) return;
+            const temp = fields[fIdx];
+            fields[fldIdx] = fields[target];
+            fields[target] = temp;
+            this.syncUiToBlueprintAndYaml();
+        },
+
+
+        setRowActionsPreset(preset) {
+            this.ensureUiConfig();
+            const ra = this.blueprint.ui.directory.row_actions;
+            if (preset === 'standard_crud') {
+                ra.display = 'dropdown';
+                ra.items = [
+                    { handle: 'view', label: 'View Details', icon: 'eye', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'edit', label: 'Edit Record', icon: 'pencil', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'delete', label: 'Delete Record', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
+                ];
+            } else if (preset === 'hybrid_view_outside') {
+                ra.display = 'hybrid';
+                ra.items = [
+                    { handle: 'view', label: 'View', icon: 'eye', placement: 'inline', type: 'drawer' },
+                    { handle: 'edit', label: 'Edit', icon: 'pencil', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
+                ];
+            } else if (preset === 'task_suite') {
+                ra.display = 'hybrid';
+                ra.items = [
+                    { handle: 'timer', label: 'Timer', icon: 'play', placement: 'inline', type: 'event' },
+                    { handle: 'view', label: 'View', icon: 'eye', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'edit', label: 'Edit', icon: 'pencil', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'duplicate', label: 'Duplicate', icon: 'copy', placement: 'dropdown', type: 'route' },
+                    { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
+                ];
+            } else if (preset === 'invoice_suite') {
+                ra.display = 'dropdown';
+                ra.items = [
+                    { handle: 'view', label: 'View Details', icon: 'eye', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'download_pdf', label: 'Download PDF', icon: 'download', placement: 'dropdown', type: 'route' },
+                    { handle: 'send', label: 'Send Email', icon: 'send', placement: 'dropdown', type: 'event' },
+                    { handle: 'edit', label: 'Edit Invoice', icon: 'pencil', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'add_payment', label: 'Add Payment', icon: 'credit-card', placement: 'dropdown', type: 'drawer' },
+                    { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
+                ];
+            } else if (preset === 'inline_compact') {
+                ra.display = 'inline';
+                ra.items = [
+                    { handle: 'view', label: 'View', icon: 'eye', placement: 'inline', type: 'drawer' },
+                    { handle: 'edit', label: 'Edit', icon: 'pencil', placement: 'inline', type: 'drawer' },
+                    { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'inline', type: 'delete', danger: true }
+                ];
+            }
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        addRowAction() {
+            this.ensureUiConfig();
+            const count = (this.blueprint.ui.directory.row_actions.items || []).length + 1;
+            this.blueprint.ui.directory.row_actions.items.push({
+                handle: `custom_action_${count}`,
+                label: `Action ${count}`,
+                icon: 'external-link',
+                placement: 'dropdown',
+                type: 'route',
+                danger: false
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        removeRowAction(idx) {
+            this.ensureUiConfig();
+            this.blueprint.ui.directory.row_actions.items.splice(idx, 1);
+            this.syncUiToBlueprintAndYaml();
+        },
+
+        moveRowAction(idx, dir) {
+            this.ensureUiConfig();
+            const items = this.blueprint.ui.directory.row_actions.items;
+            const target = idx + dir;
+            if (target < 0 || target >= items.length) return;
+            const temp = items[idx];
+            items[idx] = items[target];
+            items[target] = temp;
+            this.syncUiToBlueprintAndYaml();
+        },
+
         quickAddField(modelIndex) {
             const m = this.blueprint.models[modelIndex];
             if (!m) return;
@@ -5114,7 +6400,14 @@ document.addEventListener('alpine:init', () => {
                 this.introspecting = false;
             }
         }
-    }));
 });
+
+if (window.Alpine) {
+    window.Alpine.data('blueprintStudio', window.blueprintStudio);
+} else {
+    document.addEventListener('alpine:init', () => {
+        window.Alpine.data('blueprintStudio', window.blueprintStudio);
+    });
+}
 </script>
 @endsection

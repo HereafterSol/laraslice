@@ -1,39 +1,45 @@
 schema_version: 1
-name: Shop Orders
+name: 'Shop Orders'
 handle: shop_orders
 domain: E-Commerce
-author: LaraSlice Team
+author: 'LaraSlice Team'
 version: 1.0.0
-description: Order checkout and management with real-world product line items.
+description: 'Order checkout and management with real-world product line items.'
 models:
-  - handle: shop_order
+  -
+    handle: shop_order
     table: shop_orders
     root: true
     timestamps: true
     soft_deletes: true
     fields:
-      - handle: order_number
-        label: Order Number
+      -
+        handle: order_number
+        label: 'Order Number'
         type: string
         required: true
         length: 50
-      - handle: customer_name
-        label: Customer Name
+      -
+        handle: customer_name
+        label: 'Customer Name'
         type: string
         required: true
         length: 255
-      - handle: customer_email
-        label: Customer Email
+      -
+        handle: customer_email
+        label: 'Customer Email'
         type: email
         required: true
         length: 255
-      - handle: total_amount
-        label: Total Amount
+      -
+        handle: total_amount
+        label: 'Total Amount'
         type: decimal
         required: true
-        length: 12,2
-      - handle: order_status
-        label: Order Status
+        length: '12,2'
+      -
+        handle: order_status
+        label: 'Order Status'
         type: enum
         required: true
         default: pending
@@ -42,8 +48,9 @@ models:
           processing: Processing
           completed: Completed
           cancelled: Cancelled
-      - handle: payment_status
-        label: Payment Status
+      -
+        handle: payment_status
+        label: 'Payment Status'
         type: enum
         required: true
         default: unpaid
@@ -53,50 +60,118 @@ models:
           refunded: Refunded
           failed: Failed
     relations:
-      - name: items
+      -
+        name: items
         type: hasMany
         model: shop_order_item
         foreign_key: shop_order_id
-
-  - handle: shop_order_item
+  -
+    handle: shop_order_item
     table: shop_order_items
     timestamps: true
     soft_deletes: false
     fields:
-      - handle: shop_order_id
+      -
+        handle: shop_order_id
         label: Order
         type: foreign_id
         required: true
-      - handle: shop_product_id
+      -
+        handle: shop_product_id
         label: Product
         type: foreign_id
         required: true
-      - handle: product_name
-        label: Product Name
+      -
+        handle: product_name
+        label: 'Product Name'
         type: string
         required: true
         length: 255
-      - handle: quantity
+      -
+        handle: quantity
         label: Quantity
         type: integer
         required: true
         default: 1
-      - handle: unit_price
-        label: Unit Price
+      -
+        handle: unit_price
+        label: 'Unit Price'
         type: decimal
         required: true
-        length: 10,2
-      - handle: total_price
-        label: Line Total
+        length: '10,2'
+      -
+        handle: total_price
+        label: 'Line Total'
         type: decimal
         required: true
-        length: 10,2
+        length: '10,2'
     relations:
-      - name: order
+      -
+        name: order
         type: belongsTo
         model: shop_order
         foreign_key: shop_order_id
-      - name: product
+      -
+        name: product
         type: belongsTo
         model: shop_product
         foreign_key: shop_product_id
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: order_number
+        label: 'Order Number'
+        formatter: text
+        sortable: true
+      -
+        handle: customer_name
+        label: 'Customer Name'
+        formatter: composite_user
+        sortable: true
+      -
+        handle: customer_email
+        label: 'Customer Email'
+        formatter: composite_user
+        sortable: true
+      -
+        handle: total_amount
+        label: 'Total Amount'
+        formatter: money_breakdown
+        sortable: true
+      -
+        handle: order_status
+        label: 'Order Status'
+        formatter: status_pill
+        sortable: true
+      -
+        handle: payment_status
+        label: 'Payment Status'
+        formatter: status_pill
+        sortable: true
+    quick_filters:
+      -
+        handle: customer_name
+        label: 'Customer Name'
+        is_searchable: true
+      -
+        handle: customer_email
+        label: 'Customer Email'
+        is_searchable: true
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Shop Orders Information'
+        grid: 3
+        fields:
+          - { handle: order_number, span: 1, is_searchable: false }
+          - { handle: customer_name, span: 1, is_searchable: false }
+          - { handle: customer_email, span: 1, is_searchable: false }
+          - { handle: total_amount, span: 1, is_searchable: false }
+          - { handle: order_status, span: 1, is_searchable: true }
+          - { handle: payment_status, span: 1, is_searchable: true }

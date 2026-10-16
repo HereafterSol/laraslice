@@ -173,4 +173,18 @@ return [
             'middleware' => ['api', 'auth:sanctum'],
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Multi-Tenancy & SaaS Isolation
+    |--------------------------------------------------------------------------
+    |
+    | Pluggable multi-tenant scoping. When enabled, models using HasTenant
+    | automatically filter queries by the tenant key (e.g. company_id or tenant_id).
+    |
+    */
+    'tenancy' => [
+        'enabled' => (bool) env('LARASLICE_TENANCY_ENABLED', false),
+        'tenant_key' => env('LARASLICE_TENANT_KEY', 'company_id'),
+    ],
 ];

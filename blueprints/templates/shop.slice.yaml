@@ -1,102 +1,174 @@
 schema_version: 1
-name: Shop Products
+name: 'Shop Products'
 handle: shop_products
 domain: E-Commerce
-author: LaraSlice Team
+author: 'LaraSlice Team'
 version: 1.0.0
-description: E-Commerce product catalog with category linking, SKU variants and pricing.
+description: 'E-Commerce product catalog with category linking, SKU variants and pricing.'
 models:
-  - handle: shop_product
+  -
+    handle: shop_product
     table: shop_products
     root: true
     timestamps: true
     soft_deletes: true
     fields:
-      - handle: shop_category_id
+      -
+        handle: shop_category_id
         label: Category
         type: foreign_id
         required: true
-      - handle: name
-        label: Product Name
+      -
+        handle: name
+        label: 'Product Name'
         type: string
         required: true
         length: 255
-      - handle: slug
-        label: URL Slug
+      -
+        handle: slug
+        label: 'URL Slug'
         type: string
         required: true
         length: 255
-      - handle: sku
-        label: SKU Code
+      -
+        handle: sku
+        label: 'SKU Code'
         type: string
         required: true
         length: 100
-      - handle: price
-        label: Base Price
+      -
+        handle: price
+        label: 'Base Price'
         type: decimal
         required: true
-        length: 10,2
-      - handle: sale_price
-        label: Sale Price
+        length: '10,2'
+      -
+        handle: sale_price
+        label: 'Sale Price'
         type: decimal
         required: false
         nullable: true
-        length: 10,2
-      - handle: stock_quantity
-        label: Stock Qty
+        length: '10,2'
+      -
+        handle: stock_quantity
+        label: 'Stock Qty'
         type: integer
         required: false
         nullable: true
         default: 0
-      - handle: is_featured
+      -
+        handle: is_featured
         label: Featured
         type: boolean
         default: false
-      - handle: is_active
+      -
+        handle: is_active
         label: Active
         type: boolean
         default: true
     relations:
-      - name: category
+      -
+        name: category
         type: belongsTo
         model: shop_category
         foreign_key: shop_category_id
-      - name: variants
+      -
+        name: variants
         type: hasMany
         model: shop_variant
         foreign_key: shop_product_id
-
-  - handle: shop_variant
+  -
+    handle: shop_variant
     table: shop_variants
     timestamps: true
     soft_deletes: false
     fields:
-      - handle: shop_product_id
+      -
+        handle: shop_product_id
         label: Product
         type: foreign_id
         required: true
-      - handle: sku
-        label: Variant SKU
+      -
+        handle: sku
+        label: 'Variant SKU'
         type: string
         required: true
         length: 100
-      - handle: title
-        label: Variant Title
+      -
+        handle: title
+        label: 'Variant Title'
         type: string
         required: true
         length: 150
-      - handle: price
+      -
+        handle: price
         label: Price
         type: decimal
         required: true
-        length: 10,2
-      - handle: stock_quantity
+        length: '10,2'
+      -
+        handle: stock_quantity
         label: Stock
         type: integer
         required: true
         default: 0
     relations:
-      - name: product
+      -
+        name: product
         type: belongsTo
         model: shop_product
         foreign_key: shop_product_id
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: shop_category_id
+        label: Category
+        formatter: text
+        sortable: true
+      -
+        handle: name
+        label: 'Product Name'
+        formatter: text
+        sortable: true
+      -
+        handle: slug
+        label: 'URL Slug'
+        formatter: text
+        sortable: true
+      -
+        handle: sku
+        label: 'SKU Code'
+        formatter: code_badge
+        sortable: true
+      -
+        handle: price
+        label: 'Base Price'
+        formatter: money_breakdown
+        sortable: true
+      -
+        handle: sale_price
+        label: 'Sale Price'
+        formatter: money_breakdown
+        sortable: true
+    quick_filters: {  }
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Shop Products Information'
+        grid: 3
+        fields:
+          - { handle: shop_category_id, span: 1, is_searchable: true }
+          - { handle: name, span: 1, is_searchable: false }
+          - { handle: slug, span: 1, is_searchable: false }
+          - { handle: sku, span: 1, is_searchable: false }
+          - { handle: price, span: 1, is_searchable: false }
+          - { handle: sale_price, span: 1, is_searchable: false }
+          - { handle: stock_quantity, span: 1, is_searchable: false }
+          - { handle: is_featured, span: 1, is_searchable: false }
+          - { handle: is_active, span: 1, is_searchable: false }

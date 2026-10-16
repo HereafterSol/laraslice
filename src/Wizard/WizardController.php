@@ -100,6 +100,7 @@ class WizardController extends Controller
                     'workflowConfig' => $request->input('workflowConfig'),
                     'roles' => $request->input('roles'),
                     'api' => $includeApi,
+                    'ui' => $request->input('ui'),
                 ]
             );
 
@@ -308,6 +309,13 @@ class WizardController extends Controller
             $manifestFile = $slice->path.'/slice.json';
             // Fields are always keyed by column name for the studio UI
             $raw = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : ManifestRepository::normalize($slice->toArray());
+            $normPath = str_replace('\\', '/', $slice->path);
+            if (preg_match('#/Slices/([^/]+)/([^/]+)/([^/]+)$#i', $normPath, $pMatches)) {
+                $raw['app'] = $raw['app'] ?? $pMatches[1];
+                $raw['super_domain'] = $raw['super_domain'] ?? $pMatches[1];
+                $raw['module'] = $raw['module'] ?? $pMatches[2];
+                $raw['domain'] = $raw['domain'] ?? $pMatches[2];
+            }
 
             // Discover all tables belonging to this slice
             $primaryTable = Str::plural(Str::snake($slice->name));
@@ -1046,6 +1054,7 @@ class WizardController extends Controller
                         'workflowConfig' => $request->input('workflowConfig'),
                         'roles' => $request->input('roles'),
                         'api' => (bool) ($validated['includeApi'] ?? true),
+                        'ui' => $schemas[$sliceName]['ui'] ?? $request->input('ui'),
                     ]
                 );
 

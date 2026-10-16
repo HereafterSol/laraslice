@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.2] - 2026-10-16
+
+### Added
+- **Enterprise N-Tier Architecture & Recursive Slice Discovery**:
+  - Recursive directory discovery up to 6 levels deep (`app/Slices/{SuperDomain}/{Domain}/{Slice}`, `app/Slices/{Domain}/{Slice}`, or `app/Slices/{Slice}`).
+  - Extended `SliceManifest.php`, `slice.json`, and `slice.yaml` schemas with `super_domain`, `domain`, `sub_domain`, `table_prefix`, `multitenant`, and `tenant_key` metadata.
+  - Dynamic PSR-4 namespace calculation (`getNamespace()`) reflecting exact physical directory taxonomy.
+  - Hierarchical navigation builder in `SliceManager` (`getSuperDomains()`, `getDomains()`, `getHierarchicalNavigation()`).
+  - Domain acronym & CamelCase preservation in `SliceName::domainSegment()` (`ERP`, `ProjectExecution`, `FinancialAccounting`).
+- **Pluggable Multi-Tenancy & SaaS Isolation**:
+  - `TenantManager` singleton managing active tenant context, identification, and `withoutTenancy()` bypass for background jobs and super-admin operations.
+  - `HasTenant` Eloquent model trait with automatic `TenantScope` query registration and automatic tenant assignment during model `creating()`.
+  - `TenantScope` global query scope applying `where($table.$tenantKey, $tenantId)`.
+  - `IdentifyTenant` middleware resolving tenant context from route parameters, query string, request headers, or authenticated user company context.
+  - Centralized tenancy configuration under `config/laraslice.php` (`tenancy`).
+- **Universal Monolith Reverse-Engineering & ETL Data Streaming Pipeline (`slice:port`)**:
+  - Multi-block `Schema::create` migration parsing in `SlicePortService.php` to introspect consolidated initial migrations across large enterprise monoliths (tested on 227-table Worksuite/ERP).
+  - Multi-tenancy column detection (`company_id`, `tenant_id`) and exclusion from aggregate-swallowing algorithms.
+  - Bounded business domain consolidation (12 Canonical Business Modules instead of raw flat tables).
+  - Dynamic seeder generation: extracts multi-table master taxonomies into deterministic database seeders in `database/seeders/` to eliminate blank select dropdowns on clean slate deployments.
+  - `SliceDataPortService`: High-throughput ETL data streaming engine with foreign key check suppression, dependency-aware sequencing, and auto-ID preservation.
+  - CLI commands: `php artisan slice:port` with `--plan`, `--import-data`, `--source-connection`, `--dry-run`, and `--no-interaction`.
+- **Interactive Blueprint Studio Porting Suite & Canvas Loading**:
+  - Added **🚀 Port Legacy App** modal in Blueprint Studio with live side-by-side architecture preview, live BlatUI sidebar preview with record badges, and ETL pipeline inspection.
+  - **📥 Load Ported Suite into Blueprint Studio**: Loads 28 bounded slices directly into the Blueprint Studio canvas with full model schemas, field definitions, and 4-step BlatUI architecture plans.
+  - 4-step BlatUI Page & UI architecture inspector for every slice (Listing/Directory, Show Workspace with Sub-Tabs, Create/Edit Forms, Workflow/FSM state transitions).
+- **Declarative UI Schema & TypeSafe UI Synthesis (`slice.yaml`)**:
+  - Canonical `ui:` schema declaration for `presentation` (`create: drawer|page`, `edit: drawer|page`), `directory` (columns with formatters: `code_badge`, `composite_user`, `status_pill`, `money_breakdown`, `progress_bar`, `date_time`, `text`), `quick_filters`, `sidebar_filters`, and `forms` (sections grid 1-4, field span 1-4, `is_searchable`).
+  - Instant slide-over drawer (`<x-ui.sheet>`) with browser URL deep-linking (`?drawer=create` synchronization and `pushState`).
+  - Modular YAML validation and synchronization: `php artisan slice:validate [slice] [--part=ui|forms|directory|fsm] [--fix]`.
+- **BlatUI Enterprise Components & Data Table Upgrades**:
+  - Top header Module Switcher Ribbon with reactive Alpine.js filtering across active bounded domains.
+  - Collapsible domain-scoped sidebar with active domain badge and 1-click clear.
+  - Enhanced `<x-ui.data-table>`: multi-select checkboxes, bulk actions bar, sortable headers with raw value sorting (`__raw`), status badges, and inline row quick-action dropdowns.
+  - New UI components: `<x-ui.import-modal>` for ETL/CSV uploads, `<x-ui.searchable-select>` for foreign key relations, and `<x-ui.status-pill>` for state machine status rendering.
+- **Generator & Seeder Hardening**:
+  - Defensive migration guards: `if (Schema::hasTable($tableName)) return;` prevents collisions with framework core tables (`users`, `cache`, `job_batches`).
+  - Enterprise field normalization capacity increased from 50 to 250 fields.
+  - Smart FK relationship wiring: foreign key `*_id` fields automatically resolve to target slice models with searchable select dropdowns.
+- **RBAC Hierarchical Matrix**:
+  - Hierarchical permission matrix in `Roles/Resources/views/form.blade.php` grouped by super-domain and domain with bulk toggle controls.
+
 ## [1.6.1] - 2026-10-12
 
 ### Added

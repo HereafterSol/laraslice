@@ -17,8 +17,8 @@ final class FieldDefinitionNormalizer
      */
     public function normalize(array $fields): array
     {
-        if (count($fields) > 50) {
-            throw new SliceFieldDefinitionException('A slice can define at most 50 custom fields per generation.');
+        if (count($fields) > 250) {
+            throw new SliceFieldDefinitionException('A slice can define at most 250 custom fields per generation.');
         }
 
         $definitions = [];

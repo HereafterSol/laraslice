@@ -74,6 +74,22 @@ class RoleSliceService extends BaseSliceService
     {
         /** @var RoleFormBusinessObject $form */
         /** @var Role $model */
+        $scopes = request()->input('permission_scopes', []);
+        
+        if (!empty($scopes) && is_array($scopes)) {
+            $syncData = [];
+            foreach ($scopes as $pId => $scopeId) {
+                $sId = (int) $scopeId;
+                if ($sId !== 5) { // 5 is 'none'
+                    $syncData[(int) $pId] = ['permission_type_id' => $sId];
+                }
+            }
+            if (method_exists($model, 'permissions')) {
+                $model->permissions()->sync($syncData);
+            }
+            return;
+        }
+
         $permList = ! empty($form->permissions) ? $form->permissions : (! empty($form->permissionIds) ? $form->permissionIds : []);
 
         if ($model->slug === 'super-admin' && empty($permList) && class_exists(Permission::class)) {
@@ -81,7 +97,11 @@ class RoleSliceService extends BaseSliceService
         }
 
         if (method_exists($model, 'permissions')) {
-            $model->permissions()->sync($permList);
+            $syncData = [];
+            foreach ((array)$permList as $pId) {
+                $syncData[(int)$pId] = ['permission_type_id' => 4]; // Default 'all'
+            }
+            $model->permissions()->sync($syncData);
         }
     }
 

@@ -97,7 +97,14 @@ class SliceSeederService
         $slices = [];
         foreach ($this->manager->getAllSlices() as $s) {
             $sliceDomain = $s->domain ?? $s->navigation['group'] ?? $s->raw['domain'] ?? null;
-            if (strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName))) {
+            $sliceApp = $s->app ?? $s->super_domain ?? $s->raw['app'] ?? null;
+            $hierarchical = ($sliceApp && $sliceDomain && strtolower($sliceApp) !== strtolower($sliceDomain))
+                ? "{$sliceApp} › {$sliceDomain}"
+                : ($sliceDomain ?: $sliceApp);
+
+            if (strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName))
+                || strtolower(trim((string) $sliceApp)) === strtolower(trim($domainName))
+                || strtolower(trim((string) $hierarchical)) === strtolower(trim($domainName))) {
                 $slices[] = $s;
             }
         }
@@ -210,7 +217,14 @@ class SliceSeederService
         $slices = [];
         foreach ($this->manager->getAllSlices() as $s) {
             $sliceDomain = $s->domain ?? $s->navigation['group'] ?? $s->raw['domain'] ?? null;
-            if (strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName))) {
+            $sliceApp = $s->app ?? $s->super_domain ?? $s->raw['app'] ?? null;
+            $hierarchical = ($sliceApp && $sliceDomain && strtolower($sliceApp) !== strtolower($sliceDomain))
+                ? "{$sliceApp} › {$sliceDomain}"
+                : ($sliceDomain ?: $sliceApp);
+
+            if (strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName))
+                || strtolower(trim((string) $sliceApp)) === strtolower(trim($domainName))
+                || strtolower(trim((string) $hierarchical)) === strtolower(trim($domainName))) {
                 $slices[] = $s;
             }
         }

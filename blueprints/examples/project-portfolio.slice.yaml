@@ -1,41 +1,50 @@
 schema_version: 1
 name: Portfolio
 handle: portfolio
-description: Track delivery portfolios and their project tasks with owner, due date, priority, and status.
+description: 'Track delivery portfolios and their project tasks with owner, due date, priority, and status.'
 models:
-  - handle: portfolio
+  -
+    handle: portfolio
     table: portfolios
     root: true
     fields:
-      - handle: name
-        label: Portfolio name
+      -
+        handle: name
+        label: 'Portfolio name'
         type: string
         required: true
-      - handle: owner_email
-        label: Owner email
+      -
+        handle: owner_email
+        label: 'Owner email'
         type: email
         required: true
-      - handle: is_active
+      -
+        handle: is_active
         label: Active
         type: boolean
         default: true
     relations:
-      - name: portfolio_tasks
+      -
+        name: portfolio_tasks
         type: hasMany
         model: portfolio_task
         foreign_key: portfolio_id
-  - handle: portfolio_task
+  -
+    handle: portfolio_task
     table: portfolio_tasks
     fields:
-      - handle: portfolio_id
+      -
+        handle: portfolio_id
         label: Portfolio
         type: foreign_id
         required: true
-      - handle: title
-        label: Task title
+      -
+        handle: title
+        label: 'Task title'
         type: string
         required: true
-      - handle: priority
+      -
+        handle: priority
         label: Priority
         type: enum
         default: normal
@@ -43,21 +52,57 @@ models:
           low: Low
           normal: Normal
           high: High
-      - handle: status
+      -
+        handle: status
         label: Status
         type: enum
         default: planned
         options:
           planned: Planned
-          in_progress: In progress
+          in_progress: 'In progress'
           blocked: Blocked
           complete: Complete
-      - handle: due_date
-        label: Due date
+      -
+        handle: due_date
+        label: 'Due date'
         type: date
         nullable: true
     relations:
-      - name: portfolio
+      -
+        name: portfolio
         type: belongsTo
         model: portfolio
         foreign_key: portfolio_id
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: name
+        label: 'Portfolio name'
+        formatter: text
+        sortable: true
+      -
+        handle: owner_email
+        label: 'Owner email'
+        formatter: text
+        sortable: true
+      -
+        handle: is_active
+        label: Active
+        formatter: text
+        sortable: true
+    quick_filters: {  }
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Portfolio Information'
+        grid: 3
+        fields:
+          - { handle: name, span: 1, is_searchable: false }
+          - { handle: owner_email, span: 1, is_searchable: false }
+          - { handle: is_active, span: 1, is_searchable: false }

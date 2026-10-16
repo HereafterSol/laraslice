@@ -11,6 +11,10 @@ class QrCodeServiceTest extends TestCase
     {
         $service = new QrCodeService;
 
+        if (! $service->available()) {
+            $this->markTestSkipped('bacon/bacon-qr-code is not available.');
+        }
+
         $this->assertTrue($service->available());
         $svg = $service->svg('otpauth://totp/LaraSlice:sara%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=LaraSlice');
 

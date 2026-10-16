@@ -73,33 +73,39 @@ class SliceManager
         }
 
         foreach ($scanPaths as $path) {
-            $directories = glob($path.'/*', GLOB_ONLYDIR) ?: [];
+            $this->scanDirectoryForSlices($path);
+        }
+    }
 
-            foreach ($directories as $dir) {
-                $manifestFile = $this->findManifest($dir);
-                if ($manifestFile) {
-                    $manifest = new SliceManifest($manifestFile);
-                    $this->slices[$manifest->name] = $manifest;
+    /**
+     * Recursively scan directory up to $maxDepth for slices containing slice.json or slice.yaml.
+     */
+    protected function scanDirectoryForSlices(string $path, int $depth = 0, int $maxDepth = 6): void
+    {
+        if (! is_dir($path) || $depth > $maxDepth) {
+            return;
+        }
 
-                    if ($manifest->active) {
-                        $this->bootSlice($manifest);
-                    }
-                } else {
-                    // Check if $dir is a domain folder containing nested slices (e.g. Slices/Ecommerce/ShopProducts)
-                    $subDirs = glob($dir.'/*', GLOB_ONLYDIR) ?: [];
-                    foreach ($subDirs as $subDir) {
-                        $subManifestFile = $this->findManifest($subDir);
-                        if ($subManifestFile) {
-                            $manifest = new SliceManifest($subManifestFile);
-                            $this->slices[$manifest->name] = $manifest;
+        $manifestFile = $this->findManifest($path);
+        if ($manifestFile) {
+            $manifest = new SliceManifest($manifestFile);
+            $this->slices[$manifest->name] = $manifest;
 
-                            if ($manifest->active) {
-                                $this->bootSlice($manifest);
-                            }
-                        }
-                    }
-                }
+            if ($manifest->active) {
+                $this->bootSlice($manifest);
             }
+
+            // Once a manifest is found, do not scan deeper into this slice's internal directories
+            return;
+        }
+
+        $subDirs = glob($path.'/*', GLOB_ONLYDIR) ?: [];
+        foreach ($subDirs as $subDir) {
+            $base = basename($subDir);
+            if (in_array(strtolower($base), ['.git', 'node_modules', 'vendor', 'storage', 'public', 'tests', 'cache', '.system_generated'])) {
+                continue;
+            }
+            $this->scanDirectoryForSlices($subDir, $depth + 1, $maxDepth);
         }
     }
 
@@ -217,11 +223,7 @@ class SliceManager
         }
 
         // 4. Register custom SliceServiceProvider if exists
-        $sliceNamespace = $slice->namespace ?? (
-            isset($slice->domain)
-                ? (config('laraslice.slices_namespace', 'App\\Slices').'\\'.Str::studly(Str::slug($slice->domain))."\\{$slice->name}")
-                : (config('laraslice.slices_namespace', 'App\\Slices')."\\{$slice->name}")
-        );
+        $sliceNamespace = $slice->getNamespace();
         $providerClass = "{$sliceNamespace}\\{$slice->name}SliceServiceProvider";
         if (class_exists($providerClass)) {
             $this->app->register($providerClass);
@@ -945,7 +947,13 @@ class SliceManager
                 'active' => $isActive,
                 'badge' => $slice->navigation['badge'] ?? null,
                 'version' => $slice->version,
-                'group' => $slice->navigation['group'] ?? $slice->raw['domain'] ?? null,
+                'super_domain' => $slice->super_domain,
+                'domain' => $slice->domain,
+                'sub_domain' => $slice->sub_domain,
+                'group' => $slice->navigation['group'] ?? $slice->domain ?? null,
+                'table_prefix' => $slice->table_prefix,
+                'multitenant' => $slice->multitenant,
+                'tenant_key' => $slice->tenant_key,
                 'core' => (bool) ($slice->raw['core'] ?? false),
                 'permission' => $requiredPermission,
                 'children' => $children,
@@ -955,6 +963,63 @@ class SliceManager
         usort($nav, fn ($a, $b) => $a['order'] <=> $b['order']);
 
         return $this->navigationCache[$cacheKey] = $nav;
+    }
+
+    /**
+     * Get unique list of Super Domains across active slices.
+     */
+    public function getSuperDomains(): array
+    {
+        $supers = [];
+        foreach ($this->getActiveSlices() as $slice) {
+            if ($slice->super_domain && ! in_array($slice->super_domain, $supers, true)) {
+                $supers[] = $slice->super_domain;
+            }
+        }
+
+        return $supers;
+    }
+
+    /**
+     * Get unique list of Domains across active slices, optionally filtered by Super Domain.
+     */
+    public function getDomains(?string $superDomain = null): array
+    {
+        $domains = [];
+        foreach ($this->getActiveSlices() as $slice) {
+            if ($superDomain && $slice->super_domain !== $superDomain) {
+                continue;
+            }
+            $dom = $slice->domain ?? $slice->navigation['group'] ?? null;
+            if ($dom && ! in_array($dom, $domains, true)) {
+                $domains[] = $dom;
+            }
+        }
+
+        return $domains;
+    }
+
+    /**
+     * Build full 3-Tier Hierarchical Navigation Tree (SuperDomain -> Domain -> SubDomain/Slice).
+     */
+    public function getHierarchicalNavigation(): array
+    {
+        $slices = $this->getNavigableSlices();
+        $tree = [];
+
+        foreach ($slices as $item) {
+            $super = $item['super_domain'] ?: 'Default';
+            $domain = $item['domain'] ?: ($item['group'] ?: 'General');
+            $sub = $item['sub_domain'] ?: null;
+
+            if ($sub) {
+                $tree[$super][$domain][$sub][] = $item;
+            } else {
+                $tree[$super][$domain]['_slices'][] = $item;
+            }
+        }
+
+        return $tree;
     }
 
     /**
@@ -1256,8 +1321,14 @@ class SliceManager
 
         return array_filter($this->getAllSlices(), function (SliceManifest $slice) use ($wanted) {
             $sliceDomain = $slice->domain ?? $slice->navigation['group'] ?? $slice->raw['domain'] ?? null;
+            $sliceApp = $slice->app ?? $slice->super_domain ?? $slice->raw['app'] ?? null;
+            $hierarchical = ($sliceApp && $sliceDomain && strtolower($sliceApp) !== strtolower($sliceDomain))
+                ? "{$sliceApp} › {$sliceDomain}"
+                : ($sliceDomain ?: $sliceApp);
 
-            return strtolower(trim((string) $sliceDomain)) === $wanted;
+            return strtolower(trim((string) $sliceDomain)) === $wanted
+                || strtolower(trim((string) $sliceApp)) === $wanted
+                || strtolower(trim((string) $hierarchical)) === $wanted;
         });
     }
 
@@ -1543,7 +1614,15 @@ class SliceManager
         $slices = [];
         foreach ($this->getAllSlices() as $s) {
             $sliceDomain = $s->domain ?? $s->navigation['group'] ?? $s->raw['domain'] ?? null;
-            if (strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName)) && ! $this->isProtectedSlice($s)) {
+            $sliceApp = $s->app ?? $s->super_domain ?? $s->raw['app'] ?? null;
+            $hierarchical = ($sliceApp && $sliceDomain && strtolower($sliceApp) !== strtolower($sliceDomain))
+                ? "{$sliceApp} › {$sliceDomain}"
+                : ($sliceDomain ?: $sliceApp);
+
+            if ((strtolower(trim((string) $sliceDomain)) === strtolower(trim($domainName))
+                || strtolower(trim((string) $sliceApp)) === strtolower(trim($domainName))
+                || strtolower(trim((string) $hierarchical)) === strtolower(trim($domainName)))
+                && ! $this->isProtectedSlice($s)) {
                 $slices[] = $s;
             }
         }

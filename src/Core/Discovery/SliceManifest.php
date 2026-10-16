@@ -30,11 +30,27 @@ class SliceManifest
 
     public array $relations;
 
-    public ?string $domain;
+    public ?string $super_domain = null;
 
-    public ?string $namespace;
+    public ?string $domain = null;
 
-    public array $raw;
+    public ?string $sub_domain = null;
+
+    public ?string $app = null;
+
+    public ?string $module = null;
+
+    public ?string $canonical_id = null;
+
+    public ?string $table_prefix = null;
+
+    public bool $multitenant = false;
+
+    public string $tenant_key = 'company_id';
+
+    public ?string $namespace = null;
+
+    public array $raw = [];
 
     public string $path;
 
@@ -81,14 +97,101 @@ class SliceManifest
         $this->navigation = $data['navigation'] ?? [];
         $this->tables = $data['tables'] ?? [];
         $this->relations = $data['relations'] ?? [];
-        $parentFolder = basename(dirname($this->path));
-        $inferredDomain = (! in_array(strtolower($parentFolder), ['slices', 'src', 'app', 'packages', 'vendor'])) ? ucwords(str_replace(['_', '-'], ' ', $parentFolder)) : null;
+
+        // Automatic folder-depth taxonomy inference
+        $inferredSuperDomain = null;
+        $inferredDomain = null;
+        $inferredSubDomain = null;
+
+        $appSlicesPath = config('laraslice.slices_path', function_exists('app_path') ? app_path('Slices') : null);
+        $realApp = $appSlicesPath ? realpath($appSlicesPath) : false;
+        $realPath = realpath($this->path);
+
+        if ($realApp && $realPath && str_starts_with($realPath, $realApp)) {
+            $relativeFolder = trim(substr($realPath, strlen($realApp)), DIRECTORY_SEPARATOR);
+            $folderParts = array_filter(explode(DIRECTORY_SEPARATOR, $relativeFolder));
+            // e.g. ['ERP', 'Finance', 'Billing', 'Invoices']
+            $count = count($folderParts);
+            if ($count >= 4) {
+                $inferredSuperDomain = $folderParts[0];
+                $inferredDomain = $folderParts[1];
+                $inferredSubDomain = $folderParts[2];
+            } elseif ($count === 3) {
+                $inferredSuperDomain = $folderParts[0];
+                $inferredDomain = $folderParts[1];
+            } elseif ($count === 2) {
+                $inferredDomain = $folderParts[0];
+            }
+        } else {
+            $parentFolder = basename(dirname($this->path));
+            $grandParentFolder = basename(dirname(dirname($this->path)));
+            if (! in_array(strtolower($parentFolder), ['slices', 'src', 'app', 'packages', 'vendor'])) {
+                $inferredDomain = ucwords(str_replace(['_', '-'], ' ', $parentFolder));
+                if (! in_array(strtolower($grandParentFolder), ['slices', 'src', 'app', 'packages', 'vendor'])) {
+                    $inferredSuperDomain = ucwords(str_replace(['_', '-'], ' ', $grandParentFolder));
+                }
+            }
+        }
+
         if ($inferredDomain === 'Ecommerce') {
             $inferredDomain = 'E-Commerce';
         }
-        $this->domain = $data['domain'] ?? $data['navigation']['group'] ?? $inferredDomain;
+
+        // Harmonize App / Module with SuperDomain / Domain
+        $this->app = $data['app'] ?? $data['super_domain'] ?? $inferredSuperDomain;
+        $this->module = $data['module'] ?? $data['domain'] ?? $data['navigation']['group'] ?? $inferredDomain;
+        $this->super_domain = $this->app;
+        $this->domain = $this->module;
+        $this->sub_domain = $data['sub_domain'] ?? $inferredSubDomain;
+
+        // Canonical ID: e.g. erp.finance.ledger or adjudication.complaints
+        $idParts = array_filter([$this->app, $this->module, $this->name]);
+        $slugParts = array_map(fn ($p) => \Illuminate\Support\Str::slug($p), $idParts);
+        $this->canonical_id = $data['canonical_id'] ?? implode('.', $slugParts);
+
+        $this->table_prefix = $data['table_prefix'] ?? null;
+        $this->multitenant = filter_var($data['multitenant'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $this->tenant_key = $data['tenant_key'] ?? 'company_id';
         $this->namespace = $data['namespace'] ?? null;
         $this->raw = $data;
+    }
+
+    public function getNamespace(): string
+    {
+        if (! empty($this->namespace)) {
+            return $this->namespace;
+        }
+
+        $appSlicesPath = config('laraslice.slices_path', function_exists('app_path') ? app_path('Slices') : null);
+        $coreSlicesPath = dirname(__DIR__, 2).'/Slices';
+
+        $realApp = $appSlicesPath ? realpath($appSlicesPath) : false;
+        $realCore = realpath($coreSlicesPath);
+        $realPath = realpath($this->path);
+
+        if ($realApp && $realPath && str_starts_with($realPath, $realApp)) {
+            $relative = trim(substr($realPath, strlen($realApp)), DIRECTORY_SEPARATOR);
+            $parts = array_filter(explode(DIRECTORY_SEPARATOR, $relative));
+            $studlyParts = array_map(fn ($p) => \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($p)), $parts);
+
+            return config('laraslice.slices_namespace', 'App\\Slices').'\\'.implode('\\', $studlyParts);
+        }
+
+        if ($realCore && $realPath && str_starts_with($realPath, $realCore)) {
+            $relative = trim(substr($realPath, strlen($realCore)), DIRECTORY_SEPARATOR);
+            $parts = array_filter(explode(DIRECTORY_SEPARATOR, $relative));
+            $studlyParts = array_map(fn ($p) => \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($p)), $parts);
+
+            return 'LaraSlice\\Slices\\'.implode('\\', $studlyParts);
+        }
+
+        if ($this->domain) {
+            $domainPart = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($this->domain));
+
+            return config('laraslice.slices_namespace', 'App\\Slices')."\\{$domainPart}\\{$this->name}";
+        }
+
+        return config('laraslice.slices_namespace', 'App\\Slices')."\\{$this->name}";
     }
 
     public function getRoutesPath(): ?string
@@ -170,6 +273,16 @@ class SliceManifest
             'dependencies' => $this->dependencies,
             'permissions' => $this->permissions,
             'path' => $this->path,
+            'app' => $this->app,
+            'module' => $this->module,
+            'canonical_id' => $this->canonical_id,
+            'super_domain' => $this->super_domain,
+            'domain' => $this->domain,
+            'sub_domain' => $this->sub_domain,
+            'table_prefix' => $this->table_prefix,
+            'multitenant' => $this->multitenant,
+            'tenant_key' => $this->tenant_key,
+            'namespace' => $this->getNamespace(),
         ];
     }
 }

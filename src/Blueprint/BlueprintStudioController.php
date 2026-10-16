@@ -104,6 +104,15 @@ final class BlueprintStudioController extends Controller
         // 5. Collect database tables for quick introspection
         $dbTables = $this->getDatabaseTables();
 
+        // 6. Preload default architecture plan if available
+        $portPlan = null;
+        $portPlanFile = base_path('docs/porting-architecture-plan.json');
+        if (File::exists($portPlanFile)) {
+            try {
+                $portPlan = json_decode(File::get($portPlanFile), true);
+            } catch (Throwable) {}
+        }
+
         return view('laraslice::blueprint-studio', [
             'source' => $source,
             'format' => 'yaml',
@@ -114,6 +123,7 @@ final class BlueprintStudioController extends Controller
             'currentTemplate' => $requestedTemplate,
             'allSlicesJson' => null,
             'activeSliceIdx' => 0,
+            'portPlan' => $portPlan,
         ]);
     }
 
@@ -999,12 +1009,92 @@ final class BlueprintStudioController extends Controller
     }
 
     /**
+     * Return available porting presets and examples.
+     */
+    public function portPresets(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'presets' => [
+                [
+                    'id' => 'erp',
+                    'name' => 'ERP Enterprise Suite',
+                    'badge' => '358 tables → 23 Slices (15k records)',
+                    'domain' => 'ERP',
+                    'source_path' => 'e:/laragon/www/erp',
+                    'description' => 'Comprehensive enterprise suite with Projects, Tasks, Invoices, HR, CRM, Tickets and Unified Settings Hub',
+                ],
+                [
+                    'id' => 'fospah',
+                    'name' => 'FOSPAH Judicial Case Management',
+                    'badge' => 'Petitions, Scrutiny & Cause Lists',
+                    'domain' => 'Legal',
+                    'source_path' => 'e:/laragon/www/wwf-old',
+                    'description' => 'Statutory judicial case workflow: Citizen Intake, Scrutiny, Hearings and Speaking Orders',
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Inspect or load architecture plan for legacy application porting.
+     */
+    public function portPlan(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
+    {
+        @set_time_limit(180);
+        @ini_set('max_execution_time', '180');
+
+        $preset = (string) $request->input('preset', '');
+        $source = (string) $request->input('source', '');
+        $domain = (string) $request->input('domain', 'ERP');
+        $planJson = (string) $request->input('plan_json', '');
+
+        try {
+            // 1. Direct JSON passed from developer
+            if (! empty($planJson)) {
+                $plan = json_decode($planJson, true);
+                if (! is_array($plan) || ! isset($plan['modules'])) {
+                    throw new \InvalidArgumentException('Invalid JSON Architecture Plan format.');
+                }
+                return response()->json(['success' => true, 'plan' => $plan]);
+            }
+
+            // 2. Load ERP preset example plan if requested
+            if ($preset === 'erp' || (empty($source) && strtolower($domain) === 'erp')) {
+                $examplePlan = base_path('docs/porting-architecture-plan.json');
+                if (\Illuminate\Support\Facades\File::exists($examplePlan)) {
+                    $plan = json_decode(\Illuminate\Support\Facades\File::get($examplePlan), true);
+                    return response()->json(['success' => true, 'plan' => $plan]);
+                }
+            }
+
+            // 3. Dynamic inspection & plan generation
+            $inspection = $portService->inspect($source, $domain);
+            $plan = $portService->generateArchitecturePlan($inspection, $domain);
+
+            return response()->json([
+                'success' => true,
+                'plan' => $plan,
+                'inspection' => $inspection,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
      * Inspect a legacy application directory and return table classification & slice mapping.
      */
     public function portInspect(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
     {
+        @set_time_limit(180);
+        @ini_set('max_execution_time', '180');
+
         $source = (string) $request->input('source', '');
-        $domain = (string) $request->input('domain', 'Adjudication');
+        $domain = (string) $request->input('domain', 'ERP');
 
         try {
             $data = $portService->inspect($source, $domain);
@@ -1025,13 +1115,24 @@ final class BlueprintStudioController extends Controller
      */
     public function portExecute(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+
+        $planInput = $request->input('plan');
         $source = (string) $request->input('source', '');
-        $domain = (string) $request->input('domain', 'Adjudication');
+        $domain = (string) $request->input('domain', 'ERP');
         $mode = (string) $request->input('mode', 'system-base');
         $withFiles = (bool) $request->input('with_files', false);
+        $importData = (bool) $request->input('import_data', true);
 
         try {
-            $result = $portService->execute($source, $domain, $mode, $withFiles);
+            if (! empty($planInput)) {
+                $plan = is_array($planInput) ? $planInput : json_decode($planInput, true);
+                $result = $portService->executeFromPlan($plan, $importData, $withFiles);
+            } else {
+                $result = $portService->execute($source, $domain, $mode, $withFiles, $importData);
+            }
+
             return response()->json([
                 'success' => true,
                 'result' => $result,

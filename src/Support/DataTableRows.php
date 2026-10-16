@@ -43,18 +43,41 @@ class DataTableRows
             foreach ($columns as $column) {
                 $key = $column['key'];
                 $val = data_get($item, $key);
+                $row[$key . '__raw'] = is_scalar($val) ? (string)$val : '';
 
-                // If this is a foreign key with a resolved parent name, display the friendly name
+                // 1. If column has a custom callback formatter
+                if (isset($column['formatter']) && is_callable($column['formatter'])) {
+                    $row[$key] = $column['formatter']($val, $item);
+                    continue;
+                }
+
+                // 2. Named string formatters
+                $fmt = $column['formatter'] ?? null;
+                if (is_string($fmt) && $fmt !== 'text') {
+                    $row[$key] = match ($fmt) {
+                        'code_badge' => static::codeBadge($val),
+                        'composite_user' => static::resolveCompositeUser($item, $key, $val, $column),
+                        'status_pill' => static::statusPill((string) ($val ?: data_get($item, 'user.status') ?: 'active')),
+                        'money_breakdown' => static::moneyBreakdown($val, data_get($item, 'paid_amount', 0), data_get($item, 'currency', 'PKR')),
+                        'progress_bar' => static::progressBar((float) $val),
+                        'date_time' => static::display($val),
+                        default => static::display($val),
+                    };
+                    continue;
+                }
+
+                // 3. Foreign key lookup batch mapping
                 if (isset($fkMaps[$key]) && is_scalar($val) && isset($fkMaps[$key][$val])) {
                     $row[$key] = (string) $fkMaps[$key][$val];
                 } elseif (str_ends_with($key, '_id') && $key !== 'id' && $item instanceof Model) {
-                    // Check if relation is loaded on the model
                     $relName = Str::camel(substr($key, 0, -3));
                     if ($item->relationLoaded($relName) && ($relModel = $item->getRelation($relName))) {
                         $row[$key] = static::modelDisplayName($relModel);
                     } else {
                         $row[$key] = static::display($val);
                     }
+                } elseif ($val instanceof Model) {
+                    $row[$key] = static::modelDisplayName($val);
                 } else {
                     $row[$key] = static::display($val);
                 }
@@ -68,6 +91,193 @@ class DataTableRows
         }
 
         return $rows;
+    }
+
+    /**
+     * Render a rich composite user avatar + name + subtitle cell with zero extra dependencies.
+     */
+    /**
+     * Render an enterprise monospace code badge (e.g. #EMP-01, INV-2024).
+     */
+    public static function codeBadge(mixed $val): string
+    {
+        $str = htmlspecialchars((string) ($val ?? '—'), ENT_QUOTES, 'UTF-8');
+        return '<span class="inline-flex items-center px-2 py-0.5 rounded font-mono text-[11px] font-bold bg-muted/80 text-foreground border border-border/60">' . $str . '</span>';
+    }
+
+    /**
+     * Gracefully resolve composite user avatar, name, and subtitle from item.
+     */
+    public static function resolveCompositeUser(mixed $item, string $key, mixed $val, array $column): string
+    {
+        $name = data_get($item, 'user.name')
+            ?? data_get($item, 'name')
+            ?? (is_object($val) ? ($val->name ?? null) : null)
+            ?? (is_string($val) && !empty($val) && !is_numeric($val) ? $val : null);
+
+        // If name resolved to a raw foreign key number (e.g. user_id = 14)
+        if (empty($name) || is_numeric($name)) {
+            $lookupId = is_numeric($val) ? (int) $val : (is_numeric(data_get($item, 'user_id')) ? (int) data_get($item, 'user_id') : null);
+            if ($lookupId) {
+                try {
+                    $u = DB::table('users')->where('id', $lookupId)->first(['name', 'email']);
+                    if ($u) {
+                        $name = $u->name;
+                        if (!data_get($item, 'email')) {
+                            $item->email = $u->email;
+                        }
+                    }
+                } catch (\Throwable $e) {}
+            }
+        }
+
+        $name = $name ?: 'Unknown';
+
+        $subtitle = data_get($item, 'designation.name')
+            ?? data_get($item, 'designation_name')
+            ?? data_get($item, 'designation')
+            ?? data_get($item, 'user.email')
+            ?? data_get($item, 'email');
+
+        if (is_numeric($subtitle) || empty($subtitle)) {
+            $desigId = is_numeric(data_get($item, 'designation_id')) ? (int) data_get($item, 'designation_id') : null;
+            if ($desigId) {
+                try {
+                    $subtitle = DB::table('designations')->where('id', $desigId)->value('name');
+                } catch (\Throwable $e) {}
+            }
+        }
+
+        $avatarUrl = data_get($item, 'user.avatar_url')
+            ?? data_get($item, 'avatar_url')
+            ?? data_get($item, 'user.image');
+
+        $viewUrl = $column['view_url'] ?? (isset($item->id) && \Illuminate\Support\Facades\Route::has('employees.show') ? route('employees.show', $item->id) : null);
+
+        return static::compositeUser($name, $subtitle, $avatarUrl, $viewUrl);
+    }
+    public static function compositeUser(?string $name, ?string $subtitle = null, ?string $avatarUrl = null, ?string $viewUrl = null): string
+    {
+        $name = htmlspecialchars($name ?: 'Unknown', ENT_QUOTES, 'UTF-8');
+        $subtitle = $subtitle ? htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') : '';
+        $initials = strtoupper(substr($name, 0, 2));
+
+        $avatarHtml = $avatarUrl
+            ? '<img src="'.htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8').'" alt="'.$name.'" class="size-8 rounded-full object-cover shrink-0 ring-1 ring-border" />'
+            : '<div class="size-8 rounded-full bg-primary/10 text-primary font-semibold text-xs flex items-center justify-center shrink-0 ring-1 ring-border">'.$initials.'</div>';
+
+        $titleHtml = $viewUrl
+            ? '<a href="'.htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8').'" class="font-semibold text-foreground hover:text-primary transition-colors block truncate max-w-[200px]">'.$name.'</a>'
+            : '<span class="font-semibold text-foreground block truncate max-w-[200px]">'.$name.'</span>';
+
+        $subHtml = $subtitle ? '<span class="text-xs text-muted-foreground block truncate max-w-[200px]">'.$subtitle.'</span>' : '';
+
+        return '<div class="flex items-center gap-2.5 py-0.5">' . $avatarHtml . '<div class="min-w-0">' . $titleHtml . $subHtml . '</div></div>';
+    }
+
+    /**
+     * Render an enterprise semantic status pill with pulsing/colored dot and rounded pill background.
+     */
+    public static function statusPill(string $status, ?string $label = null, ?string $color = null): string
+    {
+        $statusKey = strtolower(trim($status));
+        $label = htmlspecialchars($label ?: ucwords(str_replace('_', ' ', $status)), ENT_QUOTES, 'UTF-8');
+
+        $colorMap = [
+            'active' => 'emerald',
+            'enabled' => 'emerald',
+            'paid' => 'emerald',
+            'completed' => 'emerald',
+            'approved' => 'emerald',
+            'present' => 'emerald',
+            'pending' => 'amber',
+            'in_progress' => 'amber',
+            'partially_paid' => 'amber',
+            'waiting' => 'amber',
+            'inactive' => 'rose',
+            'disabled' => 'rose',
+            'unpaid' => 'rose',
+            'cancelled' => 'rose',
+            'rejected' => 'rose',
+            'absent' => 'rose',
+            'overdue' => 'rose',
+            'draft' => 'slate',
+            'archived' => 'slate',
+            'holiday' => 'sky',
+            'leave' => 'sky',
+        ];
+
+        $resolved = $color ?: ($colorMap[$statusKey] ?? 'indigo');
+
+        $dotColor = match ($resolved) {
+            'emerald', 'green', 'success' => 'bg-emerald-500',
+            'rose', 'red', 'danger' => 'bg-rose-500',
+            'amber', 'yellow', 'warning' => 'bg-amber-500',
+            'sky', 'blue', 'info' => 'bg-sky-500',
+            'purple' => 'bg-purple-500',
+            'indigo' => 'bg-indigo-500',
+            default => 'bg-slate-400',
+        };
+
+        $pillColor = match ($resolved) {
+            'emerald', 'green', 'success' => 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+            'rose', 'red', 'danger' => 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800',
+            'amber', 'yellow', 'warning' => 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+            'sky', 'blue', 'info' => 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800',
+            'purple' => 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800',
+            'indigo' => 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800',
+            default => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+        };
+
+        return '<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ' . $pillColor . '"><span class="size-1.5 rounded-full ' . $dotColor . '"></span>' . $label . '</span>';
+    }
+
+    /**
+     * Render formatted financial total with paid and due breakdown.
+     */
+    public static function moneyBreakdown(float|int|string $total, float|int|string $paid = 0, ?string $currency = 'PKR'): string
+    {
+        $numTotal = (float) $total;
+        $numPaid = (float) $paid;
+        $numDue = max(0, $numTotal - $numPaid);
+        $curr = htmlspecialchars($currency ?: '', ENT_QUOTES, 'UTF-8');
+
+        $totalFormatted = $curr . number_format($numTotal, 2);
+        $paidFormatted = $curr . number_format($numPaid, 2);
+        $dueFormatted = $curr . number_format($numDue, 2);
+
+        return '<div class="text-xs space-y-0.5">' .
+            '<div class="font-bold text-foreground">' . $totalFormatted . '</div>' .
+            '<div class="flex items-center gap-2 text-[11px]">' .
+                '<span class="text-emerald-600 dark:text-emerald-400 font-medium">Paid: ' . $paidFormatted . '</span>' .
+                ($numDue > 0 ? '<span class="text-rose-600 dark:text-rose-400 font-medium">Due: ' . $dueFormatted . '</span>' : '') .
+            '</div>' .
+        '</div>';
+    }
+
+    /**
+     * Render an enterprise progress bar with percentage indicator.
+     */
+    public static function progressBar(float|int $percent, ?string $label = null): string
+    {
+        $pct = max(0, min(100, (int) round($percent)));
+        $lbl = $label !== null ? htmlspecialchars($label, ENT_QUOTES, 'UTF-8') : ($pct . '%');
+
+        $barColor = match (true) {
+            $pct >= 100 => 'bg-emerald-500',
+            $pct >= 60 => 'bg-primary',
+            $pct >= 30 => 'bg-amber-500',
+            default => 'bg-rose-500',
+        };
+
+        return '<div class="w-full min-w-[100px] max-w-[160px] space-y-1">' .
+            '<div class="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">' .
+                '<span>Progress</span><span>' . $lbl . '</span>' .
+            '</div>' .
+            '<div class="w-full h-2 rounded-full bg-muted overflow-hidden">' .
+                '<div class="h-full rounded-full transition-all duration-300 ' . $barColor . '" style="width: ' . $pct . '%"></div>' .
+            '</div>' .
+        '</div>';
     }
 
     /**
@@ -88,10 +298,10 @@ class DataTableRows
             }
 
             $base = substr($key, 0, -3);
-            $candidateTables = [
-                Str::plural($base),
-                $base,
-            ];
+            $candidateTables = match ($base) {
+                'department' => ['teams', 'departments', 'department'],
+                default => [Str::plural($base), $base],
+            };
 
             $targetTable = null;
             $labelCol = null;
@@ -105,7 +315,7 @@ class DataTableRows
                     }
                 } elseif (Schema::hasTable($tbl)) {
                     $cols = Schema::getColumnListing($tbl);
-                    foreach (['name', 'title', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
+                    foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
                         if (in_array($candidate, $cols, true)) {
                             $labelCol = $candidate;
                             break;

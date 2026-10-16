@@ -1,46 +1,82 @@
 schema_version: 1
-name: Service Desk
+name: 'Service Desk'
 handle: service_desk
-description: Track support desks, customer requests, and ticket status.
+description: 'Track support desks, customer requests, and ticket status.'
 models:
-  - handle: service_desk
+  -
+    handle: service_desk
     table: service_desks
     root: true
     fields:
-      - handle: name
-        label: Desk name
+      -
+        handle: name
+        label: 'Desk name'
         type: string
         required: true
-      - handle: is_active
+      -
+        handle: is_active
         label: Active
         type: boolean
         default: true
     relations:
-      - name: tickets
+      -
+        name: tickets
         type: hasMany
         model: ticket
         foreign_key: service_desk_id
-  - handle: ticket
+  -
+    handle: ticket
     table: tickets
     fields:
-      - handle: service_desk_id
-        label: Service desk
+      -
+        handle: service_desk_id
+        label: 'Service desk'
         type: foreign_id
         required: true
-      - handle: subject
+      -
+        handle: subject
         label: Subject
         type: string
         required: true
-      - handle: status
+      -
+        handle: status
         label: Status
         type: enum
         default: open
         options:
           open: Open
-          in_progress: In progress
+          in_progress: 'In progress'
           resolved: Resolved
     relations:
-      - name: service_desk
+      -
+        name: service_desk
         type: belongsTo
         model: service_desk
         foreign_key: service_desk_id
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: name
+        label: 'Desk name'
+        formatter: text
+        sortable: true
+      -
+        handle: is_active
+        label: Active
+        formatter: text
+        sortable: true
+    quick_filters: {  }
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Service Desk Information'
+        grid: 3
+        fields:
+          - { handle: name, span: 1, is_searchable: false }
+          - { handle: is_active, span: 1, is_searchable: false }

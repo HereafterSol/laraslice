@@ -53,9 +53,14 @@ final class SliceName
      */
     public static function domainSegment(string $domain): string
     {
-        $segment = Str::studly(Str::slug(trim($domain)));
+        $domain = trim($domain);
+        if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $domain)) {
+            $segment = ucfirst($domain);
+        } else {
+            $segment = Str::studly(str_replace(['-', '_'], ' ', $domain));
+        }
 
-        if ($segment === '' || ! preg_match('/^[A-Z][A-Za-z0-9]*$/', $segment) || in_array(strtolower($segment), self::PHP_RESERVED, true)) {
+        if ($segment === '' || ! preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $segment) || in_array(strtolower($segment), self::PHP_RESERVED, true)) {
             throw new InvalidArgumentException('Use a domain name that starts with a letter, so it can be used as a PHP namespace segment.');
         }
 

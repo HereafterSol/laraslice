@@ -2,76 +2,133 @@ schema_version: 1
 name: Companies
 handle: companies
 domain: CRM
-author: LaraSlice Team
+author: 'LaraSlice Team'
 version: 1.0.0
-description: Track client companies and business contacts.
+description: 'Track client companies and business contacts.'
 models:
-  - handle: company
+  -
+    handle: company
     table: companies
     root: true
     timestamps: true
     soft_deletes: true
     fields:
-      - handle: name
-        label: Company Name
+      -
+        handle: name
+        label: 'Company Name'
         type: string
         required: true
         length: 200
-      - handle: industry
+      -
+        handle: industry
         label: Industry
         type: string
         required: false
         nullable: true
         length: 100
-      - handle: website
+      -
+        handle: website
         label: Website
         type: string
         required: false
         nullable: true
         length: 255
-      - handle: annual_revenue
+      -
+        handle: annual_revenue
         label: Revenue
         type: decimal
         required: false
         nullable: true
-        length: 12,2
-      - handle: is_active
+        length: '12,2'
+      -
+        handle: is_active
         label: Active
         type: boolean
         default: true
     relations:
-      - name: contacts
+      -
+        name: contacts
         type: hasMany
         model: contact
         foreign_key: company_id
-
-  - handle: contact
+  -
+    handle: contact
     table: contacts
     timestamps: true
     soft_deletes: false
     fields:
-      - handle: company_id
+      -
+        handle: company_id
         label: Company
         type: foreign_id
         required: true
-      - handle: full_name
-        label: Full Name
+      -
+        handle: full_name
+        label: 'Full Name'
         type: string
         required: true
         length: 150
-      - handle: email
+      -
+        handle: email
         label: Email
         type: email
         required: true
         length: 255
-      - handle: phone
-        label: Phone Number
+      -
+        handle: phone
+        label: 'Phone Number'
         type: string
         required: false
         nullable: true
         length: 50
     relations:
-      - name: company
+      -
+        name: company
         type: belongsTo
         model: company
         foreign_key: company_id
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: name
+        label: 'Company Name'
+        formatter: text
+        sortable: true
+      -
+        handle: industry
+        label: Industry
+        formatter: text
+        sortable: true
+      -
+        handle: website
+        label: Website
+        formatter: text
+        sortable: true
+      -
+        handle: annual_revenue
+        label: Revenue
+        formatter: money_breakdown
+        sortable: true
+      -
+        handle: is_active
+        label: Active
+        formatter: text
+        sortable: true
+    quick_filters: {  }
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Companies Information'
+        grid: 3
+        fields:
+          - { handle: name, span: 1, is_searchable: false }
+          - { handle: industry, span: 1, is_searchable: false }
+          - { handle: website, span: 1, is_searchable: false }
+          - { handle: annual_revenue, span: 1, is_searchable: false }
+          - { handle: is_active, span: 1, is_searchable: false }

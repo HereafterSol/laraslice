@@ -16,8 +16,8 @@ class DataTableRowsTest extends TestCase
         $rows = DataTableRows::from([$object, $array], [['key' => 'id'], ['key' => 'title']]);
 
         $this->assertSame([
-            ['id' => 1, 'title' => 'Acme'],
-            ['id' => 2, 'title' => 'Globex'],
+            ['id__raw' => '1', 'id' => 1, 'title__raw' => 'Acme', 'title' => 'Acme'],
+            ['id__raw' => '2', 'id' => 2, 'title__raw' => 'Globex', 'title' => 'Globex'],
         ], $rows);
     }
 
@@ -53,6 +53,6 @@ class DataTableRowsTest extends TestCase
             fn ($item) => ['edit_url' => '/things/'.$item->id.'/edit']
         );
 
-        $this->assertSame([['id' => 7, 'edit_url' => '/things/7/edit']], $rows);
+        $this->assertSame([['id__raw' => '7', 'id' => 7, 'edit_url' => '/things/7/edit']], $rows);
     }
 }

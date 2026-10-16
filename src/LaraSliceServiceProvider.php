@@ -55,7 +55,7 @@ use TailwindMerge\TailwindMerge;
 class LaraSliceServiceProvider extends ServiceProvider
 {
     /** Package version reported to MCP clients and the AI copilot. Bump with each release. */
-    public const VERSION = '1.6.0';
+    public const VERSION = '1.6.2';
 
     public function register(): void
     {
@@ -228,8 +228,15 @@ class LaraSliceServiceProvider extends ServiceProvider
                 Route::middleware(["{$studio}:studio.access", "{$studio}:studio.migrate", $guard])->group(function () {
                     Route::post('/migrate', [WizardController::class, 'runMigration'])->name('laraslice.wizard.migrate');
                     Route::post('/blueprint/migrate', [BlueprintStudioController::class, 'runMigrations'])->name('laraslice.wizard.blueprint.migrate');
-            Route::post('/blueprint/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.blueprint.port-inspect');
-            Route::post('/blueprint/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.blueprint.port-execute');
+                    Route::get('/blueprint/port-presets', [BlueprintStudioController::class, 'portPresets'])->name('laraslice.wizard.blueprint.port-presets');
+                    Route::post('/blueprint/port-plan', [BlueprintStudioController::class, 'portPlan'])->name('laraslice.wizard.blueprint.port-plan');
+                    Route::post('/blueprint/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.blueprint.port-inspect');
+                    Route::post('/blueprint/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.blueprint.port-execute');
+
+                    Route::get('/port-presets', [BlueprintStudioController::class, 'portPresets'])->name('laraslice.wizard.port-presets');
+                    Route::post('/port-plan', [BlueprintStudioController::class, 'portPlan'])->name('laraslice.wizard.port-plan');
+                    Route::post('/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.port-inspect');
+                    Route::post('/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.port-execute');
                 });
 
                 Route::middleware(["{$studio}:studio.access", "{$studio}:studio.wipe", $guard])->group(function () {

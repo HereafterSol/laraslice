@@ -2,33 +2,38 @@ schema_version: 1
 name: Invoices
 handle: invoices
 domain: Billing
-author: LaraSlice Team
+author: 'LaraSlice Team'
 version: 1.0.0
-description: Enterprise client invoicing, balances, payment dates, and delivery tracking.
+description: 'Enterprise client invoicing, balances, payment dates, and delivery tracking.'
 models:
-  - handle: invoice
+  -
+    handle: invoice
     table: invoices
     root: true
     timestamps: true
     soft_deletes: true
     fields:
-      - handle: invoice_number
-        label: Invoice Number
+      -
+        handle: invoice_number
+        label: 'Invoice Number'
         type: string
         required: true
         length: 50
-      - handle: amount
-        label: Total Amount ($)
+      -
+        handle: amount
+        label: 'Total Amount ($)'
         type: decimal
         required: true
-        length: 14,2
-        default: 0.00
-      - handle: due_date
-        label: Due Date
+        length: '14,2'
+        default: 0.0
+      -
+        handle: due_date
+        label: 'Due Date'
         type: date
         required: true
-      - handle: status
-        label: Invoice Status
+      -
+        handle: status
+        label: 'Invoice Status'
         type: enum
         required: true
         default: draft
@@ -38,3 +43,46 @@ models:
           paid: Paid
           overdue: Overdue
           void: Void
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: invoice_number
+        label: 'Invoice Number'
+        formatter: text
+        sortable: true
+      -
+        handle: amount
+        label: 'Total Amount ($)'
+        formatter: money_breakdown
+        sortable: true
+      -
+        handle: due_date
+        label: 'Due Date'
+        formatter: date_time
+        sortable: true
+      -
+        handle: status
+        label: 'Invoice Status'
+        formatter: status_pill
+        sortable: true
+    quick_filters:
+      -
+        handle: status
+        label: 'Invoice Status'
+        is_searchable: true
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Invoices Information'
+        grid: 3
+        fields:
+          - { handle: invoice_number, span: 1, is_searchable: false }
+          - { handle: amount, span: 1, is_searchable: false }
+          - { handle: due_date, span: 1, is_searchable: false }
+          - { handle: status, span: 1, is_searchable: true }

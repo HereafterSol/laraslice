@@ -43,6 +43,25 @@ function larasliceWizard() {
         showAddRoleModal: false,
         newState: { label: '', slug: '', color: 'slate', icon: 'clock', sla_hours: '', terminal: false },
         newRole: { name: '', slug: '', description: '', permissions: [] },
+        showPortModal: false,
+        portPreset: 'erp',
+        portSourcePath: 'e:/laragon/www/erp',
+        portDomain: 'ERP',
+        portMode: 'system-base',
+        portImportData: true,
+        portWithFiles: false,
+        portInspecting: false,
+        portExecuting: false,
+        portInspectionData: null,
+        portPlanData: null,
+        portPlanJsonText: '',
+        portActiveTab: 'sidebar',
+        portExecutionLogs: [],
+        pageArchTab: 'index',
+        selectedUiSlice: 'Projects',
+        selectedUiPage: 'index',
+        selectedUiSubTab: 'overview',
+        uiSliceSearch: '',
 
         sliceSearchQuery: '',
         collapsedDomains: {},
@@ -1301,6 +1320,12 @@ function larasliceWizard() {
         init() {
             if (!this.projectName) { this.applyPreset('legal_dispute_adjudication'); }
 
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('port') === '1' || this.mainTab === 'porting') {
+                this.showPortModal = true;
+                this.fetchPortPlan();
+            }
+
             this.loadSlices();
         },
         loadSlices() {
@@ -1337,12 +1362,21 @@ function larasliceWizard() {
                 const nameMatch = (s.name || '').toLowerCase().includes(query);
                 const titleMatch = (s.title || '').toLowerCase().includes(query);
                 const domainMatch = ((s.domain || s.navigation?.group || '')).toLowerCase().includes(query);
-                return nameMatch || titleMatch || domainMatch;
+                const appMatch = (s.app || s.super_domain || '').toLowerCase().includes(query);
+                const modMatch = (s.module || '').toLowerCase().includes(query);
+                return nameMatch || titleMatch || domainMatch || appMatch || modMatch;
             });
 
             list.forEach(s => {
-                let domain = (s.domain || s.navigation?.group || '').trim();
-                if (!domain) domain = 'General / Core';
+                const appName = (s.app || s.super_domain || '').trim();
+                const modName = (s.module || s.domain || s.navigation?.group || '').trim();
+                let domain = '';
+                if (appName && modName && appName.toLowerCase() !== modName.toLowerCase()) {
+                    domain = `${appName} › ${modName}`;
+                } else {
+                    domain = appName || modName || 'General / Core';
+                }
+
                 if (!groups[domain]) {
                     groups[domain] = {
                         domain: domain,
@@ -1761,7 +1795,8 @@ function larasliceWizard() {
 
                 sliceSchemas[sName] = {
                     fields: formattedFields,
-                    childTables: rawChild
+                    childTables: rawChild,
+                    ui: (this.multiSliceData[sName] && this.multiSliceData[sName].ui) ? this.multiSliceData[sName].ui : this.buildUiConfig()
                 };
             });
 
@@ -1819,6 +1854,68 @@ function larasliceWizard() {
                 this.resultMessage = 'Error: ' + e.message;
             });
         },
+        buildUiConfig() {
+            const activeCols = (this.studioFields || [])
+                .filter(f => f.show_in_list !== false && f.handle && f.handle.trim())
+                .map(f => ({
+                    handle: f.handle,
+                    key: f.handle,
+                    label: f.label || f.handle.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    type: f.formatter || 'text',
+                    formatter: f.formatter || 'text',
+                    sortable: f.sortable !== false,
+                    searchable: true
+                }));
+
+            const quickFilters = (this.studioFields || [])
+                .filter(f => f.type === 'foreign_id' || f.handle.includes('status') || f.handle.includes('type') || f.handle.includes('category'))
+                .map(f => ({
+                    field: f.handle,
+                    handle: f.handle,
+                    label: f.label || f.handle.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    type: 'select',
+                    searchable: true,
+                    is_searchable: true
+                }));
+
+            const formFields = (this.studioFields || [])
+                .filter(f => f.show_in_form !== false && f.handle && f.handle.trim() && !['id', 'created_at', 'updated_at', 'deleted_at'].includes(f.handle))
+                .map(f => ({
+                    handle: f.handle,
+                    span: (f.width === 100 ? 2 : 1),
+                    width: f.width || 50,
+                    searchable: f.type === 'foreign_id' || f.handle.endsWith('_id') || !!f.searchable
+                }));
+
+            const sections = [
+                {
+                    name: 'General Information',
+                    grid: 2,
+                    columns: 2,
+                    fields: formFields.length > 0 ? formFields : [
+                        { handle: 'name', span: 1, width: 50, searchable: false }
+                    ]
+                }
+            ];
+
+            return {
+                presentation: { create: 'drawer', edit: 'drawer' },
+                directory: {
+                    presentation: 'table',
+                    columns: activeCols.length > 0 ? activeCols : [
+                        { handle: 'name', key: 'name', label: 'Name', type: 'text', sortable: true, searchable: true }
+                    ],
+                    quick_filters: quickFilters,
+                    sidebar_filters: []
+                },
+                forms: {
+                    mode: 'drawer',
+                    presentation: 'drawer',
+                    sections: sections
+                }
+            };
+        },
+
         generateSlice() {
             if (!this.projectName || this.projectName.trim() === '') {
                 return alert('Please enter a Slice Name');
@@ -1869,6 +1966,7 @@ function larasliceWizard() {
                         }))
                     })),
                     permissions: this.permissions,
+                    ui: this.buildUiConfig(),
                     flutter: this.includeFlutter,
                     runMigration: this.autoMigrate
                 })
@@ -2004,6 +2102,376 @@ function larasliceWizard() {
                 this.copilotLoading = false;
                 alert('Execution error: ' + err.message);
             });
+        },
+
+        toSnakeCase(str) {
+            if (!str) return '';
+            return str.replace(/([a-z])([A-Z])/g, '$1_$2')
+                      .replace(/[\s\-]+/g, '_')
+                      .toLowerCase()
+                      .replace(/^[^a-z]+/, '')
+                      .replace(/_+/g, '_');
+        },
+
+        toStudlyCase(str) {
+            if (!str) return '';
+            return str.replace(/[\_\-\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : '')
+                      .replace(/^(.)/, c => c.toUpperCase());
+        },
+
+        getSelectedUiSliceObj() {
+            if (!this.portPlanData || !this.portPlanData.modules) return null;
+            for (let m of this.portPlanData.modules) {
+                if (m.slices) {
+                    for (let s of m.slices) {
+                        if (s.name === this.selectedUiSlice) {
+                            return Object.assign({}, s, { moduleName: m.name });
+                        }
+                    }
+                }
+            }
+            const first = this.portPlanData.modules[0]?.slices?.[0];
+            return first ? Object.assign({}, first, { moduleName: this.portPlanData.modules[0].name }) : null;
+        },
+
+        getAllUiSlices() {
+            let res = [];
+            if (!this.portPlanData || !this.portPlanData.modules) return res;
+            const q = (this.uiSliceSearch || '').toLowerCase().trim();
+            for (let m of this.portPlanData.modules) {
+                if (m.slices) {
+                    for (let s of m.slices) {
+                        if (!q || s.name.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q)) || (s.root_table && s.root_table.toLowerCase().includes(q))) {
+                            res.push(Object.assign({}, s, { moduleName: m.name }));
+                        }
+                    }
+                }
+            }
+            return res;
+        },
+
+        selectPortPreset(val) {
+            this.portPreset = val;
+            if (val === 'erp') {
+                this.portSourcePath = 'e:/laragon/www/erp';
+                this.portDomain = 'ERP';
+                this.fetchPortPlan();
+            } else if (val === 'fospah') {
+                this.portSourcePath = 'e:/laragon/www/wwf-old';
+                this.portDomain = 'Legal';
+                this.fetchPortPlan();
+            } else if (val === 'custom') {
+                this.portSourcePath = '';
+                this.portDomain = 'Core';
+            }
+        },
+
+        fetchPortPlan() {
+            this.portInspecting = true;
+            fetch('/laraslice/wizard/port-plan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    preset: this.portPreset,
+                    source: this.portSourcePath,
+                    domain: this.portDomain,
+                    plan_json: this.portPreset === 'json' ? this.portPlanJsonText : ''
+                })
+            })
+            .then(async (r) => {
+                const text = await r.text();
+                let res;
+                try {
+                    res = JSON.parse(text);
+                } catch (parseErr) {
+                    throw new Error(`Server returned non-JSON response (${r.status} ${r.statusText}): ${text.substring(0, 250)}`);
+                }
+                if (!r.ok && !res.message) {
+                    throw new Error(`Server error ${r.status}: ${text.substring(0, 250)}`);
+                }
+                return res;
+            })
+            .then(res => {
+                this.portInspecting = false;
+                if (res.success && res.plan) {
+                    this.portPlanData = res.plan;
+                    this.portPlanJsonText = JSON.stringify(res.plan, null, 2);
+                    if (res.inspection) this.portInspectionData = res.inspection;
+                    if (!this.selectedUiSlice && res.plan.modules && res.plan.modules[0] && res.plan.modules[0].slices && res.plan.modules[0].slices[0]) {
+                        this.selectedUiSlice = res.plan.modules[0].slices[0].name;
+                    }
+                } else {
+                    alert('Plan generation failed: ' + (res.message || 'Unknown error'));
+                }
+            })
+            .catch(e => {
+                this.portInspecting = false;
+                alert('Plan generation error: ' + e.message);
+            });
+        },
+
+        downloadPlanJson() {
+            if (!this.portPlanJsonText) return;
+            const blob = new Blob([this.portPlanJsonText], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `porting-architecture-plan-${(this.portDomain || 'app').toLowerCase()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+
+        executePortPlan() {
+            if (!this.portPlanData && !this.portPlanJsonText) {
+                alert('Please inspect the project or load an architecture plan first.');
+                return;
+            }
+            this.portExecuting = true;
+            this.portActiveTab = 'log';
+            this.portExecutionLogs = [
+                `[${new Date().toLocaleTimeString()}] Initializing LaraSlice VSA Porting Engine...`,
+                `[${new Date().toLocaleTimeString()}] Target Domain: ${this.portDomain}`,
+                `[${new Date().toLocaleTimeString()}] Mode: Canonical Enterprise Business Aggregates`,
+                `[${new Date().toLocaleTimeString()}] Multi-tenancy: ${this.portPlanData?.summary?.multi_tenancy?.enabled ? 'Enabled (' + this.portPlanData.summary.multi_tenancy.tenant_key + ')' : 'Disabled'}`,
+                `[${new Date().toLocaleTimeString()}] Scaffolding ${this.portPlanData?.modules?.length || 0} Modules and ${this.portPlanData?.summary?.total_canonical_slices || 0} Canonical Slices...`
+            ];
+
+            let planPayload = this.portPlanData;
+            try {
+                if (this.portPlanJsonText) {
+                    planPayload = JSON.parse(this.portPlanJsonText);
+                }
+            } catch (e) {}
+
+            fetch('/laraslice/wizard/port-execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    plan: planPayload,
+                    source: this.portSourcePath,
+                    domain: this.portDomain,
+                    import_data: this.portImportData,
+                    with_files: this.portWithFiles
+                })
+            })
+            .then(async (r) => {
+                const text = await r.text();
+                let res;
+                try {
+                    res = JSON.parse(text);
+                } catch (parseErr) {
+                    throw new Error(`Server returned non-JSON response (${r.status} ${r.statusText}): ${text.substring(0, 250)}`);
+                }
+                if (!r.ok && !res.message) {
+                    throw new Error(`Server error ${r.status}: ${text.substring(0, 250)}`);
+                }
+                return res;
+            })
+            .then(res => {
+                this.portExecuting = false;
+                if (res.success) {
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ Slices and Child Tables successfully created.`);
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ Database migrations executed.`);
+                    if (res.result?.data_import) {
+                        const imp = res.result.data_import;
+                        this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ ETL Data Stream: ${imp.total_rows_imported || 0} records streamed across ${imp.tables_imported || 0} tables.`);
+                    }
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] 🚀 100% Usable Porting Completed Successfully!`);
+                    this.loadSlices();
+                    setTimeout(() => {
+                        this.showToast('Porting completed successfully! Slices loaded into Studio.');
+                    }, 1000);
+                } else {
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ❌ Error: ${res.message || 'Execution failed'}`);
+                    alert('Porting execution error: ' + (res.message || 'Unknown error'));
+                }
+            })
+            .catch(e => {
+                this.portExecuting = false;
+                this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ❌ Network Error: ${e.message}`);
+                alert('Port execution error: ' + e.message);
+            });
+        },
+
+        convertModulesToStudioSlices(modules) {
+            const out = [];
+            if (!Array.isArray(modules)) return out;
+            for (let m of modules) {
+                const modName = m.name || 'Core';
+                if (!Array.isArray(m.slices)) continue;
+                for (let s of m.slices) {
+                    const sName = s.name;
+                    const sHandle = s.handle || this.toSnakeCase(sName);
+                    const rootTable = s.root_table || this.toSnakeCase(sName);
+                    const rootModelHandle = this.toSnakeCase(rootTable.replace(/s$/, ''));
+                    
+                    const models = [];
+                    const relations = [];
+                    
+                    if (Array.isArray(s.child_tables)) {
+                        for (let ct of s.child_tables) {
+                            const cTable = typeof ct === 'string' ? ct : ct.table;
+                            const cModel = (typeof ct === 'object' && ct.model) ? ct.model : this.toStudlyCase(cTable.replace(/s$/, ''));
+                            const cHandle = this.toSnakeCase(cModel);
+                            const fk = rootModelHandle + '_id';
+                            models.push({
+                                name: cModel,
+                                handle: cHandle,
+                                table: cTable,
+                                root: false,
+                                timestamps: true,
+                                soft_deletes: false,
+                                description: `Child entity of ${sName}`,
+                                fields: [
+                                    { handle: 'id', label: 'ID', type: 'integer', input_type: 'number', required: true, nullable: false, width: 25 },
+                                    { handle: fk, label: this.toStudlyCase(fk), type: 'integer', input_type: 'select', required: true, nullable: false, width: 50 },
+                                    { handle: 'name', label: 'Name', type: 'string', input_type: 'text', required: false, nullable: true, width: 50 }
+                                ],
+                                relations: [{ name: rootModelHandle, type: 'belongsTo', model: rootModelHandle, foreign_key: fk }]
+                            });
+                            relations.push({ type: 'hasMany', source: rootTable, target: cTable, source_model: rootModelHandle, target_model: cHandle, foreign_key: fk });
+                        }
+                    }
+                    
+                    models.unshift({
+                        name: this.toStudlyCase(rootModelHandle),
+                        handle: rootModelHandle,
+                        table: rootTable,
+                        root: true,
+                        timestamps: true,
+                        soft_deletes: true,
+                        description: `Primary aggregate root for ${sName}`,
+                        fields: [
+                            { handle: 'id', label: 'ID', type: 'integer', input_type: 'number', required: true, nullable: false, width: 25 },
+                            { handle: 'name', label: 'Name', type: 'string', input_type: 'text', required: true, nullable: false, width: 50 },
+                            { handle: 'status', label: 'Status', type: 'string', input_type: 'select', required: false, nullable: true, width: 50 }
+                        ],
+                        relations: relations.map(r => ({ name: r.target, type: 'hasMany', model: r.target_model, foreign_key: r.foreign_key }))
+                    });
+                    
+                    let uiConfig = null;
+                    if (s.ui) {
+                        uiConfig = JSON.parse(JSON.stringify(s.ui));
+                    } else if (s.pages) {
+                        let uiCols = [];
+                        if (s.pages.index && Array.isArray(s.pages.index.columns)) {
+                            uiCols = s.pages.index.columns.map(c => ({
+                                handle: c.field || c.key,
+                                label: c.label || this.toStudlyCase(c.field || c.key),
+                                type: c.type || 'text',
+                                formatter: c.type || 'text',
+                                sortable: c.sortable !== false,
+                                searchable: true
+                            }));
+                        }
+                        let quickFilters = [];
+                        if (s.pages.index?.filter_bar?.filters) {
+                            quickFilters = s.pages.index.filter_bar.filters.map(f => ({
+                                field: f.name || f.field || 'status',
+                                handle: f.name || f.field || 'status',
+                                label: f.label || 'Status',
+                                type: 'select',
+                                searchable: true,
+                                is_searchable: true
+                            }));
+                        }
+                        let sections = [];
+                        if (s.pages.forms?.create?.sections) {
+                            sections = s.pages.forms.create.sections.map(sec => ({
+                                name: sec.name || 'General Information',
+                                grid: sec.columns || 2,
+                                columns: sec.columns || 2,
+                                fields: (sec.fields || []).map(f => {
+                                    const h = typeof f === 'string' ? f : (f.handle || f.name);
+                                    return {
+                                        handle: h,
+                                        span: 1,
+                                        searchable: (typeof f === 'object' && f.searchable !== undefined) ? f.searchable : (h.endsWith('_id') || h.includes('status'))
+                                    };
+                                })
+                            }));
+                        }
+                        uiConfig = {
+                            presentation: { create: 'drawer', edit: 'drawer' },
+                            directory: {
+                                presentation: 'table',
+                                columns: uiCols.length ? uiCols : (models[0]?.fields?.map(f => ({ handle: f.handle, label: f.label, type: 'text', sortable: true })) || []),
+                                quick_filters: quickFilters,
+                                sidebar_filters: []
+                            },
+                            forms: {
+                                mode: s.pages.forms?.presentation || 'drawer',
+                                sections: sections
+                            }
+                        };
+                    }
+
+                    const bp = {
+                        schema_version: 1,
+                        name: sName,
+                        handle: sHandle,
+                        domain: this.portDomain || 'ERP',
+                        module: modName,
+                        description: `Canonical ${sName} slice in ${modName}`,
+                        permissions: s.permissions || [`${sHandle}.view`, `${sHandle}.create`, `${sHandle}.edit`, `${sHandle}.delete`],
+                        workflow: s.workflow || null,
+                        roles: [],
+                        navigation: {
+                            label: sName,
+                            icon: s.icon || 'briefcase',
+                            group: modName,
+                            route: `erp/${this.toSnakeCase(modName)}/${sHandle}`
+                        },
+                        ui: uiConfig,
+                        pages: s.pages || null,
+                        models: models
+                    };
+                    
+                    out.push({
+                        name: sName,
+                        handle: sHandle,
+                        domain: this.portDomain || 'ERP',
+                        module: modName,
+                        blueprint: bp,
+                        allRelations: relations,
+                        source: ''
+                    });
+                }
+            }
+            return out;
+        },
+
+        loadPortedToStudio() {
+            let targetSlices = null;
+            if (this.portPlanData && Array.isArray(this.portPlanData.studio_slices) && this.portPlanData.studio_slices.length > 0) {
+                targetSlices = this.portPlanData.studio_slices;
+            } else if (this.portInspectionData && Array.isArray(this.portInspectionData.studio_slices) && this.portInspectionData.studio_slices.length > 0) {
+                targetSlices = this.portInspectionData.studio_slices;
+            } else if (this.portPlanData && Array.isArray(this.portPlanData.modules)) {
+                targetSlices = this.convertModulesToStudioSlices(this.portPlanData.modules);
+            }
+
+            if (!targetSlices || !targetSlices.length) {
+                alert('Please inspect the project schema or load an architecture plan first.');
+                return;
+            }
+
+            try {
+                sessionStorage.setItem('laraslice_studio_slices', JSON.stringify(targetSlices));
+                sessionStorage.setItem('laraslice_active_slice_idx', '0');
+            } catch(e) {}
+
+            window.location.href = "{{ route('laraslice.wizard.blueprint') }}?load_port=1";
         }
     };
 }
@@ -2051,12 +2519,14 @@ function larasliceWizard() {
                 <span aria-hidden="true">⌘</span>
                 <span>Blueprint Studio</span>
             </a>
-            <a href="{{ route('laraslice.wizard.blueprint') }}?port=1"
-               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            <button type="button"
+               @click="showPortModal = true; if (!portPlanData) fetchPortPlan();"
+               :class="showPortModal ? 'border-indigo-500 bg-indigo-500/25 text-indigo-300 font-bold' : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-semibold'"
+               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer shadow-xs"
                title="Reverse-engineer and port legacy application">
                 <span>🚀</span>
                 <span>Port Legacy App</span>
-            </a>
+            </button>
             <a href="{{ route('laraslice.wizard.schema_studio') }}"
                class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-border text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50">
                 <span>⚡</span>
@@ -3170,9 +3640,14 @@ function larasliceWizard() {
                             <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Installed Slices</span>
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary" x-text="(installedSlices || []).length + ' Total'"></span>
                         </div>
-                        <button @click="loadSlices()" class="text-xs text-primary hover:opacity-80 flex items-center gap-1 cursor-pointer">
-                            <span>↻</span> Refresh
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="showPortModal = true; if (!portPlanData) fetchPortPlan();" class="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer shadow-2xs">
+                                <span>🚀</span> Port App
+                            </button>
+                            <button type="button" @click="loadSlices()" class="text-xs text-primary hover:opacity-80 flex items-center gap-1 cursor-pointer">
+                                <span>↻</span> Refresh
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Filter Search Input -->
@@ -3760,6 +4235,196 @@ function larasliceWizard() {
                     </div>
                 </div>
 
+                
+                <!-- Declarative UI Architecture: Directory Columns, Multi-Dimensional Filters & Form Layout -->
+                <div class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4" x-data="{ uiTab: 'directory' }">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
+                        <div class="flex items-center gap-2.5">
+                            <div class="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
+                                🎨
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-foreground text-base">Declarative UI Architecture & Layout Studio</h3>
+                                <p class="text-xs text-muted-foreground mt-0.5">Composite semantic directory columns, searchable filters, responsive form sections, and drawer modes</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <!-- Link to full visual Blueprint Studio -->
+                            <a :href="'/laraslice/wizard/blueprint?slice=' + (selectedSlice?.name || '')" 
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 text-xs font-semibold shadow-xs transition">
+                                <span>⌘</span>
+                                <span>Open in Blueprint Studio</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Sub-tabs: Directory (Index) vs Forms -->
+                    <div class="flex items-center justify-between border-b border-border/60 pb-2">
+                        <div class="inline-flex rounded-lg p-0.5 bg-muted/60 border border-border text-xs">
+                            <button type="button" @click="uiTab = 'directory'" :class="uiTab === 'directory' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
+                                <span>📋 Directory Columns & Semantic Formatters</span>
+                            </button>
+                            <button type="button" @click="uiTab = 'filters'" :class="uiTab === 'filters' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
+                                <span>🔍 Multi-Dimensional Filters (Searchable Combobox)</span>
+                            </button>
+                            <button type="button" @click="uiTab = 'forms'" :class="uiTab === 'forms' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
+                                <span>📐 Create & Edit Form Sections & Drawer Mode</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TAB 1: DIRECTORY COLUMNS & SEMANTIC FORMATTERS -->
+                    <div x-show="uiTab === 'directory'" class="space-y-3">
+                        <div class="overflow-x-auto rounded-xl border border-border">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-muted/50 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
+                                    <tr>
+                                        <th class="w-12 px-3 py-2 text-center">In Table</th>
+                                        <th class="w-40 px-3 py-2">Field Handle</th>
+                                        <th class="w-48 px-3 py-2">Column Header</th>
+                                        <th class="w-56 px-3 py-2">Composite Semantic Formatter</th>
+                                        <th class="w-20 px-3 py-2 text-center">Sortable</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border/60 bg-card">
+                                    <template x-for="(f, fIdx) in studioFields" :key="'col-' + fIdx">
+                                        <tr class="hover:bg-muted/20 transition-colors">
+                                            <td class="px-3 py-2 text-center">
+                                                <input type="checkbox" x-model="f.show_in_list" class="rounded border-input text-primary size-3.5 cursor-pointer">
+                                            </td>
+                                            <td class="px-3 py-2 font-mono font-semibold text-foreground text-xs" x-text="f.handle"></td>
+                                            <td class="px-3 py-2">
+                                                <input type="text" x-model="f.label" class="h-7 w-full rounded border border-input bg-card px-2 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                                            </td>
+                                            <td class="px-3 py-2">
+                                                <select x-model="f.formatter" class="h-7 w-full rounded border border-input bg-card px-2 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                                                    <option value="text">text (Standard Raw Output)</option>
+                                                    <option value="code_badge">code_badge (Mono Badge EMP-01 / INV-2024)</option>
+                                                    <option value="composite_user">composite_user (Avatar + Name + Subtitle)</option>
+                                                    <option value="status_pill">status_pill (Color-coded Active / Inactive pill)</option>
+                                                    <option value="money_breakdown">money_breakdown (Amount + Currency Pill)</option>
+                                                    <option value="progress_bar">progress_bar (0-100% Visual Progress)</option>
+                                                    <option value="date_time">date_time (Formatted Timestamp)</option>
+                                                </select>
+                                            </td>
+                                            <td class="px-3 py-2 text-center">
+                                                <input type="checkbox" checked class="rounded border-input text-primary size-3.5 cursor-pointer">
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: MULTI-DIMENSIONAL FILTERS -->
+                    <div x-show="uiTab === 'filters'" class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
+                                <div class="flex items-center justify-between border-b border-border/40 pb-1.5">
+                                    <span class="font-bold text-xs text-foreground flex items-center gap-1.5">
+                                        <span>⚡</span> Quick Filter Bar (Above Table)
+                                    </span>
+                                    <span class="text-[10px] text-primary font-mono">Instant Filter</span>
+                                </div>
+                                <p class="text-[11px] text-muted-foreground">Appears directly above the data table for instant keystroke filtering</p>
+                                <div class="space-y-1.5 pt-1">
+                                    <template x-for="f in studioFields.filter(f => f.type === 'foreign_id' || f.handle.includes('status') || f.handle.includes('type') || f.handle.includes('category'))" :key="'qf-' + f.handle">
+                                        <div class="flex items-center justify-between p-2 rounded-lg border border-border bg-card text-xs">
+                                            <div class="flex items-center gap-2">
+                                                <input type="checkbox" checked class="rounded border-border text-primary size-3.5">
+                                                <span class="font-bold text-foreground" x-text="f.label || f.handle"></span>
+                                            </div>
+                                            <label class="inline-flex items-center gap-1.5 text-[10px] text-indigo-400 font-semibold cursor-pointer">
+                                                <input type="checkbox" checked class="rounded border-indigo-500/40 text-indigo-500 size-3">
+                                                <span>🔍 Searchable Dropdown (&lt;x-ui.searchable-select&gt;)</span>
+                                            </label>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div class="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
+                                <div class="flex items-center justify-between border-b border-border/40 pb-1.5">
+                                    <span class="font-bold text-xs text-foreground flex items-center gap-1.5">
+                                        <span>🎛️</span> Off-Canvas Drawer Filters
+                                    </span>
+                                    <span class="text-[10px] text-indigo-400 font-mono">Deep Filter Drawer</span>
+                                </div>
+                                <p class="text-[11px] text-muted-foreground">Slide-over drawer for multi-attribute filtering (date ranges, multi-select tags, secondary dimensions)</p>
+                                <div class="p-3 rounded-lg border border-border/80 bg-card text-[11px] text-muted-foreground space-y-1">
+                                    <div class="font-semibold text-foreground">BlatUI Off-Canvas Filter Drawer Active</div>
+                                    <p>Opens seamlessly when user clicks the "Filters" toolbar button; preserves active filter states in the browser query string.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: FORMS & DRAWER MODE -->
+                    <div x-show="uiTab === 'forms'" class="space-y-3">
+                        <!-- Form Presentation Standard Toggle -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-primary/30 bg-primary/5">
+                            <div>
+                                <span class="font-bold text-xs text-foreground flex items-center gap-1.5">
+                                    <span>⚡</span> Form Presentation Architecture
+                                </span>
+                                <p class="text-[11px] text-muted-foreground mt-0.5">Choose how Add and Edit forms open for users of this slice</p>
+                            </div>
+                            <div class="inline-flex rounded-lg p-0.5 bg-background border border-border text-xs">
+                                <button type="button" class="px-3 py-1.5 rounded-md bg-indigo-600 text-white font-bold shadow-xs transition cursor-pointer flex items-center gap-1.5">
+                                    <span>⚡ Instant Slide-Over Drawer (?drawer=create)</span>
+                                </button>
+                                <button type="button" class="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground transition cursor-pointer flex items-center gap-1.5">
+                                    <span>📄 Standalone Page (/create)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Form Widths & Searchable Selects Table -->
+                        <div class="overflow-x-auto rounded-xl border border-border">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-muted/50 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
+                                    <tr>
+                                        <th class="w-12 px-3 py-2 text-center">In Form</th>
+                                        <th class="w-40 px-3 py-2">Field Handle</th>
+                                        <th class="w-44 px-3 py-2">Display Label</th>
+                                        <th class="w-44 px-3 py-2 text-center">Field Span Width</th>
+                                        <th class="w-48 px-3 py-2 text-center">Searchable Combobox</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border/60 bg-card">
+                                    <template x-for="(f, fIdx) in studioFields" :key="'form-' + fIdx">
+                                        <tr class="hover:bg-muted/20 transition-colors">
+                                            <td class="px-3 py-2 text-center">
+                                                <input type="checkbox" x-model="f.show_in_form" class="rounded border-input text-primary size-3.5 cursor-pointer">
+                                            </td>
+                                            <td class="px-3 py-2 font-mono font-semibold text-foreground text-xs" x-text="f.handle"></td>
+                                            <td class="px-3 py-2">
+                                                <input type="text" x-model="f.label" class="h-7 w-full rounded border border-input bg-card px-2 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                                            </td>
+                                            <td class="px-3 py-2 text-center">
+                                                <div class="inline-flex rounded-md border border-input bg-card p-0.5 text-[10px] font-mono">
+                                                    <button type="button" @click="f.width = 33" :class="f.width === 33 ? 'bg-primary text-primary-foreground font-bold rounded' : 'text-muted-foreground hover:text-foreground'" class="px-1.5 py-0.5 transition">33%</button>
+                                                    <button type="button" @click="f.width = 50" :class="(f.width === 50 || !f.width) ? 'bg-primary text-primary-foreground font-bold rounded' : 'text-muted-foreground hover:text-foreground'" class="px-1.5 py-0.5 transition">50%</button>
+                                                    <button type="button" @click="f.width = 66" :class="f.width === 66 ? 'bg-primary text-primary-foreground font-bold rounded' : 'text-muted-foreground hover:text-foreground'" class="px-1.5 py-0.5 transition">66%</button>
+                                                    <button type="button" @click="f.width = 100" :class="f.width === 100 ? 'bg-primary text-primary-foreground font-bold rounded' : 'text-muted-foreground hover:text-foreground'" class="px-1.5 py-0.5 transition">100%</button>
+                                                </div>
+                                            </td>
+                                            <td class="px-3 py-2 text-center">
+                                                <label class="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer">
+                                                    <input type="checkbox" :checked="f.type === 'foreign_id' || f.handle.endsWith('_id') || f.searchable" @change="f.searchable = $event.target.checked" class="rounded border-border text-primary size-3.5">
+                                                    <span :class="(f.type === 'foreign_id' || f.handle.endsWith('_id') || f.searchable) ? 'text-indigo-400 font-bold' : ''">🔍 Searchable</span>
+                                                </label>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Navigation & Permissions Settings (October CMS Builder equivalent) -->
                 <div class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between pb-3 border-b border-border">
@@ -4260,6 +4925,8 @@ function larasliceWizard() {
                 </div>
             </div>
         </div>
+
+        @include('laraslice::partials.porting-modal')
 
     </div>
 @endsection

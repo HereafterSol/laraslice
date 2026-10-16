@@ -1,105 +1,167 @@
 schema_version: 1
 name: Departments
 handle: departments
-domain: Human Resources
-author: LaraSlice Team
+domain: 'Human Resources'
+author: 'LaraSlice Team'
 version: 1.0.0
-description: Manage company departments and staff employees.
+description: 'Manage company departments and staff employees.'
 models:
-  - handle: department
+  -
+    handle: department
     table: departments
     root: true
     timestamps: true
     soft_deletes: true
     fields:
-      - handle: name
-        label: Department Name
+      -
+        handle: name
+        label: 'Department Name'
         type: string
         required: true
         length: 150
-      - handle: code
-        label: Department Code
+      -
+        handle: code
+        label: 'Department Code'
         type: string
         required: true
         length: 20
-      - handle: budget
-        label: Annual Budget
+      -
+        handle: budget
+        label: 'Annual Budget'
         type: decimal
         required: false
         nullable: true
-        length: 12,2
-      - handle: location
+        length: '12,2'
+      -
+        handle: location
         label: Location
         type: string
         required: false
         nullable: true
         length: 100
-      - handle: is_active
+      -
+        handle: is_active
         label: Active
         type: boolean
         default: true
     relations:
-      - name: employees
+      -
+        name: employees
         type: hasMany
         model: employee
         foreign_key: department_id
-
-  - handle: employee
+  -
+    handle: employee
     table: employees
     timestamps: true
     soft_deletes: false
     fields:
-      - handle: department_id
+      -
+        handle: department_id
         label: Department
         type: foreign_id
         required: true
-      - handle: first_name
-        label: First Name
+      -
+        handle: first_name
+        label: 'First Name'
         type: string
         required: true
         length: 100
-      - handle: last_name
-        label: Last Name
+      -
+        handle: last_name
+        label: 'Last Name'
         type: string
         required: true
         length: 100
-      - handle: email
-        label: Email Address
+      -
+        handle: email
+        label: 'Email Address'
         type: email
         required: true
         length: 255
-      - handle: phone
-        label: Phone Number
+      -
+        handle: phone
+        label: 'Phone Number'
         type: string
         required: false
         nullable: true
         length: 50
-      - handle: job_title
-        label: Job Title
+      -
+        handle: job_title
+        label: 'Job Title'
         type: string
         required: true
         length: 150
-      - handle: hire_date
-        label: Hire Date
+      -
+        handle: hire_date
+        label: 'Hire Date'
         type: date
         required: true
-      - handle: salary
-        label: Base Salary
+      -
+        handle: salary
+        label: 'Base Salary'
         type: decimal
         required: false
         nullable: true
-        length: 10,2
-      - handle: status
-        label: Employment Status
+        length: '10,2'
+      -
+        handle: status
+        label: 'Employment Status'
         type: enum
         required: true
         default: active
         options:
           active: Active
-          on_leave: On Leave
+          on_leave: 'On Leave'
           terminated: Terminated
     relations:
-      - name: department
+      -
+        name: department
         type: belongsTo
         model: department
         foreign_key: department_id
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+      -
+        handle: name
+        label: 'Department Name'
+        formatter: text
+        sortable: true
+      -
+        handle: code
+        label: 'Department Code'
+        formatter: code_badge
+        sortable: true
+      -
+        handle: budget
+        label: 'Annual Budget'
+        formatter: money_breakdown
+        sortable: true
+      -
+        handle: location
+        label: Location
+        formatter: text
+        sortable: true
+      -
+        handle: is_active
+        label: Active
+        formatter: text
+        sortable: true
+    quick_filters: {  }
+    sidebar_filters: {  }
+  forms:
+    sections:
+      -
+        key: general_details
+        title: 'Departments Information'
+        grid: 3
+        fields:
+          - { handle: name, span: 1, is_searchable: false }
+          - { handle: code, span: 1, is_searchable: false }
+          - { handle: budget, span: 1, is_searchable: false }
+          - { handle: location, span: 1, is_searchable: false }
+          - { handle: is_active, span: 1, is_searchable: false }

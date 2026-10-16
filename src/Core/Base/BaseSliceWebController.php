@@ -40,15 +40,23 @@ abstract class BaseSliceWebController extends Controller
         }
 
         $pagedList = $this->getService()->getList($filter);
+        $formClass = $this->getFormClass();
+        $createForm = new $formClass();
 
-        return view($this->getViewPrefix().'index', [
-            'pagedList' => $pagedList,
-            'filter' => $filter,
-            'routePrefix' => $this->getRoutePrefix(),
-            'routeParameters' => $this->routeParameters(),
-            'parentId' => request()->route('parentId'),
-            'can' => $this->sliceAbilities(),
-        ]);
+        $viewData = array_merge(
+            $this->resolveRelationshipOptions($createForm),
+            [
+                'pagedList' => $pagedList,
+                'filter' => $filter,
+                'createForm' => $createForm,
+                'routePrefix' => $this->getRoutePrefix(),
+                'routeParameters' => $this->routeParameters(),
+                'parentId' => request()->route('parentId'),
+                'can' => $this->sliceAbilities(),
+            ]
+        );
+
+        return view($this->getViewPrefix().'index', $viewData);
     }
 
     public function create()
@@ -91,16 +99,16 @@ abstract class BaseSliceWebController extends Controller
                 }
 
                 $base = substr($propName, 0, -3);
-                $tablesToTry = [
-                    Str::plural($base),
-                    $base,
-                ];
+                $tablesToTry = match ($base) {
+                    'department' => ['teams', 'departments', 'department'],
+                    default => [Str::plural($base), $base],
+                };
 
                 foreach ($tablesToTry as $tbl) {
                     if (Schema::hasTable($tbl)) {
                         $columns = Schema::getColumnListing($tbl);
                         $labelCol = 'id';
-                        foreach (['name', 'title', 'label', 'order_number', 'sku'] as $candidate) {
+                        foreach (['name', 'title', 'team_name', 'company_name', 'full_name', 'label', 'order_number', 'sku'] as $candidate) {
                             if (in_array($candidate, $columns, true)) {
                                 $labelCol = $candidate;
                                 break;

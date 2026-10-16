@@ -1,6 +1,6 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 @php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
-<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="posLeft !== null ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
+<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
     <!-- Floating Trigger Bubble -->
     <div class="relative group" x-show="!isOpen">
         <!-- Pulse Glow -->
@@ -577,6 +577,8 @@
 <script>
 function larasliceCopilot() {
     return {
+        posLeft: null,
+        posTop: null,
         isOpen: false,
         isLoading: false,
         inputQuery: '',
