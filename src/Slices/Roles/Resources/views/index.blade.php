@@ -1,20 +1,14 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="space-y-6">
-    <!-- Header with Breadcrumbs & Action -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border/40">
+<div class="w-full mx-auto space-y-4">
+    <!-- Compact header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-            <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <a href="{{ Route::has('dashboard') ? route('dashboard') : url('/') }}" class="hover:text-primary transition-colors">Dashboard</a>
-                <span>/</span>
-                <span class="text-foreground font-medium">Roles & Permissions</span>
-            </div>
-            <h1 class="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
-                Roles & Permissions (RBAC)
+            <h1 class="text-xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+                Roles & Permissions
                 <x-ui.badge variant="secondary" class="font-mono text-xs">v1.0.0</x-ui.badge>
             </h1>
-            <p class="text-sm text-muted-foreground mt-0.5">Configure role authorization matrix and user privileges across all slices</p>
         </div>
         <div class="flex items-center gap-3">
             <x-ui.button href="{{ route('users.index') }}" as="a" variant="outline" class="gap-1.5 shadow-xs">
@@ -36,7 +30,7 @@
     @endif
 
     <!-- Roles Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         @forelse ($pagedList->items as $role)
             <x-ui.card class="bg-card border border-border shadow-xs hover:border-primary/40 transition flex flex-col justify-between">
                 <x-ui.card-header class="pb-3 px-5 pt-5">
@@ -73,7 +67,7 @@
                         <x-ui.button href="{{ route('roles.edit', $role->id) }}" as="a" variant="ghost" size="sm" class="size-8 p-0">
                             <x-lucide-pencil class="size-3.5 text-muted-foreground" />
                         </x-ui.button>
-                        @if ($role->slug !== 'super-admin')
+                        @if (! in_array($role->slug, ['super-admin', 'super-dev']))
                             <form action="{{ route('roles.destroy', $role->id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this role?')">
                                 @csrf
                                 @method('DELETE')

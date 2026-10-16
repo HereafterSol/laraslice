@@ -1,251 +1,396 @@
 {
-    "name": "Users",
-    "title": "User Management",
-    "version": "1.4.1",
-    "description": "Core Slice: Enterprise user administration, multi-persona profiles (Govt BPS/CNIC & Corporate EmpID), multi-device tracking, MFA, passkeys, and Enterprise security audit parity.",
-    "author": "LaraSlice Core",
-    "icon": "users",
-    "active": true,
-    "core": true,
-    "permissions": [
-        {
-            "slug": "users.view",
-            "name": "View Users Directory"
-        },
-        {
-            "slug": "users.create",
-            "name": "Create User Accounts"
-        },
-        {
-            "slug": "users.edit",
-            "name": "Edit User Profiles & Roles"
-        },
-        {
-            "slug": "users.delete",
-            "name": "Delete User Accounts"
-        },
-        {
-            "slug": "users.impersonate",
-            "name": "Impersonate Users"
-        },
-        {
-            "slug": "users.metrics",
-            "name": "View Access Metrics & GPS Telemetry"
-        },
-        {
-            "slug": "users.mfa",
-            "name": "Manage MFA Policies & Passkeys"
-        },
-        {
-            "slug": "users.devices",
-            "name": "View & Revoke Active Client Devices"
-        },
-        {
-            "slug": "users.security_logs",
-            "name": "View Security & Audit Trail"
-        },
-        {
-            "slug": "users.attempts",
-            "name": "View Login & Lockscreen Attempts"
-        }
-    ],
-    "fields": {
+  "name": "Users",
+  "title": "User Management",
+  "version": "1.4.1",
+  "description": "Core Slice: Enterprise user administration, multi-persona profiles (Govt BPS/CNIC & Corporate EmpID), multi-device tracking, MFA, passkeys, and Enterprise security audit parity.",
+  "author": "LaraSlice Core",
+  "icon": "users",
+  "active": true,
+  "core": true,
+  "permissions": [
+    {
+      "slug": "users.view",
+      "name": "View Users Directory"
+    },
+    {
+      "slug": "users.create",
+      "name": "Create User Accounts"
+    },
+    {
+      "slug": "users.edit",
+      "name": "Edit User Profiles & Roles"
+    },
+    {
+      "slug": "users.delete",
+      "name": "Delete User Accounts"
+    },
+    {
+      "slug": "users.impersonate",
+      "name": "Impersonate Users"
+    },
+    {
+      "slug": "users.metrics",
+      "name": "View Access Metrics & GPS Telemetry"
+    },
+    {
+      "slug": "users.mfa",
+      "name": "Manage MFA Policies & Passkeys"
+    },
+    {
+      "slug": "users.devices",
+      "name": "View & Revoke Active Client Devices"
+    },
+    {
+      "slug": "users.security_logs",
+      "name": "View Security & Audit Trail"
+    },
+    {
+      "slug": "users.attempts",
+      "name": "View Login & Lockscreen Attempts"
+    }
+  ],
+  "fields": {
+    "gender": {
+      "type": "string",
+      "length": 20,
+      "nullable": true,
+      "default": null,
+      "hidden": false,
+      "table": "users",
+      "added_in": "1.1.0"
+    },
+    "phone": {
+      "type": "string",
+      "length": 30,
+      "nullable": true,
+      "default": null,
+      "hidden": false,
+      "table": "users",
+      "added_in": "1.1.0"
+    },
+    "customised_permissions": {
+      "type": "boolean",
+      "nullable": false,
+      "default": false,
+      "hidden": true,
+      "table": "users",
+      "added_in": "1.1.0"
+    },
+    "mfa_channel": {
+      "type": "string",
+      "length": 20,
+      "nullable": false,
+      "default": "none",
+      "hidden": false,
+      "table": "users",
+      "added_in": "1.1.0"
+    }
+  },
+  "version_history": [
+    {
+      "version": "1.1.0",
+      "migration": "2026_10_03_220000_enhance_users_table_and_security_devices.php",
+      "description": "Added enterprise fields (gender, phone, dob, employee_id, department, designation, cnic), device tracking, recovery codes, and security audit tables with Slice Studio visibility control.",
+      "author": "Antigravity & User via Slice Studio",
+      "date": "2026-10-03 22:00:00"
+    },
+    {
+      "version": "1.2.0",
+      "migration": "2026_10_03_230000_create_user_details_table_and_split_profile.php",
+      "description": "Split users (pure auth) and user_details (1-to-1 aggregate for employee and profile details).",
+      "author": "Antigravity & User via Slice Studio",
+      "date": "2026-10-03 23:00:00"
+    },
+    {
+      "version": "1.3.0",
+      "migration": "2026_10_04_210000_create_enterprise_identity_and_device_trust_tables.php",
+      "description": "Added user_connect, user_creds, user_factors, user_codes, user_attempts, user_checks, user_push_devices, user_resets, user_tokens, and user_devices.",
+      "author": "Antigravity & User via Slice Studio",
+      "date": "2026-10-04 21:00:00"
+    },
+    {
+      "version": "1.3.1",
+      "migration": "2026_10_05_000000_add_device_trust_columns_to_user_devices_table.php",
+      "description": "Backfilled session_id, device_label, and is_trusted on user_devices for installs where the v1.1.0 table pre-empted the v1.3.0 schema.",
+      "author": "LaraSlice Contributors",
+      "date": "2026-10-05 00:00:00"
+    },
+    {
+      "version": "1.4.1",
+      "created_at": "2026-10-07 13:38:16",
+      "description": "Fix passkey lockscreen user verification and guard wizard routes in starter layout.",
+      "fields_snapshot": {
         "gender": {
-            "type": "string",
-            "length": 20,
-            "nullable": true,
-            "default": null,
-            "hidden": false,
-            "table": "users",
-            "added_in": "1.1.0"
+          "type": "string",
+          "length": 20,
+          "nullable": true,
+          "default": null,
+          "hidden": false,
+          "table": "users",
+          "added_in": "1.1.0"
         },
         "phone": {
-            "type": "string",
-            "length": 30,
-            "nullable": true,
-            "default": null,
-            "hidden": false,
-            "table": "users",
-            "added_in": "1.1.0"
+          "type": "string",
+          "length": 30,
+          "nullable": true,
+          "default": null,
+          "hidden": false,
+          "table": "users",
+          "added_in": "1.1.0"
         },
         "customised_permissions": {
-            "type": "boolean",
-            "nullable": false,
-            "default": false,
-            "hidden": true,
-            "table": "users",
-            "added_in": "1.1.0"
+          "type": "boolean",
+          "nullable": false,
+          "default": false,
+          "hidden": true,
+          "table": "users",
+          "added_in": "1.1.0"
         },
         "mfa_channel": {
-            "type": "string",
-            "length": 20,
-            "nullable": false,
-            "default": "none",
-            "hidden": false,
-            "table": "users",
-            "added_in": "1.1.0"
+          "type": "string",
+          "length": 20,
+          "nullable": false,
+          "default": "none",
+          "hidden": false,
+          "table": "users",
+          "added_in": "1.1.0"
         }
-    },
-    "version_history": [
-        {
-            "version": "1.1.0",
-            "migration": "2026_10_03_220000_enhance_users_table_and_security_devices.php",
-            "description": "Added enterprise fields (gender, phone, dob, employee_id, department, designation, cnic), device tracking, recovery codes, and security audit tables with Slice Studio visibility control.",
-            "author": "Antigravity & User via Slice Studio",
-            "date": "2026-10-03 22:00:00"
-        },
-        {
-            "version": "1.2.0",
-            "migration": "2026_10_03_230000_create_user_details_table_and_split_profile.php",
-            "description": "Split users (pure auth) and user_details (1-to-1 aggregate for employee and profile details).",
-            "author": "Antigravity & User via Slice Studio",
-            "date": "2026-10-03 23:00:00"
-        },
-        {
-            "version": "1.3.0",
-            "migration": "2026_10_04_210000_create_enterprise_identity_and_device_trust_tables.php",
-            "description": "Added user_connect, user_creds, user_factors, user_codes, user_attempts, user_checks, user_push_devices, user_resets, user_tokens, and user_devices.",
-            "author": "Antigravity & User via Slice Studio",
-            "date": "2026-10-04 21:00:00"
-        },
-        {
-            "version": "1.3.1",
-            "migration": "2026_10_05_000000_add_device_trust_columns_to_user_devices_table.php",
-            "description": "Backfilled session_id, device_label, and is_trusted on user_devices for installs where the v1.1.0 table pre-empted the v1.3.0 schema.",
-            "author": "LaraSlice Contributors",
-            "date": "2026-10-05 00:00:00"
-        },
-        {
-            "version": "1.4.1",
-            "created_at": "2026-10-07 13:38:16",
-            "description": "Fix passkey lockscreen user verification and guard wizard routes in starter layout.",
-            "fields_snapshot": {
-                "gender": {
-                    "type": "string",
-                    "length": 20,
-                    "nullable": true,
-                    "default": null,
-                    "hidden": false,
-                    "table": "users",
-                    "added_in": "1.1.0"
-                },
-                "phone": {
-                    "type": "string",
-                    "length": 30,
-                    "nullable": true,
-                    "default": null,
-                    "hidden": false,
-                    "table": "users",
-                    "added_in": "1.1.0"
-                },
-                "customised_permissions": {
-                    "type": "boolean",
-                    "nullable": false,
-                    "default": false,
-                    "hidden": true,
-                    "table": "users",
-                    "added_in": "1.1.0"
-                },
-                "mfa_channel": {
-                    "type": "string",
-                    "length": 20,
-                    "nullable": false,
-                    "default": "none",
-                    "hidden": false,
-                    "table": "users",
-                    "added_in": "1.1.0"
-                }
-            }
-        }
-    ],
-    "child_tables": [
-        "user_details",
-        "user_devices",
-        "user_connect",
-        "user_creds",
-        "user_factors",
-        "user_codes",
-        "user_attempts",
-        "user_checks",
-        "user_push_devices",
-        "user_resets",
-        "user_tokens"
-    ],
-    "navigation": {
-        "label": "User Management",
-        "route": "users.index",
-        "icon": "users",
-        "order": 10,
-        "group": "Vertical Slices",
-        "children": [
-            {
-                "label": "All Users",
-                "route": "users.index",
-                "icon": "users"
-            },
-            {
-                "label": "Access Metrics",
-                "route": "users.metrics",
-                "icon": "activity"
-            },
-            {
-                "label": "MFA Management",
-                "route": "users.mfa",
-                "icon": "shield"
-            },
-            {
-                "label": "Active Devices & Sessions",
-                "route": "users.devices",
-                "icon": "smartphone"
-            },
-            {
-                "label": "Security & Audit Logs",
-                "route": "users.security_logs",
-                "icon": "shield-check"
-            },
-            {
-                "label": "Profile & Settings",
-                "route": "users.settings",
-                "icon": "settings"
-            }
-        ]
-    },
-    "child_fields": {
-        "user_details": {
-            "employee_id": {
-                "type": "string",
-                "length": 50,
-                "nullable": true,
-                "hidden": false
-            },
-            "department": {
-                "type": "string",
-                "length": 100,
-                "nullable": true,
-                "hidden": false
-            },
-            "designation": {
-                "type": "string",
-                "length": 100,
-                "nullable": true,
-                "hidden": false
-            },
-            "cnic": {
-                "type": "string",
-                "length": 20,
-                "nullable": true,
-                "hidden": false
-            },
-            "dob": {
-                "type": "date",
-                "nullable": true,
-                "hidden": false
-            },
-            "address": {
-                "type": "text",
-                "nullable": true,
-                "hidden": false
-            }
-        }
+      }
     }
+  ],
+  "child_tables": [
+    "user_details",
+    "user_devices",
+    "user_connect",
+    "user_creds",
+    "user_factors",
+    "user_codes",
+    "user_attempts",
+    "user_checks",
+    "user_push_devices",
+    "user_resets",
+    "user_tokens"
+  ],
+  "navigation": {
+    "label": "User Management",
+    "route": "users.index",
+    "icon": "users",
+    "order": 10,
+    "group": "Vertical Slices",
+    "children": [
+      {
+        "label": "All Users",
+        "route": "users.index",
+        "icon": "users"
+      },
+      {
+        "label": "Access Metrics",
+        "route": "users.metrics",
+        "icon": "activity"
+      },
+      {
+        "label": "MFA Management",
+        "route": "users.mfa",
+        "icon": "shield"
+      },
+      {
+        "label": "Active Devices & Sessions",
+        "route": "users.devices",
+        "icon": "smartphone"
+      },
+      {
+        "label": "Security & Audit Logs",
+        "route": "users.security_logs",
+        "icon": "shield-check"
+      },
+      {
+        "label": "Profile & Settings",
+        "route": "users.settings",
+        "icon": "settings"
+      }
+    ]
+  },
+  "child_fields": {
+    "user_details": {
+      "employee_id": {
+        "type": "string",
+        "length": 50,
+        "nullable": true,
+        "hidden": false
+      },
+      "department": {
+        "type": "string",
+        "length": 100,
+        "nullable": true,
+        "hidden": false
+      },
+      "designation": {
+        "type": "string",
+        "length": 100,
+        "nullable": true,
+        "hidden": false
+      },
+      "cnic": {
+        "type": "string",
+        "length": 20,
+        "nullable": true,
+        "hidden": false
+      },
+      "dob": {
+        "type": "date",
+        "nullable": true,
+        "hidden": false
+      },
+      "address": {
+        "type": "text",
+        "nullable": true,
+        "hidden": false
+      }
+    }
+  },
+  "ui": {
+    "presentation": {
+      "create": "drawer",
+      "edit": "drawer",
+      "view": "page"
+    },
+    "directory": {
+      "presentation": "table",
+      "columns": [
+        {
+          "handle": "name",
+          "label": "Name",
+          "formatter": "text",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "handle": "email",
+          "label": "Email",
+          "formatter": "text",
+          "sortable": true,
+          "searchable": true
+        },
+        {
+          "handle": "status",
+          "label": "Status",
+          "formatter": "status_pill",
+          "sortable": true
+        },
+        {
+          "handle": "roles",
+          "label": "Roles",
+          "formatter": "text",
+          "sortable": false
+        },
+        {
+          "handle": "permissions",
+          "label": "Permissions",
+          "formatter": "text",
+          "sortable": false
+        },
+        {
+          "handle": "created_at",
+          "label": "Created",
+          "formatter": "date_time",
+          "sortable": true
+        }
+      ],
+      "searchable": [
+        "name",
+        "email"
+      ],
+      "search_placeholder": "Start typing to search...",
+      "quick_filters": [
+        {
+          "handle": "status",
+          "label": "Status",
+          "options_from": "distinct:status",
+          "is_searchable": false
+        }
+      ],
+      "sidebar_filters": [
+        {
+          "handle": "created_at",
+          "label": "Created date",
+          "type": "date_range"
+        }
+      ],
+      "summary_cards": [
+        {
+          "handle": "id",
+          "label": "Total Users",
+          "aggregate": "count",
+          "formatter": "number"
+        }
+      ],
+      "bulk_actions": [
+        "delete",
+        "export"
+      ],
+      "row_actions": {
+        "display": "hybrid",
+        "items": [
+          {
+            "handle": "view",
+            "label": "View",
+            "icon": "eye",
+            "placement": "inline"
+          },
+          {
+            "handle": "edit",
+            "label": "Edit",
+            "icon": "pencil",
+            "placement": "dropdown"
+          },
+          {
+            "handle": "delete",
+            "label": "Delete",
+            "icon": "trash-2",
+            "placement": "dropdown",
+            "danger": true
+          }
+        ]
+      }
+    },
+    "forms": {
+      "mode": "drawer",
+      "presentation": "drawer",
+      "sections": [
+        {
+          "title": "Account Details",
+          "columns": 2,
+          "fields": [
+            {
+              "handle": "name",
+              "span": 1
+            },
+            {
+              "handle": "email",
+              "span": 1
+            },
+            {
+              "handle": "password",
+              "span": 1
+            },
+            {
+              "handle": "status",
+              "span": 1
+            }
+          ]
+        },
+        {
+          "title": "Roles & Access",
+          "columns": 2,
+          "fields": [
+            {
+              "handle": "roles",
+              "span": 2,
+              "searchable": true
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

@@ -1,140 +1,121 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="w-full max-w-7xl mx-auto space-y-6">
-    <!-- Top Action Bar -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight text-foreground">User Management</h1>
-            <p class="text-sm text-muted-foreground">Manage user accounts, demographic profiles, employment roles, and access credentials</p>
+<div class="w-full mx-auto space-y-4">
+    <!-- Compact header: title + actions -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+            <h1 class="text-xl font-bold tracking-tight text-foreground">User Management</h1>
+            <x-ui.badge variant="secondary" class="font-mono text-xs">v1.0.0</x-ui.badge>
         </div>
         <div class="flex items-center gap-2">
-            <x-ui.button href="{{ route('users.create') }}" as="a" variant="default" class="shadow-xs">
-                <x-lucide-user-plus class="size-4 mr-1.5" />
-                <span>Create User</span>
+            @if($can['create'] ?? true)
+            <x-ui.button href="{{ route('users.create') }}" as="a" class="shadow-xs">
+                <x-lucide-plus class="size-4 mr-1" />
+                <span>Add User</span>
             </x-ui.button>
+            @endif
         </div>
     </div>
 
     @if (session('success'))
-        <div class="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-medium flex items-center gap-2 shadow-xs">
+        <div class="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-medium flex items-center gap-2">
             <x-lucide-check-circle-2 class="size-4 shrink-0" />
             <span>{{ session('success') }}</span>
         </div>
     @endif
-
-    <!-- Filter Card -->
-    <x-ui.card variant="sectioned" class="border shadow-xs bg-card">
-        <x-ui.card-content class="p-4">
-            <form action="{{ route('users.index') }}" method="GET" class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                <div class="flex flex-1 items-center gap-3">
-                    <div class="relative flex-1 max-w-md">
-                        <x-lucide-search class="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                        <x-ui.input
-                            name="search"
-                            value="{{ $filter->search ?? '' }}"
-                            placeholder="Search by name, email, CNIC, employee ID..."
-                            class="pl-9"
-                        />
-                    </div>
-                    <div class="w-full sm:w-48">
-                        <select name="status" aria-label="Filter by status" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                            <option value="">All Statuses</option>
-                            <option value="active" {{ ($filter->status ?? '') === 'active' ? 'selected' : '' }}>Active</option>
-                            <option value="suspended" {{ ($filter->status ?? '') === 'suspended' ? 'selected' : '' }}>Suspended</option>
-                            <option value="pending" {{ ($filter->status ?? '') === 'pending' ? 'selected' : '' }}>Pending</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <x-ui.button type="submit" variant="secondary" size="sm">
-                        <x-lucide-filter class="size-3.5 mr-1" />
-                        <span>Filter</span>
-                    </x-ui.button>
-                    @if (!empty($filter->search) || !empty($filter->status))
-                        <x-ui.button href="{{ route('users.index') }}" as="a" variant="ghost" size="sm">
-                            Reset
-                        </x-ui.button>
-                    @endif
-                </div>
-            </form>
-        </x-ui.card-content>
-    </x-ui.card>
+    @if (session('error'))
+        <div class="p-3 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm font-medium">
+            {{ session('error') }}
+        </div>
+    @endif
 
     @php
         $columns = [
-            ['key' => 'name', 'label' => 'Name'],
-            ['key' => 'email', 'label' => 'Email'],
-            ['key' => 'status', 'label' => 'Status'],
-            ['key' => 'gender', 'label' => 'Gender'],
-            ['key' => 'employment', 'label' => 'Employment'],
-            ['key' => 'roles', 'label' => 'Roles'],
-            ['key' => 'permissions', 'label' => 'Permissions'],
-            ['key' => 'cnic', 'label' => 'CNIC'],
-            ['key' => 'phone', 'label' => 'Phone'],
+            ['key' => 'name', 'label' => 'Name', 'sortable' => true],
+            ['key' => 'email', 'label' => 'Email', 'sortable' => true],
+            ['key' => 'status', 'label' => 'Status', 'sortable' => true],
+            ['key' => 'roles', 'label' => 'Roles', 'sortable' => false],
+            ['key' => 'permissions', 'label' => 'Permissions', 'sortable' => false],
+            ['key' => 'created_at', 'label' => 'Created', 'sortable' => true],
         ];
         $rows = collect($pagedList->items)->map(fn ($user) => [
             'id'          => $user->id,
             'name'        => $user->name,
             'email'       => $user->email,
             'status'      => ucfirst($user->status ?? 'pending'),
-            'gender'      => $user->gender ? ucfirst($user->gender) : '—',
-            'employment'  => trim(implode(' · ', array_filter([$user->employeeId ?? null, $user->designation ?? $user->department ?? null]))) ?: '—',
             'roles'       => !empty($user->roles) ? implode(', ', (array) $user->roles) : 'Standard User',
             'permissions' => (int) ($user->permissionsCount ?? 0),
-            'cnic'        => $user->cnic ?? '—',
-            'phone'       => $user->phone ?? '—',
+            'created_at'  => $user->created_at ?? '—',
             'edit_url'    => route('users.edit', $user->id),
             'delete_url'  => route('users.destroy', $user->id),
         ])->values()->all();
     @endphp
 
-    <!-- Users Data Table Card -->
-    <x-ui.card variant="sectioned" class="border shadow-xs bg-card">
-        <x-ui.card-header class="border-b pb-4 px-6 pt-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <x-ui.card-title class="text-base font-semibold">User Directory</x-ui.card-title>
-                    <x-ui.card-description>All enterprise identities, access statuses, and assigned RBAC permissions</x-ui.card-description>
-                </div>
-                <div class="text-xs text-muted-foreground font-medium">
-                    Total: {{ $pagedList->totalCount }} users
-                </div>
-            </div>
-        </x-ui.card-header>
-
-        <x-ui.card-content class="p-6">
-            @if ($pagedList->totalCount > count($rows))
-                <p class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                    Showing the latest {{ count($rows) }} of {{ $pagedList->totalCount }} users. Raise <code>LARASLICE_DATA_TABLE_MAX_ROWS</code> to load more.
-                </p>
+    @if(count($rows) === 0)
+        <div class="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground border border-dashed border-border rounded-xl">
+            <x-lucide-inbox class="size-8 text-muted-foreground/50" />
+            <p class="text-sm font-medium">No users found</p>
+            @if($can['create'] ?? true)
+            <x-ui.button href="{{ route('users.create') }}" as="a" variant="outline" size="sm">Add User</x-ui.button>
             @endif
+        </div>
+    @else
+        <!-- Summary Cards (from ui.directory.summary_cards) -->
+        @if(!empty($summaryCards))
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            @foreach($summaryCards as $card)
+            <x-ui.stat
+                :label="$card['label'] ?? ''"
+                :value="$summaryData[$card['handle']] ?? '—'"
+            />
+            @endforeach
+        </div>
+        @endif
 
-            @if (count($rows) === 0)
-                <div class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
-                    <x-lucide-inbox class="size-8 text-muted-foreground/50" />
-                    <p class="text-sm font-medium">No users found matching your criteria</p>
-                    <x-ui.button href="{{ route('users.create') }}" as="a" variant="outline" size="sm">
-                        Create new user
+        <!-- Quick Filter Tabs (from ui.directory.quick_filters) -->
+        @if(!empty($quickFilters))
+        <div class="flex flex-wrap gap-2">
+            @foreach($quickFilters as $qf)
+            <x-ui.filter-tabs
+                :tabs="$qf['options'] ?? []"
+                :param="$qf['handle']"
+            />
+            @endforeach
+        </div>
+        @endif
+
+        <!-- High-Density Data Table with Automatic 3-Dots Action Column -->
+        <x-ui.data-table
+            :columns="$columns"
+            :rows="$rows"
+            :page-size="10"
+            search-placeholder="Start typing to search..."
+        >
+            <x-slot:actions>
+                @if($can['edit'] ?? true)
+                <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="icon" title="Edit">
+                    <x-lucide-pencil class="size-4" />
+                </x-ui.button>
+                @endif
+            </x-slot:actions>
+            <x-slot:rowActions>
+                @if($can['edit'] ?? true)
+                <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm" class="w-full justify-start">
+                    <x-lucide-pencil class="size-3.5 mr-1.5" /> Edit
+                </x-ui.button>
+                @endif
+                @if($can['delete'] ?? true)
+                <form method="POST" :action="item.r.delete_url" class="w-full" onsubmit="return confirm('Delete user account?')">
+                    @csrf
+                    @method('DELETE')
+                    <x-ui.button type="submit" variant="ghost" size="sm" class="w-full justify-start text-destructive hover:text-destructive">
+                        <x-lucide-trash-2 class="size-3.5 mr-1.5" /> Delete
                     </x-ui.button>
-                </div>
-            @else
-                <x-ui.data-table :columns="$columns" :rows="$rows" :page-size="10" search-placeholder="Filter users..." sticky-actions>
-                    <x-slot:actions>
-                        <x-ui.button as="a" ::href="item.r.edit_url" variant="ghost" size="sm">
-                            <x-lucide-pencil class="size-4" /> Edit
-                        </x-ui.button>
-                        <form method="POST" :action="item.r.delete_url" class="inline" onsubmit="return confirm('Delete user account?')">
-                            @csrf
-                            @method('DELETE')
-                            <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
-                                <x-lucide-trash-2 class="size-4" /> Delete
-                            </x-ui.button>
-                        </form>
-                    </x-slot:actions>
-                </x-ui.data-table>
-            @endif
-        </x-ui.card-content>
-    </x-ui.card>
+                </form>
+                @endif
+            </x-slot:rowActions>
+        </x-ui.data-table>
+    @endif
 </div>
 @endsection
