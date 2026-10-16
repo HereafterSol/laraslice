@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.3] - 2026-10-16
+
+### Fixed
+- **Sanctum Migration Deduplication in `slice:install`**:
+  - `SliceInstallCommand` now checks if any `*_create_personal_access_tokens_table.php` migration file already exists before calling `vendor:publish --tag=sanctum-migrations`.
+  - Automatically deduplicates and removes redundant pending Sanctum migration files, preventing SQLSTATE 42S01 (`Table 'personal_access_tokens' already exists`) when re-initializing or running `slice:install` on fresh database installations.
+
 ## [1.6.2] - 2026-10-16
 
 ### Added
