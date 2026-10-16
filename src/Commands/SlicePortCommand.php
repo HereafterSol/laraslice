@@ -18,12 +18,20 @@ class SlicePortCommand extends Command
                             {source? : Path to legacy Laravel project root or database}
                             {--plan= : Path to JSON architecture plan (e.g. docs/porting-architecture-plan.json)}
                             {--import-data : Stream and import operational data via ETL}
+                            {--import-auth : Also import legacy roles/permissions via normalized merge (framework auth tables stay protected by default)}
                             {--super-domain= : Target Super-Domain (e.g. ERP, Legal, Core)}
                             {--domain= : Target Domain Group (default: Adjudication)}
                             {--mode= : Porting mode: system-base (taxonomies & dropdown seeders) or full-data (historical data migration)}
                             {--with-files : Copy physical file attachments from storage/app/public}
                             {--scaffold : Automatically scaffold physical vertical slices into app/Slices}
-                            {--dry-run : Preview table-to-slice mapping without writing files}';
+                            {--dry-run : Preview table-to-slice mapping without writing files}
+                            {--source-connection= : Legacy DB connection name from config/database.php (overrides --source-* options)}
+                            {--source-host= : Legacy database host (default: 127.0.0.1)}
+                            {--source-port= : Legacy database port (default: 3306)}
+                            {--source-database= : Legacy database name}
+                            {--source-username= : Legacy database username}
+                            {--source-password= : Legacy database password}
+                            {--data-source= : Data to port: real (live DB, default), seeders (source seed files), both, none}';
 
     protected $description = 'Reverse-engineer and port a legacy Laravel application into domain-bounded LaraSlice vertical slices';
 
@@ -95,14 +103,32 @@ class SlicePortCommand extends Command
             }
 
             $importData = (bool) $this->option('import-data');
+            $dataSource = $this->option('data-source');
             if (! $importData && ! $this->option('no-interaction')) {
                 $importData = $this->confirm('Stream and import operational database records via ETL?', true);
             }
 
+            // Ask which data source if importing and not specified
+            if ($importData && ! $dataSource && ! $this->option('no-interaction')) {
+                $dataSource = $this->choice(
+                    'Which data source should be ported?',
+                    [
+                        'real' => 'Real data (live database — always up-to-date)',
+                        'seeders' => 'Seeders (source seed files — may be outdated)',
+                        'both' => 'Both (real data for transactions, seeders for reference)',
+                        'none' => 'None (schema only)',
+                    ],
+                    'real'
+                );
+                $this->comment("  → Seeders may be outdated. Live database is always current.");
+            }
+            $dataSource = $dataSource ?: 'real';
+
             $withFiles = (bool) $this->option('with-files');
 
             $this->comment("⚙️  Scaffolding vertical slices, migrations, and models from plan...");
-            $result = $portService->executeFromPlan($plan, $importData, $withFiles);
+            $importAuth = (bool) $this->option('import-auth');
+            $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth);
 
             if (! empty($result['slices_created'])) {
                 $this->info("✓ Scaffolded " . count($result['slices_created']) . " canonical slices!");
@@ -190,6 +216,10 @@ class SlicePortCommand extends Command
 
         $this->table(['Target Slice', 'Architecture Type', 'Primary Table', 'Attached Child / Pivot Tables'], $rows);
 
+        if (! empty($inspection['unmapped_pivots'])) {
+            $this->warn('Pivot tables not attached to any slice (review manually): ' . implode(', ', $inspection['unmapped_pivots']));
+        }
+
         if ($this->option('dry-run')) {
             $this->warn('Dry-run mode: skipping blueprint and seeder generation.');
             return self::SUCCESS;
@@ -203,8 +233,58 @@ class SlicePortCommand extends Command
         $this->line('');
         $this->comment("⚙️  Synthesizing domain blueprint & {$mode} seeders...");
 
+        // Build legacy source DB connection from --source-* options (or named connection).
+        $sourceConnectionName = $this->option('source-connection');
+        if ($sourceConnectionName) {
+            $connConfig = config("database.connections.{$sourceConnectionName}");
+            if (! $connConfig) {
+                $this->error("Source connection [{$sourceConnectionName}] is not defined in config/database.php.");
+                return self::FAILURE;
+            }
+            $sourceConnection = [
+                'host' => $connConfig['host'] ?? '127.0.0.1',
+                'port' => $connConfig['port'] ?? 3306,
+                'database' => $connConfig['database'] ?? '',
+                'username' => $connConfig['username'] ?? '',
+                'password' => $connConfig['password'] ?? '',
+            ];
+            config(['laraslice.porting.source_connection' => $sourceConnectionName]);
+        } else {
+            $sourceConnection = [
+                'host' => $this->option('source-host') ?: '127.0.0.1',
+                'port' => $this->option('source-port') ?: 3306,
+                'database' => $this->option('source-database') ?: '',
+                'username' => $this->option('source-username') ?: '',
+                'password' => $this->option('source-password') ?: '',
+            ];
+
+            // Register runtime connection if database provided (for live table discovery)
+            if (! empty($sourceConnection['database'])) {
+                config(['database.connections.laraslice_source' => [
+                    'driver' => 'mysql',
+                    'host' => $sourceConnection['host'],
+                    'port' => $sourceConnection['port'],
+                    'database' => $sourceConnection['database'],
+                    'username' => $sourceConnection['username'],
+                    'password' => $sourceConnection['password'],
+                    'charset' => 'utf8mb4',
+                    'collation' => 'utf8mb4_unicode_ci',
+                    'prefix' => '',
+                    'strict' => true,
+                ]]);
+                config(['laraslice.porting.source_connection' => 'laraslice_source']);
+                $this->info("✓ Source database connection registered: {$sourceConnection['database']}@{$sourceConnection['host']}");
+            }
+        }
+
         try {
-            $result = $portService->execute($source, $domain, $mode, $withFiles);
+            $importAuth = (bool) $this->option('import-auth');
+            if ($importAuth) {
+                $this->warn('Auth import enabled: legacy roles/permissions will be merged by normalized slug. Framework roles (super-admin, super-dev) are never overwritten.');
+            } else {
+                $this->line('<fg=gray>Auth tables protected: roles/permissions skipped, users merged by email.</>');
+            }
+            $result = $portService->execute($source, $domain, $mode, $withFiles, $mode === 'full-data', $sourceConnection, $importAuth);
         } catch (\Throwable $e) {
             $this->error("Porting execution failed: {$e->getMessage()}");
             return self::FAILURE;
@@ -223,10 +303,11 @@ class SlicePortCommand extends Command
 
         if ($this->option('scaffold') || (! $this->input->isInteractive() && $this->option('scaffold')) || ($this->input->isInteractive() && $this->confirm('Do you want to scaffold physical vertical slices into app/Slices now?', true))) {
             $this->line('');
-            $this->comment("⚙️  Scaffolding physical vertical slices into app/Slices/{$domain}/...");
-            $scaffoldResult = $portService->scaffoldSlices($inspection, $domain);
+            $targetPath = $superDomain ? "app/Slices/{$superDomain}/{$domain}/" : "app/Slices/{$domain}/";
+            $this->comment("⚙️  Scaffolding physical vertical slices into {$targetPath}...");
+            $scaffoldResult = $portService->scaffoldSlices($inspection, $domain, $superDomain);
             $this->info("✓ Successfully scaffolded " . count($scaffoldResult['created']) . " physical vertical slices!");
-            
+
             $moduleGroups = [];
             foreach ($scaffoldResult['created'] as $s) {
                 $moduleGroups[$s['module']][] = $s['slice'];
@@ -236,13 +317,16 @@ class SlicePortCommand extends Command
             }
 
             if (! empty($scaffoldResult['errors'])) {
-                $this->warn("Skipped " . count($scaffoldResult['errors']) . " slice(s) due to existing directories or conflicts.");
+                $this->warn("Skipped " . count($scaffoldResult['errors']) . " slice(s) due to existing directories or conflicts:");
+                foreach ($scaffoldResult['errors'] as $s => $err) {
+                    $this->warn("  [{$s}] {$err}");
+                }
             }
         }
 
         $this->line('');
         $this->info('🎉 Porting analysis, blueprint synthesis & slice scaffolding completed successfully!');
-        $this->info("You can now open http://localhost:7000/ to view the active modules and slices.");
+        $this->info("You can now open /laraslice/wizard in your browser to view the active modules and slices.");
 
         return self::SUCCESS;
     }

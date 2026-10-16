@@ -11,6 +11,130 @@ use Throwable;
 class SlicePortService
 {
     /**
+     * Clone a Git repository (GitHub, GitLab, or any Git host) into a local
+     * cache directory so it can be analyzed like a local source path.
+     *
+     * Supports:
+     *  - Public repos (no token needed)
+     *  - Private repos via personal access token (GitHub or GitLab)
+     *  - Branch / tag selection (defaults to the repo's default branch)
+     *
+     * The token is injected into the clone URL in-memory only — it is never
+     * written to disk, never logged, and never returned to the caller.
+     *
+     * @param  string  $repoUrl  e.g. https://github.com/acme/legacy-erp.git
+     * @param  string|null  $branch  Branch or tag to check out (null = default)
+     * @param  string|null  $token  Personal access token for private repos
+     * @return string  Local path of the cloned repository
+     *
+     * @throws \InvalidArgumentException on invalid URL or failed clone
+     */
+    public function cloneGitSource(string $repoUrl, ?string $branch = null, ?string $token = null, bool $keep = false): string
+    {
+        $repoUrl = trim($repoUrl);
+
+        if (! preg_match('#^https?://[^\\s/]+/.+#i', $repoUrl)) {
+            throw new \InvalidArgumentException('Invalid repository URL. Use an https:// URL, e.g. https://github.com/acme/legacy-erp.git');
+        }
+
+        // Normalize: strip trailing .git for the cache key but keep for cloning
+        $cacheKey = md5(strtolower(preg_replace('#\\.git$#i', '', $repoUrl)).'|'.($branch ?? 'default'));
+
+        $cacheDir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-sources');
+        if (! File::isDirectory($cacheDir)) {
+            File::makeDirectory($cacheDir, 0755, true);
+        }
+
+        $targetDir = $cacheDir.DIRECTORY_SEPARATOR.$cacheKey;
+
+        // Reuse a fresh-enough clone (same branch, < 24h old) to avoid re-cloning.
+        // Skipped when the source is marked "keep" — those are managed manually.
+        if (File::isDirectory($targetDir.DIRECTORY_SEPARATOR.'.git')) {
+            $meta = $this->readCloneMeta($targetDir);
+            if (! ($meta['keep'] ?? false)) {
+                $headFile = $targetDir.DIRECTORY_SEPARATOR.'.git'.DIRECTORY_SEPARATOR.'FETCH_HEAD';
+                if (File::exists($headFile) && (time() - File::lastModified($headFile)) < 86400) {
+                    return $targetDir;
+                }
+            } else {
+                return $targetDir;
+            }
+            File::deleteDirectory($targetDir);
+        }
+
+        // Build an authenticated clone URL in-memory only (never persisted/logged)
+        $cloneUrl = $repoUrl;
+        if ($token !== null && $token !== '') {
+            $parts = parse_url($repoUrl);
+            $host = $parts['host'] ?? '';
+            // GitHub and GitLab both accept the token as the username with empty password,
+            // or as oauth2:<token>. Use the x-access-token form which works on both.
+            $auth = 'x-access-token:'.rawurlencode(trim($token)).'@';
+            $cloneUrl = ($parts['scheme'] ?? 'https').'://'.$auth.$host.($parts['path'] ?? '');
+            if (! empty($parts['query'])) {
+                $cloneUrl .= '?'.$parts['query'];
+            }
+        }
+
+        $branchArg = ($branch !== null && trim($branch) !== '')
+            ? ' --branch '.escapeshellarg(trim($branch))
+            : '';
+
+        // Shallow clone: faster, and enough for static analysis
+        $cmd = 'git clone --depth 1'.$branchArg.' '.escapeshellarg($cloneUrl).' '.escapeshellarg($targetDir).' 2>&1';
+
+        // Mask any token from the command string used in error messages
+        $safeCmd = preg_replace('#x-access-token:[^@]+@#', 'x-access-token:***@', $cmd);
+
+        $output = [];
+        $exitCode = 0;
+        // Use a sanitized environment so the token never leaks via process listing
+        exec($cmd, $output, $exitCode);
+
+        if ($exitCode !== 0 || ! File::isDirectory($targetDir)) {
+            $hint = implode("\n", array_slice($output, -5));
+            // Scrub any accidental token echo from git's error output
+            $hint = preg_replace('#x-access-token:[^@\\s]+@#', 'x-access-token:***@', $hint);
+            throw new \InvalidArgumentException(
+                "Could not clone repository. Check the URL, branch name, and token permissions.\n{$hint}\n(Command: {$safeCmd})"
+            );
+        }
+
+        // Write metadata (repo URL, branch, keep flag) — never the token
+        $this->writeCloneMeta($targetDir, [
+            'repo_url' => preg_replace('#\\.git$#i', '', $repoUrl),
+            'branch' => $branch,
+            'keep' => $keep,
+            'cloned_at' => date('c'),
+        ]);
+
+        return $targetDir;
+    }
+
+    /**
+     * Read clone metadata (never contains a token).
+     */
+    protected function readCloneMeta(string $dir): array
+    {
+        $metaFile = $dir.DIRECTORY_SEPARATOR.'.porting-meta.json';
+        if (File::exists($metaFile)) {
+            $meta = json_decode(File::get($metaFile), true);
+            if (is_array($meta)) {
+                return $meta;
+            }
+        }
+        return [];
+    }
+
+    /**
+     * Write clone metadata (never contains a token).
+     */
+    protected function writeCloneMeta(string $dir, array $meta): void
+    {
+        File::put($dir.DIRECTORY_SEPARATOR.'.porting-meta.json', json_encode($meta, JSON_PRETTY_PRINT));
+    }
+
+    /**
      * Inspect a legacy application directory and return comprehensive schema & slice mapping.
      */
     public function inspect(string $sourcePath, string $domain = 'Adjudication'): array
@@ -28,15 +152,38 @@ class SlicePortService
         $migDir = $cleanPath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'migrations';
         $seedDir = $cleanPath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'seeders';
 
-        $tables = $this->extractTablesFromMigrations($migDir);
+        // SOURCE OF TRUTH PRIORITY:
+        // 1. Live source database (via --source-* connection options) = most accurate
+        // 2. Migrations (for metadata: types, FKs, migration filenames)
+        // 3. Current app database (fallback with warning)
+        $sourceConn = config('laraslice.porting.source_connection');
+        $dbTables = [];
+        $migTables = $this->extractTablesFromMigrations($migDir);
 
-        if (empty($tables)) {
+        if ($sourceConn) {
+            // Live source DB is the source of truth
+            $dbTables = $this->extractTablesFromSourceDatabase($sourceConn);
+            $tables = $this->reconcileTableSources($dbTables, $migTables, $sourceConn);
+        } elseif (! empty($migTables)) {
+            // Migrations available, no live DB — use migrations but check for gaps
+            $tables = $migTables;
+            // Mark all as migration-sourced
+            foreach ($tables as $name => $t) {
+                $tables[$name]['table_source'] = 'migrations';
+            }
+        } else {
+            // No migrations, no source DB — fallback to current app DB with warning
             $tables = $this->extractTablesFromDatabase();
+            foreach ($tables as $name => $t) {
+                $tables[$name]['table_source'] = 'app_database_fallback';
+            }
         }
 
         $tenancy = $this->detectMultiTenancy($tables);
         $classified = $this->classifyTables($tables);
-        $sliceMapping = $this->buildSliceMapping($classified, $domain);
+        $mappingResult = $this->buildSliceMapping($classified, $domain);
+        $sliceMapping = $mappingResult['mapping'];
+        $unmappedPivots = $mappingResult['unmapped_pivots'];
 
         $studioSlices = $this->buildStudioSlices($sliceMapping, $tables, $domain, [
             'multitenant' => $tenancy['enabled'],
@@ -57,6 +204,7 @@ class SlicePortService
             'tables' => $tables,
             'classified' => $classified,
             'slice_mapping' => $sliceMapping,
+            'unmapped_pivots' => $unmappedPivots,
             'studio_slices' => $studioSlices,
             'domain_blueprint_yaml' => $domainYaml,
             'has_seeders' => File::isDirectory($seedDir) && count(File::files($seedDir)) > 0,
@@ -110,7 +258,7 @@ class SlicePortService
     /**
      * Execute the porting process: generate blueprints, seeders, and optionally copy files.
      */
-    public function execute(string $sourcePath, string $domain = 'Adjudication', string $mode = 'system-base', bool $withFiles = false): array
+    public function execute(string $sourcePath, string $domain = 'Adjudication', string $mode = 'system-base', bool $withFiles = false, bool $importData = false, ?array $sourceConnection = null, bool $importAuth = false): array
     {
         $inspection = $this->inspect($sourcePath, $domain);
         $cleanPath = $inspection['source_path'];
@@ -151,6 +299,23 @@ class SlicePortService
             }
         }
 
+        $dataImport = null;
+        if ($importData) {
+            try {
+                $dataPortService = new SliceDataPortService;
+                $dataPortService->setImportAuth($importAuth);
+                $dataImport = $dataPortService->importFromDatabase(
+                    $sourceConnection['database'] ?? 'erp',
+                    $sourceConnection['host'] ?? '127.0.0.1',
+                    (int) ($sourceConnection['port'] ?? 3306),
+                    $sourceConnection['username'] ?? 'root',
+                    $sourceConnection['password'] ?? ''
+                );
+            } catch (\Throwable $e) {
+                $dataImport = ['success' => false, 'error' => $e->getMessage()];
+            }
+        }
+
         return [
             'success' => true,
             'domain' => $domain,
@@ -163,6 +328,8 @@ class SlicePortService
             'files_migrated' => $filesMigrated,
             'bytes_migrated' => $bytesMigrated,
             'tables_count' => $inspection['total_tables'],
+            'unmapped_pivots' => $inspection['unmapped_pivots'] ?? [],
+            'data_import' => $dataImport,
         ];
     }
 
@@ -249,7 +416,7 @@ class SlicePortService
     /**
      * Scaffold physical vertical slices directly into app/Slices/{App}/{Domain}/{Slice}.
      */
-    public function scaffoldSlices(array $inspection, string $app = 'ERP'): array
+    public function scaffoldSlices(array $inspection, string $app = 'ERP', ?string $superDomain = null): array
     {
         $generator = new \LaraSlice\Generator\SliceGenerator;
         $created = [];
@@ -259,6 +426,43 @@ class SlicePortService
         $tables = $inspection['tables'];
         $multitenant = $inspection['tenancy']['enabled'] ?? false;
         $tenantKey = $inspection['tenancy']['tenant_key'] ?? 'company_id';
+        $sourcePath = $inspection['source_path'] ?? '';
+
+        // Detect workflows, business logic, and dead tables from source
+        $workflows = $sourcePath ? $this->detectWorkflows($sourcePath, $sliceMapping) : [];
+        $businessLogic = $sourcePath ? $this->detectBusinessLogic($sourcePath, $sliceMapping) : [];
+        $deadTables = $sourcePath ? $this->detectDeadTables($tables, $sourcePath) : [];
+
+        // Convert detected workflows to generator's expected format
+        $workflowConfigs = [];
+        foreach ($workflows as $sliceName => $wf) {
+            $states = [];
+            foreach ($wf['states'] as $state) {
+                $states[] = [
+                    'slug' => $state,
+                    'label' => \Illuminate\Support\Str::headline($state),
+                    'initial' => $state === ($wf['initial_state'] ?? 'draft'),
+                ];
+            }
+            $transitions = [];
+            foreach ($wf['transitions'] as $t) {
+                $transitions[] = [
+                    'slug' => \Illuminate\Support\Str::snake($t['name']),
+                    'name' => $t['label'],
+                    'from' => ['draft'], // Conservative: allow from draft
+                    'to' => $t['to_state'],
+                ];
+            }
+            $workflowConfigs[$sliceName] = [
+                'enabled' => true,
+                'slug' => \Illuminate\Support\Str::slug($sliceName),
+                'name' => "{$sliceName} Workflow",
+                'state_field' => 'status',
+                'initial_state' => $wf['initial_state'] ?? 'draft',
+                'states' => $states,
+                'transitions' => $transitions,
+            ];
+        }
 
         foreach ($sliceMapping as $sliceName => $info) {
             try {
@@ -296,15 +500,27 @@ class SlicePortService
 
                 $options = [
                     'app' => $app,
+                    'super_domain' => $superDomain,
                     'domain' => $module,
                     'table' => $primaryTable,
                     'multitenant' => $multitenant,
                     'tenant_key' => $tenantKey,
                     'description' => $info['description'] ?? "Vertical slice for {$sliceName}",
+                    // v1.6.2: Generate canonical ui: block from real inspected fields
+                    'ui' => $this->buildUiFromInspectedFields($sliceName, $fields, $tenantKey),
+                    // Workflow: pass detected state machine to generator
+                    'workflowConfig' => $workflowConfigs[$sliceName] ?? null,
                 ];
 
-                $sliceDir = $generator->generate($sliceName, $generatorFields, false, $options);
-                $sliceNamespace = "App\\Slices\\{$app}\\{$module}\\{$sliceName}";
+                $sliceDir = $generator->generate($sliceName, $generatorFields, ! empty($workflowConfigs[$sliceName]), $options);
+                $nsParts = [];
+                if ($superDomain) {
+                    $nsParts[] = \Illuminate\Support\Str::studly($superDomain);
+                }
+                $nsParts[] = \Illuminate\Support\Str::studly($app);
+                $nsParts[] = \Illuminate\Support\Str::studly($module);
+                $nsParts[] = $sliceName;
+                $sliceNamespace = 'App\\Slices\\'.implode('\\', $nsParts);
 
                 // Scaffold child tables associated with this aggregate slice
                 $childTables = $info['child_tables'] ?? [];
@@ -315,6 +531,11 @@ class SlicePortService
                         $this->scaffoldChildTable($sliceDir, $sliceNamespace, $sliceName, $primaryTable, $childTable, $cCols, $multitenant, $tenantKey);
                         $scaffoldedChildren[] = $childTable;
                     }
+                }
+
+                // Enrich slice.yaml with the child models so the manifest describes the full aggregate.
+                if (! empty($scaffoldedChildren)) {
+                    $this->enrichSliceYamlWithChildren($sliceDir, $primaryTable, $scaffoldedChildren, $tables, $multitenant, $tenantKey, $businessLogic[$sliceName] ?? []);
                 }
 
                 $created[$sliceName] = [
@@ -434,6 +655,218 @@ PHP;
 
         File::ensureDirectoryExists($sliceDir . '/Models');
         File::put($sliceDir . "/Models/{$childModelName}.php", $childModelContent);
+    }
+
+    /**
+     * Enrich a ported slice's slice.yaml with its child (aggregate) models so the
+     * manifest describes the full aggregate — not just the root model.
+     */
+    protected function enrichSliceYamlWithChildren(
+        string $sliceDir,
+        string $primaryTable,
+        array $childTables,
+        array $tables,
+        bool $multitenant,
+        string $tenantKey,
+        array $portingNotes = []
+    ): void {
+        $yamlPath = $sliceDir.'/slice.yaml';
+        if (! File::exists($yamlPath)) {
+            return;
+        }
+
+        try {
+            $yaml = \Symfony\Component\Yaml\Yaml::parseFile($yamlPath);
+        } catch (\Throwable) {
+            return;
+        }
+        if (! is_array($yaml)) {
+            return;
+        }
+
+        $existingHandles = [];
+        foreach ($yaml['models'] ?? [] as $m) {
+            $existingHandles[] = $m['handle'] ?? null;
+        }
+
+        $rootHandle = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($primaryTable));
+        $relations = [];
+
+        foreach ($childTables as $childTable) {
+            $childHandle = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($childTable));
+            if (in_array($childHandle, $existingHandles, true)) {
+                continue;
+            }
+
+            $fields = [];
+            $seen = [];
+            foreach ($this->convertColumnsToFields($tables[$childTable]['columns'] ?? []) as $f) {
+                $fn = $f['handle'];
+                if ($fn === 'id' || isset($seen[$fn])) {
+                    continue;
+                }
+                if ($fn === $tenantKey && $multitenant) {
+                    continue;
+                }
+                $seen[$fn] = true;
+                $fields[] = [
+                    'handle' => $fn,
+                    'label' => $f['label'] ?? \Illuminate\Support\Str::headline($fn),
+                    'type' => $f['type'],
+                    'required' => false,
+                ];
+            }
+
+            $fk = \Illuminate\Support\Str::singular($primaryTable).'_id';
+            // Only wire the relation if the FK column actually exists on the child.
+            // Lookup tables (e.g. invoice_statuses with only name/code) are scaffolded
+            // as standalone models but do not belong in this aggregate's manifest.
+            $childFieldHandles = array_column($fields, 'handle');
+            if (! in_array($fk, $childFieldHandles, true)) {
+                continue;
+            }
+
+            $yaml['models'][] = [
+                'handle' => $childHandle,
+                'table' => $childTable,
+                'root' => false,
+                'fields' => $fields,
+                'relations' => [
+                    [
+                        'name' => $rootHandle,
+                        'type' => 'belongsTo',
+                        'model' => $rootHandle,
+                        'foreign_key' => $fk,
+                    ],
+                ],
+            ];
+            $relations[] = [
+                'name' => $childHandle,
+                'type' => 'hasMany',
+                'model' => $childHandle,
+                'foreign_key' => $fk,
+            ];
+        }
+
+        // Attach hasMany relations to the root model.
+        foreach ($yaml['models'] as &$m) {
+            if (($m['handle'] ?? null) === $rootHandle) {
+                $m['relations'] = array_merge($m['relations'] ?? [], $relations);
+                break;
+            }
+        }
+        unset($m);
+
+        // Add porting notes documenting what was NOT portable
+        if (! empty($portingNotes)) {
+            $yaml['porting_notes'] = $portingNotes;
+        }
+
+        File::put($yamlPath, \Symfony\Component\Yaml\Yaml::dump($yaml, 10, 2));
+    }
+
+    /**
+     * Extract tables from the configured SOURCE database connection.
+     * This is the source of truth for projects that don't use migrations.
+     */
+    private function extractTablesFromSourceDatabase(string $connection): array
+    {
+        $tables = [];
+        try {
+            $conn = \Illuminate\Support\Facades\DB::connection($connection);
+            $pdo = $conn->getPdo();
+            $driver = $conn->getDriverName();
+
+            $tableNames = [];
+            if ($driver === 'mysql') {
+                $stmt = $pdo->query('SHOW TABLES');
+                $tableNames = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+            } elseif ($driver === 'pgsql') {
+                $stmt = $pdo->query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
+                $tableNames = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+            } elseif ($driver === 'sqlite') {
+                $stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+                $tableNames = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+            } else {
+                // Portable fallback
+                $tableNames = \Illuminate\Support\Facades\Schema::connection($connection)->getTableListing();
+            }
+
+            foreach ($tableNames as $t) {
+                if (in_array($t, ['migrations', 'failed_jobs', 'personal_access_tokens', 'jobs', 'cache', 'sessions'], true)) {
+                    continue;
+                }
+
+                $cols = [];
+                $fks = [];
+                try {
+                    $rawCols = \Illuminate\Support\Facades\Schema::connection($connection)->getColumns($t);
+                    foreach ($rawCols as $rc) {
+                        $colName = $rc['name'] ?? '';
+                        $cols[] = [
+                            'name' => $colName,
+                            'type' => $rc['type_name'] ?? 'string',
+                        ];
+                        if (str_ends_with($colName, '_id') && ! in_array($colName, ['id', 'uuid', 'tax_id', 'nid'], true)) {
+                            $fks[] = $colName;
+                        }
+                    }
+                } catch (Throwable $e) {}
+
+                $tables[$t] = [
+                    'name' => $t,
+                    'columns' => $cols,
+                    'foreign_keys' => array_values(array_unique($fks)),
+                    'migration' => 'database_live',
+                    'table_source' => 'source_database',
+                ];
+            }
+        } catch (Throwable $e) {}
+
+        return $tables;
+    }
+
+    /**
+     * Reconcile live database tables with migration-parsed tables.
+     * DB is source of truth; migrations provide metadata enrichment.
+     */
+    private function reconcileTableSources(array $dbTables, array $migTables, string $connection): array
+    {
+        $tables = [];
+
+        // Start with DB tables (source of truth)
+        foreach ($dbTables as $name => $dbTable) {
+            $tables[$name] = $dbTable;
+
+            // Enrich with migration metadata if available
+            if (isset($migTables[$name])) {
+                $mig = $migTables[$name];
+                $tables[$name]['migration'] = $mig['migration'] ?? 'database_live';
+                $tables[$name]['table_source'] = 'source_database+migrations';
+
+                // Merge FKs from migrations (more reliable than _id convention)
+                if (! empty($mig['foreign_keys'])) {
+                    $tables[$name]['foreign_keys'] = array_values(array_unique(
+                        array_merge($tables[$name]['foreign_keys'] ?? [], $mig['foreign_keys'])
+                    ));
+                }
+            } else {
+                // Table in DB but not in migrations = manual schema or legacy
+                $tables[$name]['table_source'] = 'source_database_only';
+                $tables[$name]['porting_note'] = 'Table exists in live database but has no migration file. May be legacy or manually created.';
+            }
+        }
+
+        // Tables in migrations but NOT in live DB = pending/dead
+        foreach ($migTables as $name => $migTable) {
+            if (! isset($tables[$name])) {
+                $tables[$name] = $migTable;
+                $tables[$name]['table_source'] = 'migrations_only';
+                $tables[$name]['porting_note'] = 'Table defined in migrations but not found in live database. May be pending migration or dead code.';
+            }
+        }
+
+        return $tables;
     }
 
     private function extractTablesFromMigrations(string $migDir): array
@@ -574,8 +1007,15 @@ PHP;
                 continue;
             }
 
-            // Pivot table detection
-            if (str_contains($tName, '__') || (count($tInfo['foreign_keys']) >= 2 && count($tInfo['columns']) <= 5)) {
+            // Pivot table detection: tenant/audit keys are not relationship FKs,
+            // so a line-item table like invoice_items (invoice_id + company_id)
+            // must not be misclassified as a pivot.
+            $tenantFkPattern = '/^(company_id|tenant_id|organization_id|created_by|updated_by)$/';
+            $relationshipFks = array_values(array_filter(
+                $tInfo['foreign_keys'],
+                fn ($fk) => ! preg_match($tenantFkPattern, $fk)
+            ));
+            if (str_contains($tName, '__') || (count($relationshipFks) >= 2 && count($tInfo['columns']) <= 5)) {
                 $classified['pivots'][$tName] = $tInfo;
                 continue;
             }
@@ -762,6 +1202,30 @@ PHP;
             ];
         }
 
+        // 3b. Surface pivot tables: attach to owning slice via FK affinity, track unmapped ones
+        // (previously pivots were classified but silently dropped from the plan)
+        $unmappedPivots = [];
+        foreach ($classified['pivots'] ?? [] as $pName => $pInfo) {
+            $attached = false;
+            foreach ($pInfo['foreign_keys'] ?? [] as $fk) {
+                $rawBase = preg_replace('/_id$/', '', $fk);
+                $parentBase = Str::studly($rawBase);
+                foreach (array_keys($mapping) as $sName) {
+                    if (strcasecmp($sName, $parentBase) === 0
+                        || strcasecmp($sName, Str::plural($parentBase)) === 0
+                        || strcasecmp(Str::singular($sName), $parentBase) === 0) {
+                        $mapping[$sName]['pivot_tables'][] = $pName;
+                        $attached = true;
+                        break;
+                    }
+                }
+                if ($attached) break;
+            }
+            if (! $attached) {
+                $unmappedPivots[] = $pName;
+            }
+        }
+
         // 4. Sort slices by child count descending (most important core aggregate root first, MasterData last)
         uasort($mapping, function ($a, $b) {
             if (($a['taxonomy'] ?? false) && ! ($b['taxonomy'] ?? false)) return 1;
@@ -769,13 +1233,22 @@ PHP;
             return count($b['child_tables'] ?? []) <=> count($a['child_tables'] ?? []);
         });
 
-        return $mapping;
+        return ['mapping' => $mapping, 'unmapped_pivots' => $unmappedPivots];
     }
 
     private function generateTaxonomySeeders(array $inspection, string $domain): array
     {
         $created = [];
-        $seederDir = app_path("Slices/{$domain}/MasterData/Database/Seeders");
+        // Derive the catalog slice name from the actual mapping (MasterData for
+        // Adjudication, ReferenceData otherwise) instead of hardcoding MasterData.
+        $catalogName = 'MasterData';
+        foreach ($inspection['slice_mapping'] ?? [] as $sName => $info) {
+            if (($info['type'] ?? '') === 'taxonomy_catalog') {
+                $catalogName = $sName;
+                break;
+            }
+        }
+        $seederDir = app_path("Slices/{$domain}/{$catalogName}/Database/Seeders");
         File::ensureDirectoryExists($seederDir);
 
         $className = Str::studly($domain).'MasterDataSeeder';
@@ -1163,6 +1636,9 @@ PHP;
                     'icon' => $icon,
                     'group' => $domain,
                     'route' => Str::slug($domain) . '/' . Str::slug($sliceHandle),
+                    // Akaunting-style: numeric ordering for easy insertion, permission-gated
+                    'order' => $info['nav_order'] ?? 50,
+                    'permission' => Str::snake(Str::singular($sliceName)).'.view',
                 ],
             ];
 
@@ -1188,6 +1664,11 @@ PHP;
     public function generateDomainBlueprintYaml(array $studioSlices, string $domain, array $inspection): string
     {
         $domainData = [
+            // NOTE: This is a PORT ANALYSIS REPORT, not an appliable blueprint.
+            // It documents what slice:port discovered. Per-slice slice.yaml files
+            // (schema v2) are the canonical appliable manifests — validate them
+            // with `php artisan slice:blueprint:validate app/Slices/<Domain>/<Slice>/slice.yaml`.
+            'kind' => 'laraslice-port-analysis-report',
             'schema_version' => 1,
             'domain' => $domain,
             'source_application' => basename($inspection['source_path']),
@@ -1206,18 +1687,268 @@ PHP;
     /**
      * Generate a complete, exportable JSON Architecture Plan and Sidebar Preview.
      */
+    /**
+     * Analyze source system's navigation structure.
+     * Detects how the source groups menu items (dropdowns, order, icons, permissions).
+     */
+    public function analyzeSourceNavigation(string $sourcePath): array
+    {
+        $navigation = [
+            'groups' => [],
+            'source' => 'not_detected',
+        ];
+
+        // Strategy 1: Laravel menu listeners (Akaunting pattern)
+        $menuListeners = [
+            $sourcePath.'/app/Listeners/Menu/ShowInAdmin.php',
+            $sourcePath.'/app/Listeners/Menu/ShowInPortal.php',
+        ];
+
+        foreach ($menuListeners as $listenerFile) {
+            if (! file_exists($listenerFile)) {
+                continue;
+            }
+
+            $content = file_get_contents($listenerFile);
+            $isPortal = str_contains($listenerFile, 'Portal');
+            $groups = $this->parseMenuListener($content);
+
+            if (! empty($groups)) {
+                $navigation['source'] = 'menu_listener';
+                $navigation['groups'] = array_merge(
+                    $navigation['groups'],
+                    array_map(fn($g) => array_merge($g, ['context' => $isPortal ? 'portal' : 'admin']), $groups)
+                );
+            }
+        }
+
+        // Strategy 2: Config-based menu (config/menu.php with items)
+        $configMenu = $sourcePath.'/config/menu.php';
+        if (empty($navigation['groups']) && file_exists($configMenu)) {
+            $groups = $this->parseConfigMenu($configMenu);
+            if (! empty($groups)) {
+                $navigation['source'] = 'config_menu';
+                $navigation['groups'] = $groups;
+            }
+        }
+
+        // Strategy 3: Blade sidebar with hardcoded links
+        if (empty($navigation['groups'])) {
+            $groups = $this->parseBladeNavigation($sourcePath);
+            if (! empty($groups)) {
+                $navigation['source'] = 'blade_templates';
+                $navigation['groups'] = $groups;
+            }
+        }
+
+        return $navigation;
+    }
+
+    /**
+     * Parse Akaunting-style menu listener for navigation groups.
+     */
+    private function parseMenuListener(string $content): array
+    {
+        $groups = [];
+
+        // Match: $menu->route('route.name', $title, [], ORDER, ['icon' => 'xxx'])
+        // Match: $menu->dropdown($title, function..., ORDER, ['icon' => 'xxx'])
+        // Titles are often trans() calls, so we extract the variable assignment above
+
+        // First, extract title assignments: $title = trim(trans_choice('general.xxx', 2));
+        $titles = [];
+        if (preg_match_all("/\\\$title\s*=\s*trim\(\s*trans_choice?\(\s*['\"]([^'\"]+)['\"]/", $content, $tm)) {
+            foreach ($tm[1] as $idx => $transKey) {
+                // Extract the last part: 'general.invoices' -> 'invoices'
+                $parts = explode('.', $transKey);
+                $titles[$idx] = ucfirst(end($parts));
+            }
+        }
+
+        // Match menu items with order and icon
+        // Pattern: $menu->route('xxx', $title, [], ORDER, ['icon' => 'yyy'])
+        if (preg_match_all("/\\\$menu->(route|dropdown)\(\s*['\"]([^'\"]+)['\"]\s*,\s*\\\$title\s*,\s*\[\]\s*,\s*(\d+)\s*,\s*\[[^\]]*'icon'\s*=>\s*['\"]([^'\"]+)['\"]/", $content, $matches, PREG_SET_ORDER)) {
+            $titleIdx = 0;
+            foreach ($matches as $m) {
+                $type = $m[1]; // route or dropdown
+                $route = $m[2];
+                $order = (int) $m[3];
+                $icon = $m[4];
+                $label = $titles[$titleIdx] ?? ucfirst($route);
+                $titleIdx++;
+
+                // Check if it's a dropdown (has sub-items)
+                $children = [];
+                if ($type === 'dropdown') {
+                    // Extract sub-items: $sub->route('xxx', $title, [], ORDER, $attr)
+                    // This is simplified — full parsing would need AST
+                    $children = ['_has_children' => true];
+                }
+
+                $groups[] = [
+                    'label' => $label,
+                    'route' => $route,
+                    'order' => $order,
+                    'icon' => $icon,
+                    'type' => $type,
+                    'children' => $children,
+                ];
+            }
+        }
+
+        // Sort by order
+        usort($groups, fn($a, $b) => $a['order'] <=> $b['order']);
+
+        return $groups;
+    }
+
+    /**
+     * Parse config/menu.php for navigation items.
+     */
+    private function parseConfigMenu(string $configFile): array
+    {
+        $groups = [];
+        try {
+            $config = include $configFile;
+            // Config format varies — try common patterns
+            if (isset($config['items']) && is_array($config['items'])) {
+                foreach ($config['items'] as $idx => $item) {
+                    $groups[] = [
+                        'label' => $item['title'] ?? $item['label'] ?? "Item {$idx}",
+                        'route' => $item['route'] ?? $item['url'] ?? '#',
+                        'order' => $item['order'] ?? ($idx * 10),
+                        'icon' => $item['icon'] ?? 'circle',
+                        'type' => isset($item['children']) ? 'dropdown' : 'route',
+                        'children' => $item['children'] ?? [],
+                    ];
+                }
+            }
+        } catch (Throwable $e) {}
+
+        return $groups;
+    }
+
+    /**
+     * Parse Blade templates for hardcoded navigation.
+     */
+    private function parseBladeNavigation(string $sourcePath): array
+    {
+        $groups = [];
+        $sidebarFiles = [];
+
+        // Find sidebar/nav Blade files
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($sourcePath.'/resources/views', FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            $filename = strtolower($file->getFilename());
+            if (str_contains($filename, 'sidebar') || str_contains($filename, 'nav') || str_contains($filename, 'menu')) {
+                $sidebarFiles[] = $file->getPathname();
+                if (count($sidebarFiles) >= 5) break;
+            }
+        }
+
+        foreach ($sidebarFiles as $file) {
+            $content = file_get_contents($file);
+            // Extract route() calls with surrounding text for labels
+            if (preg_match_all("/route\(\s*['\"]([^'\"]+)['\"]\s*\)/", $content, $m)) {
+                foreach (array_unique($m[1]) as $route) {
+                    // Skip non-navigation routes
+                    if (str_contains($route, 'create') || str_contains($route, 'edit') || str_contains($route, 'destroy')) {
+                        continue;
+                    }
+                    $groups[] = [
+                        'label' => ucfirst(str_replace(['.', '_', '-'], ' ', $route)),
+                        'route' => $route,
+                        'order' => count($groups) * 10,
+                        'icon' => 'circle',
+                        'type' => 'route',
+                        'children' => [],
+                    ];
+                }
+            }
+        }
+
+        return array_slice($groups, 0, 20);
+    }
+
+    /**
+     * Analyze available data sources for porting.
+     * Gives developers the choice: seeders (may be outdated) vs real data (always current).
+     */
+    public function analyzeDataSources(string $sourcePath, array $sliceMapping): array
+    {
+        $sources = [
+            'seeders' => [],
+            'real_data' => [
+                'available' => false,
+                'note' => 'Configure --source-* database options to enable real data porting.',
+            ],
+            'recommendation' => '',
+        ];
+
+        // Check for seeders
+        $seederDir = $sourcePath.'/database/seeders';
+        if (is_dir($seederDir)) {
+            $dataService = app(SliceDataPortService::class);
+            $seederAnalysis = $dataService->analyzeSeeders($sourcePath, $sliceMapping);
+
+            foreach ($seederAnalysis as $className => $info) {
+                $sources['seeders'][] = [
+                    'class' => $className,
+                    'file' => $info['file'],
+                    'tables' => $info['tables'],
+                    'slices' => $info['slices'],
+                    'is_reference_data' => $info['is_reference_data'],
+                    'recommendation' => $info['is_reference_data']
+                        ? 'Safe to auto-import (reference data)'
+                        : 'Review before importing (may contain test data)',
+                ];
+            }
+        }
+
+        // Check if source DB is configured
+        $sourceConn = config('laraslice.porting.source_connection');
+        if ($sourceConn) {
+            try {
+                $conn = \Illuminate\Support\Facades\DB::connection($sourceConn);
+                $conn->getPdo();
+                $sources['real_data'] = [
+                    'available' => true,
+                    'connection' => $sourceConn,
+                    'note' => 'Live database is the source of truth. Always up-to-date.',
+                ];
+            } catch (Throwable $e) {
+                $sources['real_data'] = [
+                    'available' => false,
+                    'note' => 'Source connection configured but unreachable: '.$e->getMessage(),
+                ];
+            }
+        }
+
+        // Recommendation
+        $hasSeeders = ! empty($sources['seeders']);
+        $hasRealData = $sources['real_data']['available'] ?? false;
+
+        if ($hasRealData && $hasSeeders) {
+            $sources['recommendation'] = 'Both available. Use real data for transactional tables (always current). Use seeders for reference data (currencies, roles, etc.) if real data is empty.';
+        } elseif ($hasRealData) {
+            $sources['recommendation'] = 'Real data available. Use it — always up-to-date.';
+        } elseif ($hasSeeders) {
+            $sources['recommendation'] = 'Only seeders available. Review seeder data for freshness before importing.';
+        } else {
+            $sources['recommendation'] = 'No data sources detected. Configure --source-* or add seeders.';
+        }
+
+        return $sources;
+    }
+
     public function generateArchitecturePlan(array $inspection, string $domain = 'ERP'): array
     {
-        // 1. If ERP preset plan file exists, load and enrich with live row counts
-        $examplePlanFile = base_path('docs/porting-architecture-plan.json');
-        if (strtolower($domain) === 'erp' && File::exists($examplePlanFile)) {
-            try {
-                $plan = json_decode(File::get($examplePlanFile), true);
-                if (is_array($plan) && isset($plan['modules'])) {
-                    return $plan;
-                }
-            } catch (Throwable) {}
-        }
+        // NOTE: The static ERP example plan is intentionally NOT auto-loaded here.
+        // The web controller serves example plans explicitly per preset; this method
+        // always generates from the live inspection so plans never masquerade as analysis.
 
         // 2. Dynamic generation for arbitrary legacy projects
         $sliceMapping = $inspection['slice_mapping'] ?? [];
@@ -1369,8 +2100,13 @@ PHP;
                 'title' => "{$domain} Enterprise Navigation",
                 'theme' => 'BlatUI Dashboard-01',
                 'groups' => $sidebarGroups,
+                'source_navigation' => $this->analyzeSourceNavigation($inspection['source_path'] ?? ''),
+                'navigation_note' => 'Source navigation analyzed from menu listeners/config. Compare source grouping with proposed grouping below. Developers can reorder in the porting dialog.',
             ],
             'modules' => $formattedModules,
+            'studio_slices' => $inspection['studio_slices'] ?? [],
+            'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? ''),
+            'data_sources' => $this->analyzeDataSources($inspection['source_path'] ?? '', $sliceMapping),
             'etl_data_pipeline' => [
                 'source_connection' => 'mysql (legacy database)',
                 'target_connection' => 'mysql (current database)',
@@ -1384,7 +2120,7 @@ PHP;
     /**
      * Execute full vertical slice generation and migration directly from a structured Architecture Plan.
      */
-    public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false): array
+    public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false, bool $importAuth = false): array
     {
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
@@ -1423,7 +2159,7 @@ PHP;
                         'ui' => $uiConfig,
                     ];
 
-                    $sliceDir = $generator->generate($sliceName, $fields, false, $options);
+                    $sliceDir = $generator->generate($sliceName, $fields, ! empty($options['ui']), $options);
                     $studlyName = \LaraSlice\Generator\SliceName::canonical($sliceName);
                     $pluralName = Str::plural($studlyName);
                     $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
@@ -1466,6 +2202,7 @@ PHP;
             try {
                 $sourceDb = $plan['source_db'] ?? 'erp';
                 $dataPortService = new SliceDataPortService;
+                $dataPortService->setImportAuth($importAuth);
                 $dataImportResult = $dataPortService->importFromDatabase($sourceDb);
             } catch (\Throwable $e) {
                 $errors['data_import'] = $e->getMessage();
@@ -1484,18 +2221,19 @@ PHP;
 
     /**
      * Query live database row counts for accurate preview badges.
+     *
+     * Uses the configured porting source connection when available, otherwise the
+     * application's default database connection. Never falls back to a different
+     * database silently — counts always reflect the connection actually queried.
      */
-    public function queryDatabaseRowCounts(): array
+    public function queryDatabaseRowCounts(?string $connection = null): array
     {
         $counts = [];
         try {
-            // First check legacy erp database
-            $pdo = null;
-            try {
-                $pdo = new \PDO('mysql:host=127.0.0.1;dbname=erp', 'root', '');
-            } catch (Throwable) {
-                $pdo = \Illuminate\Support\Facades\DB::connection()->getPdo();
-            }
+            $conn = $connection
+                ?? config('laraslice.porting.source_connection')
+                ?? config('database.default');
+            $pdo = \Illuminate\Support\Facades\DB::connection($conn)->getPdo();
 
             if ($pdo) {
                 $stmt = $pdo->query('SHOW TABLES');
@@ -1562,16 +2300,19 @@ PHP;
     }
 
     /**
-     * Get column definitions from database or fallback.
+     * Get column definitions from the configured source database.
      */
-    public function getColumnsForTable(string $table): array
+    public function getColumnsForTable(string $table, ?string $connection = null): array
     {
         $cols = [];
         try {
-            // Check legacy erp database first
-            $pdo = null;
-            try {
-                $pdo = new \PDO('mysql:host=127.0.0.1;dbname=erp', 'root', '');
+            $conn = $connection
+                ?? config('laraslice.porting.source_connection')
+                ?? config('database.default');
+            $pdo = \Illuminate\Support\Facades\DB::connection($conn)->getPdo();
+            $driver = \Illuminate\Support\Facades\DB::connection($conn)->getDriverName();
+
+            if ($driver === 'mysql') {
                 $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
                 $rawCols = $stmt->fetchAll(\PDO::FETCH_ASSOC);
                 foreach ($rawCols as $rc) {
@@ -1581,17 +2322,16 @@ PHP;
                     ];
                 }
                 return $cols;
-            } catch (Throwable) {}
-
-            if (Schema::hasTable($table)) {
-                $raw = Schema::getColumns($table);
-                foreach ($raw as $rc) {
-                    $cols[] = [
-                        'name' => $rc['name'] ?? '',
-                        'type' => $rc['type_name'] ?? 'string',
-                    ];
-                }
             }
+
+            // Portable fallback via the schema builder for non-MySQL drivers.
+            foreach (\Illuminate\Support\Facades\Schema::connection($conn)->getColumns($table) as $sc) {
+                $cols[] = [
+                    'name' => $sc['name'],
+                    'type' => $sc['type_name'] ?? $sc['type'] ?? 'string',
+                ];
+            }
+            return $cols;
         } catch (Throwable) {}
 
         return $cols;
@@ -1673,9 +2413,6 @@ PHP;
                 'description' => "High-density enterprise data table with real-time KPI ribbon and interactive query filters for {$name}.",
                 'stats_ribbon' => [
                     ['label' => "Total {$name}", 'value' => $recordsCount, 'change' => 'Operational records', 'icon' => 'folder', 'color' => 'primary'],
-                    ['label' => 'Active / In Progress', 'value' => (int) ($recordsCount * 0.7), 'change' => 'Standard flow', 'icon' => 'play-circle', 'color' => 'blue'],
-                    ['label' => 'Attention / Pending', 'value' => (int) ($recordsCount * 0.2), 'change' => 'Action required', 'icon' => 'alert-circle', 'color' => 'amber'],
-                    ['label' => 'Completed / Closed', 'value' => (int) ($recordsCount * 0.1), 'change' => 'Archived', 'icon' => 'check-circle', 'color' => 'emerald'],
                 ],
                 'filter_bar' => [
                     'search_placeholder' => "Search {$name} by code, title, or keyword...",
@@ -1833,6 +2570,30 @@ PHP;
             }
         }
 
+        // Add repeater fields for hasMany relations (e.g., invoice line items)
+        foreach ($relations as $rel) {
+            if (($rel['type'] ?? '') === 'hasMany') {
+                $relName = $rel['name'] ?? '';
+                if ($relName) {
+                    $sections[] = [
+                        'key' => 'items_'.$relName,
+                        'title' => \Illuminate\Support\Str::headline($relName),
+                        'grid' => 1,
+                        'fields' => [
+                            [
+                                'handle' => $relName,
+                                'type' => 'repeater',
+                                'label' => \Illuminate\Support\Str::headline($relName),
+                                // Repeater sub-fields will be populated from child table columns
+                                'repeater_fields' => [],
+                                'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
+                            ],
+                        ],
+                    ];
+                }
+            }
+        }
+
         return [
             'presentation' => [
                 'create' => 'drawer',
@@ -1857,6 +2618,601 @@ PHP;
                 'sections' => $sections,
             ],
         ];
+    }
+
+    /**
+     * Build the v1.6.2 canonical `ui:` block from REAL inspected fields.
+     *
+     * Unlike generateDefaultPagesSpecification() which uses hardcoded placeholder
+     * columns, this infers directory columns, formatters, and form sections from
+     * the actual database columns discovered during inspection.
+     *
+     * Formatter inference rules:
+     * - amount/total/price/balance → money_breakdown
+     * - status/state → status_pill
+     * - *_at, date* → date_time
+     * - code/number fields → code_badge
+     * - email → text (with mailto in UI)
+     * - *_id (FK) → text (resolves to related name in UI)
+     */
+    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = []): array
+    {
+        $columns = [];
+        $formFields = [];
+        $quickFilters = [];
+        $sidebarFilters = [];
+        $summaryCards = [];
+        $searchableFields = [];
+
+        foreach ($fields as $f) {
+            $handle = $f['handle'] ?? $f['name'] ?? '';
+            if (in_array($handle, ['id', $tenantKey, 'created_at', 'updated_at', 'deleted_at'], true)) {
+                continue;
+            }
+
+            $label = $f['label'] ?? \Illuminate\Support\Str::headline($handle);
+            $type = $f['type'] ?? 'string';
+            $lower = strtolower($handle);
+
+            // Infer formatter from field name/type
+            $formatter = 'text';
+            $isMoney = str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || $type === 'decimal';
+            $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state';
+            $isDate = str_ends_with($lower, '_at') || str_starts_with($lower, 'date') || in_array($type, ['datetime', 'date', 'timestamp'], true);
+
+            if ($isMoney) {
+                $formatter = 'money_breakdown';
+            } elseif ($isStatus) {
+                $formatter = 'status_pill';
+            } elseif ($isDate) {
+                $formatter = 'date_time';
+            } elseif ($lower === 'code' || str_ends_with($lower, '_code') || $lower === 'invoice_number' || $lower === 'order_number') {
+                $formatter = 'code_badge';
+            } elseif (str_contains($lower, 'email')) {
+                $formatter = 'text'; // UI renders mailto link
+            } elseif (str_contains($lower, 'progress') || str_contains($lower, 'percent')) {
+                $formatter = 'progress_bar';
+            }
+
+            // Directory columns: first 6 meaningful fields
+            if (count($columns) < 6) {
+                $columns[] = [
+                    'handle' => $handle,
+                    'label' => $label,
+                    'formatter' => $formatter,
+                    'sortable' => true,
+                ];
+            }
+
+            // Quick filters: status/enum fields become tab-style quick filters
+            if ($isStatus && count($quickFilters) < 4) {
+                $quickFilters[] = [
+                    'handle' => $handle,
+                    'label' => $label,
+                    'is_searchable' => false,
+                    'options_from' => 'distinct:'.$handle,
+                ];
+            }
+
+            // Sidebar filters: date ranges and FK lookups
+            if ($isDate && count($sidebarFilters) < 2) {
+                $sidebarFilters[] = [
+                    'handle' => $handle,
+                    'label' => $label,
+                    'type' => 'date_range',
+                ];
+            } elseif ((str_ends_with($handle, '_id') || str_ends_with($handle, '_by')) && count($sidebarFilters) < 4) {
+                $sidebarFilters[] = [
+                    'handle' => $handle,
+                    'label' => $label,
+                    'type' => 'select',
+                    'options_from' => 'relation:'.$handle,
+                ];
+            }
+
+            // Summary cards: money fields become KPI cards (like Akaunting's Receivables/Payables)
+            if ($isMoney && count($summaryCards) < 3) {
+                // Avoid "Total Total Amount" when label already contains Total/Amount
+                $cardLabel = preg_match('/\b(total|amount|balance)\b/i', $label) ? $label : 'Total '.$label;
+                $summaryCards[] = [
+                    'handle' => $handle,
+                    'label' => $cardLabel,
+                    'aggregate' => 'sum',
+                    'formatter' => 'money',
+                ];
+            }
+
+            // Searchable: text-like fields
+            if (in_array($type, ['string', 'text'], true) && ! $isStatus && count($searchableFields) < 5) {
+                // Skip long text blobs, IDs, and codes already shown as badges
+                if (! str_contains($lower, 'password') && ! str_contains($lower, 'token') && strlen($handle) < 30) {
+                    $searchableFields[] = $handle;
+                }
+            }
+
+            // Form fields: all fields with smart searchable flags
+            $isSearchable = str_ends_with($handle, '_id') || in_array($handle, ['category_id', 'customer_id', 'user_id', 'company_id', 'contact_id'], true);
+            $formFields[] = [
+                'handle' => $handle,
+                'span' => in_array($type, ['text'], true) ? 2 : 1,
+                'is_searchable' => $isSearchable,
+            ];
+        }
+
+        // Add a count summary card if we have no money fields (every list benefits from a total)
+        if (empty($summaryCards)) {
+            $summaryCards[] = [
+                'handle' => 'id',
+                'label' => 'Total Records',
+                'aggregate' => 'count',
+                'formatter' => 'number',
+            ];
+        }
+
+        // Group form fields into logical sections
+        $sections = [];
+        $currentSection = ['key' => 'general', 'title' => 'General Information', 'grid' => 2, 'fields' => []];
+        foreach ($formFields as $ff) {
+            $currentSection['fields'][] = $ff;
+            // Start new section every 6 fields for readability
+            if (count($currentSection['fields']) >= 6) {
+                $sections[] = $currentSection;
+                $currentSection = ['key' => 'additional_'.count($sections), 'title' => 'Additional Details', 'grid' => 2, 'fields' => []];
+            }
+        }
+        if (! empty($currentSection['fields'])) {
+            $sections[] = $currentSection;
+        }
+
+        // Add repeater fields for hasMany relations (e.g., invoice line items)
+        foreach ($relations as $rel) {
+            if (($rel['type'] ?? '') === 'hasMany') {
+                $relName = $rel['name'] ?? '';
+                if ($relName) {
+                    $sections[] = [
+                        'key' => 'items_'.$relName,
+                        'title' => \Illuminate\Support\Str::headline($relName),
+                        'grid' => 1,
+                        'fields' => [
+                            [
+                                'handle' => $relName,
+                                'type' => 'repeater',
+                                'label' => \Illuminate\Support\Str::headline($relName),
+                                // Repeater sub-fields will be populated from child table columns
+                                'repeater_fields' => [],
+                                'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
+                            ],
+                        ],
+                    ];
+                }
+            }
+        }
+
+        return [
+            'presentation' => [
+                'create' => 'drawer',
+                'edit' => 'drawer',
+            ],
+            'directory' => [
+                'columns' => $columns,
+                'searchable' => $searchableFields,
+                'search_placeholder' => 'Search '.strtolower($sliceName).'...',
+                'quick_filters' => $quickFilters,
+                'sidebar_filters' => $sidebarFilters,
+                'summary_cards' => $summaryCards,
+                'bulk_actions' => ['delete', 'export'],
+                'row_actions' => [
+                    'display' => 'dropdown',
+                    'items' => [
+                        ['handle' => 'view', 'label' => 'View', 'icon' => 'eye', 'placement' => 'inline'],
+                        ['handle' => 'edit', 'label' => 'Edit', 'icon' => 'pencil', 'placement' => 'dropdown'],
+                        ['handle' => 'delete', 'label' => 'Delete', 'icon' => 'trash-2', 'placement' => 'dropdown', 'danger' => true],
+                    ],
+                ],
+            ],
+            'forms' => [
+                'sections' => $sections,
+            ],
+        ];
+    }
+
+    /**
+     * Detect dead tables — tables with no active Eloquent model in the source.
+     *
+     * Legacy systems often have v1 tables that are no longer used (e.g., Akaunting's
+     * 2017 `invoices` tables vs the live `documents` table). Porting dead tables
+     * as features misleads developers.
+     *
+     * @return array List of dead table names
+     */
+    public function detectDeadTables(array $tables, string $sourcePath): array
+    {
+        $dead = [];
+        $modelsDir = $sourcePath.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Models';
+
+        if (! \Illuminate\Support\Facades\File::isDirectory($modelsDir)) {
+            return [];
+        }
+
+        // Collect all model table names from source
+        $activeTables = [];
+        foreach (glob($modelsDir.DIRECTORY_SEPARATOR.'*.php') as $modelFile) {
+            $content = @file_get_contents($modelFile);
+            if ($content && preg_match("/protected\s+\\\$table\s*=\s*['\"]([^'\"]+)['\"]/", $content, $m)) {
+                $activeTables[] = $m[1];
+            } else {
+                // Infer from class name (e.g., Document.php → documents)
+                $base = basename($modelFile, '.php');
+                $activeTables[] = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($base));
+            }
+        }
+
+        // Also check Models subdirectories
+        foreach (glob($modelsDir.DIRECTORY_SEPARATOR.'*'.DIRECTORY_SEPARATOR.'*.php') as $modelFile) {
+            $content = @file_get_contents($modelFile);
+            if ($content && preg_match("/protected\s+\\\$table\s*=\s*['\"]([^'\"]+)['\"]/", $content, $m)) {
+                $activeTables[] = $m[1];
+            }
+        }
+
+        foreach (array_keys($tables) as $table) {
+            if (! in_array($table, $activeTables, true)) {
+                $dead[] = $table;
+            }
+        }
+
+        return $dead;
+    }
+
+    /**
+     * Detect business logic in source controllers — non-CRUD methods that
+     * need manual implementation.
+     *
+     * @return array Map of slice name → list of porting notes
+     */
+    public function detectBusinessLogic(string $sourcePath, array $sliceMapping): array
+    {
+        $notes = [];
+        $controllersDir = $sourcePath.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers';
+
+        if (! \Illuminate\Support\Facades\File::isDirectory($controllersDir)) {
+            return [];
+        }
+
+        $crudMethods = ['index', 'create', 'store', 'show', 'edit', 'update', 'destroy', '__construct'];
+
+        foreach ($sliceMapping as $sliceName => $info) {
+            $sliceNotes = [];
+            $primaryTable = $info['primary_table'] ?? '';
+
+            // Find controller files that might relate to this slice
+            $searchTerms = [strtolower($sliceName), str_replace('_', '', strtolower($primaryTable))];
+
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($controllersDir)) as $file) {
+                if ($file->isDir() || $file->getExtension() !== 'php') {
+                    continue;
+                }
+
+                $filename = strtolower($file->getFilename());
+                $matched = false;
+                foreach ($searchTerms as $term) {
+                    if (str_contains($filename, $term)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if (! $matched) {
+                    continue;
+                }
+
+                $content = @file_get_contents($file->getPathname());
+                if (! $content) {
+                    continue;
+                }
+
+                // Find public methods that aren't CRUD
+                preg_match_all('/public\s+function\s+(\w+)\s*\(/', $content, $matches);
+                foreach ($matches[1] as $method) {
+                    if (! in_array($method, $crudMethods, true)) {
+                        $sliceNotes[] = "Source controller ".basename($file->getPathname())." has custom method `{$method}()` — implement manually in {$sliceName}Service";
+                    }
+                }
+
+                // Detect common business patterns
+                if (str_contains($content, 'PDF') || str_contains($content, 'dompdf') || str_contains($content, '->pdf(')) {
+                    $sliceNotes[] = "Source generates PDF documents — implement PDF generation manually";
+                }
+                if (preg_match('/Mail::|->mail\(|Mailable/', $content)) {
+                    $sliceNotes[] = "Source sends emails — implement mail integration manually";
+                }
+                if (str_contains($content, 'Stripe') || str_contains($content, 'PayPal') || str_contains($content, 'gateway')) {
+                    $sliceNotes[] = "Source integrates payment gateways — implement payment integration manually";
+                }
+            }
+
+            if (! empty($sliceNotes)) {
+                $notes[$sliceName] = array_unique($sliceNotes);
+            }
+        }
+
+        return $notes;
+    }
+
+    /**
+     * Analyze source UI templates for a table — extract form fields, columns, and structure.
+     *
+     * Looks for Blade/Vue templates related to the table and extracts:
+     * - Form field names from x-form components
+     * - Table columns from index views
+     * - Section grouping from component structure
+     *
+     * @return array UI structure with fields, sections, and detected patterns
+     */
+    public function analyzeSourceUi(string $sourcePath, string $table): array
+    {        $viewsDir = $sourcePath.DIRECTORY_SEPARATOR.'resources'.DIRECTORY_SEPARATOR.'views';
+        if (! \Illuminate\Support\Facades\File::isDirectory($viewsDir)) {
+            return ['fields' => [], 'sections' => [], 'has_modals' => false];
+        }
+
+        $singular = \Illuminate\Support\Str::singular($table);
+        $fields = [];
+        $sections = [];
+        $hasModals = false;
+
+        // Search for view files related to this table
+        $patterns = [$table, $singular, str_replace('_', '-', $table)];
+
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($viewsDir)) as $file) {
+            if ($file->isDir()) {
+                continue;
+            }
+            // getExtension() returns 'php' for 'file.blade.php', so check the full filename
+            if (! str_ends_with($file->getFilename(), '.blade.php')) {
+                continue;
+            }
+
+            $path = strtolower($file->getPathname());
+            $matched = false;
+            foreach ($patterns as $pattern) {
+                // Match table name in path segments (e.g., /documents/, /document-, components/documents/)
+                if (str_contains($path, '/'.$pattern.'/') || str_contains($path, '/'.$pattern.'-') || str_contains($path, '/'.$pattern.'.')) {
+                    $matched = true;
+                    break;
+                }
+            }
+            if (! $matched) {
+                continue;
+            }
+
+            $content = @file_get_contents($file->getPathname());
+            if (! $content) {
+                continue;
+            }
+
+            // Extract form field names from x-form components
+            preg_match_all('/x-form\.[a-z.]+\s+[^>]*name="([^"]+)"/', $content, $fieldMatches);
+            foreach ($fieldMatches[1] as $fieldName) {
+                if (! in_array($fieldName, $fields, true) && ! str_starts_with($fieldName, '_')) {
+                    $fields[] = $fieldName;
+                }
+            }
+
+            // Detect modals
+            if (str_contains($path, 'modal') || str_contains($content, 'x-modal')) {
+                $hasModals = true;
+            }
+
+            // Detect section structure from component names
+            if (preg_match('/components\/'.preg_quote($singular, '/').'\/form\/(\w+)/', $path, $m)) {
+                $section = $m[1];
+                if (! in_array($section, $sections, true)) {
+                    $sections[] = $section;
+                }
+            }
+        }
+
+        return [
+            'fields' => array_slice($fields, 0, 30), // Limit to 30 fields
+            'sections' => $sections,
+            'has_modals' => $hasModals,
+            'field_count' => count($fields),
+        ];
+    }
+
+    /**
+     * Detect workflow state machines in source controllers.
+     *
+     * Looks for `mark*` methods (e.g., markSent, markCancelled, markPaid) which
+     * indicate state transitions. Also detects status column values from
+     * language files or constants.
+     *
+     * @return array Map of slice name → workflow definition with states and transitions
+     */
+    public function detectWorkflows(string $sourcePath, array $sliceMapping): array
+    {
+        $workflows = [];
+        $controllersDir = $sourcePath.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers';
+
+        if (! \Illuminate\Support\Facades\File::isDirectory($controllersDir)) {
+            return [];
+        }
+
+        foreach ($sliceMapping as $sliceName => $info) {
+            $primaryTable = $info['primary_table'] ?? '';
+            $searchTerms = [strtolower($sliceName), str_replace('_', '', strtolower($primaryTable))];
+
+            $transitions = [];
+            $states = [];
+
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($controllersDir)) as $file) {
+                if ($file->isDir() || ! str_ends_with($file->getFilename(), '.php')) {
+                    continue;
+                }
+
+                $filename = strtolower($file->getFilename());
+                $matched = false;
+                foreach ($searchTerms as $term) {
+                    if (str_contains($filename, $term)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if (! $matched) {
+                    continue;
+                }
+
+                $content = @file_get_contents($file->getPathname());
+                if (! $content) {
+                    continue;
+                }
+
+                // Find mark* methods (markSent, markCancelled, markPaid, etc.)
+                preg_match_all('/public\s+function\s+(mark\w+)\s*\(/', $content, $matches);
+                foreach ($matches[1] as $method) {
+                    // Convert markSent → sent, markCancelled → cancelled
+                    $targetState = strtolower(preg_replace('/^mark/', '', $method));
+                    $transitions[] = [
+                        'name' => $method,
+                        'label' => \Illuminate\Support\Str::headline($method),
+                        'to_state' => $targetState,
+                    ];
+                    if (! in_array($targetState, $states, true)) {
+                        $states[] = $targetState;
+                    }
+                }
+
+                // Also look for status transitions in events
+                preg_match_all('/Document(\w+)\(/', $content, $eventMatches);
+                foreach ($eventMatches[1] as $event) {
+                    if (str_starts_with($event, 'Marked')) {
+                        $state = strtolower(substr($event, 6));
+                        if (! in_array($state, $states, true)) {
+                            $states[] = $state;
+                        }
+                    }
+                }
+            }
+
+            if (! empty($transitions)) {
+                // Always include draft as the initial state
+                if (! in_array('draft', $states, true)) {
+                    array_unshift($states, 'draft');
+                }
+                $workflows[$sliceName] = [
+                    'states' => $states,
+                    'transitions' => $transitions,
+                    'initial_state' => 'draft',
+                ];
+            }
+        }
+
+        return $workflows;
+    }
+
+    /**
+     * Analyze user journeys in the source system.
+     *
+     * Identifies the key personas and their workflows:
+     * - Onboarding: How new users get started (wizard, setup steps)
+     * - End user: Daily workflows (create invoice → send → get paid)
+     * - Admin: System management (users, settings, reports)
+     * - Client/Portal: External user journeys (view invoice → pay)
+     *
+     * @return array Map of journey name → steps with slice mapping
+     */
+    public function analyzeUserJourneys(string $sourcePath): array
+    {
+        $journeys = [];
+
+        // 1. Onboarding journey - look for Wizard controllers
+        $wizardDir = $sourcePath.'/app/Http/Controllers/Wizard';
+        if (is_dir($wizardDir)) {
+            $steps = [];
+            foreach (glob($wizardDir.'/*.php') as $file) {
+                $base = basename($file, '.php');
+                $steps[] = [
+                    'step' => \Illuminate\Support\Str::headline($base),
+                    'controller' => $base,
+                ];
+            }
+            if (! empty($steps)) {
+                $journeys['onboarding'] = [
+                    'name' => 'New User Onboarding',
+                    'persona' => 'end_user',
+                    'description' => 'First-time setup wizard for new companies',
+                    'steps' => $steps,
+                ];
+            }
+        }
+
+        // 2. Client/Portal journey - external users
+        $portalDir = $sourcePath.'/app/Http/Controllers/Portal';
+        if (is_dir($portalDir)) {
+            $steps = [];
+            foreach (glob($portalDir.'/*.php') as $file) {
+                $base = basename($file, '.php');
+                $steps[] = [
+                    'step' => \Illuminate\Support\Str::headline($base),
+                    'controller' => 'Portal\\'.$base,
+                ];
+            }
+            if (! empty($steps)) {
+                $journeys['client_portal'] = [
+                    'name' => 'Client Portal Journey',
+                    'persona' => 'client',
+                    'description' => 'External client workflow: view invoices, make payments',
+                    'steps' => $steps,
+                ];
+            }
+        }
+
+        // 3. End user core workflows - from main controllers
+        $coreFlows = [];
+        $salesDir = $sourcePath.'/app/Http/Controllers/Sales';
+        if (is_dir($salesDir)) {
+            // Invoice lifecycle: create → send → paid
+            $coreFlows[] = [
+                'name' => 'Invoice to Cash',
+                'steps' => [
+                    ['step' => 'Create Invoice', 'slice' => 'Invoices', 'action' => 'create'],
+                    ['step' => 'Send to Client', 'slice' => 'Invoices', 'action' => 'email'],
+                    ['step' => 'Client Views', 'slice' => 'Portal', 'action' => 'view'],
+                    ['step' => 'Record Payment', 'slice' => 'Invoices', 'action' => 'add_payment'],
+                ],
+            ];
+        }
+        $bankingDir = $sourcePath.'/app/Http/Controllers/Banking';
+        if (is_dir($bankingDir)) {
+            $coreFlows[] = [
+                'name' => 'Bank Reconciliation',
+                'steps' => [
+                    ['step' => 'Import Transactions', 'slice' => 'Accounts', 'action' => 'import'],
+                    ['step' => 'Match & Reconcile', 'slice' => 'Reconciliations', 'action' => 'reconcile'],
+                    ['step' => 'Review Reports', 'slice' => 'Reports', 'action' => 'view'],
+                ],
+            ];
+        }
+        if (! empty($coreFlows)) {
+            $journeys['core_workflows'] = [
+                'name' => 'Core Business Workflows',
+                'persona' => 'end_user',
+                'description' => 'Daily operational workflows',
+                'flows' => $coreFlows,
+            ];
+        }
+
+        // 4. Admin journey
+        $settingsDir = $sourcePath.'/app/Http/Controllers/Settings';
+        if (is_dir($settingsDir)) {
+            $journeys['admin'] = [
+                'name' => 'System Administration',
+                'persona' => 'admin',
+                'description' => 'Manage users, roles, settings, and system configuration',
+                'areas' => ['User Management', 'Role & Permissions', 'System Settings', 'Email Templates', 'Tax Configuration'],
+            ];
+        }
+
+        return $journeys;
     }
 
 }

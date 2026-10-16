@@ -104,8 +104,8 @@ trait HasSlicePermissions
      */
     public function hasPermission(string $permissionSlug): bool
     {
-        // Super-admin possesses all permissions by default
-        if ($this->hasRole('super-admin')) {
+        // Super-dev and super-admin possess all permissions by default
+        if ($this->hasRole(['super-admin', 'super-dev'])) {
             return true;
         }
 
@@ -137,7 +137,7 @@ trait HasSlicePermissions
         }
 
         try {
-            if ($this->hasRole('super-admin')) {
+            if ($this->hasRole(['super-admin', 'super-dev'])) {
                 return $this->slicePermissions = Permission::all();
             }
 

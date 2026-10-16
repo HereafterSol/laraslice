@@ -16,7 +16,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <button type="button" @click="loadPortedToStudio()" class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer shadow-xs" title="Load entire ported suite directly into Studio canvas">
+                <button type="button" @click="loadPortedToStudio()" :disabled="!portPlanData && !portInspectionData" :class="(!portPlanData && !portInspectionData) ? 'opacity-40 cursor-not-allowed' : ''" class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer shadow-xs disabled:hover:bg-emerald-500/10" title="Load entire ported suite directly into Studio canvas (requires an analyzed plan)">
                     <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                     <span>📥 Load into Studio</span>
                 </button>
@@ -24,6 +24,18 @@
                     <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
+        </div>
+
+        <!-- Inline error banner (replaces blocking alert() popups) -->
+        <div x-show="portError" x-transition class="flex items-start gap-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-600 dark:text-rose-400">
+            <span class="text-sm leading-none mt-0.5">⚠️</span>
+            <div class="flex-1">
+                <p class="font-bold">Porting action failed</p>
+                <p x-text="portError" class="mt-0.5 opacity-90"></p>
+            </div>
+            <button type="button" @click="portError = ''" class="rounded-md p-1 hover:bg-rose-500/20 transition cursor-pointer" title="Dismiss">
+                <span class="text-sm leading-none">✕</span>
+            </button>
         </div>
 
         <!-- Step 1: Preset & Source Selection -->
@@ -65,6 +77,9 @@
                 <button type="button" @click="portActiveTab = 'vsa'" :class="portActiveTab === 'vsa' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
                     <span>🏗️ VSA Domain Architecture</span>
                 </button>
+                <button type="button" @click="portActiveTab = 'journeys'" :class="portActiveTab === 'journeys' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
+                    <span>🧭 User Journeys</span>
+                </button>
                 <button type="button" @click="portActiveTab = 'pages'" :class="portActiveTab === 'pages' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
                     <span>📄 Page & UI Architecture</span>
                 </button>
@@ -73,6 +88,9 @@
                 </button>
                 <button type="button" @click="portActiveTab = 'etl'" :class="portActiveTab === 'etl' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
                     <span>⚡ ETL Data Pipeline</span>
+                </button>
+                <button type="button" @click="portActiveTab = 'datasources'" :class="portActiveTab === 'datasources' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
+                    <span>💾 Data Sources</span>
                 </button>
                 <button type="button" @click="portActiveTab = 'log'" :class="portActiveTab === 'log' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="px-3 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1.5">
                     <span>📜 Execution Terminal</span>
@@ -88,8 +106,52 @@
             </div>
         </div>
 
+        <!-- Step-by-step Developer Guidance -->
+        <div x-show="portPlanData" class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <p class="font-bold text-sm text-foreground mb-2">🧭 Recommended Porting Workflow</p>
+            <ol class="space-y-1.5 text-xs text-muted-foreground">
+                <li class="flex gap-2">
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 text-[10px] font-bold flex items-center justify-center">1</span>
+                    <span><strong class="text-foreground">Review User Journeys</strong> — Check the 🧭 User Journeys tab to understand how end users, admins, and clients flow through the system. This is the most important part.</span>
+                </li>
+                <li class="flex gap-2">
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 text-[10px] font-bold flex items-center justify-center">2</span>
+                    <span><strong class="text-foreground">Inspect VSA Architecture</strong> — Review the 🏗️ tab to see how tables map to slices. Check for dead tables (v1 legacy) that should be skipped.</span>
+                </li>
+                <li class="flex gap-2">
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 text-[10px] font-bold flex items-center justify-center">3</span>
+                    <span><strong class="text-foreground">Review Page & UI</strong> — Check the 📄 tab to see the generated <code class="bg-muted px-1 rounded">ui:</code> schema with real columns and formatters.</span>
+                </li>
+                <li class="flex gap-2">
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 text-[10px] font-bold flex items-center justify-center">4</span>
+                    <span><strong class="text-foreground">Load into Blueprint Studio</strong> — Click "Load into Studio" to visualize and customize the slices before scaffolding.</span>
+                </li>
+                <li class="flex gap-2">
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 text-[10px] font-bold flex items-center justify-center">5</span>
+                    <span><strong class="text-foreground">Execute Porting</strong> — Run the scaffold, then check <code class="bg-muted px-1 rounded">porting_notes</code> in each slice.yaml for manual tasks (PDF, email, gateways).</span>
+                </li>
+            </ol>
+        </div>
+
         <!-- Tab 1: Live Sidebar & Navigation Preview -->
         <div x-show="portActiveTab === 'sidebar'" class="space-y-4">
+            <!-- Source Navigation Comparison -->
+            <div x-show="portPlanData?.sidebar_preview?.source_navigation?.groups?.length" class="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+                <p class="font-bold text-sm text-foreground mb-1">🔍 Source Navigation Detected</p>
+                <p class="text-xs text-muted-foreground mb-2">
+                    Found in: <code class="font-mono text-indigo-400" x-text="portPlanData.sidebar_preview.source_navigation.source"></code>.
+                    Compare how the source groups navigation vs our proposed VSA grouping below.
+                </p>
+                <div class="flex flex-wrap gap-1.5">
+                    <template x-for="(nav, nIdx) in (portPlanData.sidebar_preview.source_navigation.groups || [])" :key="nIdx">
+                        <span class="rounded-full bg-indigo-500/10 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 border border-indigo-500/20" x-text="nav.label + ' (' + nav.order + ')'"></span>
+                    </template>
+                </div>
+                <p class="text-[11px] text-muted-foreground mt-2 italic" x-text="portPlanData?.sidebar_preview?.navigation_note"></p>
+            </div>
+            <div x-show="portPlanData && !(portPlanData?.sidebar_preview?.source_navigation?.groups?.length)" class="rounded-xl border border-dashed border-border p-3 text-center text-[11px] text-muted-foreground">
+                Source navigation not detected. Proposed grouping below is auto-generated from slice mapping. You can reorder groups in Slice Studio after scaffolding.
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
                 <!-- Left Pane: Rendered BlatUI Sidebar Shell -->
                 <div class="md:col-span-5 rounded-xl border border-border bg-slate-950 p-4 text-slate-100 shadow-inner flex flex-col h-[420px]">
@@ -101,12 +163,16 @@
                         <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-mono text-slate-400">BlatUI Shell</span>
                     </div>
 
-                    <!-- Scrollable Menu Groups -->
+                    <!-- Scrollable Menu Groups (reorderable) -->
                     <div class="space-y-3.5 overflow-y-auto pr-1 text-xs">
                         <template x-for="(group, gIdx) in (portPlanData?.sidebar_preview?.groups || [])" :key="gIdx">
-                            <div class="space-y-1">
+                            <div class="space-y-1 rounded-lg border border-transparent hover:border-slate-700/50 p-1">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 flex items-center justify-between">
-                                    <span x-text="group.name"></span>
+                                    <span class="flex items-center gap-1.5">
+                                        <button type="button" @click="moveSidebarGroup(gIdx, -1)" :disabled="gIdx === 0" class="text-slate-500 hover:text-white disabled:opacity-30 text-xs" title="Move group up">▲</button>
+                                        <button type="button" @click="moveSidebarGroup(gIdx, 1)" :disabled="gIdx === (portPlanData.sidebar_preview.groups.length - 1)" class="text-slate-500 hover:text-white disabled:opacity-30 text-xs" title="Move group down">▼</button>
+                                        <span x-text="group.name"></span>
+                                    </span>
                                     <span x-show="group.collapsible" class="text-[9px] text-slate-600">▾</span>
                                 </div>
                                 <div class="space-y-0.5">
@@ -123,16 +189,23 @@
                             </div>
                         </template>
                     </div>
+                    <div class="border-t border-slate-800 pt-2 mt-2">
+                        <p class="text-[10px] text-slate-500">💡 Use ▲▼ to reorder groups. Changes apply when you load into Blueprint Studio.</p>
+                    </div>
                 </div>
 
                 <!-- Right Pane: Architecture Explanation & Tab Details -->
                 <div class="md:col-span-7 rounded-xl border border-border bg-card p-4 space-y-3 h-[420px] overflow-y-auto">
                     <h4 class="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                         <span>Clean Navigation Architecture vs. Legacy Clutter</span>
-                        <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-500">100% Usable Replica</span>
+                        <span x-show="!portPlanData" class="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">EXAMPLE PREVIEW</span>
+                        <span x-show="portPlanData" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-500">LIVE ANALYSIS</span>
                     </h4>
-                    <p class="text-xs text-muted-foreground leading-relaxed">
-                        In the legacy system, 358 tables created 101 raw sidebar items with 23 isolated settings tables under Administration. In LaraSlice VSA, all entities are grouped into bounded business contexts with tabbed views.
+                    <p x-show="!portPlanData" class="text-xs text-muted-foreground leading-relaxed">
+                        <span class="font-bold text-amber-600 dark:text-amber-400">Example — not your data.</span>
+                        In the legacy system, 358 tables created 101 raw sidebar items with 23 isolated settings tables under Administration. In LaraSlice VSA, all entities are grouped into bounded business contexts with tabbed views. Run <span class="font-bold">🔍 Analyze</span> against your source to see your real architecture here.
+                    </p>
+                    <p x-show="portPlanData" class="text-xs text-muted-foreground leading-relaxed" x-text="'Analyzed ' + (portPlanData.summary?.total_legacy_tables || 0) + ' legacy tables → ' + (portPlanData.summary?.total_canonical_slices || 0) + ' canonical slices across ' + (portPlanData.summary?.total_modules || 0) + ' modules.'">
                     </p>
 
                     <!-- Feature Highlights Grid -->
@@ -168,6 +241,10 @@
 
         <!-- Tab 2: VSA Domain Architecture -->
         <div x-show="portActiveTab === 'vsa'" class="space-y-3">
+            <div x-show="!portPlanData" class="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                <p class="font-semibold text-foreground text-sm">No domain architecture yet</p>
+                <p class="mt-1">Click <span class="font-bold">🔍 Analyze</span> to reverse-engineer the legacy schema into bounded modules and slices.</p>
+            </div>
             <div class="max-h-[420px] overflow-y-auto space-y-3 pr-1">
                 <template x-for="(mod, mIdx) in (portPlanData?.modules || [])" :key="mIdx">
                     <div class="rounded-xl border border-border bg-card p-3.5 space-y-2.5">
@@ -198,8 +275,66 @@
             </div>
         </div>
 
+        <!-- Tab: User Journeys (Persona-based Workflow Analysis) -->
+        <div x-show="portActiveTab === 'journeys'" class="space-y-4">
+            <div x-show="!portPlanData" class="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                <p class="font-semibold text-foreground mb-1">No analysis yet</p>
+                <p>Click <span class="font-bold text-primary">Analyze</span> to detect user journeys from the source system.</p>
+                <p class="mt-2 text-[11px]">Journeys show how different personas (end users, admins, clients) flow through the system — the most important part of porting.</p>
+            </div>
+            <div x-show="portPlanData?.journeys" class="space-y-3">
+                <template x-for="(journey, key) in (portPlanData.journeys || {})" :key="key">
+                    <div class="rounded-xl border border-border bg-card p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-lg" x-text="journey.persona === 'admin' ? '👑' : journey.persona === 'client' ? '🤝' : '👤'"></span>
+                            <div>
+                                <p class="font-bold text-sm text-foreground" x-text="journey.name"></p>
+                                <p class="text-[11px] text-muted-foreground" x-text="journey.description"></p>
+                            </div>
+                            <span class="ml-auto rounded-full bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5" x-text="journey.persona"></span>
+                        </div>
+                        <template x-if="journey.steps">
+                            <div class="flex items-center gap-1 flex-wrap mt-2">
+                                <template x-for="(step, idx) in journey.steps" :key="idx">
+                                    <div class="flex items-center gap-1">
+                                        <span class="rounded-lg bg-muted px-2 py-1 text-[11px] font-medium" x-text="step.step"></span>
+                                        <span x-show="idx < journey.steps.length - 1" class="text-muted-foreground">→</span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="journey.flows">
+                            <div class="space-y-2 mt-2">
+                                <template x-for="flow in journey.flows" :key="flow.name">
+                                    <div class="rounded-lg bg-muted/50 p-2">
+                                        <p class="text-[11px] font-bold text-foreground mb-1" x-text="flow.name"></p>
+                                        <div class="flex items-center gap-1 flex-wrap">
+                                            <template x-for="(step, idx) in flow.steps" :key="idx">
+                                                <div class="flex items-center gap-1">
+                                                    <span class="rounded bg-background border border-border px-1.5 py-0.5 text-[10px]" x-text="step.step"></span>
+                                                    <span x-show="idx < flow.steps.length - 1" class="text-muted-foreground text-[10px]">→</span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div x-show="portPlanData && !portPlanData.journeys" class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs">
+                <p class="font-semibold text-amber-600 mb-1">No journeys detected</p>
+                <p class="text-muted-foreground">The source system may not have a Wizard or Portal structure. Journeys help developers understand user workflows before porting.</p>
+            </div>
+        </div>
+
         <!-- Tab 3: Page & UI Architecture (Step-by-Step UI Porting) -->
         <div x-show="portActiveTab === 'pages'" class="space-y-4">
+            <div x-show="!portPlanData" class="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                <p class="font-semibold text-foreground text-sm">No page architecture yet</p>
+                <p class="mt-1">Click <span class="font-bold">🔍 Analyze</span> to generate the per-slice page specifications (index, forms, workflows).</p>
+            </div>
             <!-- Top Bar: Methodology Step Indicator -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-2.5">
                 <template x-for="st in (portPlanData?.page_architecture_guide?.steps || [
@@ -801,12 +936,16 @@
 
         <!-- Tab 5: ETL Data Pipeline -->
         <div x-show="portActiveTab === 'etl'" class="space-y-3">
-            <div class="flex items-center justify-between text-xs text-muted-foreground">
+            <div x-show="!portPlanData" class="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                <p class="font-semibold text-foreground text-sm">No ETL preview yet</p>
+                <p class="mt-1">Choose a preset or source path and click <span class="font-bold">🔍 Analyze</span> to detect record counts and build the migration pipeline.</p>
+            </div>
+            <div x-show="portPlanData" class="flex items-center justify-between text-xs text-muted-foreground">
                 <div>
-                    <span>Streaming relational records from legacy <code class="text-primary font-mono text-[11px]">erp</code> database</span>
+                    <span>Streaming relational records from legacy <code class="text-primary font-mono text-[11px]" x-text="portPlanData.domain || 'legacy'"></code> database</span>
                     <span class="text-[10px] text-muted-foreground block">Foreign keys toggled, auto-increments preserved, chunked in batches of 250</span>
                 </div>
-                <span class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-500">15,664 Records Detected</span>
+                <span class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-500" x-text="(portPlanData.summary?.total_records_detected || 0).toLocaleString() + ' Records Detected'"></span>
             </div>
             <div class="max-h-[380px] overflow-y-auto rounded-xl border border-border text-xs">
                 <table class="w-full text-left">
@@ -832,6 +971,59 @@
             </div>
         </div>
 
+        <!-- Tab: Data Sources (Seeder vs Real Data) -->
+        <div x-show="portActiveTab === 'datasources'" class="space-y-3">
+            <div x-show="!portPlanData" class="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                <p class="font-semibold text-foreground text-sm">No data sources analyzed yet</p>
+                <p class="mt-1">Choose a preset or source path and click <span class="font-bold">🔍 Analyze</span> to detect seeders and database availability.</p>
+            </div>
+            <div x-show="portPlanData" class="space-y-3">
+                <div class="rounded-xl border border-border p-4 bg-muted/20">
+                    <p class="font-bold text-sm text-foreground mb-1">💡 Recommendation</p>
+                    <p class="text-xs text-muted-foreground" x-text="portPlanData?.data_sources?.recommendation || 'Analyze to get recommendation.'"></p>
+                </div>
+
+                <!-- Real Data Option -->
+                <div class="rounded-xl border border-border p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="font-bold text-sm text-foreground">🗄️ Real Data (Live Database)</p>
+                        <span x-show="portPlanData?.data_sources?.real_data?.available" class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-500">Available</span>
+                        <span x-show="!portPlanData?.data_sources?.real_data?.available" class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-500">Not configured</span>
+                    </div>
+                    <p class="text-xs text-muted-foreground" x-text="portPlanData?.data_sources?.real_data?.note || ''"></p>
+                    <p class="text-[11px] text-muted-foreground mt-1">✅ Always up-to-date &nbsp;✅ Real relationships &nbsp;✅ Production data volume</p>
+                </div>
+
+                <!-- Seeders Option -->
+                <div class="rounded-xl border border-border p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="font-bold text-sm text-foreground">🌱 Seeders (Source Seed Files)</p>
+                        <span class="rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs font-bold text-indigo-400" x-text="(portPlanData?.data_sources?.seeders?.length || 0) + ' found'"></span>
+                    </div>
+                    <p class="text-[11px] text-amber-400 mb-2">⚠️ Seeders may be outdated. Database is always current.</p>
+                    <div class="max-h-[200px] overflow-y-auto space-y-1.5">
+                        <template x-for="(seeder, sIdx) in (portPlanData?.data_sources?.seeders || [])" :key="sIdx">
+                            <div class="rounded-lg border border-border p-2.5 bg-muted/10">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono text-xs font-bold text-foreground" x-text="seeder.class"></span>
+                                    <span x-show="seeder.is_reference_data" class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500">Reference data</span>
+                                    <span x-show="!seeder.is_reference_data" class="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-500">Review needed</span>
+                                </div>
+                                <div class="text-[11px] text-muted-foreground mt-1">
+                                    Tables: <span class="font-mono" x-text="(seeder.tables || []).join(', ')"></span>
+                                </div>
+                                <div class="text-[11px] text-muted-foreground">
+                                    Slices: <span class="font-semibold" x-text="(seeder.slices || []).join(', ') || 'Unmapped'"></span>
+                                </div>
+                                <div class="text-[11px] text-indigo-400 italic" x-text="seeder.recommendation"></div>
+                            </div>
+                        </template>
+                        <div x-show="!(portPlanData?.data_sources?.seeders?.length)" class="text-xs text-muted-foreground text-center py-2">No seeders detected in source.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Tab 6: Execution Terminal -->
         <div x-show="portActiveTab === 'log'" class="space-y-2">
             <div class="rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-[11px] leading-6 text-emerald-400 shadow-inner h-[380px] overflow-y-auto space-y-1">
@@ -849,7 +1041,9 @@
             <div class="flex items-center gap-2">
                 <input type="checkbox" id="portImportDataCheck" x-model="portImportData" class="rounded border-input text-primary focus:ring-primary size-4">
                 <label for="portImportDataCheck" class="text-xs text-foreground font-medium cursor-pointer">
-                    Stream existing relational records (<span class="text-emerald-400 font-bold">15,664 rows</span> via ETL Data Port Engine)
+                    Stream existing relational records
+                    <span x-show="portPlanData" class="text-emerald-400 font-bold" x-text="'(' + (portPlanData.summary?.total_records_detected || 0).toLocaleString() + ' rows via ETL Data Port Engine)'"></span>
+                    <span x-show="!portPlanData" class="text-muted-foreground">(via ETL Data Port Engine)</span>
                 </label>
             </div>
             <div class="flex items-center gap-2.5">

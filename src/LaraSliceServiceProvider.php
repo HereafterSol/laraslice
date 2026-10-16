@@ -55,7 +55,7 @@ use TailwindMerge\TailwindMerge;
 class LaraSliceServiceProvider extends ServiceProvider
 {
     /** Package version reported to MCP clients and the AI copilot. Bump with each release. */
-    public const VERSION = '1.6.3';
+    public const VERSION = '1.6.4';
 
     public function register(): void
     {
@@ -234,9 +234,19 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/blueprint/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.blueprint.port-execute');
 
                     Route::get('/port-presets', [BlueprintStudioController::class, 'portPresets'])->name('laraslice.wizard.port-presets');
+                    Route::get('/porting', [BlueprintStudioController::class, 'portingStudio'])->name('laraslice.wizard.porting');
                     Route::post('/port-plan', [BlueprintStudioController::class, 'portPlan'])->name('laraslice.wizard.port-plan');
                     Route::post('/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.port-inspect');
                     Route::post('/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.port-execute');
+                    // User-saved porting presets (analyzed plans)
+                    Route::get('/port-saved-presets', [BlueprintStudioController::class, 'listPortPresets'])->name('laraslice.wizard.port-saved-presets.index');
+                    Route::post('/port-saved-presets', [BlueprintStudioController::class, 'savePortPreset'])->name('laraslice.wizard.port-saved-presets.store');
+                    Route::get('/port-saved-presets/{slug}', [BlueprintStudioController::class, 'loadPortPreset'])->name('laraslice.wizard.port-saved-presets.show');
+                    Route::delete('/port-saved-presets/{slug}', [BlueprintStudioController::class, 'deletePortPreset'])->name('laraslice.wizard.port-saved-presets.destroy');
+                    // Cached git sources (cloned repositories)
+                    Route::get('/port-cached-sources', [BlueprintStudioController::class, 'listCachedSources'])->name('laraslice.wizard.port-cached-sources.index');
+                    Route::post('/port-cached-sources/{key}/keep', [BlueprintStudioController::class, 'keepCachedSource'])->name('laraslice.wizard.port-cached-sources.keep');
+                    Route::delete('/port-cached-sources/{key}', [BlueprintStudioController::class, 'deleteCachedSource'])->name('laraslice.wizard.port-cached-sources.destroy');
                 });
 
                 Route::middleware(["{$studio}:studio.access", "{$studio}:studio.wipe", $guard])->group(function () {

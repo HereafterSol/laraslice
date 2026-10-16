@@ -1183,7 +1183,7 @@ class SliceManager
 
         // 3b. Prune orphaned roles from destroyed slices
         if ($prune && Schema::hasTable('roles')) {
-            $protectedRoleSlugs = ['super-admin', 'super_admin', 'admin', 'administrator', 'manager', 'user', 'standard-user', 'guest', 'system'];
+            $protectedRoleSlugs = ['super-admin', 'super_admin', 'super-dev', 'super_dev', 'admin', 'administrator', 'manager', 'user', 'standard-user', 'guest', 'system'];
             $activeRoleSlugs = [];
             foreach ($this->slices as $s) {
                 $manifestRoles = $s->raw['roles'] ?? ($s->raw['workflow']['roles'] ?? []);
@@ -1225,29 +1225,33 @@ class SliceManager
             }
         }
 
-        // Ensure super-admin role automatically receives all synced permissions by default
+        // Ensure super-admin and super-dev roles automatically receive all synced
+        // permissions by default. super-dev is the developer master key: whole-system
+        // access including all studios, immune to legacy data ports.
         try {
-            $superAdminRole = Schema::hasTable('roles')
-                ? DB::table('roles')->where('slug', 'super-admin')->first()
-                : null;
-
-            if ($superAdminRole && Schema::hasTable('permission_role')) {
+            if (Schema::hasTable('roles') && Schema::hasTable('permission_role')) {
                 $allPermIds = DB::table('permissions')->pluck('id');
-                $existing = DB::table('permission_role')
-                    ->where('role_id', $superAdminRole->id)
-                    ->pluck('permission_id')
-                    ->toArray();
-
-                $missing = $allPermIds->diff($existing);
-                if ($missing->isNotEmpty()) {
-                    $newRows = [];
-                    foreach ($missing as $mId) {
-                        $newRows[] = [
-                            'role_id' => $superAdminRole->id,
-                            'permission_id' => $mId,
-                        ];
+                foreach (['super-admin', 'super-dev'] as $privilegedSlug) {
+                    $role = DB::table('roles')->where('slug', $privilegedSlug)->first();
+                    if (! $role) {
+                        continue;
                     }
-                    DB::table('permission_role')->insert($newRows);
+                    $existing = DB::table('permission_role')
+                        ->where('role_id', $role->id)
+                        ->pluck('permission_id')
+                        ->toArray();
+
+                    $missing = $allPermIds->diff($existing);
+                    if ($missing->isNotEmpty()) {
+                        $newRows = [];
+                        foreach ($missing as $mId) {
+                            $newRows[] = [
+                                'role_id' => $role->id,
+                                'permission_id' => $mId,
+                            ];
+                        }
+                        DB::table('permission_role')->insert($newRows);
+                    }
                 }
             }
         } catch (\Throwable $e) {

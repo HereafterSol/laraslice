@@ -601,6 +601,10 @@ When a developer asks to port or reverse-engineer an existing application in cha
      # Or for full production migration:
      php artisan slice:port "path/to/legacy" --domain="DomainName" --mode=full-data --with-files
      ```
+   - **N-tier targeting**: `--super-domain=ERP` nests slices as `app/Slices/ERP/<Domain>/<Module>/<Slice>` (3-tier). Without it, slices land in `app/Slices/<Domain>/<Module>/<Slice>`.
+   - **Legacy DB credentials** (for `--mode=full-data` ETL): pass `--source-host`, `--source-port`, `--source-database`, `--source-username`, `--source-password`, or `--source-connection=<name>` referencing a `config/database.php` connection. Never hardcode credentials.
+   - **Dry-run first**: always preview with `--dry-run` — it prints the table→slice mapping, multi-tenancy detection, and warns about unmapped pivot tables before writing anything.
+   - **Scaffold errors are explicit**: per-slice failures print `[SliceName] reason` — never silently skipped.
 
 ---
 
@@ -742,8 +746,12 @@ Supports both single-tenant enterprise deployments and multi-tenant SaaS archite
 Re-architects legacy monolithic schemas (e.g., 200+ table ERPs) into domain-bounded vertical slices:
 - **Dynamic Multi-Block Migration Parsing**: Extracts all `Schema::create` blocks, columns, and foreign keys even from massive consolidated migrations.
 - **Dynamic In-Degree Foreign Key Graph Analysis**: Discovers primary aggregate roots and child tables based on relationship density, while excluding cross-cutting tenant/audit keys (`company_id`, `user_id`).
-- **Automatic Multi-Tenancy Detection**: Automatically computes coverage of `company_id` / `tenant_id` and equips generated models with `HasTenant`.
+- **Automatic Multi-Tenancy Detection**: Automatically computes coverage of `company_id` / `tenant_key` and equips generated models with `HasTenant`.
 - **Zero-Blank Dropdown Taxonomy Synthesis**: Generates deterministic MasterData seeders from source seeders or fallback baselines so UI forms render complete dropdowns.
+- **Pivot tables are surfaced, never dropped**: detected pivots attach to their owning slice via FK affinity; unmapped ones are reported as warnings in CLI (`--dry-run`) and in the inspection payload (`unmapped_pivots`).
+- **Complete manifests**: ported `slice.yaml` files include all aggregate child models with `hasMany`/`belongsTo` relations — the manifest always matches the generated code.
+- **Honest UI**: the Porting Studio dialog never auto-runs Analyze, shows inline errors (no blocking popups), labels example content as examples, and binds all figures to the live plan. "Load into Studio" carries real inspected columns, not placeholders.
+- **ETL safety**: source tables outside the priority list are reported as `skipped_tables` (never silently dropped); foreign-key handling is driver-aware (MySQL/SQLite/PgSQL); chunked reads are deterministic.
 
 ### 15.4 Enterprise UI/UX Navigation (Module Switcher Ribbon)
 To prevent cognitive overload from dozens of vertical slices in enterprise apps:
@@ -874,7 +882,42 @@ Before generating the Architecture Plan, the AI agent must inspect:
    php artisan slice:install --force
    ```
 
-### 16.5 AI-Guided 4-Step Page & UI Porting Methodology (BlatUI Parity)
+### 16.5 AI-First Source System Analysis (Before Porting)
+
+**Never port blind.** Before generating any YAML or scaffolding any slice, the AI agent MUST analyze the source system — both its code AND its UI. This is the "AI First" principle: understand deeply, then generate completely.
+
+**Phase A: Code Analysis**
+1. **Inspect database schema**: Tables, columns, foreign keys, indexes (via `slice:port --dry-run`)
+2. **Map controllers to slices**: Which controller actions belong to which aggregate? (e.g., `Invoices.php` has 16 actions → Invoices slice)
+3. **Identify business logic**: Look for non-CRUD methods — `generatePdf()`, `sendEmail()`, `markAsPaid()`, `calculateTax()`. These are NOT portable as CRUD; they need manual implementation notes.
+4. **Find Jobs/Events**: If the source uses Jobs (e.g., Akaunting's 92 Jobs), document which job encapsulates which business rule.
+5. **Detect dead tables**: Tables with no active model/controller are legacy — flag them, don't port them as features.
+
+**Phase B: UI Analysis**
+1. **Find view templates**: Locate Blade/Vue/React templates for each controller action
+2. **Extract form structure**: What fields are on the create/edit forms? How are they grouped? (sections, tabs, accordions)
+3. **Extract table columns**: What columns are in the index/listing? What formatters? (badges, money, dates, avatars)
+4. **Extract filters**: What search/filters exist? (status dropdown, date range, category filter)
+5. **Map to v1.6.4 `ui:` schema**: Translate the source UI into declarative YAML:
+   - Source table columns → `ui.directory.columns` with inferred formatters
+   - Source form sections → `ui.forms.sections` with grid layout
+   - Source filters → `ui.directory.quick_filters` / `sidebar_filters`
+
+**Phase C: Generate Complete YAML**
+Only AFTER Phases A and B, generate the `slice.yaml` with:
+- `models:` from Phase A (tables + relations)
+- `ui:` from Phase B (real columns, real form structure, inferred formatters)
+- `porting_notes:` documenting what was NOT portable (business logic, jobs, custom actions)
+
+**Example porting_notes:**
+```yaml
+porting_notes:
+  - "Source controller Invoices.php has generatePdf() — implement manually in InvoiceService"
+  - "Source has 10 custom routes (markSent, markCancelled, email) — add as slice actions"
+  - "Tables invoice_histories is v1 legacy (2017), no active model — excluded from aggregate"
+```
+
+### 16.6 AI-Guided 4-Step Page & UI Porting Methodology (BlatUI Parity)
 When transitioning from database/schema migration to full UI feature parity, follow the standardized **4-Step BlatUI Methodology** for every ported slice. Never generate ad-hoc HTML or non-BlatUI dependencies (0% Metronic, Livewire, or Flux):
 
 1. **Step 1: Listing / Directory Architecture (`index.blade.php`)**:
@@ -900,7 +943,7 @@ When transitioning from database/schema migration to full UI feature parity, fol
    - **Granular Capability Gates**: Gated by `@can('[slice].[action]')` (e.g. `@can('projects.edit')`, `@can('invoices.approve')`).
    - **Immutable Audit Trail**: State transitions and key field updates automatically record timestamps, user ID, remarks, and previous values in the activity history.
 
-### 16.6 Legacy Route Mapping & Page Inventory Protocol
+### 16.7 Legacy Route Mapping & Page Inventory Protocol
 Before porting controllers, the AI agent must catalog legacy routes and systematically map them to Vertical Slice Architecture:
 1. **Extract Route Inventory**: Run `php artisan route:list --json` or parse `routes/web.php` in the legacy application to discover total route count, URL patterns, controller actions, and middleware.
 2. **Consolidate Monolithic Routes into Bounded Slices**:
@@ -911,7 +954,7 @@ Before porting controllers, the AI agent must catalog legacy routes and systemat
      - 20 legacy task-related routes → `app/Slices/ERP/Work/Tasks/`.
 3. **Route Mapping Artifact**: Document the legacy-to-VSA route mapping in `porting-architecture-plan.json` under each slice's `pages` and `legacy_routes` arrays so both developers and AI assistants have 100% clarity on where every legacy URL is re-hosted.
 
-### 16.7 Loading Ported Suite Directly into Blueprint Studio Canvas
+### 16.8 Loading Ported Suite Directly into Blueprint Studio Canvas
 Developers can inspect and edit the entire ported architecture interactively in Blueprint Studio (`/laraslice/wizard/blueprint`):
 1. **Top Bar Button**: Click **`📥 Load Ported Suite (28 Slices)`** in the top navigation bar.
 2. **Modal Action**: In the Porting Studio modal header or footer, click **`📥 Load into Blueprint Studio`**.
@@ -920,6 +963,137 @@ Developers can inspect and edit the entire ported architecture interactively in 
    - Clicking between slices (`Projects`, `Tasks`, `Invoices`, `Employees`) instantly updates the canvas to show all root and child models, field types, validation rules, and relations.
    - The **📄 Page & UI Architecture Plan** card renders the 4-step BlatUI plan for that slice, with full stats ribbons, filter bar definitions, sub-tabs, form sections, and workflow state transitions.
    - Developers can edit any field or state directly in the Visual Designer or YAML editor, click **`Save Changes`**, and then click **`⚡ Run Migrations`** to scaffold and migrate.
+
+### 16.9 User Journey Analysis (Persona-Based Workflows)
+
+**The most important part of porting is understanding HOW users flow through the system** — not just what tables exist.
+
+The porter automatically detects four journey types:
+
+1. **Onboarding** (`end_user` persona): Wizard controllers (`Wizard/Companies.php`, `Wizard/Currencies.php`) reveal the first-time setup flow.
+2. **Client Portal** (`client` persona): Portal controllers (`Portal/Invoices.php`, `Portal/Payments.php`) show external user workflows.
+3. **Core Workflows** (`end_user` persona): Business processes like "Invoice to Cash" (create → send → view → pay) and "Bank Reconciliation" (import → match → report).
+4. **Admin** (`admin` persona): System management areas (users, roles, settings, templates).
+
+**Viewing journeys:** In the Porting Studio dialog, click the **🧭 User Journeys** tab after Analyze. Each journey shows the persona, description, and step-by-step flow with slice mappings.
+
+**Why this matters:** A developer who understands that "Invoice to Cash" spans Invoices → Portal → Payments will build the right integrations. A developer who only sees tables will build disconnected CRUD.
+
+### 16.10 AI-First Porting Intelligence (Dead Tables, Business Logic, Workflows)
+
+The porter includes four AI analyzers that run automatically during `slice:port`:
+
+| Analyzer | What it detects | Output |
+|----------|----------------|--------|
+| `detectDeadTables()` | Tables with no active Eloquent model (legacy v1 tables) | Warning in CLI; excluded from slice mapping |
+| `detectBusinessLogic()` | Non-CRUD controller methods (`generatePdf`, `sendEmail`, `markSent`) | `porting_notes` in `slice.yaml` with manual implementation guidance |
+| `analyzeSourceUi()` | Form fields from Blade templates, modal patterns | Feeds into `ui:` schema generation |
+| `detectWorkflows()` | State machines from `mark*` methods | `workflow` config in `slice.json` manifest |
+
+**Example `porting_notes` in `slice.yaml`:**
+```yaml
+porting_notes:
+  - "Source controller Invoices.php has custom method `pdfInvoice()` — implement manually in InvoicesService"
+  - "Source generates PDF documents — implement PDF generation manually"
+  - "Source sends emails — implement mail integration manually"
+```
+
+### 16.11 Dual-Source Table Discovery (Migrations + Live Database)
+
+The porter handles both types of projects:
+
+**Projects WITH migrations** (standard Laravel):
+- Parses `database/migrations/` for `Schema::create()` calls
+- Extracts columns, types, and foreign keys from migration code
+
+**Projects WITHOUT migrations** (legacy, or DB-first):
+- Connects to the live source database via `--source-*` options
+- Uses `SHOW TABLES` / `information_schema` as the source of truth
+- Works with MySQL, PostgreSQL, and SQLite
+
+**When both exist** (recommended):
+```bash
+php artisan slice:port /path/to/source \
+  --source-host=127.0.0.1 \
+  --source-database=legacy_erp \
+  --source-username=root \
+  --source-password=secret
+```
+The porter reconciles both sources:
+- **Live DB is the source of truth** for which tables exist
+- **Migrations provide metadata** (column types, FK constraints, migration filenames)
+- Tables in DB but not migrations → marked `source_database_only` with a porting note
+- Tables in migrations but not DB → marked `migrations_only` (possibly pending or dead)
+
+Each table in the analysis tracks its `table_source`:
+- `source_database` — from live DB only
+- `migrations` — from migrations only  
+- `source_database+migrations` — confirmed in both
+- `source_database_only` — manual/legacy table, no migration
+- `migrations_only` — defined but not in live DB
+
+### 16.12 Data Porting (Slice-Aware)
+
+Data porting is **slice-aware** — it uses the slice mapping to determine which tables to import, not a hardcoded list.
+
+**Three data sources:**
+
+1. **Live database tables** (`importForSlices()`):
+   - Streams data from source DB → target DB
+   - Uses slice mapping to find root tables, child tables, and pivots
+   - Chunked (250 rows) with FK constraints disabled during import
+   - Sanitizes invalid timestamps (`0000-00-00` → null)
+   - Only imports columns that exist in both source and target
+
+2. **Source seeders** (`analyzeSeeders()`):
+   - Parses `database/seeders/` for `DB::table()->insert()` and `Model::create()` calls
+   - Maps seeder tables to slices
+   - Flags reference data (currencies, countries, roles, tax rates) as safe to auto-import
+   - Generates per-slice seeder recommendations
+
+3. **Legacy priority list** (`importFromDatabase()`):
+   - Deprecated — uses hardcoded table list
+   - Kept for backwards compatibility only
+
+**Framework Auth Protection (v1.6.4+):**
+
+The ETL **never wipes** framework auth tables by default. `roles`, `permissions`, `permission_role`, and `role_user` are skipped with a `skipped_system_auth` status. `users` are merged by email — existing users are never deleted or overwritten, new emails are inserted with fresh IDs.
+
+To explicitly import legacy auth data (opt-in):
+```bash
+php artisan slice:port --import-auth
+```
+With `--import-auth`, legacy roles/permissions are **normalized and merged** (never wipe-and-replace):
+- Legacy roles without `slug` get slugified; reserved slugs (`super-admin`, `super-dev`) are remapped to `legacy-*`
+- Legacy permissions are mapped to framework permission slugs where possible
+- `role_user` pivots are remapped via natural keys (role slug + user email)
+- Post-import reconciliation restores any missing framework roles/permissions
+
+```php
+// Programmatic
+$portService->executeFromPlan($plan, importData: true, importAuth: true);
+```
+
+**Usage:**
+```php
+// Slice-aware import (recommended)
+$dataService = app(SliceDataPortService::class);
+$result = $dataService->importForSlices($sliceMapping, 'laraslice_source');
+
+// Analyze seeders for reference data
+$seeders = $dataService->analyzeSeeders('/path/to/source', $sliceMapping);
+// Returns: ['CurrencySeeder' => ['tables' => ['currencies'], 'slices' => ['Settings'], 'is_reference_data' => true]]
+```
+
+### 16.13 Developer Role & RBAC Hardening (v1.6.4+)
+
+**`super-dev` role** — the framework developer persona with whole-system bypass:
+- `Access::isSuperDev()` checks `roles.slug = 'super-dev'`
+- `Access::allows()` grants everything to super-dev (like super-admin)
+- `HasSlicePermissions::hasPermission()` treats super-dev as privileged
+- Created by `slice:install` and by migration `2026_10_17_000000_add_super_dev_role` for existing installs
+- Protected from deletion in the Roles UI and from ETL wipes
+- Sync via `SliceManager::syncPermissions()` assigns all permissions to both super-admin and super-dev
 
 ---
 
@@ -983,3 +1157,16 @@ ui:
 `slice.yaml` is designed for granular, sub-part synchronization:
 - AI agents, CLI commands, and Studio tools can validate and edit either the entire document or isolated sub-parts (`ui`, `directory`, `forms`, `fsm`, `relations`, `models`).
 - CLI Command: `php artisan slice:validate [SliceName|path] [--part=ui|forms|directory|fsm] [--fix]`.
+
+### 17.5 Slice Studio UI Editors (v1.6.4+)
+
+Slice Studio's Field Manager includes a full **Page & UI Architecture** editor — every `ui:` block section is editable in the browser without touching YAML:
+
+- **Quick Filters** — tab-style filters with field picker, ▲▼ reorder (tab order = display order), label/handle editing, and options source (`distinct:field`)
+- **Sidebar Filters** — date-range and dropdown filters with field picker and type selector
+- **Summary Cards** — aggregate cards (count/sum/avg/min/max) with field picker and formatter
+- **Row Actions** — View/Edit/Delete with ⋯Menu / Inline / Hybrid display toggle and per-action placement
+- **Bulk Actions** — delete/export toggles
+- **Create & Edit Form** — Drawer/Page presentation toggle, section editor with 1–4 column layouts
+
+All changes flow into `slice.yaml` on generate. Blueprint Studio remains the reference implementation for the full declarative schema.

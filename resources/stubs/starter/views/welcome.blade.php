@@ -161,7 +161,7 @@
                 <div>
                     <div class="font-extrabold text-foreground tracking-tight text-lg flex items-center gap-2">
                         <span>LaraSlice</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20 font-bold">v1.0</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20 font-bold">v{{ \LaraSlice\LaraSliceServiceProvider::VERSION }}</span>
                     </div>
                     <div class="text-[11px] text-muted-foreground font-medium -mt-0.5">Vertical Slice Architecture for Laravel 13+</div>
                 </div>

@@ -102,7 +102,7 @@
             </button>
 
                         <!-- Port Legacy App Button -->
-            <button type="button" @click="showPortModal = true; if (!portPlanData && !portInspecting) fetchPortPlan();" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Reverse-engineer and port a legacy Laravel application">
+            <button type="button" @click="showPortModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Reverse-engineer and port a legacy Laravel application">
                 <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
                 <span>🚀 Port Legacy App</span>
             </button>
@@ -4516,6 +4516,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         portWithFiles: false,
         portInspecting: false,
         portExecuting: false,
+        portError: '',
         portInspectionData: null,
         portPlanData: initialPortPlan || null,
         portPlanJsonText: initialPortPlan ? JSON.stringify(initialPortPlan, null, 2) : '',
@@ -4565,14 +4566,18 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
 
         selectPortPreset(val) {
             this.portPreset = val;
+            // Changing the preset only prefills the fields and clears stale plan data.
+            // The developer clicks Analyze explicitly — no auto-fire.
+            this.portPlanData = null;
+            this.portPlanJsonText = '';
+            this.portInspectionData = null;
+            this.portError = '';
             if (val === 'erp') {
                 this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
-                this.fetchPortPlan();
             } else if (val === 'fospah') {
                 this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
-                this.fetchPortPlan();
             } else if (val === 'custom') {
                 this.portSourcePath = '';
                 this.portDomain = 'Core';
@@ -4580,6 +4585,16 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
         fetchPortPlan() {
+            this.portError = '';
+            // Client-side sanity check: a source is required unless a canned preset/JSON is used.
+            if ((this.portPreset === 'custom' || !this.portPreset) && !this.portPlanJsonText && !(this.portSourcePath || '').trim()) {
+                this.portError = 'Enter a Source Application Path (root directory of the legacy Laravel app) or switch to the "Custom JSON Architecture Plan" preset.';
+                return;
+            }
+            if (!(this.portDomain || '').trim()) {
+                this.portError = 'Enter a Target Domain Suite name (e.g. ERP).';
+                return;
+            }
             this.portInspecting = true;
             fetch('/laraslice/wizard/blueprint/port-plan', {
                 method: 'POST',
@@ -4611,6 +4626,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             .then(res => {
                 this.portInspecting = false;
                 if (res.success && res.plan) {
+                    this.portError = '';
                     this.portPlanData = res.plan;
                     this.portPlanJsonText = JSON.stringify(res.plan, null, 2);
                     if (res.inspection) this.portInspectionData = res.inspection;
@@ -4618,12 +4634,19 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                         this.selectedUiSlice = res.plan.modules[0].slices[0].name;
                     }
                 } else {
-                    alert('Plan generation failed: ' + (res.message || 'Unknown error'));
+                    // Clear stale plan so a failed re-Analyze never masquerades as current.
+                    this.portPlanData = null;
+                    this.portPlanJsonText = '';
+                    this.portInspectionData = null;
+                    this.portError = 'Plan generation failed: ' + (res.message || 'Unknown error');
                 }
             })
             .catch(e => {
                 this.portInspecting = false;
-                alert('Plan generation error: ' + e.message);
+                this.portPlanData = null;
+                this.portPlanJsonText = '';
+                this.portInspectionData = null;
+                this.portError = 'Plan generation error: ' + e.message;
             });
         },
 
@@ -4641,8 +4664,26 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
         executePortPlan() {
+            this.portError = '';
             if (!this.portPlanData && !this.portPlanJsonText) {
-                alert('Please inspect the project or load an architecture plan first.');
+                this.portError = 'Please inspect the project or load an architecture plan first.';
+                return;
+            }
+            // Validate hand-edited JSON before executing (mirrors the server's modules check).
+            let planPayload = this.portPlanData;
+            try {
+                if (this.portPlanJsonText) {
+                    planPayload = JSON.parse(this.portPlanJsonText);
+                }
+            } catch (e) {
+                this.portError = 'The JSON Architecture Plan contains invalid JSON: ' + e.message;
+                return;
+            }
+            if (!planPayload || !Array.isArray(planPayload.modules) || planPayload.modules.length === 0) {
+                this.portError = 'The architecture plan is invalid: it must contain a non-empty "modules" array.';
+                return;
+            }
+            if (!confirm('Execute the porting plan? This will scaffold slices, models, and migrations into app/Slices.')) {
                 return;
             }
             this.portExecuting = true;
@@ -4654,13 +4695,6 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 `[${new Date().toLocaleTimeString()}] Multi-tenancy: ${this.portPlanData?.summary?.multi_tenancy?.enabled ? 'Enabled (' + this.portPlanData.summary.multi_tenancy.tenant_key + ')' : 'Disabled'}`,
                 `[${new Date().toLocaleTimeString()}] Scaffolding ${this.portPlanData?.modules?.length || 0} Modules and ${this.portPlanData?.summary?.total_canonical_slices || 0} Canonical Slices...`
             ];
-
-            let planPayload = this.portPlanData;
-            try {
-                if (this.portPlanJsonText) {
-                    planPayload = JSON.parse(this.portPlanJsonText);
-                }
-            } catch (e) {}
 
             fetch('/laraslice/wizard/blueprint/port-execute', {
                 method: 'POST',
@@ -4700,19 +4734,17 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                         this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ✓ ETL Data Stream: ${imp.total_rows_imported || 0} records streamed across ${imp.tables_imported || 0} tables.`);
                     }
                     this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] 🚀 100% Usable Porting Completed Successfully!`);
-                    setTimeout(() => {
-                        alert('Porting completed successfully with 100% functional data! Reloading Studio...');
-                        window.location.reload();
-                    }, 1500);
+                    this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] Reloading Studio...`);
+                    setTimeout(() => window.location.reload(), 1500);
                 } else {
                     this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ❌ Error: ${res.message || 'Execution failed'}`);
-                    alert('Porting execution error: ' + (res.message || 'Unknown error'));
+                    this.portError = 'Porting execution error: ' + (res.message || 'Unknown error');
                 }
             })
             .catch(e => {
                 this.portExecuting = false;
                 this.portExecutionLogs.push(`[${new Date().toLocaleTimeString()}] ❌ Network Error: ${e.message}`);
-                alert('Port execution error: ' + e.message);
+                this.portError = 'Port execution error: ' + e.message;
             });
         },
 
@@ -4935,7 +4967,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             }
 
             if (!targetSlices || !targetSlices.length) {
-                alert('Please inspect the project schema or load an architecture plan first.');
+                this.portError = 'Please inspect the project schema or load an architecture plan first.';
                 return;
             }
 
@@ -5332,9 +5364,8 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             if (urlParams.get('load_port') === '1' || urlParams.get('auto_load_port') === '1') {
                 this.loadPortedToStudio();
             }
-            if (!this.portPlanData && !this.portInspecting) {
-                this.fetchPortPlan();
-            }
+            // NOTE: Porting Analyze is intentionally NOT auto-fired here.
+            // The developer opens the Porting Studio dialog and clicks Analyze explicitly.
             // 1. Restore all slices if passed from backend (e.g. after form validation / plan review)
             if (allSlicesJson) {
                 try {

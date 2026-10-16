@@ -24,7 +24,7 @@ final class BlueprintValidator
     public function validate(array $blueprint): array
     {
         $errors = [];
-        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'app', 'module', 'table_prefix', 'multitenant', 'tenant_key', 'navigation', 'permissions', 'workflow', 'roles', 'icon', 'priority', 'taxonomy', 'ui', 'dependencies'], 'blueprint', $errors);
+        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'app', 'module', 'super_domain', 'sub_domain', 'table_prefix', 'multitenant', 'tenant_key', 'navigation', 'permissions', 'workflow', 'roles', 'icon', 'priority', 'taxonomy', 'ui', 'dependencies', 'porting_notes', 'table_source'], 'blueprint', $errors);
 
         if (! in_array(($blueprint['schema_version'] ?? null), [1, 2], true)) {
             $errors[] = 'schema_version must be the integer 1.';
@@ -415,7 +415,7 @@ final class BlueprintValidator
             if (! is_array($ui['directory'])) {
                 $errors[] = "{$path}.directory must be a map.";
             } else {
-                $this->checkKeys($ui['directory'], ['columns', 'quick_filters', 'sidebar_filters', 'row_actions'], "{$path}.directory", $errors);
+                $this->checkKeys($ui['directory'], ['columns', 'quick_filters', 'sidebar_filters', 'row_actions', 'searchable', 'search_placeholder', 'summary_cards', 'bulk_actions'], "{$path}.directory", $errors);
 
                 if (isset($ui['directory']['columns'])) {
                     if (! is_array($ui['directory']['columns'])) {
@@ -550,7 +550,7 @@ final class BlueprintValidator
 
                                             continue;
                                         }
-                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help'], $fldPath, $errors);
+                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help', 'type', 'label', 'repeater_fields', 'add_button_text'], $fldPath, $errors);
                                         if (empty($fld['handle']) || ! is_string($fld['handle'])) {
                                             $errors[] = "{$fldPath}.handle must be a non-empty string.";
                                         }

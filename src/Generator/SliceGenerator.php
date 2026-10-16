@@ -37,9 +37,20 @@ class SliceGenerator
 
         $app = isset($options['app']) && is_string($options['app']) && trim($options['app']) !== ''
             ? trim($options['app'])
-            : (isset($options['super_domain']) && is_string($options['super_domain']) ? trim($options['super_domain']) : null);
+            : null;
+        // Explicit super_domain creates a third nesting tier: {super}/{app}/{domain}/{slice}.
+        // (Falls back to legacy behavior where super_domain was only an app alias.)
+        $superDomainOpt = isset($options['super_domain']) && is_string($options['super_domain']) && trim($options['super_domain']) !== ''
+            ? trim($options['super_domain'])
+            : null;
+        if (! $app && $superDomainOpt) {
+            $app = $superDomainOpt;
+            $superDomainOpt = null;
+        }
         $appFolder = $app ? SliceName::domainSegment($app) : null;
         $appSlug = $app ? Str::slug($app) : null;
+        $superFolder = $superDomainOpt ? SliceName::domainSegment($superDomainOpt) : null;
+        $superSlug = $superDomainOpt ? Str::slug($superDomainOpt) : null;
 
         $domain = isset($options['domain']) && is_string($options['domain']) && trim($options['domain']) !== ''
             ? trim($options['domain'])
@@ -48,7 +59,11 @@ class SliceGenerator
         $domainSlug = $domain ? Str::slug($domain) : null;
         $domainDot = $domainSlug ? str_replace('-', '_', $domainSlug).'.' : '';
 
-        if ($appFolder && $domainFolder) {
+        if ($superFolder && $appFolder && $domainFolder) {
+            $routePrefix = "{$superSlug}/{$appSlug}/{$domainSlug}/{$pluralSnake}";
+            $targetDir = $this->slicesPath.DIRECTORY_SEPARATOR.$superFolder.DIRECTORY_SEPARATOR.$appFolder.DIRECTORY_SEPARATOR.$domainFolder.DIRECTORY_SEPARATOR.$pluralName;
+            $sliceNamespace = "{$this->namespace}\\{$superFolder}\\{$appFolder}\\{$domainFolder}\\{$pluralName}";
+        } elseif ($appFolder && $domainFolder) {
             $routePrefix = "{$appSlug}/{$domainSlug}/{$pluralSnake}";
             $targetDir = $this->slicesPath.DIRECTORY_SEPARATOR.$appFolder.DIRECTORY_SEPARATOR.$domainFolder.DIRECTORY_SEPARATOR.$pluralName;
             $sliceNamespace = "{$this->namespace}\\{$appFolder}\\{$domainFolder}\\{$pluralName}";
@@ -338,6 +353,25 @@ HTML;
                     $fHandle = is_array($fld) ? ($fld['handle'] ?? '') : (string) $fld;
                     $fSpan = is_array($fld) ? (int) ($fld['span'] ?? 1) : 1;
                     $isSearchable = is_array($fld) && !empty($fld['searchable']);
+                    $fType = is_array($fld) ? ($fld['type'] ?? '') : '';
+
+                    // Repeater field (e.g., invoice line items) — render x-ui.repeater
+                    if ($fType === 'repeater') {
+                        $repLabel = $fld['label'] ?? \Illuminate\Support\Str::headline($fHandle);
+                        $addBtn = $fld['add_button_text'] ?? ('Add ' . \Illuminate\Support\Str::singular($repLabel));
+                        $repFields = $fld['repeater_fields'] ?? [];
+                        // Build sub-field definitions for the repeater
+                        $subFieldDefs = [];
+                        foreach ($repFields as $rf) {
+                            $rfName = $rf['handle'] ?? $rf['name'] ?? '';
+                            $rfLabel = $rf['label'] ?? \Illuminate\Support\Str::headline($rfName);
+                            $rfType = $rf['type'] ?? 'text';
+                            $subFieldDefs[] = "['name' => '{$rfName}', 'label' => '{$rfLabel}', 'type' => '{$rfType}']";
+                        }
+                        $subFieldsStr = '[' . implode(', ', $subFieldDefs) . ']';
+                        $cardInputs[] = "<x-ui.repeater name=\"{$fHandle}\" label=\"{$repLabel}\" :fields=\"{$subFieldsStr}\" addButtonText=\"{$addBtn}\" class=\"md:col-span-2 lg:col-span-3\" />";
+                        continue;
+                    }
 
                     // Find field matching handle
                     $fieldObj = collect($fields)->firstWhere('name', $fHandle);
@@ -496,13 +530,24 @@ CARD;
                 ],
             ];
 
-            if ($app !== null) {
+            if ($superDomainOpt !== null) {
+                // 3-tier: super_domain > app(domain) > sub_domain(module)
+                $manifestData['app'] = $superDomainOpt;
+                $manifestData['super_domain'] = $superDomainOpt;
+            } elseif ($app !== null) {
                 $manifestData['app'] = $app;
                 $manifestData['super_domain'] = $app;
             }
             if ($domain !== null) {
-                $manifestData['module'] = $domain;
-                $manifestData['domain'] = $domain;
+                if ($superDomainOpt !== null && $app !== null) {
+                    // 3-tier: domain is the middle tier, module is the inner grouping
+                    $manifestData['module'] = $app;
+                    $manifestData['domain'] = $app;
+                    $manifestData['sub_domain'] = $domain;
+                } else {
+                    $manifestData['module'] = $domain;
+                    $manifestData['domain'] = $domain;
+                }
                 $manifestData['navigation']['group'] = $domain;
             }
             $manifestData['table_prefix'] = $tablePrefix ?: null;
@@ -529,12 +574,21 @@ CARD;
                 'description' => $description,
             ];
 
-            if ($app !== null) {
+            if ($superDomainOpt !== null) {
+                $yamlData['super_domain'] = $superDomainOpt;
+                $yamlData['app'] = $superDomainOpt;
+            } elseif ($app !== null) {
                 $yamlData['app'] = $app;
             }
             if ($domain !== null) {
-                $yamlData['module'] = $domain;
-                $yamlData['domain'] = $domain;
+                if ($superDomainOpt !== null && $app !== null) {
+                    $yamlData['module'] = $app;
+                    $yamlData['domain'] = $app;
+                    $yamlData['sub_domain'] = $domain;
+                } else {
+                    $yamlData['module'] = $domain;
+                    $yamlData['domain'] = $domain;
+                }
                 $yamlData['navigation'] = [
                     'group' => $domain,
                     'label' => Str::title(Str::snake($pluralName, ' ')),
@@ -964,6 +1018,7 @@ PHP;
 
             // 10. Pure BlatUI Views with Universal Layout Integration
             $rowActionsDisplay = $options['ui']['directory']['row_actions']['display'] ?? 'dropdown';
+            $rowActionsSlot = '';
             if ($rowActionsDisplay === 'hybrid') {
                 $rowActionsSlot = <<<ACTIONS
             <x-slot:actions>
@@ -1000,8 +1055,18 @@ ACTIONS;
             </x-slot:actions>
 ACTIONS;
             } else {
+                // Default 'dropdown' display: compact row-actions dropdown menu.
                 $rowActionsSlot = <<<ACTIONS
-{$rowActionsSlot}
+            <x-slot:actions>
+                <div class="flex items-center gap-1 justify-end">
+                    <x-ui.row-actions
+                        view-url="item.r.show_url"
+                        edit-url="item.r.edit_url"
+                        delete-url="item.r.delete_url"
+                        delete-confirm="Are you sure you want to delete this {$studlyName}?"
+                    />
+                </div>
+            </x-slot:actions>
 ACTIONS;
             }
             $bladeIndex = <<<BLADE
@@ -1040,10 +1105,25 @@ ACTIONS;
             </button>
 
             @if(\$can['create'] ?? true)
+            @if((\$uiPresentationCreate ?? 'page') === 'drawer')
+            <x-ui.drawer>
+                <x-ui.drawer-trigger as-child>
+                    <x-ui.button size="sm" class="gap-1.5 shadow-xs font-semibold">
+                        <x-lucide-plus class="size-3.5" />
+                        <span>Add {$studlyName}</span>
+                    </x-ui.button>
+                </x-ui.drawer-trigger>
+                <x-ui.drawer-content>
+                    <x-ui.drawer-header><x-ui.drawer-title>Add {$studlyName}</x-ui.drawer-title></x-ui.drawer-header>
+                    <div id="{$pluralSnake}-drawer-form"></div>
+                </x-ui.drawer-content>
+            </x-ui.drawer>
+            @else
             <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" size="sm" class="gap-1.5 shadow-xs font-semibold">
                 <x-lucide-plus class="size-3.5" />
                 <span>Add {$studlyName}</span>
             </x-ui.button>
+            @endif
             @endif
         </div>
     </div>
@@ -1094,6 +1174,31 @@ ACTIONS;
             </div>
         </div>
     @else
+        <!-- Summary Cards (from ui.directory.summary_cards) -->
+        @if(!empty(\$summaryCards))
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            @foreach(\$summaryCards as \$card)
+            <x-ui.stat
+                :label="\$card['label'] ?? ''"
+                :value="\$summaryData[\$card['handle']] ?? '—'"
+                :icon="\$card['icon'] ?? null"
+            />
+            @endforeach
+        </div>
+        @endif
+
+        <!-- Quick Filter Tabs (from ui.directory.quick_filters) -->
+        @if(!empty(\$quickFilters))
+        <div class="mb-4">
+            @foreach(\$quickFilters as \$qf)
+            <x-ui.filter-tabs
+                :tabs="\$qf['options'] ?? []"
+                :param="\$qf['handle']"
+            />
+            @endforeach
+        </div>
+        @endif
+
         <!-- High-Density Data Table with Automatic 3-Dots Action Column -->
         <x-ui.data-table 
             :columns="\$columns" 

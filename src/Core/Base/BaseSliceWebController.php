@@ -43,6 +43,20 @@ abstract class BaseSliceWebController extends Controller
         $formClass = $this->getFormClass();
         $createForm = new $formClass();
 
+        // Load UI config from slice.yaml for summary cards, quick filters, etc.
+        $uiConfig = $this->getSliceUiConfig();
+        $summaryCards = $uiConfig['directory']['summary_cards'] ?? [];
+        $quickFilters = $uiConfig['directory']['quick_filters'] ?? [];
+        $summaryData = $this->computeSummaryData($summaryCards);
+        // Resolve quick filter options from distinct values
+        foreach ($quickFilters as &$qf) {
+            if (isset($qf['options_from']) && str_starts_with($qf['options_from'], 'distinct:')) {
+                $field = substr($qf['options_from'], 9);
+                $qf['options'] = $this->getDistinctFilterOptions($field);
+            }
+        }
+        unset($qf);
+
         $viewData = array_merge(
             $this->resolveRelationshipOptions($createForm),
             [
@@ -53,6 +67,10 @@ abstract class BaseSliceWebController extends Controller
                 'routeParameters' => $this->routeParameters(),
                 'parentId' => request()->route('parentId'),
                 'can' => $this->sliceAbilities(),
+                'summaryCards' => $summaryCards,
+                'summaryData' => $summaryData,
+                'quickFilters' => $quickFilters,
+                'uiPresentationCreate' => $uiConfig['presentation']['create'] ?? 'page',
             ]
         );
 
@@ -363,5 +381,131 @@ abstract class BaseSliceWebController extends Controller
         }
 
         return Str::snake(Str::singular($prefix));
+    }
+
+    /**
+     * Load UI config from the slice's slice.yaml.
+     */
+    protected function getSliceUiConfig(): array
+    {
+        try {
+            // Try SliceManager first
+            $slice = app(\LaraSlice\Core\Discovery\SliceManager::class)->getSliceByRoutePrefix($this->getRoutePrefix());
+            if (!empty($slice->ui)) {
+                return (array) $slice->ui;
+            }
+        } catch (\Throwable $e) {
+            // Fall through to file-based lookup
+        }
+
+        // Fallback: read slice.yaml (or slice.json for core slices) directly
+        try {
+            $ref = new \ReflectionClass($this);
+            $ctrlPath = $ref->getFileName();
+            // Controllers/XxxController.php -> slice manifest (two levels up)
+            $sliceDir = dirname($ctrlPath, 2);
+            $yamlPath = $sliceDir . '/slice.yaml';
+            if (file_exists($yamlPath)) {
+                $data = \Symfony\Component\Yaml\Yaml::parseFile($yamlPath);
+                return $data['ui'] ?? [];
+            }
+            // Core framework slices declare ui in slice.json
+            $jsonPath = $sliceDir . '/slice.json';
+            if (file_exists($jsonPath)) {
+                $data = json_decode(file_get_contents($jsonPath), true);
+                return $data['ui'] ?? [];
+            }
+        } catch (\Throwable $e) {
+            // Silently fail
+        }
+
+        return [];
+    }
+
+    /**
+     * Compute summary card values (sum, count, avg) from the database.
+     */
+    protected function computeSummaryData(array $cards): array
+    {
+        $data = [];
+        if (empty($cards)) {
+            return $data;
+        }
+
+        try {
+            $service = $this->getService();
+            $model = null;
+            // Try to get the model via the service (using reflection for protected method)
+            try {
+                $ref = new \ReflectionMethod($service, 'getModelClass');
+                $ref->setAccessible(true);
+                $modelClass = $ref->invoke($service);
+                if ($modelClass && class_exists($modelClass)) {
+                    $model = new $modelClass();
+                }
+            } catch (\Throwable $e) {
+                // Try alternative: get from filter or form class
+            }
+            if (! $model) {
+                return $data;
+            }
+
+            $query = $model->newQuery();
+            foreach ($cards as $card) {
+                $handle = $card['handle'] ?? '';
+                $aggregate = $card['aggregate'] ?? 'count';
+                if (! $handle) {
+                    continue;
+                }
+                try {
+                    $value = match ($aggregate) {
+                        'sum' => $query->clone()->sum($handle),
+                        'avg' => $query->clone()->avg($handle),
+                        'max' => $query->clone()->max($handle),
+                        'min' => $query->clone()->min($handle),
+                        default => $query->clone()->count(),
+                    };
+                    // Format money values
+                    if (($card['formatter'] ?? '') === 'money') {
+                        $data[$handle] = '$' . number_format((float) $value, 2);
+                    } else {
+                        $data[$handle] = is_numeric($value) ? number_format($value) : $value;
+                    }
+                } catch (\Throwable $e) {
+                    $data[$handle] = '—';
+                }
+            }
+        } catch (\Throwable $e) {
+            // Silently fail - summary cards are optional
+        }
+
+        return $data;
+    }
+
+    /**
+     * Get distinct values for a quick filter field.
+     */
+    protected function getDistinctFilterOptions(string $field): array
+    {
+        try {
+            $service = $this->getService();
+            $model = null;
+            if (method_exists($service, 'getModel')) {
+                $model = $service->getModel();
+            } elseif (method_exists($service, 'getModelClass')) {
+                $ref = new \ReflectionMethod($service, 'getModelClass');
+                $ref->setAccessible(true);
+                $modelClass = $ref->invoke($service);
+                $model = new $modelClass;
+            }
+            if ($model) {
+                $values = $model->newQuery()->distinct()->pluck($field)->filter()->take(20);
+                return $values->map(fn ($v) => ['value' => $v, 'label' => \Illuminate\Support\Str::headline((string) $v)])->toArray();
+            }
+        } catch (\Throwable $e) {
+            // Silently fail
+        }
+
+        return [];
     }
 }

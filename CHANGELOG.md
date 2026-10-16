@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.4] - 2026-10-17
+
+### Added
+- **RBAC Hardening** — `super-dev` platform developer role with whole-system bypass (`Access::isSuperDev()`); immune to data-port wipes; created by `slice:install` and migration `2026_10_17_000000_add_super_dev_role` for existing installs.
+- **ETL Auth Guards** — `roles`, `permissions`, `permission_role`, `role_user` are never wiped by default (`skipped_system_auth`); `users` merged by email; opt-in `--import-auth` normalizes legacy auth data instead of replacing.
+- **Slice Studio UI Editors** — Full Page & UI Architecture editor: Quick Filters (reorder, field picker, options source), Sidebar Filters, Summary Cards, Row Actions (⋯Menu/Inline/Hybrid), Bulk Actions, Create & Edit Form sections.
+- **Core Slice UI Alignment** — Users page rewritten to foundation layout; `slice.json` ui blocks for core slices; `getSliceUiConfig()` reads slice.json; `getDistinctFilterOptions()` supports `getModelClass()` services.
+- **AI-First Porting Intelligence** — Three new source analyzers in `SlicePortService`:
+  - `detectDeadTables()` — Flags tables with no active Eloquent model (e.g., Akaunting's 2017 v1 legacy tables). Found 22 dead tables in Akaunting.
+  - `detectBusinessLogic()` — Scans controllers for non-CRUD methods (`generatePdf`, `sendEmail`, `markSent`) and generates `porting_notes` in each `slice.yaml`.
+  - `analyzeSourceUi()` — Inspects Blade templates to extract form fields, sections, and modal patterns (found 51 fields in Akaunting's document forms).
+  - `detectWorkflows()` — Detects state machines from `mark*` methods (e.g., `markSent`, `markCancelled`) and generates workflow definitions.
+  - `analyzeUserJourneys()` — Identifies persona-based workflows: onboarding wizards, client portals, core business flows, admin journeys.
+- **v1.6.2 UI Schema Generation** — `buildUiFromInspectedFields()` generates canonical `ui:` blocks from REAL database columns with smart formatter inference (`amount` → `money_breakdown`, `status` → `status_pill`, `*_at` → `date_time`, `*_number` → `code_badge`).
+- **Workflow Engine Integration** — Detected workflows now populate `slice.json` manifests via `workflowConfig`. The `WorkflowEngine` is no longer dead code.
+- **User Journeys Tab** — New 🧭 tab in Porting Studio dialog visualizing persona-based workflows with step-by-step flow diagrams.
+- **Step-by-Step Developer Guidance** — Porting dialog now shows a 5-step recommended workflow: Review Journeys → Inspect VSA → Review UI → Load into Studio → Execute.
+
+### Fixed
+- **26 porting bugs** including: `--super-domain` ignored, scaffold errors swallowed, `$rowActionsSlot` undefined, hardcoded DB credentials, pivot tables dropped, fabricated KPI stats, auto-fire Analyze (4 paths), blocking `alert()` dialogs, stale plan data, and more. See `CHANGES-v1.6.4.md` for full list.
+- **Missing `ui:` blocks** — `scaffoldSlices()` now generates v1.6.2 canonical UI schema for every ported slice.
+- **Incomplete `slice.yaml`** — Now includes child models with relations (Invoices: 1 model → 5 models, 8 relations, VALID).
+
 ## [1.6.3] - 2026-10-16
 
 ### Fixed

@@ -144,6 +144,31 @@ class SliceInstallCommand extends Command
                 $role = DB::table('roles')->where('slug', 'super-admin')->first();
             }
 
+            // Provision the super-dev (platform developer) role. This role is the
+            // developer master key: whole-system access including all studios, and
+            // it is immune to legacy data ports (ETL never wipes auth tables).
+            $devRole = null;
+            if (class_exists(Role::class)) {
+                $devRole = Role::firstOrCreate(
+                    ['slug' => 'super-dev'],
+                    [
+                        'name' => 'Platform Developer',
+                        'description' => 'Framework developer master key: whole-system access including Slice Studio, Blueprint Studio and Porting Studio. Immune to legacy data ports.',
+                    ]
+                );
+            } elseif (Schema::hasTable('roles')) {
+                DB::table('roles')->updateOrInsert(
+                    ['slug' => 'super-dev'],
+                    [
+                        'name' => 'Platform Developer',
+                        'description' => 'Framework developer master key: whole-system access including Slice Studio, Blueprint Studio and Porting Studio. Immune to legacy data ports.',
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ]
+                );
+                $devRole = DB::table('roles')->where('slug', 'super-dev')->first();
+            }
+
             // Create admin user using standard User model or Slice User model
             $userModelClass = config('auth.providers.users.model', User::class);
             if (! class_exists($userModelClass)) {
@@ -170,6 +195,15 @@ class SliceInstallCommand extends Command
                 DB::table('role_user')->updateOrInsert(
                     ['role_id' => $role->id, 'user_id' => $user->id],
                     ['role_id' => $role->id, 'user_id' => $user->id]
+                );
+            }
+
+            // The installing admin is also the platform developer: attach super-dev.
+            // Whole-system access for the developer persona, surviving future data ports.
+            if (isset($devRole) && isset($user->id) && Schema::hasTable('role_user')) {
+                DB::table('role_user')->updateOrInsert(
+                    ['role_id' => $devRole->id, 'user_id' => $user->id],
+                    ['role_id' => $devRole->id, 'user_id' => $user->id]
                 );
             }
 

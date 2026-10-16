@@ -1037,6 +1037,15 @@ final class BlueprintStudioController extends Controller
     }
 
     /**
+     * Render the dedicated Porting Studio page (mobile-responsive).
+     * Replaces the cramped modal with a full workspace for port analysis.
+     */
+    public function portingStudio()
+    {
+        return view('laraslice::porting-studio');
+    }
+
+    /**
      * Inspect or load architecture plan for legacy application porting.
      */
     public function portPlan(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
@@ -1048,6 +1057,13 @@ final class BlueprintStudioController extends Controller
         $source = (string) $request->input('source', '');
         $domain = (string) $request->input('domain', 'ERP');
         $planJson = (string) $request->input('plan_json', '');
+
+        // Git repository source: clone first, then analyze the local clone
+        $sourceType = (string) $request->input('source_type', 'local');
+        $gitBranch = (string) $request->input('git_branch', '');
+        // Token is used in-memory for the clone only — never stored or returned
+        $gitToken = (string) $request->input('git_token', '');
+        $clonedFrom = null;
 
         try {
             // 1. Direct JSON passed from developer
@@ -1064,11 +1080,32 @@ final class BlueprintStudioController extends Controller
                 $examplePlan = base_path('docs/porting-architecture-plan.json');
                 if (\Illuminate\Support\Facades\File::exists($examplePlan)) {
                     $plan = json_decode(\Illuminate\Support\Facades\File::get($examplePlan), true);
-                    return response()->json(['success' => true, 'plan' => $plan]);
+                    return response()->json(['success' => true, 'plan' => $plan, 'example' => true]);
+                }
+                // The preset was chosen explicitly but no example plan is installed:
+                // return a clear error instead of falling through to inspect() with a bogus path.
+                if ($preset === 'erp') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The ERP example plan is not installed in this project (docs/porting-architecture-plan.json not found). Choose "Inspect Custom Local Project" and enter a valid Source Application Path instead.',
+                    ], 422);
                 }
             }
 
             // 3. Dynamic inspection & plan generation
+            if ($sourceType === 'git') {
+                if (empty($source)) {
+                    throw new \InvalidArgumentException('Enter a Git repository URL to clone.');
+                }
+                $source = $portService->cloneGitSource(
+                    $source,
+                    $gitBranch !== '' ? $gitBranch : null,
+                    $gitToken !== '' ? $gitToken : null,
+                    (bool) $request->input('git_keep', false)
+                );
+                $clonedFrom = $request->input('source'); // original URL, token never included
+            }
+
             $inspection = $portService->inspect($source, $domain);
             $plan = $portService->generateArchitecturePlan($inspection, $domain);
 
@@ -1076,6 +1113,7 @@ final class BlueprintStudioController extends Controller
                 'success' => true,
                 'plan' => $plan,
                 'inspection' => $inspection,
+                'cloned_from' => $clonedFrom,
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -1083,6 +1121,200 @@ final class BlueprintStudioController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * Get the directory where porting presets are stored.
+     */
+    protected function portPresetDir(): string
+    {
+        $dir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-presets');
+        if (! \Illuminate\Support\Facades\File::isDirectory($dir)) {
+            \Illuminate\Support\Facades\File::makeDirectory($dir, 0755, true);
+        }
+        return $dir;
+    }
+
+    /**
+     * Save an analyzed porting plan as a named reusable preset.
+     */
+    public function savePortPreset(Request $request): JsonResponse
+    {
+        $name = trim((string) $request->input('name', ''));
+        $plan = $request->input('plan');
+
+        if ($name === '') {
+            return response()->json(['success' => false, 'message' => 'Preset name is required.'], 422);
+        }
+        if (! is_array($plan)) {
+            return response()->json(['success' => false, 'message' => 'Plan data is required.'], 422);
+        }
+
+        $slug = \Illuminate\Support\Str::slug($name);
+        if ($slug === '') {
+            $slug = 'preset-'.time();
+        }
+
+        $data = [
+            'name' => $name,
+            'slug' => $slug,
+            'source_type' => $request->input('source_type', 'local'),
+            'source' => $request->input('source', ''), // URL or path, never a token
+            'git_branch' => $request->input('git_branch', ''),
+            'domain' => $request->input('domain', 'ERP'),
+            'created_at' => now()->toIso8601String(),
+            'plan' => $plan,
+        ];
+
+        \Illuminate\Support\Facades\File::put(
+            $this->portPresetDir().DIRECTORY_SEPARATOR.$slug.'.json',
+            json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        );
+
+        return response()->json(['success' => true, 'slug' => $slug, 'name' => $name]);
+    }
+
+    /**
+     * List saved porting presets (metadata only, not full plans).
+     */
+    public function listPortPresets(): JsonResponse
+    {
+        $presets = [];
+        foreach (\Illuminate\Support\Facades\File::glob($this->portPresetDir().DIRECTORY_SEPARATOR.'*.json') as $file) {
+            $data = json_decode(\Illuminate\Support\Facades\File::get($file), true);
+            if (is_array($data)) {
+                $presets[] = [
+                    'slug' => $data['slug'] ?? basename($file, '.json'),
+                    'name' => $data['name'] ?? basename($file, '.json'),
+                    'source_type' => $data['source_type'] ?? 'local',
+                    'source' => $data['source'] ?? '',
+                    'git_branch' => $data['git_branch'] ?? '',
+                    'domain' => $data['domain'] ?? 'ERP',
+                    'created_at' => $data['created_at'] ?? null,
+                ];
+            }
+        }
+
+        return response()->json(['success' => true, 'presets' => $presets]);
+    }
+
+    /**
+     * Load a saved porting preset (full plan).
+     */
+    public function loadPortPreset(string $slug): JsonResponse
+    {
+        $file = $this->portPresetDir().DIRECTORY_SEPARATOR.basename($slug).'.json';
+        if (! \Illuminate\Support\Facades\File::exists($file)) {
+            return response()->json(['success' => false, 'message' => 'Preset not found.'], 404);
+        }
+
+        $data = json_decode(\Illuminate\Support\Facades\File::get($file), true);
+
+        return response()->json(['success' => true, 'preset' => $data]);
+    }
+
+    /**
+     * Delete a saved porting preset.
+     */
+    public function deletePortPreset(string $slug): JsonResponse
+    {
+        $file = $this->portPresetDir().DIRECTORY_SEPARATOR.basename($slug).'.json';
+        if (\Illuminate\Support\Facades\File::exists($file)) {
+            \Illuminate\Support\Facades\File::delete($file);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Get the directory where cloned git sources are cached.
+     */
+    protected function portSourceCacheDir(): string
+    {
+        $dir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-sources');
+        if (! \Illuminate\Support\Facades\File::isDirectory($dir)) {
+            \Illuminate\Support\Facades\File::makeDirectory($dir, 0755, true);
+        }
+        return $dir;
+    }
+
+    /**
+     * Read cached-source metadata (repo URL, branch, keep flag).
+     */
+    protected function readSourceMeta(string $dir): array
+    {
+        $metaFile = $dir.DIRECTORY_SEPARATOR.'.porting-meta.json';
+        if (\Illuminate\Support\Facades\File::exists($metaFile)) {
+            $meta = json_decode(\Illuminate\Support\Facades\File::get($metaFile), true);
+            if (is_array($meta)) {
+                return $meta;
+            }
+        }
+        return [];
+    }
+
+    /**
+     * List cached git sources with size, age, and keep status.
+     */
+    public function listCachedSources(): JsonResponse
+    {
+        $sources = [];
+        $cacheDir = $this->portSourceCacheDir();
+
+        foreach (\Illuminate\Support\Facades\File::directories($cacheDir) as $dir) {
+            if (! \Illuminate\Support\Facades\File::isDirectory($dir.DIRECTORY_SEPARATOR.'.git')) {
+                continue;
+            }
+            $meta = $this->readSourceMeta($dir);
+            $key = basename($dir);
+
+            // Calculate directory size
+            $size = 0;
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)) as $file) {
+                $size += $file->getSize();
+            }
+
+            $sources[] = [
+                'key' => $key,
+                'repo_url' => $meta['repo_url'] ?? '(unknown)',
+                'branch' => $meta['branch'] ?? null,
+                'keep' => (bool) ($meta['keep'] ?? false),
+                'cloned_at' => $meta['cloned_at'] ?? null,
+                'size_mb' => round($size / 1048576, 1),
+            ];
+        }
+
+        return response()->json(['success' => true, 'sources' => $sources]);
+    }
+
+    /**
+     * Toggle the "keep" flag on a cached source (skips 24h auto-expiry).
+     */
+    public function keepCachedSource(Request $request, string $key): JsonResponse
+    {
+        $dir = $this->portSourceCacheDir().DIRECTORY_SEPARATOR.basename($key);
+        if (! \Illuminate\Support\Facades\File::isDirectory($dir)) {
+            return response()->json(['success' => false, 'message' => 'Cached source not found.'], 404);
+        }
+
+        $meta = $this->readSourceMeta($dir);
+        $meta['keep'] = (bool) $request->input('keep', true);
+        \Illuminate\Support\Facades\File::put($dir.DIRECTORY_SEPARATOR.'.porting-meta.json', json_encode($meta, JSON_PRETTY_PRINT));
+
+        return response()->json(['success' => true, 'keep' => $meta['keep']]);
+    }
+
+    /**
+     * Delete a cached git source.
+     */
+    public function deleteCachedSource(string $key): JsonResponse
+    {
+        $dir = $this->portSourceCacheDir().DIRECTORY_SEPARATOR.basename($key);
+        if (\Illuminate\Support\Facades\File::isDirectory($dir)) {
+            \Illuminate\Support\Facades\File::deleteDirectory($dir);
+        }
+
+        return response()->json(['success' => true]);
     }
 
     /**
@@ -1124,13 +1356,16 @@ final class BlueprintStudioController extends Controller
         $mode = (string) $request->input('mode', 'system-base');
         $withFiles = (bool) $request->input('with_files', false);
         $importData = (bool) $request->input('import_data', true);
+        // Opt-in: normalized legacy roles/permissions merge. Framework auth tables
+        // (roles/permissions) stay protected by default; users merge by email.
+        $importAuth = (bool) $request->input('import_auth', false);
 
         try {
             if (! empty($planInput)) {
                 $plan = is_array($planInput) ? $planInput : json_decode($planInput, true);
-                $result = $portService->executeFromPlan($plan, $importData, $withFiles);
+                $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth);
             } else {
-                $result = $portService->execute($source, $domain, $mode, $withFiles, $importData);
+                $result = $portService->execute($source, $domain, $mode, $withFiles, $importData, null, $importAuth);
             }
 
             return response()->json([

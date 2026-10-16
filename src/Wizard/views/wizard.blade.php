@@ -52,6 +52,7 @@ function larasliceWizard() {
         portWithFiles: false,
         portInspecting: false,
         portExecuting: false,
+        portError: '',
         portInspectionData: null,
         portPlanData: null,
         portPlanJsonText: '',
@@ -923,6 +924,21 @@ function larasliceWizard() {
             this.syncStudioFields();
         },
         studioFields: [],
+        // Editable UI config (Page & UI Architecture) - auto-detected from fields, fully editable
+        uiQuickFilters: [],
+        uiSummaryCards: [],
+        uiSidebarFilters: [],
+        uiBulkActions: ['delete', 'export'],
+        // Form sections (Step 3: Create & Edit Form)
+        uiFormSections: [],
+        uiFormMode: 'drawer',
+        uiFormInitialized: false,
+        uiRowActions: { display: 'dropdown', items: [
+            { handle: 'view', label: 'View', icon: 'eye', placement: 'inline' },
+            { handle: 'edit', label: 'Edit', icon: 'pencil', placement: 'dropdown' },
+            { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'dropdown', danger: true },
+        ]},
+        uiInitialized: false,
         deletedStudioFields: [],
         isSavingStudioFields: false,
         studioRelations: [],
@@ -1323,7 +1339,7 @@ function larasliceWizard() {
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('port') === '1' || this.mainTab === 'porting') {
                 this.showPortModal = true;
-                this.fetchPortPlan();
+                // NOTE: Analyze is NOT auto-fired. The developer clicks it explicitly.
             }
 
             this.loadSlices();
@@ -1854,6 +1870,55 @@ function larasliceWizard() {
                 this.resultMessage = 'Error: ' + e.message;
             });
         },
+        refreshUiFromFields() {
+            // Auto-detect UI config from studioFields - called on demand, preserves manual edits otherwise
+            const fields = this.studioFields || [];
+            const label = (h) => h.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            this.uiQuickFilters = fields
+                .filter(f => f.type === 'foreign_id' || (f.handle && (f.handle.includes('status') || f.handle.includes('type') || f.handle.includes('category'))))
+                .map(f => ({
+                    field: f.handle, handle: f.handle,
+                    label: f.label || label(f.handle),
+                    type: 'select', searchable: true, is_searchable: true,
+                    options_from: 'distinct:' + f.handle,
+                }));
+            this.uiSummaryCards = fields
+                .filter(f => f.type === 'decimal' || (f.handle && (f.handle.includes('amount') || f.handle.includes('total') || f.handle.includes('price') || f.handle.includes('balance'))))
+                .map(f => ({
+                    handle: f.handle, label: f.label || label(f.handle),
+                    aggregate: 'sum', formatter: 'money',
+                }));
+            this.uiSidebarFilters = fields
+                .filter(f => f.type === 'date' || f.type === 'datetime' || (f.handle && (f.handle.includes('_at') || f.handle.includes('date'))))
+                .slice(0, 2)
+                .map(f => ({ handle: f.handle, label: f.label || label(f.handle), type: 'date_range' }));
+            this.uiInitialized = true;
+        },
+        refreshFormSections() {
+            // Auto-generate form sections from studioFields
+            const fields = (this.studioFields || [])
+                .filter(f => f.show_in_form !== false && f.handle && f.handle.trim() && !['id', 'created_at', 'updated_at', 'deleted_at'].includes(f.handle))
+                .map(f => ({
+                    handle: f.handle,
+                    label: f.label || f.handle.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    span: (f.width === 100 ? 2 : 1),
+                    width: f.width || 50,
+                    searchable: f.type === 'foreign_id' || f.handle.endsWith('_id') || !!f.searchable,
+                    type: f.type || 'text',
+                }));
+            // Group: put foreign keys and searchable in first section, rest in second if many fields
+            if (fields.length <= 8) {
+                this.uiFormSections = [{ title: 'General Information', description: '', columns: 2, fields: fields }];
+            } else {
+                const primary = fields.filter(f => f.searchable || f.type === 'foreign_id');
+                const rest = fields.filter(f => !(f.searchable || f.type === 'foreign_id'));
+                this.uiFormSections = [
+                    { title: 'General Information', description: '', columns: 2, fields: primary.length ? primary : fields.slice(0, 6) },
+                    { title: 'Additional Details', description: '', columns: 2, fields: primary.length ? rest : fields.slice(6) },
+                ].filter(s => s.fields.length);
+            }
+            this.uiFormInitialized = true;
+        },
         buildUiConfig() {
             const activeCols = (this.studioFields || [])
                 .filter(f => f.show_in_list !== false && f.handle && f.handle.trim())
@@ -1867,16 +1932,9 @@ function larasliceWizard() {
                     searchable: true
                 }));
 
-            const quickFilters = (this.studioFields || [])
-                .filter(f => f.type === 'foreign_id' || f.handle.includes('status') || f.handle.includes('type') || f.handle.includes('category'))
-                .map(f => ({
-                    field: f.handle,
-                    handle: f.handle,
-                    label: f.label || f.handle.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                    type: 'select',
-                    searchable: true,
-                    is_searchable: true
-                }));
+            // Use editable UI state (auto-detect on first use, then preserve manual edits)
+            if (!this.uiInitialized) this.refreshUiFromFields();
+            const quickFilters = this.uiQuickFilters;
 
             const formFields = (this.studioFields || [])
                 .filter(f => f.show_in_form !== false && f.handle && f.handle.trim() && !['id', 'created_at', 'updated_at', 'deleted_at'].includes(f.handle))
@@ -1887,15 +1945,14 @@ function larasliceWizard() {
                     searchable: f.type === 'foreign_id' || f.handle.endsWith('_id') || !!f.searchable
                 }));
 
-            const sections = [
-                {
-                    name: 'General Information',
-                    grid: 2,
-                    columns: 2,
-                    fields: formFields.length > 0 ? formFields : [
-                        { handle: 'name', span: 1, width: 50, searchable: false }
-                    ]
-                }
+            // Use editable form sections (auto-generate on first use, preserve manual edits)
+            if (!this.uiFormInitialized) this.refreshFormSections();
+            const sections = this.uiFormSections.length > 0 ? this.uiFormSections.map(s => ({
+                name: s.title, title: s.title, description: s.description || '',
+                grid: s.columns || 2, columns: s.columns || 2,
+                fields: s.fields,
+            })) : [
+                { name: 'General Information', title: 'General Information', grid: 2, columns: 2, fields: [{ handle: 'name', span: 1, width: 50, searchable: false }] }
             ];
 
             return {
@@ -1906,11 +1963,14 @@ function larasliceWizard() {
                         { handle: 'name', key: 'name', label: 'Name', type: 'text', sortable: true, searchable: true }
                     ],
                     quick_filters: quickFilters,
-                    sidebar_filters: []
+                    sidebar_filters: this.uiSidebarFilters,
+                    summary_cards: this.uiSummaryCards,
+                    bulk_actions: this.uiBulkActions,
+                    row_actions: this.uiRowActions,
                 },
                 forms: {
-                    mode: 'drawer',
-                    presentation: 'drawer',
+                    mode: this.uiFormMode,
+                    presentation: this.uiFormMode,
                     sections: sections
                 }
             };
@@ -2152,18 +2212,31 @@ function larasliceWizard() {
 
         selectPortPreset(val) {
             this.portPreset = val;
+            // Changing the preset only prefills the fields and clears stale plan data.
+            // The developer clicks Analyze explicitly — no auto-fire.
+            this.portPlanData = null;
+            this.portPlanJsonText = '';
+            this.portInspectionData = null;
+            this.portError = '';
             if (val === 'erp') {
                 this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
-                this.fetchPortPlan();
             } else if (val === 'fospah') {
                 this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
-                this.fetchPortPlan();
             } else if (val === 'custom') {
                 this.portSourcePath = '';
                 this.portDomain = 'Core';
             }
+        },
+
+        moveSidebarGroup(gIdx, direction) {
+            const groups = this.portPlanData?.sidebar_preview?.groups;
+            if (!groups || gIdx < 0 || gIdx >= groups.length) return;
+            const newIdx = gIdx + direction;
+            if (newIdx < 0 || newIdx >= groups.length) return;
+            const [moved] = groups.splice(gIdx, 1);
+            groups.splice(newIdx, 0, moved);
         },
 
         fetchPortPlan() {
@@ -2519,14 +2592,12 @@ function larasliceWizard() {
                 <span aria-hidden="true">⌘</span>
                 <span>Blueprint Studio</span>
             </a>
-            <button type="button"
-               @click="showPortModal = true; if (!portPlanData) fetchPortPlan();"
-               :class="showPortModal ? 'border-indigo-500 bg-indigo-500/25 text-indigo-300 font-bold' : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-semibold'"
-               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer shadow-xs"
-               title="Reverse-engineer and port legacy application">
+            <a href="{{ route('laraslice.wizard.porting') }}"
+               class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer shadow-xs"
+               title="Open Porting Studio (full page, mobile-friendly)">
                 <span>🚀</span>
                 <span>Port Legacy App</span>
-            </button>
+            </a>
             <a href="{{ route('laraslice.wizard.schema_studio') }}"
                class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 border border-border text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/50">
                 <span>⚡</span>
@@ -3641,7 +3712,7 @@ function larasliceWizard() {
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary" x-text="(installedSlices || []).length + ' Total'"></span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button type="button" @click="showPortModal = true; if (!portPlanData) fetchPortPlan();" class="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer shadow-2xs">
+                            <button type="button" @click="showPortModal = true" class="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer shadow-2xs">
                                 <span>🚀</span> Port App
                             </button>
                             <button type="button" @click="loadSlices()" class="text-xs text-primary hover:opacity-80 flex items-center gap-1 cursor-pointer">
@@ -4096,6 +4167,209 @@ function larasliceWizard() {
                             <button type="button" @click="addStudioField()" class="inline-flex items-center gap-1.5 rounded-lg border border-input bg-background px-4 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition shadow-xs cursor-pointer">
                                 <span>+</span> Add Field
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- UI Config Editor (Page & UI Architecture Plan) -->
+                    <div class="rounded-2xl border border-indigo-500/30 bg-card p-5 shadow-sm space-y-4 mt-4" x-data="{ showUiEditor: false }" x-init="if (!uiInitialized) refreshUiFromFields()">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                    <span class="flex size-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">📄</span>
+                                    <span>Page & UI Architecture</span>
+                                    <span class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400">BlatUI 4-Step</span>
+                                    <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">Editable</span>
+                                </h2>
+                                <p class="text-xs text-muted-foreground mt-0.5">Full UI config editor — changes flow into <code class="font-mono bg-muted px-1 rounded">slice.yaml</code> on generate. No need to visit Blueprint Studio.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="refreshUiFromFields()"
+                                    class="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground" title="Re-detect from fields">
+                                    🔄 Re-detect
+                                </button>
+                                <button type="button" @click="showUiEditor = !showUiEditor"
+                                    class="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    <span x-text="showUiEditor ? 'Hide Editor' : 'Edit UI Config'"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div x-show="showUiEditor" class="space-y-4">
+                            <!-- Quick Filters Editor -->
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-3.5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <p class="text-xs font-bold text-foreground">🔖 Quick Filters <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary" x-text="uiQuickFilters.length"></span> <span class="text-[10px] font-normal text-muted-foreground">tab order = display order</span></p>
+                                    <div class="flex items-center gap-2" x-data="{ qfField: '' }">
+                                        <select x-model="qfField" class="rounded-md border border-border bg-background px-2 py-1 text-[11px]">
+                                            <option value="">+ From field...</option>
+                                            <template x-for="f in studioFields" :key="f.handle">
+                                                <option :value="f.handle" x-text="(f.label || f.handle) + ' (' + f.handle + ')'"></option>
+                                            </template>
+                                        </select>
+                                        <button type="button" @click="if(qfField){ const f = studioFields.find(x => x.handle === qfField); uiQuickFilters.push({handle: qfField, label: f.label || qfField, type: 'select', options_from: 'distinct:' + qfField, searchable: true}); qfField=''; }"
+                                            class="text-[11px] font-semibold text-primary hover:underline">+ Add</button>
+                                    </div>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <template x-for="(qf, i) in uiQuickFilters" :key="i">
+                                        <div class="flex items-center gap-2 rounded-lg border border-border/40 bg-card px-2 py-1.5">
+                                            <span class="flex flex-col gap-0.5">
+                                                <button type="button" @click="if(i>0){ const t=uiQuickFilters[i-1]; uiQuickFilters[i-1]=uiQuickFilters[i]; uiQuickFilters[i]=t; }" :disabled="i===0" class="text-[9px] text-muted-foreground hover:text-foreground disabled:opacity-20 leading-none">▲</button>
+                                                <button type="button" @click="if(i<uiQuickFilters.length-1){ const t=uiQuickFilters[i+1]; uiQuickFilters[i+1]=uiQuickFilters[i]; uiQuickFilters[i]=t; }" :disabled="i===uiQuickFilters.length-1" class="text-[9px] text-muted-foreground hover:text-foreground disabled:opacity-20 leading-none">▼</button>
+                                            </span>
+                                            <input type="text" x-model="qf.label" placeholder="Label" class="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                                            <input type="text" x-model="qf.handle" placeholder="handle" class="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs font-mono">
+                                            <input type="text" x-model="qf.options_from" placeholder="distinct:field" title="Options source: distinct:field or manual" class="w-32 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-mono text-muted-foreground">
+                                            <button type="button" @click="uiQuickFilters.splice(i, 1)" class="text-destructive text-xs px-1">✕</button>
+                                        </div>
+                                    </template>
+                                    <p x-show="!uiQuickFilters.length" class="text-[11px] text-muted-foreground">None. Pick a field above or click 🔄 Re-detect.</p>
+                                </div>
+                            </div>
+                            <!-- Sidebar Filters Editor -->
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-3.5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <p class="text-xs font-bold text-foreground">🎛️ Sidebar Filters <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary" x-text="uiSidebarFilters.length"></span> <span class="text-[10px] font-normal text-muted-foreground">date ranges & FK dropdowns</span></p>
+                                    <div class="flex items-center gap-2" x-data="{ sfField: '', sfType: 'date_range' }">
+                                        <select x-model="sfField" class="rounded-md border border-border bg-background px-2 py-1 text-[11px]">
+                                            <option value="">+ From field...</option>
+                                            <template x-for="f in studioFields" :key="f.handle">
+                                                <option :value="f.handle" x-text="(f.label || f.handle) + ' (' + f.handle + ')'"></option>
+                                            </template>
+                                        </select>
+                                        <select x-model="sfType" class="rounded-md border border-border bg-background px-2 py-1 text-[11px]">
+                                            <option value="date_range">Date range</option>
+                                            <option value="select">Dropdown</option>
+                                        </select>
+                                        <button type="button" @click="if(sfField){ const f = studioFields.find(x => x.handle === sfField); uiSidebarFilters.push({handle: sfField, label: f.label || sfField, type: sfType}); sfField=''; }"
+                                            class="text-[11px] font-semibold text-primary hover:underline">+ Add</button>
+                                    </div>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <template x-for="(sf, i) in uiSidebarFilters" :key="i">
+                                        <div class="flex items-center gap-2 rounded-lg border border-border/40 bg-card px-2 py-1.5">
+                                            <span class="rounded px-1.5 py-0.5 text-[10px] font-bold" :class="sf.type === 'date_range' ? 'bg-blue-500/10 text-blue-600' : 'bg-amber-500/10 text-amber-600'" x-text="sf.type === 'date_range' ? '📅' : '▾'"></span>
+                                            <input type="text" x-model="sf.label" placeholder="Label" class="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                                            <input type="text" x-model="sf.handle" placeholder="handle" class="w-28 rounded-md border border-border bg-background px-2 py-1 text-xs font-mono">
+                                            <button type="button" @click="uiSidebarFilters.splice(i, 1)" class="text-destructive text-xs px-1">✕</button>
+                                        </div>
+                                    </template>
+                                    <p x-show="!uiSidebarFilters.length" class="text-[11px] text-muted-foreground">None. Pick a field above or click 🔄 Re-detect.</p>
+                                </div>
+                            </div>
+                            <!-- Summary Cards Editor -->
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-3.5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <p class="text-xs font-bold text-foreground">📊 Summary Cards <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary" x-text="uiSummaryCards.length"></span></p>
+                                    <button type="button" @click="uiSummaryCards.push({handle: 'amount', label: 'Total', aggregate: 'sum', formatter: 'money'})"
+                                        class="text-[11px] font-semibold text-primary hover:underline">+ Add</button>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <template x-for="(sc, i) in uiSummaryCards" :key="i">
+                                        <div class="flex items-center gap-2">
+                                            <input type="text" x-model="sc.label" placeholder="Label" class="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                                            <input type="text" x-model="sc.handle" placeholder="field" class="w-24 rounded-md border border-border bg-background px-2 py-1 text-xs font-mono">
+                                            <select x-model="sc.aggregate" class="rounded-md border border-border bg-background px-2 py-1 text-xs">
+                                                <option value="sum">Sum</option><option value="count">Count</option><option value="avg">Avg</option>
+                                            </select>
+                                            <button type="button" @click="uiSummaryCards.splice(i, 1)" class="text-destructive text-xs px-1">✕</button>
+                                        </div>
+                                    </template>
+                                    <p x-show="!uiSummaryCards.length" class="text-[11px] text-muted-foreground">None. Click + Add or 🔄 Re-detect.</p>
+                                </div>
+                            </div>
+                            <!-- Row Actions Editor -->
+                            <div class="rounded-xl border border-indigo-500/30 bg-card p-3.5">
+                                <div class="flex items-center justify-between mb-2">
+                                    <p class="text-xs font-bold text-foreground">⚡ Row Actions <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary" x-text="uiRowActions.items.length"></span></p>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" @click="uiRowActions.display = 'dropdown'" :class="uiRowActions.display === 'dropdown' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'" class="rounded px-2 py-0.5 text-[11px] font-bold">⋯ Menu</button>
+                                        <button type="button" @click="uiRowActions.display = 'inline'" :class="uiRowActions.display === 'inline' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'" class="rounded px-2 py-0.5 text-[11px] font-bold">Inline</button>
+                                        <button type="button" @click="uiRowActions.display = 'hybrid'" :class="uiRowActions.display === 'hybrid' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'" class="rounded px-2 py-0.5 text-[11px] font-bold">Hybrid</button>
+                                    </div>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <template x-for="(a, i) in uiRowActions.items" :key="i">
+                                        <div class="flex items-center gap-2">
+                                            <input type="text" x-model="a.label" placeholder="Label" class="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs">
+                                            <select x-model="a.placement" class="rounded-md border border-border bg-background px-2 py-1 text-xs">
+                                                <option value="inline">Inline</option><option value="dropdown">Dropdown</option>
+                                            </select>
+                                            <button type="button" @click="uiRowActions.items.splice(i, 1)" class="text-destructive text-xs px-1">✕</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <button type="button" @click="uiRowActions.items.push({handle: 'custom_' + Date.now(), label: 'Custom', icon: 'plus', placement: 'dropdown'})"
+                                    class="mt-2 text-[11px] font-semibold text-primary hover:underline">+ Add Action</button>
+                            </div>
+                            <!-- Bulk Actions -->
+                            <div class="rounded-xl border border-border/80 bg-muted/10 p-3.5">
+                                <p class="text-xs font-bold text-foreground mb-2">📦 Bulk Actions</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" :checked="uiBulkActions.includes('delete')" @change="$event.target.checked ? uiBulkActions.push('delete') : uiBulkActions.splice(uiBulkActions.indexOf('delete'), 1)" class="rounded"> Delete</label>
+                                    <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" :checked="uiBulkActions.includes('export')" @change="$event.target.checked ? uiBulkActions.push('export') : uiBulkActions.splice(uiBulkActions.indexOf('export'), 1)" class="rounded"> Export</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Create & Edit Form Sections Editor -->
+                    <div class="rounded-2xl border border-indigo-500/30 bg-card p-5 shadow-sm space-y-4 mt-4" x-data="{ showFormEditor: false }" x-init="if (!uiFormInitialized) refreshFormSections()">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                    <span class="flex size-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">📝</span>
+                                    <span>Create & Edit Form</span>
+                                    <span class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400">Step 3</span>
+                                    <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400" x-text="uiFormSections.length + ' Sections'"></span>
+                                </h2>
+                                <p class="text-xs text-muted-foreground mt-0.5">Design form section cards — fields, layout, and presentation mode.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="inline-flex rounded-lg border border-input bg-card p-0.5">
+                                    <button type="button" @click="uiFormMode = 'drawer'" :class="uiFormMode === 'drawer' ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground'" class="rounded-md px-2.5 py-1 text-[11px] transition cursor-pointer">🗂️ Drawer</button>
+                                    <button type="button" @click="uiFormMode = 'page'" :class="uiFormMode === 'page' ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground'" class="rounded-md px-2.5 py-1 text-[11px] transition cursor-pointer">📄 Page</button>
+                                </div>
+                                <button type="button" @click="refreshFormSections()" class="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground" title="Re-generate from fields">🔄</button>
+                                <button type="button" @click="showFormEditor = !showFormEditor" class="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                                    <span x-text="showFormEditor ? 'Hide' : 'Edit Sections'"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div x-show="showFormEditor" class="space-y-3">
+                            <template x-for="(sec, sIdx) in uiFormSections" :key="sIdx">
+                                <div class="rounded-xl border border-border bg-muted/10 p-3.5 space-y-2.5">
+                                    <div class="flex items-center gap-2">
+                                        <span class="size-6 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold text-xs" x-text="'S' + (sIdx + 1)"></span>
+                                        <input type="text" x-model="sec.title" placeholder="Section title" class="flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs font-bold">
+                                        <select x-model="sec.columns" class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs">
+                                            <option value="1">1 Col</option><option value="2">2 Cols</option><option value="3">3 Cols</option>
+                                        </select>
+                                        <button type="button" @click="uiFormSections.splice(sIdx, 1)" class="text-rose-500 hover:text-rose-400 text-xs px-1" title="Delete section">🗑️</button>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <template x-for="(fld, fIdx) in sec.fields" :key="fIdx">
+                                            <div class="flex items-center gap-1 rounded-lg border border-border/60 bg-card px-2 py-1">
+                                                <span class="text-[11px] font-mono font-semibold" x-text="fld.handle"></span>
+                                                <select x-model="fld.span" class="rounded border border-input bg-background px-1 py-0.5 text-[10px]">
+                                                    <option value="1">1c</option><option value="2">2c</option>
+                                                </select>
+                                                <button type="button" @click="sec.fields.splice(fIdx, 1)" class="text-rose-500 text-[10px]">✕</button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div class="flex items-center gap-2" x-data="{ addFld: '' }">
+                                        <select x-model="addFld" class="rounded-lg border border-border bg-background px-2 py-1 text-[11px]">
+                                            <option value="">+ Add field...</option>
+                                            <template x-for="f in studioFields" :key="f.handle">
+                                                <option :value="f.handle" x-text="f.label || f.handle"></option>
+                                            </template>
+                                        </select>
+                                        <button type="button" @click="if(addFld){ const f = studioFields.find(x => x.handle === addFld); if(f) sec.fields.push({handle: f.handle, label: f.label || f.handle, span: 1, width: 50, searchable: false}); addFld=''; }" class="rounded bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold">Add</button>
+                                    </div>
+                                </div>
+                            </template>
+                            <button type="button" @click="uiFormSections.push({title: 'New Section', description: '', columns: 2, fields: []})"
+                                class="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary">+ Add Section Card</button>
                         </div>
                     </div>
 

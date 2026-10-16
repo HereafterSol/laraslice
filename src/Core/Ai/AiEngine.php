@@ -358,6 +358,20 @@ class AiEngine
         $activeProvider = $provider ?: $this->getActiveProvider();
         $systemContext = $this->getSystemContext($pageContext['path'] ?? '/');
 
+        // Check for porting commands (clone + analyze a repo or local path)
+        $portResponse = $this->handlePortingCommands($message, $pageContext);
+        if ($portResponse !== null) {
+            return [
+                'success' => true,
+                'provider' => $activeProvider,
+                'reply' => $portResponse,
+                'context' => [
+                    'page' => $pageContext['path'] ?? '/',
+                    'matched' => 'porting_command',
+                ],
+            ];
+        }
+
         // Check for specific queries that require exact live database query execution
         $directResponse = $this->handleDirectDatabaseQueries($message, $systemContext, $pageContext);
         if ($directResponse !== null) {
@@ -718,6 +732,115 @@ class AiEngine
         return null;
     }
 
+    /**
+     * Handle porting slash commands: analyze a Git repo or local path for porting.
+     *
+     * Commands:
+     *   /port <repo-url> [branch]   — Clone (or reuse cache) and analyze a Git repo
+     *   /port-local <path>          — Analyze a local project path
+     *   /port-presets               — List saved porting presets
+     *
+     * Returns the reply string, or null when the message is not a porting command.
+     */
+    protected function handlePortingCommands(string $message, array $pageContext): ?string
+    {
+        $raw = trim($message);
+        $msg = strtolower($raw);
+
+        // /port-presets — list saved presets
+        if (preg_match('/^\\/port-presets\\b/i', $msg)) {
+            $dir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-presets');
+            $reply = "### 📂 Saved Porting Presets\n\n";
+            if (! is_dir($dir)) {
+                return $reply."No presets saved yet. Analyze a project in Porting Studio, then click **💾 Save as Preset**.";
+            }
+            $files = glob($dir.DIRECTORY_SEPARATOR.'*.json') ?: [];
+            if (empty($files)) {
+                return $reply."No presets saved yet. Analyze a project in Porting Studio, then click **💾 Save as Preset**.";
+            }
+            foreach ($files as $file) {
+                $data = json_decode(file_get_contents($file), true);
+                if (! is_array($data)) {
+                    continue;
+                }
+                $name = $data['name'] ?? basename($file, '.json');
+                $src = $data['source'] ?? '?';
+                $created = $data['created_at'] ?? '?';
+                $reply .= "- **{$name}** — `{$src}` ({$created})\n";
+            }
+            $reply .= "\nLoad one from Porting Studio → 📂 Load saved preset.";
+
+            return $reply;
+        }
+
+        // /port <repo-url> [branch] — clone + analyze
+        if (preg_match('/^\\/port\\s+(https?\\S+)(?:\\s+(\\S+))?/i', $raw, $m)) {
+            $repoUrl = $m[1];
+            $branch = $m[2] ?? null;
+
+            @set_time_limit(180);
+            try {
+                $portService = app(\LaraSlice\Porting\SlicePortService::class);
+                $localPath = $portService->cloneGitSource($repoUrl, $branch);
+                $inspection = $portService->inspect($localPath, 'ERP');
+
+                $tableCount = count($inspection['tables'] ?? []);
+                $sliceCount = count($inspection['slice_mapping']['slices'] ?? $inspection['slices'] ?? []);
+                $journeys = $portService->analyzeUserJourneys($localPath);
+                $journeyCount = count($journeys);
+
+                $reply = "### 🔗 Porting Analysis: `{$repoUrl}`\n\n";
+                if ($branch) {
+                    $reply .= "**Branch:** `{$branch}`\n";
+                }
+                $reply .= "**Tables found:** {$tableCount}\n";
+                $reply .= "**Slices proposed:** {$sliceCount}\n";
+                $reply .= "**User journeys:** {$journeyCount}\n\n";
+                if ($journeyCount > 0) {
+                    $reply .= "**Journeys detected:**\n";
+                    foreach (array_slice($journeys, 0, 5) as $j) {
+                        $jName = is_array($j) ? ($j['name'] ?? $j['title'] ?? '?') : $j;
+                        $jPersona = is_array($j) ? ($j['persona'] ?? '') : '';
+                        $reply .= "- {$jName}".($jPersona ? " `{$jPersona}`" : '')."\n";
+                    }
+                    $reply .= "\n";
+                }
+                $reply .= "Open **Porting Studio** → set source type to 🔗 Git Repository with this URL to see the full interactive plan, then **⚡ Execute Porting**.";
+
+                return $reply;
+            } catch (\Throwable $e) {
+                $errMsg = preg_replace('#x-access-token:[^@\\s]+@#', 'x-access-token:***@', $e->getMessage());
+
+                return "### ❌ Porting failed\n\n{$errMsg}\n\nCheck the URL and branch name, then try again.";
+            }
+        }
+
+        // /port-local <path> — analyze local path
+        if (preg_match('/^\\/port-local\\s+(\\S+)/i', $raw, $m)) {
+            $path = $m[1];
+
+            @set_time_limit(180);
+            try {
+                $portService = app(\LaraSlice\Porting\SlicePortService::class);
+                $inspection = $portService->inspect($path, 'ERP');
+
+                $tableCount = count($inspection['tables'] ?? []);
+                $sliceCount = count($inspection['slice_mapping']['slices'] ?? $inspection['slices'] ?? []);
+
+                $reply = "### 📁 Porting Analysis: `{$path}`\n\n";
+                $reply .= "**Tables found:** {$tableCount}\n";
+                $reply .= "**Slices proposed:** {$sliceCount}\n\n";
+                $reply .= "Open **Porting Studio** with this path to see the full interactive plan.";
+
+                return $reply;
+            } catch (\Throwable $e) {
+                return "### ❌ Porting failed\n\n{$e->getMessage()}";
+            }
+        }
+
+        return null;
+    }
+
     protected function handleDirectDatabaseQueries(string $message, array $context, array $pageContext): mixed
     {
         $raw = trim($message);
@@ -737,6 +860,12 @@ class AiEngine
             $reply .= "| `/test` | Test OpenCode AI reasoning (2+2) | `/test` |\n";
             $reply .= "| `/wipe` | Guide to wiping domain data safely | `/wipe` |\n";
             $reply .= "| `/help` | Show this command reference | `/help` |\n\n";
+            $reply .= "### 🔗 Porting Commands\n\n";
+            $reply .= "| Command | Description | Example |\n";
+            $reply .= "| :--- | :--- | :--- |\n";
+            $reply .= "| `/port [url] [branch]` | Clone & analyze a Git repo for porting | `/port https://github.com/acme/erp.git main` |\n";
+            $reply .= "| `/port-local [path]` | Analyze a local project path | `/port-local /var/www/legacy` |\n";
+            $reply .= "| `/port-presets` | List saved porting presets | `/port-presets` |\n\n";
             $reply .= '💡 *Tip:* Type `/` into the chat input for instant autocomplete suggestions!';
 
             return $reply;
