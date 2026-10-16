@@ -97,7 +97,16 @@ class SliceInstallCommand extends Command
 
         // 3. Run Database Migrations (including Sanctum's token table for the API slices)
         $this->components->task('Running database migrations', function () {
-            if (! Schema::hasTable('personal_access_tokens')) {
+            $existingTokens = glob(database_path('migrations/*_create_personal_access_tokens_table.php')) ?: [];
+            if (count($existingTokens) > 1) {
+                // Deduplicate any repeated sanctum migration files to prevent SQL 1050 crashes
+                sort($existingTokens);
+                for ($i = 1; $i < count($existingTokens); $i++) {
+                    @unlink($existingTokens[$i]);
+                }
+            }
+
+            if (! Schema::hasTable('personal_access_tokens') && empty($existingTokens)) {
                 Artisan::call('vendor:publish', ['--tag' => 'sanctum-migrations']);
             }
             Artisan::call('migrate', ['--force' => true]);
