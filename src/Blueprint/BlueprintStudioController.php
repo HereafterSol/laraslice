@@ -240,15 +240,7 @@ final class BlueprintStudioController extends Controller
                     }
 
                     $sliceParsed = $loader->parse($sliceSource, 'yaml');
-                    if (isset($sliceParsed['models']) && is_array($sliceParsed['models'])) {
-                        foreach ($sliceParsed['models'] as &$m) {
-                            if (isset($m['handle']) && is_string($m['handle'])) {
-                                $m['handle'] = Str::snake($m['handle']);
-                            }
-                        }
-                        unset($m);
-                    }
-
+                    $sliceParsed = $this->sanitizeBlueprint($sliceParsed);
                     $validBp = $validator->validate($sliceParsed);
                     if (! $domainName && ! empty($validBp['domain'])) {
                         $domainName = $validBp['domain'];
@@ -364,14 +356,7 @@ final class BlueprintStudioController extends Controller
 
             // Single Slice Plan
             $parsed = $loader->parse($input['source'], $input['format']);
-            if (isset($parsed['models']) && is_array($parsed['models'])) {
-                foreach ($parsed['models'] as &$m) {
-                    if (isset($m['handle']) && is_string($m['handle'])) {
-                        $m['handle'] = Str::snake($m['handle']);
-                    }
-                }
-                unset($m);
-            }
+            $parsed = $this->sanitizeBlueprint($parsed);
             $blueprint = $validator->validate($parsed);
             $plan = $planner->plan($blueprint, $slicesPath);
             $plan['is_domain_plan'] = false;
@@ -472,14 +457,7 @@ final class BlueprintStudioController extends Controller
                         $sliceSource = Yaml::dump($sl['blueprint'], 4, 2);
                     }
                     $sliceParsed = $loader->parse($sliceSource, 'yaml');
-                    if (isset($sliceParsed['models']) && is_array($sliceParsed['models'])) {
-                        foreach ($sliceParsed['models'] as &$m) {
-                            if (isset($m['handle']) && is_string($m['handle'])) {
-                                $m['handle'] = Str::snake($m['handle']);
-                            }
-                        }
-                        unset($m);
-                    }
+                    $sliceParsed = $this->sanitizeBlueprint($sliceParsed);
                     $validBp = $validator->validate($sliceParsed);
                     $sPlan = $planner->plan($validBp, $slicesPath);
                     $target = $applier->apply($validBp, $sPlan, $slicesPath, $namespace, $overwriteExisting);
@@ -530,14 +508,7 @@ final class BlueprintStudioController extends Controller
             }
 
             $parsed = $loader->parse($input['source'], $input['format']);
-            if (isset($parsed['models']) && is_array($parsed['models'])) {
-                foreach ($parsed['models'] as &$m) {
-                    if (isset($m['handle']) && is_string($m['handle'])) {
-                        $m['handle'] = Str::snake($m['handle']);
-                    }
-                }
-                unset($m);
-            }
+            $parsed = $this->sanitizeBlueprint($parsed);
             $blueprint = $validator->validate($parsed);
             $plan = $planner->plan($blueprint, $slicesPath);
 
@@ -1380,4 +1351,218 @@ final class BlueprintStudioController extends Controller
         }
     }
 
+    /**
+     * Sanitize and auto-repair blueprint data before validation.
+     * Ensures reserved columns are stripped from fields, required/nullable booleans are consistent,
+     * child models are connected to the root aggregate model, and catalog/settings slices are recognized.
+     *
+     * @param  array<string, mixed>  $blueprint
+     * @return array<string, mixed>
+     */
+    private function sanitizeBlueprint(array $blueprint): array
+    {
+        if (! isset($blueprint['models']) || ! is_array($blueprint['models'])) {
+            return $blueprint;
+        }
+
+        $sliceName = $blueprint['name'] ?? '';
+        if (preg_match('/(setting|master|catalog|reference)/i', $sliceName)) {
+            $blueprint['taxonomy'] = true;
+        }
+
+        $reserved = ['id', 'created_at', 'updated_at', 'deleted_at'];
+        $rootHandle = null;
+        $modelHandles = [];
+
+        // 1. First pass: normalize handles, sanitize fields
+        foreach ($blueprint['models'] as $idx => &$model) {
+            if (! is_array($model)) {
+                continue;
+            }
+
+            if (isset($model['handle']) && is_string($model['handle'])) {
+                $model['handle'] = Str::snake($model['handle']);
+            } else {
+                $model['handle'] = 'model_'.$idx;
+            }
+
+            $mHandle = $model['handle'];
+            $modelHandles[$mHandle] = $idx;
+
+            if (($model['root'] ?? false) === true) {
+                if ($rootHandle === null) {
+                    $rootHandle = $mHandle;
+                } else {
+                    $model['root'] = false;
+                }
+            }
+
+            // Sanitize fields
+            if (isset($model['fields']) && is_array($model['fields'])) {
+                $cleanFields = [];
+                $seenHandles = [];
+
+                foreach ($model['fields'] as $f) {
+                    if (! is_array($f)) {
+                        continue;
+                    }
+
+                    $fHandle = isset($f['handle']) && is_string($f['handle']) ? Str::snake($f['handle']) : null;
+                    if (! $fHandle || in_array($fHandle, $reserved, true) || isset($seenHandles[$fHandle])) {
+                        continue;
+                    }
+                    $seenHandles[$fHandle] = true;
+                    $f['handle'] = $fHandle;
+
+                    $req = $f['required'] ?? null;
+                    $nll = $f['nullable'] ?? null;
+
+                    if ($req === null && $nll === null) {
+                        $f['required'] = false;
+                        $f['nullable'] = true;
+                    } elseif ($req !== null && $nll !== null && (bool) $req === (bool) $nll) {
+                        if ((bool) $req) {
+                            $f['required'] = true;
+                            $f['nullable'] = false;
+                        } else {
+                            $f['required'] = false;
+                            $f['nullable'] = true;
+                        }
+                    } elseif ($req !== null) {
+                        $f['required'] = (bool) $req;
+                        $f['nullable'] = ! (bool) $req;
+                    } else {
+                        $f['nullable'] = (bool) $nll;
+                        $f['required'] = ! (bool) $nll;
+                    }
+
+                    $cleanFields[] = $f;
+                }
+                $model['fields'] = $cleanFields;
+            }
+
+            // Normalize existing relations
+            if (isset($model['relations']) && is_array($model['relations'])) {
+                $cleanRelations = [];
+                foreach ($model['relations'] as $rel) {
+                    if (! is_array($rel)) {
+                        continue;
+                    }
+                    if (isset($rel['model']) && is_string($rel['model'])) {
+                        $rel['model'] = Str::snake($rel['model']);
+                    }
+                    if (isset($rel['name']) && is_string($rel['name'])) {
+                        $rel['name'] = Str::snake($rel['name']);
+                    }
+                    $cleanRelations[] = $rel;
+                }
+                $model['relations'] = $cleanRelations;
+            } else {
+                $model['relations'] = [];
+            }
+        }
+        unset($model);
+
+        // Ensure exactly one root model
+        if ($rootHandle === null && count($blueprint['models']) > 0) {
+            $blueprint['models'][0]['root'] = true;
+            $rootHandle = $blueprint['models'][0]['handle'];
+        }
+
+        // 2. Second pass: ensure child model reachability & valid foreign keys
+        $isCatalog = ($blueprint['taxonomy'] ?? false) === true;
+        if ($rootHandle !== null && count($blueprint['models']) > 1 && ! $isCatalog) {
+            $rootIndex = $modelHandles[$rootHandle] ?? 0;
+            $rootModel = &$blueprint['models'][$rootIndex];
+            $rootTable = $rootModel['table'] ?? $rootHandle.'s';
+            $rootTableSingular = Str::singular($rootTable);
+
+            foreach ($blueprint['models'] as $idx => &$childModel) {
+                if (! is_array($childModel) || $idx === $rootIndex) {
+                    continue;
+                }
+
+                $childHandle = $childModel['handle'];
+                $childFields = array_column($childModel['fields'] ?? [], 'handle');
+
+                // Find best foreign key pointing to root or another parent model
+                $bestFk = null;
+                $parentModelHandle = $rootHandle;
+
+                if (in_array($rootHandle.'_id', $childFields, true)) {
+                    $bestFk = $rootHandle.'_id';
+                } elseif (in_array($rootTableSingular.'_id', $childFields, true)) {
+                    $bestFk = $rootTableSingular.'_id';
+                } else {
+                    foreach ($modelHandles as $otherHandle => $otherIdx) {
+                        if ($otherIdx === $idx) {
+                            continue;
+                        }
+                        if (in_array($otherHandle.'_id', $childFields, true)) {
+                            $bestFk = $otherHandle.'_id';
+                            $parentModelHandle = $otherHandle;
+                            break;
+                        }
+                    }
+                }
+
+                // If still no foreign key found, inject rootHandle_id into child model fields
+                if (! $bestFk) {
+                    $bestFk = $rootHandle.'_id';
+                    $childModel['fields'][] = [
+                        'handle' => $bestFk,
+                        'label' => Str::headline($rootHandle),
+                        'type' => 'foreign_id',
+                        'required' => false,
+                        'nullable' => true,
+                        'width' => 50,
+                    ];
+                }
+
+                // Add hasMany on the parent model
+                $pIdx = $modelHandles[$parentModelHandle] ?? $rootIndex;
+                $parentModel = &$blueprint['models'][$pIdx];
+                $parentRelations = $parentModel['relations'] ?? [];
+                $alreadyHas = false;
+                foreach ($parentRelations as $pr) {
+                    if (($pr['model'] ?? '') === $childHandle) {
+                        $alreadyHas = true;
+                        break;
+                    }
+                }
+                if (! $alreadyHas) {
+                    $relName = Str::plural($childHandle);
+                    $parentRelations[] = [
+                        'name' => $relName,
+                        'type' => 'hasMany',
+                        'model' => $childHandle,
+                        'foreign_key' => $bestFk,
+                    ];
+                    $parentModel['relations'] = $parentRelations;
+                }
+
+                // Add belongsTo on child model
+                $childRelations = $childModel['relations'] ?? [];
+                $alreadyHasBelongsTo = false;
+                foreach ($childRelations as $cr) {
+                    if (($cr['model'] ?? '') === $parentModelHandle) {
+                        $alreadyHasBelongsTo = true;
+                        break;
+                    }
+                }
+                if (! $alreadyHasBelongsTo) {
+                    $childRelations[] = [
+                        'name' => $parentModelHandle,
+                        'type' => 'belongsTo',
+                        'model' => $parentModelHandle,
+                        'foreign_key' => $bestFk,
+                    ];
+                    $childModel['relations'] = $childRelations;
+                }
+            }
+            unset($childModel);
+        }
+
+        return $blueprint;
+    }
 }

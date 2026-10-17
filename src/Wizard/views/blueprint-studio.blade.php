@@ -5578,22 +5578,26 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
 
                 const rawFields = Array.isArray(m.fields) ? m.fields : [];
                 const seenFields = new Set();
+                const reservedHandles = ['id', 'created_at', 'updated_at', 'deleted_at'];
                 rawFields.forEach(f => {
                     const fHandle = this.toSnakeCase(f.handle || f.name || '');
-                    if (!fHandle || seenFields.has(fHandle)) return;
+                    if (!fHandle || reservedHandles.includes(fHandle) || seenFields.has(fHandle)) return;
                     seenFields.add(fHandle);
 
                     const fType = f.type || 'string';
                     const fOptions = (f.options && typeof f.options === 'object') ? f.options : {};
                     const fOptionsText = Object.entries(fOptions).map(([k, v]) => `${k}: ${v}`).join(', ');
 
+                    const isNullable = f.nullable !== undefined ? !!f.nullable : (f.required !== undefined ? !f.required : true);
+                    const isRequired = !isNullable;
+
                     modelObj.fields.push({
                         handle: fHandle,
                         label: f.label || (fHandle ? (fHandle.charAt(0).toUpperCase() + fHandle.slice(1).replace(/_/g, ' ')) : ''),
                         type: fType,
                         input_type: f.input_type || (fType === 'enum' ? 'select' : (['text', 'json'].includes(fType) ? 'textarea' : (fType === 'boolean' ? 'checkbox' : (fType === 'date' ? 'date' : 'text')))),
-                        required: f.required !== undefined ? !!f.required : true,
-                        nullable: f.nullable !== undefined ? !!f.nullable : false,
+                        required: isRequired,
+                        nullable: isNullable,
                         hidden: !!f.hidden,
                         width: parseInt(f.width) || (['text', 'json'].includes(fType) ? 100 : 50),
                         length: f.length !== undefined && f.length !== null ? String(f.length) : '',
@@ -5764,26 +5768,35 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                     timestamps: m.timestamps !== false,
                     soft_deletes: !!m.soft_deletes,
                     description: m.description || '',
-                    fields: (m.fields || []).map(f => {
-                        const fHandle = this.toSnakeCase(f.handle || 'field');
-                        const fObj = {
-                            handle: fHandle,
-                            label: f.label || (fHandle.charAt(0).toUpperCase() + fHandle.slice(1).replace(/_/g, ' ')),
-                            type: f.type || 'string',
-                            input_type: f.input_type || 'text',
-                            required: !!f.required,
-                            nullable: !!f.nullable,
-                            width: parseInt(f.width) || 50,
-                        };
-                        if (f.hidden) fObj.hidden = true;
-                        if (f.length) fObj.length = f.length;
-                        if (f.default) fObj.default = f.default;
-                        if (f.type === 'enum' && f.options && Object.keys(f.options).length) {
-                            fObj.options = f.options;
-                        }
-                        return fObj;
-                    }),
-                    relations: (m.relations || []).map(r => ({
+                    fields: (m.fields || [])
+                        .filter(f => !['id', 'created_at', 'updated_at', 'deleted_at'].includes(this.toSnakeCase(f.handle || '')))
+                        .map(f => {
+                            const fHandle = this.toSnakeCase(f.handle || 'field');
+                            const isReq = !!f.required;
+                            const isNll = f.nullable !== undefined ? !!f.nullable : !isReq;
+                            const finalReq = isNll ? false : true;
+                            const finalNll = !finalReq;
+                            const fObj = {
+                                handle: fHandle,
+                                label: f.label || (fHandle.charAt(0).toUpperCase() + fHandle.slice(1).replace(/_/g, ' ')),
+                                type: f.type || 'string',
+                                input_type: f.input_type || 'text',
+                                required: finalReq,
+                                nullable: finalNll,
+                                width: parseInt(f.width) || 50,
+                            };
+                            if (f.hidden) fObj.hidden = true;
+                            if (f.length) fObj.length = f.length;
+                            if (f.default) fObj.default = f.default;
+                            if (f.type === 'enum' && f.options && Object.keys(f.options).length) {
+                                fObj.options = f.options;
+                            }
+                            return fObj;
+                        }),
+                    relations: (this.allRelations && this.allRelations.length > 0
+                        ? this.allRelations.filter(r => r.source_model === mHandle)
+                        : (m.relations || [])
+                    ).map(r => ({
                         name: this.toSnakeCase(r.name || 'relation'),
                         type: r.type || 'belongsTo',
                         model: this.toSnakeCase(r.model || ''),
@@ -5792,6 +5805,50 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 };
                 return mObj;
             });
+
+            // Auto-link child models to root aggregate if missing and not a catalog
+            const rootModel = cleanModels.find(m => m.root) || cleanModels[0];
+            const isCatalogSlice = !!this.blueprint.taxonomy || /setting|master|catalog|reference/i.test(this.blueprint.name || '');
+            if (rootModel && cleanModels.length > 1 && !isCatalogSlice) {
+                cleanModels.forEach(cm => {
+                    if (!cm.root) {
+                        const childFields = (cm.fields || []).map(f => f.handle);
+                        let bestFk = childFields.includes(rootModel.handle + '_id') ? (rootModel.handle + '_id') : null;
+                        if (!bestFk) {
+                            bestFk = rootModel.handle + '_id';
+                            if (!childFields.includes(bestFk)) {
+                                cm.fields.push({
+                                    handle: bestFk,
+                                    label: rootModel.name || (rootModel.handle.charAt(0).toUpperCase() + rootModel.handle.slice(1)),
+                                    type: 'foreign_id',
+                                    input_type: 'select',
+                                    required: false,
+                                    nullable: true,
+                                    width: 50
+                                });
+                            }
+                        }
+                        const hasRel = (rootModel.relations || []).some(r => r.model === cm.handle);
+                        if (!hasRel) {
+                            rootModel.relations.push({
+                                name: cm.handle.endsWith('s') ? cm.handle : (cm.handle + 's'),
+                                type: 'hasMany',
+                                model: cm.handle,
+                                foreign_key: bestFk
+                            });
+                        }
+                        const childHasRel = (cm.relations || []).some(r => r.model === rootModel.handle);
+                        if (!childHasRel) {
+                            cm.relations.push({
+                                name: rootModel.handle,
+                                type: 'belongsTo',
+                                model: rootModel.handle,
+                                foreign_key: bestFk
+                            });
+                        }
+                    }
+                });
+            }
 
             const bpObj = {
                 schema_version: 1,

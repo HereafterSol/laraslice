@@ -38,23 +38,27 @@ final class BlueprintApplier
         if (! $isCatalog) {
             $rootClass = SliceName::canonical($blueprint['name']);
             $rootTable = Str::plural(Str::snake($rootClass));
-            if ($root['table'] !== $rootTable) {
-                throw new RuntimeException("Blueprint apply v1 requires the root model table to match the slice name ({$rootTable}).");
+            if (! empty($root['table']) && ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $root['table'])) {
+                throw new RuntimeException("Blueprint apply requires a valid table name for the root model ({$root['table']}).");
             }
 
+            $blueprintModelHandles = array_flip(array_column($blueprint['models'], 'handle'));
             foreach ($blueprint['models'] as $model) {
                 if (($model['root'] ?? false) === true) {
                     continue;
                 }
-                $hasRootBelongsTo = false;
+                $hasValidBelongsTo = false;
                 foreach ($model['relations'] ?? [] as $relation) {
-                    if ($relation['type'] === 'belongsTo' && $relation['model'] === $root['handle']) {
-                        $hasRootBelongsTo = true;
+                    if ($relation['type'] === 'belongsTo' && (
+                        $relation['model'] === $root['handle'] ||
+                        isset($blueprintModelHandles[$relation['model'] ?? ''])
+                    )) {
+                        $hasValidBelongsTo = true;
                         break;
                     }
                 }
-                if (! $hasRootBelongsTo) {
-                    throw new RuntimeException("Child model [{$model['handle']}] must have an inverse belongsTo relation to the root model [{$root['handle']}].");
+                if (! $hasValidBelongsTo) {
+                    throw new RuntimeException("Child model [{$model['handle']}] must have an inverse belongsTo relation to an aggregate model.");
                 }
             }
 
@@ -84,10 +88,19 @@ final class BlueprintApplier
                     continue;
                 }
                 if (! isset($childHandles[$model['handle']])) {
-                    throw new RuntimeException('Blueprint apply supports only direct child models related to the root.');
-                }
-                if (($model['soft_deletes'] ?? false) === true) {
-                    throw new RuntimeException("Blueprint apply does not support soft_deletes on child model [{$model['handle']}].");
+                    $isNestedChild = false;
+                    foreach ($blueprint['models'] as $pm) {
+                        foreach ($pm['relations'] ?? [] as $pr) {
+                            if ($pr['type'] === 'hasMany' && $pr['model'] === $model['handle']) {
+                                $isNestedChild = true;
+                                $childHandles[$model['handle']] = $pr['foreign_key'];
+                                break 2;
+                            }
+                        }
+                    }
+                    if (! $isNestedChild) {
+                        throw new RuntimeException("Child model [{$model['handle']}] must be related within the aggregate root.");
+                    }
                 }
                 foreach ($model['fields'] ?? [] as $field) {
                     if ($field['handle'] === $childHandles[$model['handle']]) {
