@@ -1074,6 +1074,9 @@ ACTIONS;
 
 @section('content')
 <div class="space-y-4">
+    {{-- Bulk workflow forward (shows when table rows checked) --}}
+    <x-workflows::bulk-bar slice="{$studlyName}" />
+
     <!-- Compact Top Bar (Matches Enterprise ERP Standard) -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-border/40">
         <div class="flex items-center gap-3">
@@ -1200,11 +1203,58 @@ ACTIONS;
         @endif
 
         <!-- High-Density Data Table with Automatic 3-Dots Action Column -->
+        @php
+            // Studio YAML bulk_actions (ui.directory.bulk_actions) + DB workflow engine
+            \$wfTransitions = [];
+            \$wfBulkUrl = null;
+            \$bulkFromYaml = [];
+            try {
+                \$sliceJson = __DIR__ . '/../../slice.json';
+                \$sliceYaml = __DIR__ . '/../../slice.yaml';
+                \$manifest = [];
+                if (file_exists(\$sliceJson)) {
+                    \$manifest = json_decode(file_get_contents(\$sliceJson), true) ?: [];
+                } elseif (file_exists(\$sliceYaml) && class_exists(\\Symfony\\Component\\Yaml\\Yaml::class)) {
+                    \$manifest = \\Symfony\\Component\\Yaml\\Yaml::parseFile(\$sliceYaml) ?: [];
+                }
+                \$bulkFromYaml = \$manifest['ui']['directory']['bulk_actions'] ?? [];
+            } catch (\\Throwable) {}
+            foreach ((array) \$bulkFromYaml as \$ba) {
+                if (! is_array(\$ba)) {
+                    continue;
+                }
+                if ((\$ba['type'] ?? '') === 'workflow') {
+                    \$wfTransitions[] = [
+                        'slug' => \$ba['transition'] ?? \$ba['handle'] ?? 'transition',
+                        'label' => \$ba['label'] ?? \$ba['handle'] ?? 'Transition',
+                        'requires_remarks' => (bool) (\$ba['requires_remarks'] ?? false),
+                    ];
+                }
+            }
+            if (\\Illuminate\\Support\\Facades\\Route::has('workflows.bulk_transition') && class_exists(\\LaraSlice\\Slices\\Workflows\\Services\\WorkflowEngineService::class)) {
+                try {
+                    \$wf = app(\\LaraSlice\\Slices\\Workflows\\Services\\WorkflowEngineService::class)->getWorkflowForSlice('{$studlyName}');
+                    if (\$wf) {
+                        \$wfBulkUrl = route('workflows.bulk_transition', ['slice' => '{$studlyName}'], false);
+                        if (empty(\$wfTransitions)) {
+                            \$wfTransitions = \$wf->transitions->map(fn (\$t) => [
+                                'slug' => \$t->slug,
+                                'label' => \$t->label ?? \$t->slug,
+                                'requires_remarks' => (bool) \$t->requires_remarks,
+                            ])->values()->all();
+                        }
+                    }
+                } catch (\\Throwable) {}
+            }
+        @endphp
         <x-ui.data-table 
             :columns="\$columns" 
             :rows="\$rows" 
             :page-size="10" 
             search-placeholder="Start typing to search..."
+            :workflow-transitions="\$wfTransitions"
+            :workflow-bulk-url="\$wfBulkUrl"
+            workflow-slice="{$studlyName}"
         >
 {$rowActionsSlot}
         </x-ui.data-table>

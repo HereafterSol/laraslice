@@ -1545,7 +1545,7 @@ PHP;
                         ['slug' => 'submit', 'name' => 'Submit', 'from' => ['draft'], 'to' => 'pending', 'target_role' => 'manager'],
                         ['slug' => 'start', 'name' => 'Start', 'from' => ['pending'], 'to' => 'in_progress', 'target_role' => 'manager'],
                         ['slug' => 'complete', 'name' => 'Complete', 'from' => ['in_progress'], 'to' => 'completed', 'target_role' => 'admin'],
-                        ['slug' => 'cancel', 'name' => 'Cancel', 'from' => ['draft', 'pending', 'in_progress'], 'to' => 'cancelled', 'target_role' => 'admin'],
+                        ['slug' => 'cancel', 'name' => 'Cancel', 'from' => ['draft', 'pending', 'in_progress'], 'to' => 'cancelled', 'target_role' => 'admin', 'requires_remarks' => true],
                     ],
                 ];
             }
@@ -2148,6 +2148,36 @@ PHP;
                     $fields = $this->getFieldsForTable($rootTable, $tenantKey);
 
                     $uiConfig = $this->buildCanonicalUiFromSlice($slice, $sliceName, $rootTable);
+                    $wf = $slice['workflow'] ?? null;
+                    if (empty($wf) || empty($wf['states'])) {
+                        $statusCol = null;
+                        foreach ($fields as $f) {
+                            $h = is_array($f) ? ($f['handle'] ?? '') : ($f->handle ?? '');
+                            if ($h === 'status' || str_ends_with($h, '_status') || str_ends_with($h, '_status_id')) {
+                                $statusCol = $h;
+                                break;
+                            }
+                        }
+                        if ($statusCol) {
+                            $wf = [
+                                'enabled' => true,
+                                'state_column' => $statusCol,
+                                'states' => [
+                                    ['slug' => 'draft', 'label' => 'Draft', 'color' => 'slate'],
+                                    ['slug' => 'pending', 'label' => 'Pending', 'color' => 'amber'],
+                                    ['slug' => 'in_progress', 'label' => 'In Progress', 'color' => 'blue'],
+                                    ['slug' => 'completed', 'label' => 'Completed', 'color' => 'emerald'],
+                                    ['slug' => 'cancelled', 'label' => 'Cancelled', 'color' => 'rose'],
+                                ],
+                                'transitions' => [
+                                    ['slug' => 'submit', 'name' => 'Submit', 'from' => ['draft'], 'to' => 'pending', 'target_role' => 'manager'],
+                                    ['slug' => 'start', 'name' => 'Start', 'from' => ['pending'], 'to' => 'in_progress', 'target_role' => 'manager'],
+                                    ['slug' => 'complete', 'name' => 'Complete', 'from' => ['in_progress'], 'to' => 'completed', 'target_role' => 'admin'],
+                                    ['slug' => 'cancel', 'name' => 'Cancel', 'from' => ['draft', 'pending', 'in_progress'], 'to' => 'cancelled', 'target_role' => 'admin', 'requires_remarks' => true],
+                                ],
+                            ];
+                        }
+                    }
                     $options = [
                         'app' => $domain,
                         'domain' => $moduleName,
@@ -2157,9 +2187,25 @@ PHP;
                         'description' => $slice['description'] ?? "Vertical slice for {$sliceName}",
                         'force' => true,
                         'ui' => $uiConfig,
+                        'workflowConfig' => $wf,
                     ];
 
-                    $sliceDir = $generator->generate($sliceName, $fields, ! empty($options['ui']), $options);
+                    $sliceDir = $generator->generate($sliceName, $fields, ! empty($wf) || ! empty($options['ui']), $options);
+
+                    // Materialize workflow into DB engine so /admin/workflows lists ported machines
+                    if (! empty($wf) && is_array($wf)) {
+                        try {
+                            $engine = app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class);
+                            $studly = \LaraSlice\Generator\SliceName::canonical($sliceName);
+                            $plural = Str::plural($studly);
+                            $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
+                            $moduleFolder = \LaraSlice\Generator\SliceName::domainSegment($moduleName);
+                            $modelClass = "App\\Slices\\{$appFolder}\\{$moduleFolder}\\{$plural}\\Models\\{$studly}";
+                            $engine->syncWorkflowFromManifest($wf, $sliceName, class_exists($modelClass) ? $modelClass : null);
+                        } catch (\Throwable $syncEx) {
+                            $errors[$sliceName.'_workflow'] = $syncEx->getMessage();
+                        }
+                    }
                     $studlyName = \LaraSlice\Generator\SliceName::canonical($sliceName);
                     $pluralName = Str::plural($studlyName);
                     $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
@@ -2800,7 +2846,13 @@ PHP;
                 'quick_filters' => $quickFilters,
                 'sidebar_filters' => $sidebarFilters,
                 'summary_cards' => $summaryCards,
-                'bulk_actions' => ['delete', 'export'],
+                'bulk_actions' => [
+                    ['handle' => 'export', 'label' => 'Export Selected', 'type' => 'native', 'icon' => 'download'],
+                    ['handle' => 'delete', 'label' => 'Delete Selected', 'type' => 'native', 'icon' => 'trash-2', 'danger' => true],
+                    ['handle' => 'submit', 'label' => 'Submit', 'type' => 'workflow', 'transition' => 'submit', 'icon' => 'send'],
+                    ['handle' => 'approve', 'label' => 'Approve', 'type' => 'workflow', 'transition' => 'approve', 'icon' => 'check'],
+                    ['handle' => 'reject', 'label' => 'Reject', 'type' => 'workflow', 'transition' => 'reject', 'icon' => 'x', 'requires_remarks' => true, 'danger' => true],
+                ],
                 'row_actions' => [
                     'display' => 'dropdown',
                     'items' => [

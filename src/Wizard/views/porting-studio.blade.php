@@ -337,16 +337,60 @@
                                 class="mt-2 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary">+ Add Action</button>
                         </div>
 
-                        <!-- Bulk Actions -->
-                        <div class="rounded-xl border border-border bg-card p-4">
-                            <h4 class="font-bold text-sm mb-2">📦 Bulk Actions</h4>
-                            <div class="flex flex-wrap gap-2">
+                        <!-- Bulk Actions (editable — same shape as Blueprint Studio) -->
+                        <div class="rounded-xl border border-emerald-500/30 bg-card p-4 space-y-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <h4 class="font-bold text-sm">📦 Table Bulk Actions</h4>
+                                <div class="flex gap-1.5">
+                                    <button type="button" class="rounded-lg border border-border px-2 py-1 text-[10px] font-semibold"
+                                        @click="
+                                            const s = planData.studio_slices[selectedSliceIdx];
+                                            if (!s.blueprint) s.blueprint = {};
+                                            if (!s.blueprint.ui) s.blueprint.ui = {};
+                                            if (!s.blueprint.ui.directory) s.blueprint.ui.directory = {};
+                                            if (!Array.isArray(s.blueprint.ui.directory.bulk_actions)) s.blueprint.ui.directory.bulk_actions = [];
+                                            s.blueprint.ui.directory.bulk_actions.push({ handle: 'export', label: 'Export', type: 'native' });
+                                            s.blueprint.ui.directory.bulk_actions.push({ handle: 'approve', label: 'Approve', type: 'workflow', transition: 'approve' });
+                                            s.blueprint.ui.directory.bulk_actions.push({ handle: 'reject', label: 'Reject', type: 'workflow', transition: 'reject', requires_remarks: true });
+                                        ">+ Pack</button>
+                                    <button type="button" class="rounded-lg bg-primary px-2 py-1 text-[10px] font-bold text-primary-foreground"
+                                        @click="
+                                            const s = planData.studio_slices[selectedSliceIdx];
+                                            if (!s.blueprint) s.blueprint = {};
+                                            if (!s.blueprint.ui) s.blueprint.ui = {};
+                                            if (!s.blueprint.ui.directory) s.blueprint.ui.directory = {};
+                                            if (!Array.isArray(s.blueprint.ui.directory.bulk_actions)) s.blueprint.ui.directory.bulk_actions = [];
+                                            s.blueprint.ui.directory.bulk_actions.push({ handle: 'custom_' + Date.now(), label: 'Custom', type: 'native' });
+                                        ">+ Add</button>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
                                 <template x-for="(ba, bIdx) in (planData.studio_slices[selectedSliceIdx]?.blueprint?.ui?.directory?.bulk_actions || [])" :key="bIdx">
-                                    <span class="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600" x-text="ba"></span>
+                                    <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/10 p-2 text-xs">
+                                        <template x-if="typeof ba === 'string'">
+                                            <span class="rounded-lg bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-600" x-text="ba"></span>
+                                        </template>
+                                        <template x-if="typeof ba === 'object'">
+                                            <div class="flex flex-wrap items-center gap-2 w-full">
+                                                <input type="text" x-model="ba.handle" class="w-24 rounded border border-border bg-background px-1.5 py-1 font-mono text-[11px]" placeholder="handle">
+                                                <input type="text" x-model="ba.label" class="w-28 rounded border border-border bg-background px-1.5 py-1 text-[11px]" placeholder="Label">
+                                                <select x-model="ba.type" class="rounded border border-border bg-background px-1.5 py-1 text-[11px]">
+                                                    <option value="native">Native</option>
+                                                    <option value="workflow">Workflow</option>
+                                                </select>
+                                                <input type="text" x-show="ba.type === 'workflow'" x-model="ba.transition" class="w-28 rounded border border-border bg-background px-1.5 py-1 font-mono text-[11px]" placeholder="transition">
+                                                <label class="flex items-center gap-1" x-show="ba.type === 'workflow'">
+                                                    <input type="checkbox" x-model="ba.requires_remarks" class="rounded"> Remarks
+                                                </label>
+                                                <button type="button" class="ml-auto text-rose-500"
+                                                    @click="planData.studio_slices[selectedSliceIdx].blueprint.ui.directory.bulk_actions.splice(bIdx, 1)">✕</button>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </template>
                             </div>
-                            <div class="text-xs text-muted-foreground mt-2" x-show="!(planData.studio_slices[selectedSliceIdx]?.blueprint?.ui?.directory?.bulk_actions?.length)">
-                                No bulk actions configured.
+                            <div class="text-xs text-muted-foreground" x-show="!(planData.studio_slices[selectedSliceIdx]?.blueprint?.ui?.directory?.bulk_actions?.length)">
+                                No bulk actions — add native (export/delete) or workflow transitions for the index table.
                             </div>
                         </div>
 

@@ -282,6 +282,22 @@ final class BlueprintApplier
         if (! empty($blueprint['roles'])) {
             $manifest['roles'] = $blueprint['roles'];
         }
+        // UI directory (columns, filters, row_actions, bulk_actions) — Studio source of truth
+        if (! empty($blueprint['ui']) && is_array($blueprint['ui'])) {
+            $manifest['ui'] = $blueprint['ui'];
+        }
+        // Manifest version + append-only version_history (GitOps ledger in the file)
+        $manifest['version'] = $blueprint['version'] ?? ($manifest['version'] ?? '1.0.0');
+        $manifest['schema_version'] = $blueprint['schema_version'] ?? ($manifest['schema_version'] ?? 1);
+        $history = is_array($manifest['version_history'] ?? null) ? $manifest['version_history'] : [];
+        $history[] = [
+            'version' => $manifest['version'],
+            'at' => date('c'),
+            'description' => 'Blueprint apply: models/workflow/ui synchronized to code + DB',
+            'source' => 'blueprint_applier',
+        ];
+        // Keep last 50 entries
+        $manifest['version_history'] = array_slice($history, -50);
         $manifest['tables'] = array_values(array_map(static fn (array $model): string => $model['table'], $models));
         $manifest['fields'] = ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
             'name' => $field['handle'],

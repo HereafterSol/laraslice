@@ -1120,7 +1120,47 @@
                         </div>
 
                         <!-- Step 2: Show Workspace (Multi-Tab Consolidation) -->
-                        <div x-show="activePageStep === 'show'" class="space-y-3.5 pt-1">
+                                                    <!-- Table / Bulk Actions Builder (index multi-select) -->
+                            <div class="rounded-xl border border-emerald-500/30 bg-card p-4 space-y-3" x-init="ensureUiConfig()">
+                                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold text-foreground">📦 Table Bulk Actions</span>
+                                            <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600" x-text="(blueprint.ui?.directory?.bulk_actions || []).length + ' Actions'"></span>
+                                        </div>
+                                        <p class="text-[11px] text-muted-foreground">When rows are selected on the index table: native export/delete or workflow forward (remarks, status).</p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button type="button" @click="addBulkActionPreset('standard')" class="rounded-lg border border-border px-2 py-1 text-[10px] font-semibold hover:bg-muted cursor-pointer">+ Standard</button>
+                                        <button type="button" @click="addBulkActionPreset('workflow')" class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 cursor-pointer">+ Workflow pack</button>
+                                        <button type="button" @click="addBulkAction()" class="rounded-lg bg-primary px-2 py-1 text-[10px] font-bold text-primary-foreground cursor-pointer">+ Custom</button>
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <template x-for="(ba, bIdx) in (blueprint.ui?.directory?.bulk_actions || [])" :key="bIdx">
+                                        <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/10 p-2.5">
+                                            <input type="text" x-model="ba.handle" @change="syncUiToBlueprintAndYaml()" placeholder="handle" class="w-28 rounded border border-border bg-background px-2 py-1 text-[11px] font-mono">
+                                            <input type="text" x-model="ba.label" @change="syncUiToBlueprintAndYaml()" placeholder="Label" class="w-36 rounded border border-border bg-background px-2 py-1 text-[11px]">
+                                            <select x-model="ba.type" @change="if (ba.type === 'workflow') { ba.transition = ba.transition || ba.handle; } syncUiToBlueprintAndYaml()" class="rounded border border-border bg-background px-2 py-1 text-[11px]">
+                                                <option value="native">Native</option>
+                                                <option value="workflow">Workflow</option>
+                                            </select>
+                                            <input type="text" x-show="ba.type === 'workflow'" x-model="ba.transition" @change="syncUiToBlueprintAndYaml()" placeholder="transition slug" class="w-32 rounded border border-border bg-background px-2 py-1 text-[11px] font-mono">
+                                            <label class="flex items-center gap-1 text-[11px] cursor-pointer" x-show="ba.type === 'workflow'">
+                                                <input type="checkbox" x-model="ba.requires_remarks" @change="syncUiToBlueprintAndYaml()" class="rounded border-border">
+                                                Remarks
+                                            </label>
+                                            <label class="flex items-center gap-1 text-[11px] text-rose-500 cursor-pointer">
+                                                <input type="checkbox" x-model="ba.danger" @change="syncUiToBlueprintAndYaml()" class="rounded border-border text-rose-500">
+                                                Danger
+                                            </label>
+                                            <button type="button" @click="blueprint.ui.directory.bulk_actions.splice(bIdx, 1); syncUiToBlueprintAndYaml()" class="ml-auto text-rose-500 text-xs cursor-pointer" title="Remove">✕</button>
+                                        </div>
+                                    </template>
+                                    <p class="text-[10px] text-muted-foreground" x-show="!(blueprint.ui?.directory?.bulk_actions || []).length">No bulk actions — index multi-select will only show defaults if the generator falls back.</p>
+                                </div>
+                            </div>
+<div x-show="activePageStep === 'show'" class="space-y-3.5 pt-1">
                             <div class="rounded-xl border border-border/80 bg-muted/10 p-4 space-y-3">
                                 <div class="flex items-center justify-between">
                                     <div>
@@ -5968,6 +6008,20 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                     { handle: 'delete', label: 'Delete Record', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
                 ]
             };
+            // Bulk Actions Default (index table multi-select)
+            if (!Array.isArray(ui.directory.bulk_actions)) {
+                ui.directory.bulk_actions = [
+                    { handle: 'export', label: 'Export Selected', type: 'native', icon: 'download' },
+                    { handle: 'delete', label: 'Delete Selected', type: 'native', icon: 'trash-2', danger: true },
+                ];
+            } else {
+                ui.directory.bulk_actions = ui.directory.bulk_actions.map(ba => {
+                    if (typeof ba === 'string') {
+                        return { handle: ba, label: ba.replace(/_/g, ' '), type: 'native', icon: 'zap' };
+                    }
+                    return ba;
+                });
+            }
             ui.forms = ui.forms || {};
             ui.forms.mode = ui.presentation?.create || ui.forms.mode || 'drawer';
 
@@ -6285,6 +6339,39 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
 
+        addBulkAction() {
+            this.ensureUiConfig();
+            if (!Array.isArray(this.blueprint.ui.directory.bulk_actions)) {
+                this.blueprint.ui.directory.bulk_actions = [];
+            }
+            this.blueprint.ui.directory.bulk_actions.push({
+                handle: 'custom_' + Date.now(),
+                label: 'Custom action',
+                type: 'native',
+                icon: 'zap',
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+        addBulkActionPreset(kind) {
+            this.ensureUiConfig();
+            const list = this.blueprint.ui.directory.bulk_actions || [];
+            if (kind === 'standard') {
+                const extras = [
+                    { handle: 'export', label: 'Export Selected', type: 'native', icon: 'download' },
+                    { handle: 'delete', label: 'Delete Selected', type: 'native', icon: 'trash-2', danger: true },
+                ];
+                extras.forEach(e => { if (!list.find(x => x.handle === e.handle)) list.push(e); });
+            } else if (kind === 'workflow') {
+                const extras = [
+                    { handle: 'submit', label: 'Submit', type: 'workflow', transition: 'submit', icon: 'send' },
+                    { handle: 'approve', label: 'Approve', type: 'workflow', transition: 'approve', icon: 'check', requires_remarks: false },
+                    { handle: 'reject', label: 'Reject', type: 'workflow', transition: 'reject', icon: 'x', requires_remarks: true, danger: true },
+                ];
+                extras.forEach(e => { if (!list.find(x => x.handle === e.handle)) list.push(e); });
+            }
+            this.blueprint.ui.directory.bulk_actions = list;
+            this.syncUiToBlueprintAndYaml();
+        },
         setRowActionsPreset(preset) {
             this.ensureUiConfig();
             const ra = this.blueprint.ui.directory.row_actions;

@@ -10,6 +10,9 @@
     'actionsLabel' => null,        // header label for the row-actions column (kept sr-only)
     'stickyActions' => false,      // freeze the actions column to the right edge on horizontal scroll
     'exportFilename' => 'export',
+    'workflowTransitions' => [], // [['slug'=>'approve','label'=>'Approve','requires_remarks'=>true], ...]
+    'workflowBulkUrl' => null,   // route for POST bulk transition
+    'workflowSlice' => null,
 ])
 
 @php
@@ -33,7 +36,11 @@
         rows: @js(array_values($rows)),
         cols: @js($cols),
         searchKeys: @js($searchKeys),
-        exportFilename: @js($exportFilename)
+        exportFilename: @js($exportFilename),
+        workflowTransitions: @js($workflowTransitions ?? []),
+        workflowBulkUrl: @js($workflowBulkUrl),
+        workflowSlice: @js($workflowSlice),
+        csrf: @js(csrf_token()),
     })"
     x-init="$watch('q', () => page = 1)"
     @export-table.window="exportCsv()"
@@ -96,6 +103,9 @@
                         <option value="none">No Action</option>
                         <option value="delete">Delete Selected</option>
                         <option value="export">Export Selected</option>
+                        <template x-for="wt in workflowTransitions" :key="wt.slug">
+                            <option :value="'wf:' + wt.slug" x-text="(wt.label || wt.slug)"></option>
+                        </template>
                     </select>
                     <button 
                         type="button" 
@@ -289,6 +299,11 @@ if (typeof window.blatDataTable === 'undefined') {
             bulkAction: 'none',
             filterDrawerOpen: false,
             filters: {},
+            workflowTransitions: cfg.workflowTransitions || [],
+            workflowBulkUrl: cfg.workflowBulkUrl || null,
+            workflowSlice: cfg.workflowSlice || null,
+            csrf: cfg.csrf || '',
+            rowKey: cfg.rowKey || 'id',
             get sidebarFilterCount() {
                 let count = 0;
                 for (const [k, v] of Object.entries(this.filters)) {
@@ -342,8 +357,20 @@ if (typeof window.blatDataTable === 'undefined') {
             get pageIndices() { return this.paged.map(p => p.i) },
             get allPageSelected() { const idx = this.pageIndices; return idx.length > 0 && idx.every(i => this.selected.includes(i)) },
             toggleSort(key) { this.sortKey === key ? (this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc') : (this.sortKey = key, this.sortDir = 'asc'); this.page = 1 },
-            toggleRow(i) { this.selected.includes(i) ? this.selected = this.selected.filter(x => x !== i) : this.selected.push(i) },
-            toggleAll() { const idx = this.pageIndices; this.allPageSelected ? this.selected = this.selected.filter(i => !idx.includes(i)) : idx.forEach(i => this.selected.includes(i) || this.selected.push(i)) },
+            toggleRow(i) { this.selected.includes(i) ? this.selected = this.selected.filter(x => x !== i) : this.selected.push(i); this.emitSelection(); },
+            toggleAll() { const idx = this.pageIndices; this.allPageSelected ? this.selected = this.selected.filter(i => !idx.includes(i)) : idx.forEach(i => this.selected.includes(i) || this.selected.push(i)); this.emitSelection(); },
+            selectedRecordIds() {
+                const key = this.rowKey || 'id';
+                return this.selected.map(i => {
+                    const row = this.rows.find(r => r.i === i);
+                    if (!row) return null;
+                    return (row.r && (row.r[key] ?? row.r.id)) ?? row[key] ?? row.id ?? null;
+                }).filter(id => id !== null && id !== undefined && id !== '');
+            },
+            emitSelection() {
+                const ids = this.selectedRecordIds();
+                window.dispatchEvent(new CustomEvent('laraslice-selection-changed', { detail: { count: ids.length, ids } }));
+            },
             next() { if (this.page < this.pageCount) this.page++ },
             prev() { if (this.page > 1) this.page-- },
             clearFilters() {
@@ -367,13 +394,46 @@ if (typeof window.blatDataTable === 'undefined') {
                 }
                 if (this.bulkAction === 'delete') {
                     if (confirm('Are you sure you want to delete ' + this.selected.length + ' selected record(s)?')) {
-                        this.$dispatch('bulk-delete', { indices: this.selected });
+                        this.$dispatch('bulk-delete', { indices: this.selected, ids: this.selectedRecordIds() });
                         alert('Bulk deletion applied for ' + this.selected.length + ' record(s).');
                         this.selected = [];
+                        this.emitSelection();
                     }
                 } else if (this.bulkAction === 'export') {
                     this.exportCsv('selected_' + this.exportFilename);
                     this.selected = [];
+                    this.emitSelection();
+                } else if (String(this.bulkAction).startsWith('wf:')) {
+                    const slug = String(this.bulkAction).slice(3);
+                    const meta = (this.workflowTransitions || []).find(t => t.slug === slug) || { slug, label: slug };
+                    this.runWorkflowBulk(meta);
+                }
+            },
+            async runWorkflowBulk(meta) {
+                const ids = this.selectedRecordIds();
+                if (!ids.length) { alert('Could not resolve record ids.'); return; }
+                let remarks = '';
+                if (meta.requires_remarks) {
+                    remarks = prompt((meta.label || meta.slug) + ' — remarks (required):', '') || '';
+                    if (!remarks.trim()) { alert('Remarks are required for this transition.'); return; }
+                }
+                const url = this.workflowBulkUrl || (this.workflowSlice ? ('/admin/workflows/bulk-transition/' + this.workflowSlice) : null);
+                if (!url) { alert('Workflow bulk URL not configured.'); return; }
+                const body = new FormData();
+                body.append('_token', this.csrf);
+                body.append('transition', meta.slug);
+                body.append('remarks', remarks);
+                ids.forEach(id => body.append('ids[]', id));
+                try {
+                    const res = await fetch(url, { method: 'POST', body, headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.success === false) {
+                        alert(data.message || 'Bulk workflow transition failed');
+                        return;
+                    }
+                    window.location.reload();
+                } catch (e) {
+                    alert(e.message || 'Network error');
                 }
             },
             exportCsv(customName) {

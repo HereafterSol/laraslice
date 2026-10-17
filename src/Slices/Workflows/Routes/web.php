@@ -26,6 +26,7 @@ Route::middleware(['web', 'auth'])->prefix('admin/workflows')->name('workflows.'
 
     Route::post('/seed-examples', [WorkflowWebController::class, 'seedExamples'])->name('seed_examples');
     Route::post('/transition/{slice}/{id}', [WorkflowActionController::class, 'transition'])->name('transition');
+    Route::post('/bulk-transition/{slice}', [WorkflowActionController::class, 'bulkTransition'])->name('bulk_transition');
 });
 
 Route::redirect('/workflows', '/admin/workflows');
