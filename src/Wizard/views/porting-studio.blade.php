@@ -244,13 +244,27 @@
             </div>
             <div x-show="planData" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <template x-for="(slice, sIdx) in (planData?.studio_slices || [])" :key="sIdx">
-                    <div class="rounded-xl border border-border bg-card p-4">
-                        <h3 class="font-bold text-sm text-foreground" x-text="slice.name"></h3>
-                        <p class="text-[11px] font-mono text-muted-foreground" x-text="'Table: ' + slice.root_table"></p>
-                        <div class="flex gap-2 mt-2 text-[11px]">
+                    <div class="rounded-xl border border-border bg-card p-4 space-y-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <h3 class="font-bold text-sm text-foreground" x-text="slice.name"></h3>
+                            <span class="shrink-0 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400"
+                                  x-show="slice.module" x-text="slice.module"></span>
+                        </div>
+                        <p class="text-[11px] font-mono text-muted-foreground" x-text="'Table: ' + (slice.root_table || '—')"></p>
+                        <div class="flex flex-wrap gap-2 text-[11px]">
                             <span class="rounded bg-primary/10 px-2 py-0.5 font-bold text-primary" x-text="(slice.models?.length || 0) + ' models'"></span>
                             <span class="rounded bg-muted px-2 py-0.5 text-muted-foreground" x-text="(slice.child_tables?.length || 0) + ' children'"></span>
+                            <span class="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-400" x-show="slice.records_count" x-text="(slice.records_count || 0) + ' rows'"></span>
                         </div>
+                        <ul class="text-[10px] text-muted-foreground space-y-0.5" x-show="(slice.child_tables || []).length">
+                            <template x-for="(ch, cIdx) in (slice.child_tables || []).slice(0, 6)" :key="cIdx">
+                                <li class="flex items-center gap-1.5 font-mono">
+                                    <span x-text="typeof ch === 'string' ? ch : (ch.table || ch)"></span>
+                                    <span class="text-amber-500/90" x-show="ch.confidence" x-text="'⚡ ' + Math.round((ch.confidence || 0) * 100) + '%'"></span>
+                                    <span class="opacity-60" x-show="ch.reason" x-text="ch.reason"></span>
+                                </li>
+                            </template>
+                        </ul>
                     </div>
                 </template>
             </div>
