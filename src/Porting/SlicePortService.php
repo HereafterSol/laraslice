@@ -1837,8 +1837,8 @@ PHP;
         $sidebarFiles = [];
 
         // Find sidebar/nav Blade files
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($sourcePath.'/resources/views', FilesystemIterator::SKIP_DOTS)
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($sourcePath.'/resources/views', \FilesystemIterator::SKIP_DOTS)
         );
 
         foreach ($iterator as $file) {
