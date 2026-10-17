@@ -250,18 +250,19 @@
                             <span class="shrink-0 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400"
                                   x-show="slice.module" x-text="slice.module"></span>
                         </div>
-                        <p class="text-[11px] font-mono text-muted-foreground" x-text="'Table: ' + (slice.root_table || '—')"></p>
+                        <p class="text-[11px] font-mono text-muted-foreground" x-text="'Table: ' + (slice.root_table || slice.tables?.[0] || slice.blueprint?.models?.[0]?.table || '—')"></p>
                         <div class="flex flex-wrap gap-2 text-[11px]">
-                            <span class="rounded bg-primary/10 px-2 py-0.5 font-bold text-primary" x-text="(slice.models?.length || 0) + ' models'"></span>
-                            <span class="rounded bg-muted px-2 py-0.5 text-muted-foreground" x-text="(slice.child_tables?.length || 0) + ' children'"></span>
-                            <span class="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-400" x-show="slice.records_count" x-text="(slice.records_count || 0) + ' rows'"></span>
+                            <span class="rounded bg-primary/10 px-2 py-0.5 font-bold text-primary" x-text="((slice.models || slice.blueprint?.models || []).length) + ' models'"></span>
+                            <span class="rounded bg-muted px-2 py-0.5 text-muted-foreground" x-text="((slice.child_tables || (slice.tables ? slice.tables.slice(1) : [])).length) + ' children'"></span>
+                            <span class="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-400" x-show="slice.records_count !== undefined" x-text="(slice.records_count || 0) + ' rows'"></span>
                         </div>
-                        <ul class="text-[10px] text-muted-foreground space-y-0.5" x-show="(slice.child_tables || []).length">
-                            <template x-for="(ch, cIdx) in (slice.child_tables || []).slice(0, 6)" :key="cIdx">
+                        <ul class="text-[10px] text-muted-foreground space-y-0.5" x-show="(slice.child_tables || (slice.tables ? slice.tables.slice(1) : [])).length">
+                            <template x-for="(ch, cIdx) in (slice.child_tables || (slice.tables ? slice.tables.slice(1) : [])).slice(0, 6)" :key="cIdx">
                                 <li class="flex items-center gap-1.5 font-mono">
-                                    <span x-text="typeof ch === 'string' ? ch : (ch.table || ch)"></span>
+                                    <span x-text="typeof ch === 'string' ? ch : (ch.table || ch.name || ch)"></span>
                                     <span class="text-amber-500/90" x-show="ch.confidence" x-text="'⚡ ' + Math.round((ch.confidence || 0) * 100) + '%'"></span>
                                     <span class="opacity-60" x-show="ch.reason" x-text="ch.reason"></span>
+                                    <span class="opacity-60" x-show="ch.records !== undefined" x-text="'(' + ch.records + ' rows)'"></span>
                                 </li>
                             </template>
                         </ul>
@@ -613,6 +614,10 @@ function portingStudio() {
         planData: null,
         planJsonText: '',
         logs: [],
+        log(msg) {
+            const ts = new Date().toLocaleTimeString();
+            this.logs.push(`[${ts}] ${msg}`);
+        },
 
         async analyze() {
             this.analyzing = true;
@@ -712,12 +717,12 @@ function portingStudio() {
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.message || 'Load failed');
                 const p = data.preset;
-                this.planData = p.plan;
+                this.planData = p.plan || p;
                 this.planJsonText = JSON.stringify(this.planData, null, 2);
                 this.sourceType = p.source_type || 'local';
                 if (this.sourceType === 'git') { this.gitUrl = p.source || ''; this.gitBranch = p.git_branch || ''; }
-                else { this.sourcePath = p.source || ''; }
-                this.log('📂 Preset loaded: ' + p.name);
+                else { this.sourcePath = p.source || p.source_application || ''; }
+                this.log('📂 Preset loaded: ' + (p.name || p.domain || this.selectedSavedPreset));
                 this.activeTab = 'journeys';
             } catch (e) {
                 this.error = e.message;
