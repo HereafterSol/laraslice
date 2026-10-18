@@ -1177,15 +1177,35 @@ ACTIONS;
             </div>
         </div>
     @else
-        <!-- Summary Cards (from ui.directory.summary_cards) -->
-        @if(!empty(\$summaryCards))
+        <!-- KPI strip: ui.directory.summary_cards OR ui.dashboard.widgets -->
+        @php
+            \$dashWidgets = [];
+            try {
+                \$_mf = __DIR__ . '/../../slice.json';
+                if (is_file(\$_mf)) {
+                    \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
+                    \$dashWidgets = \$_m['ui']['dashboard']['widgets'] ?? [];
+                    if (! is_array(\$dashWidgets)) { \$dashWidgets = []; }
+                }
+            } catch (\Throwable \$e) { \$dashWidgets = []; }
+            \$kpiCards = !empty(\$summaryCards) ? \$summaryCards : \$dashWidgets;
+            if (empty(\$summaryData) || ! is_array(\$summaryData)) {
+                \$summaryData = [];
+            }
+            // Default counts when controller did not pass summaryData
+            if (\$kpiCards !== [] && \$summaryData === [] && isset(\$pagedList)) {
+                \$summaryData['total'] = is_countable(\$pagedList->items ?? null)
+                    ? count(\$pagedList->items)
+                    : (isset(\$pagedList->total) ? \$pagedList->total : '—');
+            }
+        @endphp
+        @if(!empty(\$kpiCards))
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            @foreach(\$summaryCards as \$card)
-            <x-ui.stat
-                :label="\$card['label'] ?? ''"
-                :value="\$summaryData[\$card['handle']] ?? '—'"
-                :icon="\$card['icon'] ?? null"
-            />
+            @foreach(\$kpiCards as \$card)
+            <div class="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+                <p class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{{ \$card['label'] ?? (\$card['handle'] ?? 'Stat') }}</p>
+                <p class="text-2xl font-bold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
+            </div>
             @endforeach
         </div>
         @endif

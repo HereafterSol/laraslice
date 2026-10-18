@@ -45,7 +45,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | B4 | version_history on every studio save | DONE | |
 | B5 | Bulk / row action editors | DONE | basic toggles |
 | B6 | Workflow transition editor in Studio | NEXT | edit states/transitions in YAML UI |
-| B7 | Domain group picker (Work/Finance/…) in Studio | NEXT | avoid free-text wrong groups |
+| B7 | Domain group picker (Work/Finance/…) in Studio | DONE | navGroup select + save to YAML |
 | B8 | Slice Studio UX polish (density, empty states) | NEXT | |
 
 ---
@@ -62,7 +62,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | C6 | `slice:repair` patch index data-table attrs | DONE | |
 | C7 | `--publish-ui` BlatUI stubs | DONE | |
 | C8 | Full calendar component (events drag) | LATER | |
-| C9 | Dashboard widgets from `ui.dashboard` | NEXT | render KPI strip on index |
+| C9 | Dashboard widgets from `ui.dashboard` | DONE | index KPI strip + Studio editor |
 | C10 | Show-page aggregate tabs from relations | NEXT | |
 
 ---
@@ -94,10 +94,11 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 
 1. **DONE:** Fix `$changed` before `--remap-nav` in `slice:repair`.
 2. **DONE:** Porting Studio Execute shows real slice write counts + per-slice errors.
-3. **NEXT:** Domain group picker (Work/Finance/HR…) in Slice Studio Config panel.
-4. **NEXT:** Dashboard widgets from `ui.dashboard` on generated index.
+3. **DONE:** Domain group picker (Work/Finance/HR…) in Slice Studio.
+4. **DONE:** Dashboard widgets from `ui.dashboard` on generated index + Studio editor.
 5. **NEXT:** Local pilot re-apply + 3-persona checklist vs demo.
-6. **NEXT:** Regression tests for workflow UI build + remap-nav.
+6. **NEXT:** Workflow transition editor in Studio (B6).
+7. **NEXT:** Regression tests for workflow UI build + remap-nav.
 
 ---
 

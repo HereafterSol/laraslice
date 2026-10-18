@@ -934,6 +934,7 @@ function larasliceWizard() {
         uiInlineEdit: [],
         uiDashboardWidgets: [],
         navRoles: [],
+        navGroup: 'Work',
         navVisible: true,
         studioConfigSaving: false,
         studioConfigMessage: '',
@@ -1619,6 +1620,7 @@ function larasliceWizard() {
         selectSlice(slice) {
             this.selectedSlice = slice;
             this.navRoles = Array.isArray(slice.navigation?.roles) ? [...slice.navigation.roles] : [];
+            this.navGroup = slice.navigation?.group || slice.domain || 'General';
             this.navVisible = slice.navigation?.visible !== false;
             this.uiViews = Array.isArray(slice.ui?.directory?.views) ? [...slice.ui.directory.views] : ['table'];
             this.uiDefaultView = slice.ui?.directory?.default_view || 'table';
@@ -1798,7 +1800,7 @@ function larasliceWizard() {
                     visible: this.navVisible !== false,
                     label: this.navConfig?.title || this.selectedSlice.navigation?.label || this.selectedSlice.title || this.selectedSlice.name,
                     icon: this.navConfig?.icon || this.selectedSlice.navigation?.icon || 'package',
-                    group: this.navConfig?.group || this.selectedSlice.navigation?.group || this.selectedSlice.domain || 'General',
+                    group: this.navGroup || this.navConfig?.group || this.selectedSlice.navigation?.group || 'General',
                     order: this.navConfig?.order || 50,
                     hidden: !!this.navConfig?.hidden,
                 };
@@ -1818,6 +1820,10 @@ function larasliceWizard() {
                 if (data.version_history) this.selectedSlice.version_history = data.version_history;
                 if (data.ui) this.selectedSlice.ui = data.ui;
                 if (data.navigation) this.selectedSlice.navigation = data.navigation;
+                if (this.navGroup) {
+                    this.selectedSlice.navigation = this.selectedSlice.navigation || {};
+                    this.selectedSlice.navigation.group = this.navGroup;
+                }
             } catch (e) {
                 this.studioConfigMessage = e.message || String(e);
             } finally {
@@ -4481,6 +4487,20 @@ function larasliceWizard() {
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Sidebar module group</label>
+                                <select x-model="navGroup" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-xs mb-2">
+                                    <option value="CRM">CRM</option>
+                                    <option value="Work">Work</option>
+                                    <option value="HR">HR</option>
+                                    <option value="Finance">Finance</option>
+                                    <option value="Orders">Orders</option>
+                                    <option value="Tickets">Tickets</option>
+                                    <option value="Events">Events</option>
+                                    <option value="Messages">Messages</option>
+                                    <option value="Settings">Settings</option>
+                                    <option value="General">General</option>
+                                </select>
+                                <p class="text-[10px] text-muted-foreground mb-2">Demo-aligned section in the app sidebar (not the ERP domain folder name).</p>
                                 <label class="text-[11px] font-bold uppercase text-muted-foreground">Persona roles (navigation.roles)</label>
                                 <div class="flex flex-wrap gap-2">
                                     <template x-for="role in ['admin','employee','client','manager','user']" :key="role">
@@ -4544,6 +4564,25 @@ function larasliceWizard() {
                                     <option value="hybrid">Hybrid (view inline + menu)</option>
                                     <option value="inline">Inline icons</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 pt-2 border-t border-border">
+                            <label class="text-[11px] font-bold uppercase text-muted-foreground">Dashboard widgets (index KPI strip)</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="(w, wi) in uiDashboardWidgets" :key="wi">
+                                    <div class="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs">
+                                        <input type="text" x-model="w.label" class="h-7 w-24 rounded border border-border bg-background px-1 text-[11px]" placeholder="Label">
+                                        <input type="text" x-model="w.handle" class="h-7 w-20 rounded border border-border bg-background px-1 text-[11px] font-mono" placeholder="handle">
+                                        <select x-model="w.query" class="h-7 rounded border border-border bg-background px-1 text-[11px]">
+                                            <option value="count">count</option>
+                                            <option value="sum">sum</option>
+                                        </select>
+                                        <button type="button" @click="uiDashboardWidgets.splice(wi, 1)" class="text-rose-500 text-[10px]">✕</button>
+                                    </div>
+                                </template>
+                                <button type="button" @click="uiDashboardWidgets.push({ type: 'stat', handle: 'total', label: 'Total', query: 'count' })"
+                                    class="rounded-lg border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">+ Widget</button>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
