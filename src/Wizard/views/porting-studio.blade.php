@@ -48,7 +48,7 @@
                     <label class="block text-xs font-semibold text-foreground mb-1">System Archetype</label>
                     <select x-model="preset" @change="onPresetChange()" class="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
                         <option value="auto">⚡ Auto-Detect Archetype</option>
-                        <option value="fospah">⚖️ FOSPAH Dispute Adjudication (Ombudsman)</option>
+                        <option value="adjudication">⚖️ Dispute Adjudication (Ombudsman)</option>
                         <option value="custom">🔍 Custom Application / Service</option>
                         <option value="healthcare">🏥 Healthcare & Clinical EMR</option>
                         <option value="ecommerce">🛒 E-Commerce & Retail</option>
@@ -853,9 +853,9 @@ function portingStudio() {
         targetDomain: 'Core',
         yamlCopied: false,
         onPresetChange() {
-            if (this.preset === 'fospah' || this.preset === 'adjudication') {
+            if (this.preset === 'adjudication' || this.preset === 'adjudication') {
                 this.targetDomain = 'Adjudication';
-                if (!this.sourcePath) this.sourcePath = 'e:/laragon/www/fospha-complaint-managment';
+                if (!this.sourcePath) this.sourcePath = '';
             } else if (this.preset === 'healthcare') {
                 this.targetDomain = 'Healthcare';
             } else if (this.preset === 'ecommerce') {

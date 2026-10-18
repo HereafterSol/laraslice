@@ -1729,7 +1729,7 @@ PHP;
      */
     
     /**
-     * Merge proposed module sidebar with authentic source navigation (Worksuite menu.blade etc.).
+     * Merge proposed module sidebar with authentic source navigation (legacy menu.blade / x-menu-item sidebars).
      *
      * @param  list<array<string, mixed>>  $proposedGroups
      * @return array<string, mixed>
@@ -1792,7 +1792,7 @@ PHP;
             'groups' => $previewGroups,
             'source_navigation' => $sourceNav,
             'navigation_note' => ! empty($sourceGroups)
-                ? 'Sidebar compiled from source menu (Worksuite x-menu-item / blade). Module gates and permissions preserved for Studio customization.'
+                ? 'Sidebar compiled from source menu (x-menu-item / blade). Module gates and permissions preserved for Studio customization.'
                 : 'Source menu not detected — sidebar derived from slice modules. Point --source-path at the legacy app root for 1:1 nav.',
         ];
     }
@@ -1907,12 +1907,12 @@ public function analyzeSourceNavigation(string $sourcePath): array
     }
 
     /**
-     * Parse Worksuite-style Blade menus (x-menu-item / x-sub-menu-item).
-     * ERP benchmark: gated by user_modules() and $sidebarUserPermissions.
+     * Parse Blade component menus (x-menu-item / x-sub-menu-item) (x-menu-item / x-sub-menu-item).
+     * Gated by user_modules() and $sidebarUserPermissions.
      *
      * @return array{groups: list<array>, contexts: list<string>}
      */
-    private function parseWorksuiteMenuBlade(string $rawContent, string $context, string $filePath): array
+    private function parseXMenuItemBlade(string $rawContent, string $context, string $filePath): array
     {
         $groups = [];
         $contexts = [$context];
@@ -2069,7 +2069,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             return ['items' => [], 'contexts' => []];
         }
 
-        // 1. Canonical sidebars + Worksuite/ERP menu.blade.php (benchmark for gated nav)
+        // 1. Canonical sidebars + ERP-class menu.blade.php (benchmark for gated nav)
         $candidatePatterns = [
             $viewsDir.'/sections/menu.blade.php',
             $viewsDir.'/sections/sidebar.blade.php',
@@ -2129,9 +2129,9 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $context = 'portal';
             }
 
-            // Worksuite / Blat-style component menus (ERP benchmark)
+            // x-menu-item / Blat-style component menus (ERP-class benchmark)
             if (str_contains($rawContent, 'x-menu-item') || str_contains($rawContent, 'x-sub-menu-item')) {
-                $ws = $this->parseWorksuiteMenuBlade($rawContent, $context, $filePath);
+                $ws = $this->parseXMenuItemBlade($rawContent, $context, $filePath);
                 foreach ($ws['groups'] as $g) {
                     $items[] = $g;
                 }
@@ -3565,15 +3565,15 @@ public function analyzeSourceNavigation(string $sourcePath): array
             return null;
         };
 
-        // If FOSPAH domain or legal complaint management signature, build FOSPAH BRD journeys
-        $isFospahExplicit = strtolower($domain) === 'fospah' || strtolower($domain) === 'complaintmanagement';
-        $isFospahSignature = $findCtrl(['ComplaintController']) && ($findCtrl(['CauseListController']) || $findCtrl(['NoticeController']));
-        if (($isFospahExplicit || $isFospahSignature) && ! empty($availableControllers)) {
-            return $this->buildFospahUserJourneys($sourcePath, $availableControllers, $domain);
+        // If process-core / complaint-adjudication domain signature, build operational process journeys
+        $isProcessCoreExplicit = strtolower($domain) === 'adjudication' || strtolower($domain) === 'processcore' || strtolower($domain) === 'complaintmanagement' || strtolower($domain) === 'legal' || strtolower($domain) === 'dispute';
+        $isProcessCoreSignature = $findCtrl(['ComplaintController']) && ($findCtrl(['CauseListController']) || $findCtrl(['NoticeController']));
+        if (($isProcessCoreExplicit || $isProcessCoreSignature) && ! empty($availableControllers)) {
+            return $this->buildProcessCoreJourneys($sourcePath, $availableControllers, $domain);
         }
 
         // If not ERP domain and does not contain all ERP multi-pillar signatures, dynamically discover generic journeys
-        // ERP benchmark (Worksuite-class): operational journeys from real nav — not BRD essays
+        // ERP-class benchmark: operational journeys from real nav — not BRD essays
         $isErpExplicit = strtolower($domain) === 'erp';
         $isErpSignature = $findCtrl(['ProjectController', 'ProjectsController']) && $findCtrl(['EmployeeController', 'EmployeeDetailsController']) && $findCtrl(['InvoiceController', 'PaymentController']);
         $isErp = $isErpExplicit || ($domain === 'Core' && $isErpSignature);
@@ -3587,7 +3587,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
 
     /**
      * Slim, executable user journeys for studios (persona → steps → slice/action).
-     * Driven by source navigation when present; ERP personas match Worksuite demo:
+     * Driven by source navigation when present; ERP personas (typical multi-tenant suite):
      * admin / employee / client.
      *
      * @param  array<string, string>  $availableControllers
@@ -3668,7 +3668,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 'persona' => 'admin',
                 'label' => 'Admin',
                 'entry' => 'dashboard',
-                'description' => 'Full module access — matches Worksuite admin role',
+                'description' => 'Full module access — matches typical ERP admin role',
                 'steps' => array_slice($adminSteps, 0, 24),
             ],
             'employee' => [
@@ -3690,17 +3690,17 @@ public function analyzeSourceNavigation(string $sourcePath): array
 
 
 /**
-     * Build standardized BRD user journeys and Mermaid flowcharts for the FOSPAH / Ombudsman Case Management domain.
-     * Derived from official Business Requirements Document (FOSPAH-BRD v_1.1 / NITB).
+     * Build process-core operational journeys for complaint/adjudication domains.
+     * Persona steps derived from source nav and controllers — not BRD essays.
      */
     /**
-     * FOSPAH / complaint-management: slim operational journeys (not BRD essays).
+     * Process-core / complaint-adjudication: slim operational journeys (not BRD essays).
      * Personas: admin (case officers), complainant (portal), mobile API surface noted as entry.
      *
      * @param  array<string, string>  $availableControllers
      * @return array<string, array<string, mixed>>
      */
-    protected function buildFospahUserJourneys(string $sourcePath, array $availableControllers, string $domain = 'FOSPAH'): array
+    protected function buildProcessCoreJourneys(string $sourcePath, array $availableControllers, string $domain = 'Adjudication'): array
     {
         $nav = $this->analyzeSourceNavigation($sourcePath);
         $steps = [];

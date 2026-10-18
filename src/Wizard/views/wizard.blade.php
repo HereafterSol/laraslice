@@ -2221,7 +2221,7 @@ function larasliceWizard() {
             if (val === 'erp') {
                 this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
-            } else if (val === 'fospah') {
+            } else if (val === 'adjudication') {
                 this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
             } else if (val === 'custom') {

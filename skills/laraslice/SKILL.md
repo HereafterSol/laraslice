@@ -522,17 +522,17 @@ When a user asks: `"add [field] in [table]"`, the AI Copilot:
 
 ## 12. Monolith Reverse-Engineering & Legacy System Porting (Step-by-Step AI Architecture Workflow)
 
-When an AI agent or developer is tasked with porting an existing monolithic application (e.g. FOSPAH Complaint Management, BEOEMIS, or any legacy Laravel/PHP application) into LaraSlice, the process must follow a rigorous, deterministic 7-step analysis workflow. 
+When an AI agent or developer is tasked with porting an existing monolithic application (e.g. complaint/adjudication systems, multi-module ERPs, or any legacy Laravel/PHP application) into LaraSlice, the process must follow a rigorous, deterministic 7-step analysis workflow. 
 
-### Porting foundation rules (ERP benchmark = Worksuite-class)
+### Porting foundation rules (ERP-class benchmark)
 
 1. **Source of truth order**: DB schema + FKs → **real menu/nav** (`menu.blade.php` / `x-menu-item`) → routes/controllers → status enums → optional journey steps.
-2. **Do not invent BRD essays** as journeys. Journeys must be operational: `persona → steps[{slice, action, route?}]` (`schema: laraslice.journeys.v2`). Admin / Employee / Client match Worksuite demo roles when ERP is detected.
-3. **Navigation compiler**: Prefer `parseWorksuiteMenuBlade` / blade sidebars; map groups to Porting Studio `sidebar_preview` with modules/permissions hints. Never replace gated menus with generic table lists.
+2. **Do not invent BRD essays** as journeys. Journeys must be operational: `persona → steps[{slice, action, route?}]` (`schema: laraslice.journeys.v2`). Admin / Employee / Client match typical multi-tenant ERP roles when an ERP signature is detected.
+3. **Navigation compiler**: Prefer `parseXMenuItemBlade` / blade sidebars; map groups to Porting Studio `sidebar_preview` with modules/permissions hints. Never replace gated menus with generic table lists.
 4. **Aggregates over table explosion**: `*_items` / `*_lines` are children; `*_settings` / `*_types` go to Settings Hub or taxonomy — not sidebar noise.
 5. **Studios after port**: Blueprint/Slice Studio edit YAML (`ui.directory`, workflow, bulk_actions); Porting Studio shows real nav + slim journeys for customization before Apply.
-6. **Every project differs**: FOSPAH is process-core; ERP is multi-module. Detect signatures; do not force FOSPAH BRD packs onto ERP or vice versa.
-7. **All domains use `laraslice.journeys.v2`**: ERP → admin/employee/client; FOSPAH → admin/complainant/mobile; other → operational nav-derived personas. No mermaid BRD novels in the port plan.
+6. **Every project differs**: Process-core domains differ from multi-module ERP suites. Detect signatures; do not force process-core packs onto ERP or vice versa.
+7. **All domains use `laraslice.journeys.v2`**: ERP → admin/employee/client; process-core/adjudication → admin/complainant/mobile; other → operational nav-derived personas. No mermaid BRD novels in the port plan.
 8. **100% port checklist (ERP benchmark)**: aggregates + settings hub + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order. Apply must leave Porting/Blueprint/Slice Studio useful for customization.
 
 Over **50% to 60% of an application's architecture can be accurately reverse-engineered directly from its database schema, foreign keys, and seeders**.
@@ -598,7 +598,7 @@ Before or after executing porting commands, developers can inspect the entire re
 When a developer asks to port or reverse-engineer an existing application in chat/CLI without using the Visual Studio (`/laraslice/wizard` or `/laraslice/wizard/blueprint`), the AI agent **MUST proactively prompt the user for input** before executing changes:
 
 1. **Prompt 1: Legacy Source Path**:
-   - Ask for the path or repository location (e.g. `e:/laragon/www/fospha-complaint-managment` or `.`).
+   - Ask for the path or repository location (e.g. `/path/to/legacy-app` or `.`).
 2. **Prompt 2: Target Domain Group**:
    - Ask what high-level Bounded Context / Domain to assign (e.g. `Adjudication`, `LegalCompliance`, `CRM`, `Procurement`).
 3. **Prompt 3: Data Porting Mode**:
@@ -621,7 +621,7 @@ When a developer asks to port or reverse-engineer an existing application in cha
 
 ## 13. Phased Monolith-to-Slice Migration Standard (Best Practices & Developer Experience)
 
-When porting a complex legacy monolithic system (e.g. FOSPAH 51-table complaint management, BEOEMIS, or enterprise ERPs) to LaraSlice, **never attempt a "big-bang" single-pass port of 50 blade views, procedural controllers, and report scripts**. 
+When porting a complex legacy monolithic system (e.g. large complaint/adjudication systems or multi-module enterprise ERPs) to LaraSlice, **never attempt a "big-bang" single-pass port of 50 blade views, procedural controllers, and report scripts**. 
 
 Follow the **LaraSlice Phased Strangler-Fig Migration Methodology**:
 
@@ -633,7 +633,7 @@ Follow the **LaraSlice Phased Strangler-Fig Migration Methodology**:
 ### Phase 2: Visual Studio Blueprint Refinement (Blueprint Studio)
 1. **Load into Studio**: Use the **`📥 Load into Studio`** button or **`📥 Import YAML`** to inspect the entire domain architecture live in Studio memory.
 2. **Review Models & Field Controls**: Verify parent-child aggregates (e.g. `Complaints` with `accused`, `properties`, `approvals`) and input widgets (text, textarea, select, switch, file dropzones).
-3. **Visual Lifecycle Workflow**: Inspect and customize the statutory judicial stages (e.g. all 17 distinct FOSPAH judicial milestones), transition action buttons, and remarks requirements (Note: Statutory judicial ombudsman bodies operate strictly under judicial procedure rules with zero automated SLA hour countdowns).
+3. **Visual Lifecycle Workflow**: Inspect and customize the statutory judicial stages (e.g. multi-stage statutory judicial milestones), transition action buttons, and remarks requirements (Note: Statutory judicial ombudsman bodies operate strictly under judicial procedure rules with zero automated SLA hour countdowns).
 4. **Scoped Operational Roles & RBAC**: Review authentic operational personas (`Super Admin`, `Admin`, `Complainant`, `Assistant Registrar`, `Registrar`, `Ombudsperson`, `Advisor`, `Law Officer`) and capability gates (`complaints.hear`, `complaints.decide`).
 5. **Two-Way Domain YAML**: Edit or paste unified `domain.yaml` with live bi-directional synchronization.
 
@@ -874,7 +874,7 @@ Before generating the Architecture Plan, the AI agent must inspect:
 ### 16.4 Dual Execution Pathways
 1. **Interactive UI Workflow (Blueprint Studio)**:
    - Developer opens `/laraslice/wizard/blueprint` and clicks `🚀 Port Legacy App`.
-   - Selects preset (e.g. `ERP Enterprise Suite`, `FOSPAH`, or `Custom JSON Architecture Plan`).
+   - Selects preset (e.g. `ERP Enterprise Suite`, `Dispute Adjudication`, or `Custom JSON Architecture Plan`).
    - Interactively previews:
      - `🖥️ Sidebar & Navigation Live Preview`: Real-time rendered BlatUI sidebar shell with live database record badges.
      - `🏗️ VSA Domain Architecture`: Visual cards showing modules, slices, roots, and child tables.

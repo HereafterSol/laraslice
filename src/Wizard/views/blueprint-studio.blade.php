@@ -51,7 +51,7 @@
                         class="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 shadow-sm hover:bg-indigo-500/20 focus:outline-none cursor-pointer">
                     <option value="" disabled selected>⚡ Choose Preset / Archetype...</option>
                     <optgroup label="⚖️ Statutory & Dispute Adjudication">
-                        <option value="fospah">⚖️ FOSPAH Dispute Adjudication (7 Slices: Complaints, Hearings, Notices, etc.)</option>
+                        <option value="adjudication">⚖️ Dispute Adjudication (7 Slices: Complaints, Hearings, Notices, etc.)</option>
                         <option value="legal_dispute_adjudication">⚖️ Dispute Adjudication Standard Suite (6 Slices)</option>
                     </optgroup>
                     <optgroup label="🏢 Enterprise & Commercial Archetypes">
@@ -4644,7 +4644,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             if (val === 'erp') {
                 this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
-            } else if (val === 'fospah') {
+            } else if (val === 'adjudication') {
                 this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
             } else if (val === 'custom') {
@@ -5117,7 +5117,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 }
 
                 // Fetch authentic plan from backend
-                const domain = presetKey === 'fospah' ? 'Adjudication' : (presetKey === 'erp' ? 'ERP' : presetKey.charAt(0).toUpperCase() + presetKey.slice(1));
+                const domain = presetKey === 'adjudication' ? 'Adjudication' : (presetKey === 'erp' ? 'ERP' : presetKey.charAt(0).toUpperCase() + presetKey.slice(1));
                 const res = await fetch('/laraslice/wizard/blueprint/port-plan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
@@ -5132,13 +5132,13 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                     return;
                 }
 
-                // Fallback for fospah
-                if (presetKey === 'fospah' && studioPresets['legal_dispute_adjudication']) {
+                // Fallback for adjudication
+                if (presetKey === 'adjudication' && studioPresets['legal_dispute_adjudication']) {
                     this.loadStudioPreset('legal_dispute_adjudication');
                 }
             } catch (e) {
                 console.error('Error loading preset:', e);
-                if (presetKey === 'fospah' && studioPresets['legal_dispute_adjudication']) {
+                if (presetKey === 'adjudication' && studioPresets['legal_dispute_adjudication']) {
                     this.loadStudioPreset('legal_dispute_adjudication');
                 }
             } finally {

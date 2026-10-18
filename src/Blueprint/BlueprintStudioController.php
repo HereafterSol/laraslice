@@ -988,11 +988,11 @@ final class BlueprintStudioController extends Controller
             'success' => true,
             'presets' => [
                 [
-                    'id' => 'fospah',
-                    'name' => '⚖️ FOSPAH Dispute Adjudication',
+                    'id' => 'adjudication',
+                    'name' => '⚖️ Dispute Adjudication',
                     'badge' => '7 Slices: Complaints, Hearings, Notices, etc.',
                     'domain' => 'Adjudication',
-                    'source_path' => 'e:/laragon/www/fospha-complaint-managment',
+                    'source_path' => '',
                     'description' => 'Statutory dispute adjudication: Citizen Intake, Scrutiny, Hearings, Notices, and Speaking Orders',
                 ],
                 [
@@ -1000,7 +1000,7 @@ final class BlueprintStudioController extends Controller
                     'name' => '🏢 ERP Enterprise Suite',
                     'badge' => '358 tables → 23 Slices (15k records)',
                     'domain' => 'ERP',
-                    'source_path' => 'e:/laragon/www/erp',
+                    'source_path' => '',
                     'description' => 'Comprehensive enterprise suite with Projects, Tasks, Invoices, HR, CRM, Tickets and Unified Settings Hub',
                 ],
                 [
@@ -1062,15 +1062,13 @@ final class BlueprintStudioController extends Controller
         $planJson = (string) $request->input('plan_json', '');
 
         // Resolve preset defaults if source/domain are empty
-        if ($preset === 'fospah' || strtolower($domain) === 'adjudication') {
-            if (empty($domain)) $domain = 'Adjudication';
-            if (empty($source) && \Illuminate\Support\Facades\File::isDirectory('e:/laragon/www/fospha-complaint-managment')) {
-                $source = 'e:/laragon/www/fospha-complaint-managment';
+        if ($preset === 'adjudication' || strtolower($domain) === 'adjudication') {
+            if (empty($domain)) {
+                $domain = 'Adjudication';
             }
         } elseif ($preset === 'erp' || strtolower($domain) === 'erp') {
-            if (empty($domain)) $domain = 'ERP';
-            if (empty($source) && \Illuminate\Support\Facades\File::isDirectory('e:/laragon/www/erp')) {
-                $source = 'e:/laragon/www/erp';
+            if (empty($domain)) {
+                $domain = 'ERP';
             }
         } elseif (! empty($preset) && empty($domain)) {
             $domain = ucfirst($preset);
@@ -1121,12 +1119,7 @@ final class BlueprintStudioController extends Controller
             }
 
             if (empty($source) || ! \Illuminate\Support\Facades\File::isDirectory($source)) {
-                // If preset is legal_dispute_adjudication or fospah, fallback to FOSPAH path or informative message
-                if (\Illuminate\Support\Facades\File::isDirectory('e:/laragon/www/fospha-complaint-managment') && ($preset === 'fospah' || $domain === 'Adjudication')) {
-                    $source = 'e:/laragon/www/fospha-complaint-managment';
-                } else {
-                    throw new \InvalidArgumentException("Source application directory not found: [{$source}]. Please provide a valid local project path or Git URL.");
-                }
+                throw new \InvalidArgumentException("Source application directory not found: [{$source}]. Please provide a valid local project path or Git URL.");
             }
 
             $inspection = $portService->inspect($source, $domain);

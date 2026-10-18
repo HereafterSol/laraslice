@@ -44,7 +44,7 @@
                 <label class="block text-xs font-semibold text-foreground mb-1">Architecture Preset / Example *</label>
                 <select x-model="portPreset" @change="selectPortPreset($event.target.value)" class="w-full rounded-lg border border-input bg-card px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs">
                     <option value="erp">🏢 ERP Enterprise Suite (358 tables → 23 Slices, 15k records)</option>
-                    <option value="fospah">⚖️ FOSPAH Judicial Case System (Adjudication & Hearings)</option>
+                    <option value="adjudication">⚖️ Dispute Adjudication (Hearings & Orders)</option>
                     <option value="custom">🔍 Inspect Custom Local Project / Database</option>
                     <option value="json">📋 Custom JSON Architecture Plan</option>
                 </select>

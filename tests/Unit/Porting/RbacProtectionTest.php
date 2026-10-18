@@ -13,7 +13,7 @@ use PDO;
 /**
  * RBAC protection during legacy data ports.
  *
- * Regression test for the Worksuite ERP lockout: the ETL wipe+replaced the
+ * Regression test for the legacy ERP ETL lockout: the ETL wipe+replaced the
  * `roles`/`permissions` tables with legacy rows (no slug column), destroying
  * the super-admin role and every studio.* permission, locking all developers
  * out of Slice Studio with a 403.
@@ -142,7 +142,7 @@ final class RbacProtectionTest extends TestCase
 
         $sourcePdo = new PDO('sqlite::memory:');
         $sourcePdo->exec('CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT, display_name TEXT)');
-        // Worksuite-shaped legacy role: no slug column, name 'admin'
+        // legacy-ERP-shaped legacy role: no slug column, name 'admin'
         $sourcePdo->exec("INSERT INTO roles (id, name, display_name) VALUES (1, 'admin', 'App Administrator')");
         $sourcePdo->exec("INSERT INTO roles (id, name, display_name) VALUES (2, 'employee', 'Employee')");
 

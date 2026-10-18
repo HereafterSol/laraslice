@@ -916,7 +916,7 @@ class SliceDataPortService
                 }
 
                 // Repair: legacy rows may exist with the right name but empty slug
-                // (e.g. Worksuite role id=1 name='admin'). Never touch them — the
+                // (e.g. legacy ERP role id=1 name='admin'). Never touch them — the
                 // framework roles above are matched strictly by slug.
             }
 
