@@ -964,78 +964,109 @@ Developers can inspect and edit the entire ported architecture interactively in 
    - The **📄 Page & UI Architecture Plan** card renders the 4-step BlatUI plan for that slice, with full stats ribbons, filter bar definitions, sub-tabs, form sections, and workflow state transitions.
    - Developers can edit any field or state directly in the Visual Designer or YAML editor, click **`Save Changes`**, and then click **`⚡ Run Migrations`** to scaffold and migrate.
 
-### 16.9 BRD-Grade Role-Based User Journey Mapping (Flows, State Transitions, Blade Views & Slice Integration)
+### 16.9 Universal BRD-Grade Role & User Journey Standardization (Flows, State Transitions, Blade Views & Manifest Contracts)
 
-**The foundation of enterprise porting is understanding HOW human actors and system agents flow through the business domain** — not just what database tables or controller methods exist.
+**The core architectural foundation of LaraSlice is understanding HOW human actors and system agents flow through ANY business domain** — not merely what database tables or controller methods exist.
 
-A true enterprise modernization or porting effort must act as a **Business Requirements Document (BRD)**: it documents role-based actor lifecycles, authentication/onboarding gates, interactive Blade page triggers, state transitions, and database mutations.
+LaraSlice enforces a **100% Domain-Agnostic, Standardized Specification** for Business Requirements Documents (BRD), user journeys, role transitions, and operational step traces. Whether porting or scaffolding an **ERP, Healthcare (EHR/EMR), E-Commerce Marketplace, EdTech LMS, Logistics Fleet, or Fintech Core**: the engine, schema, and UI adapt dynamically with zero hardcoded domain constraints.
 
-#### 1. The 6 Enterprise Persona Lifecycles
-The porter introspects the legacy source across routes, middleware, session managers, controllers, Blade views, and database scopes to model 6 authentic actor journeys:
+#### 1. Universal Standardized BRD Architecture
+The framework classifies any enterprise software into 5 canonical operational tiers plus a master orchestration stream:
 
-1. **Company Owner & Administrator** (`admin`):
-   - **Lifecycle**: Self-Service Tenant Registration (`auth/register.blade.php`) → Setup Checklist (`dashboard/checklist.blade.php`) → Master Taxonomy (Currencies, Taxes, Banks) → RBAC Matrix (`role-permissions/`) → Org Structure (Departments/Teams, Designations) → Executive Overview (`dashboard/admin.blade.php`).
-   - **VSA Slice Mapping**: `Settings`, `Roles`, `OverviewDashboard`.
-2. **Project Manager** (`project_manager`):
-   - **Lifecycle**: Project Charter Definition (`projects/ajax/create.blade.php`) → Team Allocation (`projects/ajax/members.blade.php`) → Milestone Roadmapping (`projects/ajax/milestones.blade.php`) → Agile Task Breakdown (`tasks/ajax/create.blade.php`) → Kanban & Gantt Verification (`projects/ajax/taskboard.blade.php`, `projects/ajax/gantt.blade.php`) → Budget & Milestone Deliverable Signoff.
-   - **VSA Slice Mapping**: `Projects` (Aggregate Root), `Tasks`, `Contracts`.
-3. **Team Member / Employee** (`employee`):
-   - **Lifecycle**: Invitation Token Activation (`auth/invitation.blade.php`) → Profile Dossier (Emergency Contacts, Skills, Compliance) → Shift Lookup (`employee-shifts/`) → Geofenced Clock-In (`dashboard/employee/clock_in_modal.blade.php`) → Task Kanban & Live Stopwatch Timer (`timelogs/ajax/timer.blade.php`) → Leave Application & Quota Audit (`leaves/ajax/create.blade.php`).
-   - **VSA Slice Mapping**: `Attendances`, `Tasks`, `TimeLogs`, `Leaves`.
-4. **External Client / Stakeholder** (`client`):
-   - **Lifecycle**: Client Portal Invitation → Interactive Proposal Review (`proposal.blade.php`) → Digital Contract E-Signing (`contract.blade.php`) → Milestone Deliverable Inspection → Tax Invoice Review (`invoice.blade.php`) → Online Gateway Payment (Stripe/PayPal) → Support Ticket Intake (`ticket-form.blade.php`).
-   - **VSA Slice Mapping**: `ClientPortal`, `Contracts`, `Invoices`, `Tickets`.
-5. **Financial Controller & Accountant** (`accountant`):
-   - **Lifecycle**: Chart of Accounts & Bank Setup (`bank-account/`) → Unbilled Timelog & Milestone Aggregation (`invoices/ajax/create-timelog-invoice.blade.php`) → Multi-Currency & Tax Invoice Generation (`invoices/ajax/create.blade.php`) → Subscription / Recurring Billing (`recurring-invoices/`) → Payment Settlement & Bank Reconciliation (`payments/ajax/create.blade.php`) → Credit Notes & Expense Auditing (`credit-notes/`, `expenses/`).
-   - **VSA Slice Mapping**: `Invoices`, `Payments`, `CreditNotes`, `Expenses`.
-6. **People Operations & HR Manager** (`hr_manager`):
-   - **Lifecycle**: Employee Recruitment Intake (`employees/ajax/create.blade.php`) → Shift Roster Planning (`shift-rosters/`) → Biometric & Geolocation Attendance Auditing (`attendances/ajax/summary_data.blade.php`) → Multi-tier Leave Approval Chain (`leaves/ajax/show.blade.php`) → Recognition & Appreciations (`appreciations/`).
-   - **VSA Slice Mapping**: `Employees`, `Attendances`, `Leaves`, `Shifts`, `Appreciations`.
+| Canonical Tier | Generic Persona Role | E-Commerce Example | Healthcare Example | ERP Operations Example |
+|---|---|---|---|---|
+| **Tier 1: Governance & Setup** | System Administrator (`admin`) | Merchant Storefront Config | Clinic & Provider Setup | Tenant Org & RBAC Setup |
+| **Tier 2: Core Domain Operations** | Operational Lead (`operations`) | Catalog & Inventory Manager | Clinical Records & Triage | Project Charter & Milestones |
+| **Tier 3: Stakeholder Collaboration** | External Stakeholder (`stakeholder` / `client`) | Buyer Checkout & Tracking | Patient Portal Intake | Client Proposal & Contract E-Sign |
+| **Tier 4: Transaction & Settlement** | Financial / Billing (`finance`) | Gateway Order Settlement | Insurance Claim & Copay | Invoicing & Ledger Reconciliation |
+| **Tier 5: Analytics & Intelligence** | Executive Analyst (`analyst`) | GMV & Conversion Telemetry | Patient Outcome Metrics | Cash Flow & Utilization BI |
+| **🌐 Master Value Stream** | Master Orchestrator (`master`) | Complete Quote-to-Fulfillment | Complete Intake-to-Discharge | Complete Lead-to-Ledger |
 
-#### 2. Dual-Level Reflection: Domain Plan vs. Slice Manifest (`slice.yaml`)
-To ensure both human developers and AI assistants have full clarity:
+#### 2. Canonical JSON / YAML Schema Contract
 
-- **Domain-Level (`porting-architecture-plan.json` & `domain.slice.yaml`)**:
-  Contains the macro role journeys with Mermaid state diagrams, legacy controller bottlenecks, and cross-slice orchestration.
-- **Slice-Level (`slice.yaml`)**:
-  Each slice manifest includes a `user_journeys:` block linking that slice directly into the enterprise workflow:
-  ```yaml
-  name: Projects
-  domain: ERP
-  module: Work
-  user_journeys:
-    - journey: project_delivery
-      persona: Project Manager & Team
-      role: project_admin
-      entry_point: /erp/work/projects/create
-      blade_source: resources/views/projects/ajax/create.blade.php
-      triggers:
-        - action: create_charter
-          ui: "<x-ui.button>Save Project</x-ui.button>"
-          mutation: "INSERT INTO projects (project_name, client_id, deadline, status)"
-          emits_event: "ProjectCharterCreated"
-        - action: add_milestone
-          ui: "Milestones Tab -> Add Milestone Modal"
-          mutation: "INSERT INTO project_milestones (project_id, milestone_title, cost)"
-      state_machine:
-        field: status
-        states: [not_started, in_progress, on_hold, canceled, finished]
-        transitions:
-          - from: not_started
-            to: in_progress
-            trigger: assign_first_task
-          - from: in_progress
-            to: finished
-            trigger: all_milestones_completed
-      modernization_gain: "Replaces 64KB god-controller ProjectController with Project Aggregate Root and discrete BlatUI Action classes."
-  ```
+Every user journey in LaraSlice conforms to a strict, standardized specification at both the **Domain Suite Level** and **Slice Level**.
 
-#### 3. Why This Matters for BRDs and AI Agents
-1. **Business Analyst (BA) Alignment**: Business stakeholders and BAs can review the visual Mermaid diagrams and role interactions directly in Porting Studio to validate that all regulatory and functional business requirements are met.
-2. **Deterministic AI Code Generation**: When an AI agent ports or builds a slice, it does NOT guess business rules or write simple disconnected CRUD. It inspects the `user_journeys` block to know:
-   - What Blade views to construct (e.g. BlatUI forms matching legacy modal fields).
-   - What Action classes to write (`CreateProjectAction`, `StartTimerAction`).
-   - What events must be dispatched (`ContractSigned`, `InvoicePaid`) to keep other slices in sync.
+##### A. Domain Level Contract (`porting-architecture-plan.json` & `domain.slice.yaml`):
+```yaml
+user_journeys:
+  - id: core_operations               # Canonical journey identifier
+    name: "Clinical Patient Care Flow" # Human-readable lifecycle title
+    title: "Clinical Patient Care Flow"
+    persona: "Attending Physician"     # Specific business actor
+    role: "physician"                  # RBAC role identifier
+    icon: "🩺"                         # Contextual UI icon
+    entry_point: "/emr/encounters"     # Entry URI route
+    auth_flow: "Physician authenticates via MFA ➔ Redirects to Today Ward Round."
+    blade_views:                       # Discovered or targeted Blade templates
+      - resources/views/encounters/index.blade.php
+      - resources/views/prescriptions/create.blade.php
+    database_tables:                   # Mutated persistence tables
+      - patient_encounters
+      - clinical_notes
+      - prescriptions
+    mermaid_flow: |                    # Valid Mermaid flowchart sequence
+      flowchart TD
+          A["Encounter Intake<br/>(encounters/index.blade.php)"] -->|Triage Vitals| B["Clinical Notes<br/>(notes/create.blade.php)"]
+          B -->|Order Diagnostics| C["Lab Orders<br/>(labs/ajax/create.blade.php)"]
+          C -->|Formulate Rx| D["Prescription Dispatch<br/>(prescriptions/create.blade.php)"]
+    legacy_friction: "Monolithic EncounterController executes 35 raw SQL queries with scattered patient data across 6 unindexed tables."
+    modernization_gain: "Encounter Aggregate Root governing clinical notes and prescriptions with discrete BlatUI Action classes and async lab dispatch."
+    steps:
+      - title: "Encounter Intake & Vitals Recording"
+        step: "Encounter Intake & Vitals Recording"
+        blade_view: "resources/views/encounters/index.blade.php"
+        trigger_ui: "<x-ui.button>Start Clinical Encounter</x-ui.button>"
+        controller: "EncounterController"
+        controller_action: "EncounterController@store"
+        slice: "Encounters"
+        persona: "Attending Physician"
+        legacy_behavior: "Synchronous controller mutation saving vitals, history, and notes without atomic transactions."
+        vsa_improvement: "StartEncounterAction with strict domain invariants and event-driven notifications."
+```
+
+##### B. Slice Level Contract (`app/Slices/{Domain}/{Module}/{Slice}/slice.yaml`):
+Each slice manifest includes a localized `user_journeys:` block linking its specific models and UI triggers directly into the parent business workflow:
+```yaml
+name: Encounters
+domain: Healthcare
+module: Clinical
+user_journeys:
+  - journey: core_operations
+    persona: Attending Physician
+    role: physician
+    entry_point: /healthcare/clinical/encounters/create
+    blade_source: resources/views/encounters/index.blade.php
+    triggers:
+      - action: start_encounter
+        ui: "<x-ui.button>Start Clinical Encounter</x-ui.button>"
+        mutation: "INSERT INTO patient_encounters (patient_id, physician_id, chief_complaint, status)"
+        emits_event: "EncounterStarted"
+      - action: finalize_diagnosis
+        ui: "Diagnosis Sheet -> Save Diagnosis Button"
+        mutation: "UPDATE patient_encounters SET status = 'finalized', icd10_code = ?"
+        emits_event: "EncounterFinalized"
+    state_machine:
+      field: status
+      states: [scheduled, in_triage, in_consultation, lab_pending, finalized, discharged]
+      transitions:
+        - from: in_consultation
+          to: lab_pending
+          trigger: order_lab_tests
+        - from: in_consultation
+          to: finalized
+          trigger: record_prescription
+    modernization_gain: "Replaces monolithic god-controller with Encounter Aggregate Root, discrete BlatUI Action classes, and strict ICD-10 validation rules."
+```
+
+#### 3. Automatic Heuristic Discovery for Any Legacy Project
+When running `slice:port` or analyzing an unknown legacy application in Porting Studio:
+1. **Dynamic Scanner**: Introspects routes (`routes/web.php`, `routes/api.php`), controller directories, route middleware (`role:*`, `can:*`, `guard:*`), and Blade files.
+2. **Dynamic Clustering**: If a domain preset is specified (`erp`, `crm`, `lms`), it utilizes verified domain blueprints; for ANY bespoke project, it dynamically clusters controllers into the 5 universal tiers and generates valid Mermaid `flowchart TD` sequences.
+3. **Master Value Stream Synthesis**: Automatically generates `master_value_stream` connecting Tier 1 through Tier 5 to provide the comprehensive "Big Picture" process diagram required for enterprise BRD signoff.
+4. **Interactive Porting Studio**:
+   - Persona Filter Bar dynamically discovers all roles (`availableRoles()`) with zero hardcoded role names.
+   - Flowcharts are rendered in-browser via Mermaid.js with Zoom In (`+`), Zoom Out (`-`), and Reset (`⟲`) controls.
+   - Interactive Node Clicking (`onNodeClick`): Clicking any node highlights the corresponding operational step card below and displays the active Blade view, UI trigger element, controller endpoint, and VSA improvement.
 
 ### 16.10 AI-First Porting Intelligence (Dead Tables, Business Logic, Workflows)
 

@@ -1944,7 +1944,7 @@ PHP;
         return $sources;
     }
 
-    public function generateArchitecturePlan(array $inspection, string $domain = 'ERP'): array
+    public function generateArchitecturePlan(array $inspection, string $domain = 'Core'): array
     {
         // NOTE: The static ERP example plan is intentionally NOT auto-loaded here.
         // The web controller serves example plans explicitly per preset; this method
@@ -2105,7 +2105,7 @@ PHP;
             ],
             'modules' => $formattedModules,
             'studio_slices' => $inspection['studio_slices'] ?? [],
-            'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? ''),
+            'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? '', $domain),
             'data_sources' => $this->analyzeDataSources($inspection['source_path'] ?? '', $sliceMapping),
             'etl_data_pipeline' => [
                 'source_connection' => 'mysql (legacy database)',
@@ -2125,7 +2125,7 @@ PHP;
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
 
-        $domain = $plan['domain'] ?? 'ERP';
+        $domain = $plan['domain'] ?? 'Core';
         $modules = $plan['modules'] ?? [];
         $multitenant = $plan['summary']['multi_tenancy']['enabled'] ?? false;
         $tenantKey = $plan['summary']['multi_tenancy']['tenant_key'] ?? 'company_id';
@@ -3172,7 +3172,7 @@ PHP;
      *
      * @return array Map of journey name → steps with slice mapping
      */
-    public function analyzeUserJourneys(string $sourcePath): array
+    public function analyzeUserJourneys(string $sourcePath, string $domain = 'Core'): array
     {
         $journeys = [];
         $controllerDir = $sourcePath.'/app/Http/Controllers';
@@ -3198,6 +3198,131 @@ PHP;
             }
             return null;
         };
+
+        // If not ERP domain and does not contain all ERP multi-pillar signatures, dynamically discover generic journeys
+        $isErpExplicit = strtolower($domain) === 'erp';
+        $isErpSignature = $findCtrl(['ProjectController', 'ProjectsController']) && $findCtrl(['EmployeeController', 'EmployeeDetailsController']) && $findCtrl(['InvoiceController', 'PaymentController']);
+        $isErp = $isErpExplicit || ($domain === 'Core' && $isErpSignature);
+        if (! $isErp && ! empty($availableControllers)) {
+            return $this->discoverGenericUserJourneys($sourcePath, $availableControllers, $domain);
+        }
+
+        // 0. Complete Enterprise System Architecture (Master Cross-Role BRD Value Stream)
+        $masterSteps = [
+            [
+                'title' => 'Tenant Provisioning & Organization Hierarchy',
+                'step' => 'Tenant Provisioning & Organization Hierarchy',
+                'blade_view' => 'resources/views/auth/register.blade.php',
+                'trigger_ui' => 'Tenant Registration Form & Setup Checklist',
+                'controller' => 'RegisterController',
+                'controller_action' => 'RegisterController@store',
+                'slice' => 'Settings',
+                'persona' => 'Company Owner',
+                'legacy_behavior' => 'Global company creation without isolated tenancy policies.',
+                'vsa_improvement' => 'Multi-tenant provisioning with automated tenant database/schema context.',
+            ],
+            [
+                'title' => 'Human Capital & Department Provisioning',
+                'step' => 'Human Capital & Department Provisioning',
+                'blade_view' => 'resources/views/employees/ajax/create.blade.php',
+                'trigger_ui' => 'Employee Intake Form with Shift Allocation',
+                'controller' => 'EmployeeController',
+                'controller_action' => 'EmployeeController@store',
+                'slice' => 'Employees',
+                'persona' => 'HR Manager',
+                'legacy_behavior' => 'Scattered profile mutations across 5 tables.',
+                'vsa_improvement' => 'Employee Aggregate Root with unified detail views.',
+            ],
+            [
+                'title' => 'Commercial Intake: Proposal, Contract & Client Portal',
+                'step' => 'Commercial Intake: Proposal, Contract & Client Portal',
+                'blade_view' => 'resources/views/contract.blade.php',
+                'trigger_ui' => 'Digital Signature Canvas on Contract Sheet',
+                'controller' => 'ContractController',
+                'controller_action' => 'ContractController@signModal',
+                'slice' => 'Contracts',
+                'persona' => 'External Client',
+                'legacy_behavior' => 'Inline public route checks without dedicated client context.',
+                'vsa_improvement' => 'Isolated Client Portal Slice with digital audit trail.',
+            ],
+            [
+                'title' => 'Project Charter, Milestones & Task Breakdown',
+                'step' => 'Project Charter, Milestones & Task Breakdown',
+                'blade_view' => 'resources/views/projects/ajax/create.blade.php',
+                'trigger_ui' => 'Project Builder & Milestone Planning Canvas',
+                'controller' => 'ProjectController',
+                'controller_action' => 'ProjectController@store',
+                'slice' => 'Projects',
+                'persona' => 'Project Manager',
+                'legacy_behavior' => 'Monolithic god-controller managing files, members, and custom fields.',
+                'vsa_improvement' => 'Clean Project Aggregate with discrete BlatUI Action classes.',
+            ],
+            [
+                'title' => 'Workforce Execution: Geofenced Attendance & Live Timers',
+                'step' => 'Workforce Execution: Geofenced Attendance & Live Timers',
+                'blade_view' => 'resources/views/timelogs/ajax/timer.blade.php',
+                'trigger_ui' => 'Top Bar Stopwatch Button & Geofence Clock-In Modal',
+                'controller' => 'TimelogController',
+                'controller_action' => 'TimelogController@startTimer',
+                'slice' => 'TimeLogs',
+                'persona' => 'Team Member',
+                'legacy_behavior' => 'Synchronous database mutations and raw date-diff queries.',
+                'vsa_improvement' => 'Alpine.js reactive stopwatch syncing clean JSON state with asynchronous activity logging.',
+            ],
+            [
+                'title' => 'Quote-to-Cash: Billing Aggregation & Multi-Currency Invoicing',
+                'step' => 'Quote-to-Cash: Billing Aggregation & Multi-Currency Invoicing',
+                'blade_view' => 'resources/views/invoices/ajax/create.blade.php',
+                'trigger_ui' => 'Timelog Invoice Builder Canvas',
+                'controller' => 'InvoiceController',
+                'controller_action' => 'InvoiceController@store',
+                'slice' => 'Invoices',
+                'persona' => 'Accountant',
+                'legacy_behavior' => '53KB InvoiceController rendering PDFs and sending emails inline.',
+                'vsa_improvement' => 'Canonical Billing Engine aggregating billable hours into structured line-item DTOs with queued jobs.',
+            ],
+            [
+                'title' => 'Settlement & Executive Real-Time Analytics',
+                'step' => 'Settlement & Executive Real-Time Analytics',
+                'blade_view' => 'resources/views/dashboard/admin.blade.php',
+                'trigger_ui' => 'Payment Gateway Webhook & Executive KPI Canvas',
+                'controller' => 'PaymentController',
+                'controller_action' => 'PaymentController@store',
+                'slice' => 'Payments',
+                'persona' => 'Accountant & Company Owner',
+                'legacy_behavior' => 'OverviewDashboard executes 11 correlated subqueries on every page load.',
+                'vsa_improvement' => 'Atomic payment state machine and dedicated Executive Dashboard slice with cached KPI ribbons.',
+            ],
+        ];
+
+        $journeys['master_value_stream'] = [
+            'id' => 'master_value_stream',
+            'icon' => '🌐',
+            'name' => 'Enterprise Master Value Stream (The Complete End-to-End BRD)',
+            'title' => 'Enterprise Master Value Stream (The Complete End-to-End BRD)',
+            'persona' => 'Cross-Functional Enterprise Actors (Owner, HR, PM, Employee, Client, Accountant)',
+            'role' => 'master',
+            'entry_point' => '/account/dashboard',
+            'auth_flow' => 'Full Lifecycle: Tenant Registration ➔ HR Talent Onboarding ➔ Client Contract E-Sign ➔ PM Project Charter ➔ Employee Timelogs ➔ Quote-to-Cash Invoicing ➔ Online Payment ➔ Executive Dashboard.',
+            'blade_views' => [
+                'resources/views/auth/register.blade.php',
+                'resources/views/dashboard/checklist.blade.php',
+                'resources/views/employees/ajax/create.blade.php',
+                'resources/views/contract.blade.php',
+                'resources/views/projects/ajax/create.blade.php',
+                'resources/views/tasks/ajax/create.blade.php',
+                'resources/views/dashboard/employee/clock_in_modal.blade.php',
+                'resources/views/timelogs/ajax/timer.blade.php',
+                'resources/views/invoices/ajax/create-timelog-invoice.blade.php',
+                'resources/views/payments/ajax/create.blade.php',
+                'resources/views/dashboard/admin.blade.php',
+            ],
+            'database_tables' => ['companies', 'users', 'roles', 'employee_details', 'contracts', 'projects', 'tasks', 'attendances', 'project_time_logs', 'invoices', 'payments'],
+            'mermaid_flow' => "flowchart TD\n    subgraph Governance [\"👑 1. Governance & Setup\"]\n        A1[\"Owner Sign Up<br/>(auth/register.blade.php)\"] --> A2[\"Onboarding Checklist<br/>(dashboard/checklist.blade.php)\"]\n        A2 --> A3[\"RBAC & Org Structure<br/>(role-permissions/ & departments/)\"]\n    end\n\n    subgraph HRWorkforce [\"👥 2. Workforce Provisioning\"]\n        A3 --> B1[\"HR Provisions Employees<br/>(employees/ajax/create.blade.php)\"]\n        B1 --> B2[\"Shift Rosters & Profiles<br/>(employee-shifts/)\"]\n        B2 --> B3[\"Invitation Token Activation<br/>(auth/invitation.blade.php)\"]\n    end\n\n    subgraph CommercialWork [\"🚀 3. Commercial & Projects\"]\n        A3 --> C1[\"Client Lead & Proposal Sent<br/>(proposal.blade.php)\"]\n        C1 --> C2[\"Digital Contract E-Signed<br/>(contract.blade.php)\"]\n        C2 --> C3[\"PM Defines Project Charter<br/>(projects/ajax/create.blade.php)\"]\n        B1 -.-> C4[\"Team Allocated to Project<br/>(projects/ajax/members.blade.php)\"]\n        C3 --> C4\n        C4 --> C5[\"Milestones & Agile Tasks<br/>(tasks/ajax/create.blade.php)\"]\n    end\n\n    subgraph Execution [\"⏱️ 4. Execution & Timelogs\"]\n        B3 --> D1[\"Geofenced Clock-In<br/>(clock_in_modal.blade.php)\"]\n        C5 --> D2[\"Task Kanban Execution<br/>(projects/ajax/taskboard.blade.php)\"]\n        D1 & D2 --> D3[\"Live Stopwatch Timers on Tasks<br/>(timelogs/ajax/timer.blade.php)\"]\n        D3 --> D4[\"Milestone Quality Signoff<br/>(projects/ajax/milestones.blade.php)\"]\n    end\n\n    subgraph QuoteToCash [\"💳 5. Quote-to-Cash & Realization\"]\n        D4 --> E1[\"Aggregate Unbilled Timelogs<br/>(create-timelog-invoice.blade.php)\"]\n        E1 --> E2[\"Tax Invoices Generated<br/>(invoices/ajax/create.blade.php)\"]\n        E2 --> E3[\"Client Portal Invoice Review<br/>(invoice.blade.php)\"]\n        E3 --> E4[\"Online Payment Settlement<br/>(Stripe / PayPal / Bank)\"]\n        E4 --> E5[\"Payment Reconciliation<br/>(payments/ajax/create.blade.php)\"]\n    end\n\n    subgraph Analytics [\"📊 6. Executive Intelligence\"]\n        E5 --> F1[\"Cash Flow & Real-Time Profitability\"]\n        D1 --> F2[\"Workforce Utilization & Overtime\"]\n        F1 & F2 --> F3[\"Executive Business Dashboard<br/>(dashboard/admin.blade.php)\"]\n    end",
+            'legacy_friction' => 'Disjointed monolithic silos: Accounts execute unindexed SQL queries; PM cannot view unbilled timelogs directly; Client portal runs on separate unauthenticated token endpoints; 11 correlated subqueries on dashboard.',
+            'modernization_gain' => 'Unified Vertical Slice Architecture: Event-driven choreography (ContractSigned -> ProjectProvisioned -> InvoiceGenerated -> LedgerReconciled) with zero controller god-objects.',
+            'steps' => $masterSteps,
+        ];
 
         // 1. Company Owner & Administrator: Governance Lifecycle
         $adminSteps = [];
@@ -3304,7 +3429,7 @@ PHP;
                     'resources/views/dashboard/admin.blade.php',
                 ],
                 'database_tables' => ['companies', 'users', 'roles', 'permissions', 'role_user', 'permission_role', 'teams', 'designations', 'global_settings'],
-                'mermaid_flow' => "graph TD\n    A[auth/register.blade.php] -->|Tenant Provisioning| B[dashboard/checklist.blade.php]\n    B -->|Master Currencies & Taxes| C[currency-settings/ & tax-settings/]\n    C -->|RBAC Matrix Definition| D[role-permissions/]\n    D -->|Org Hierarchy Setup| E[departments/ & designations/]\n    E -->|Executive Analytics| F[dashboard/admin.blade.php]",
+                'mermaid_flow' => "flowchart TD\n    A[\"Tenant Registration<br/>(auth/register.blade.php)\"] -->|Provision Tenant| B[\"Setup Checklist<br/>(dashboard/checklist.blade.php)\"]\n    B -->|Currencies & Taxes| C[\"Taxonomy Config<br/>(currency-settings/)\"]\n    C -->|RBAC Matrix| D[\"Security Matrix<br/>(role-permissions/)\"]\n    D -->|Org Hierarchy| E[\"Departments & Teams<br/>(departments/)\"]\n    E -->|Analytics| F[\"Executive Overview<br/>(dashboard/admin.blade.php)\"]",
                 'legacy_friction' => 'AccountBaseController executes 10-15 correlated queries on every request; 11 correlated subqueries in OverviewDashboard with raw unescaped SQL; checklist state queried on every page hit.',
                 'modernization_gain' => 'Clean Settings and Roles slices with cached tenancy policies, event-driven checklist completion, and isolated Executive Dashboard view composers.',
                 'steps' => $adminSteps,
@@ -3417,7 +3542,7 @@ PHP;
                     'resources/views/projects/ajax/overview.blade.php',
                 ],
                 'database_tables' => ['projects', 'project_members', 'project_milestones', 'tasks', 'task_users', 'sub_tasks', 'project_files'],
-                'mermaid_flow' => "graph TD\n    A[projects/ajax/create.blade.php] -->|Define Charter & Client| B[projects/ajax/members.blade.php]\n    B -->|Allocate Team & Rates| C[projects/ajax/milestones.blade.php]\n    C -->|Decompose Deliverables| D[tasks/ajax/create.blade.php]\n    D -->|Sprint Execution| E[projects/ajax/taskboard.blade.php]\n    E -->|Timeline Dependencies| F[projects/ajax/gantt.blade.php]\n    F -->|Budget & Deliverable Signoff| G[projects/ajax/overview.blade.php]",
+                'mermaid_flow' => "flowchart TD\n    A[\"Project Charter<br/>(projects/ajax/create.blade.php)\"] -->|Assign Team| B[\"Member Allocation<br/>(projects/ajax/members.blade.php)\"]\n    B -->|Roadmap Milestones| C[\"Milestones & Budget<br/>(projects/ajax/milestones.blade.php)\"]\n    C -->|Agile Decomposition| D[\"Task Breakdown<br/>(tasks/ajax/create.blade.php)\"]\n    D -->|Active Sprint| E[\"Kanban Taskboard<br/>(projects/ajax/taskboard.blade.php)\"]\n    E -->|Gantt Dependencies| F[\"Gantt Schedule<br/>(projects/ajax/gantt.blade.php)\"]\n    F -->|Milestone Signoff| G[\"Project Overview<br/>(projects/ajax/overview.blade.php)\"]",
                 'legacy_friction' => 'ProjectController is a 64KB god-object coupled with 12 distinct DataTables; timer start creates tasks on-the-fly and performs 3 synchronous DB log writes.',
                 'modernization_gain' => 'Aggregate Root architecture where Project governs Milestones and Tasks; dedicated StartTimerAction with asynchronous activity logging and reactive Alpine.js timer widget.',
                 'steps' => $workSteps,
@@ -3515,7 +3640,7 @@ PHP;
                     'resources/views/leaves/ajax/create.blade.php',
                 ],
                 'database_tables' => ['users', 'employee_details', 'employee_shift_schedules', 'attendances', 'tasks', 'project_time_logs', 'leaves'],
-                'mermaid_flow' => "graph TD\n    A[auth/invitation.blade.php] -->|Activate Profile| B[dashboard/employee/index.blade.php]\n    B -->|Geofence Validation| C[dashboard/employee/clock_in_modal.blade.php]\n    C -->|Pick Assigned Task| D[tasks/ajax/show.blade.php]\n    D -->|Start Live Timer| E[timelogs/ajax/timer.blade.php]\n    E -->|Log Completed Work| F[timelogs/ajax/active_timer.blade.php]\n    F -->|Submit Leave Request| G[leaves/ajax/create.blade.php]",
+                'mermaid_flow' => "flowchart TD\n    A[\"Invitation Token<br/>(auth/invitation.blade.php)\"] -->|Activate Profile| B[\"Employee Workspace<br/>(dashboard/employee/index.blade.php)\"]\n    B -->|Geofenced Validation| C[\"Clock-In Modal<br/>(clock_in_modal.blade.php)\"]\n    C -->|Pick Assigned Task| D[\"Task Detail Sheet<br/>(tasks/ajax/show.blade.php)\"]\n    D -->|Start Live Timer| E[\"Stopwatch Engine<br/>(timelogs/ajax/timer.blade.php)\"]\n    E -->|Log Completed Work| F[\"Timesheet Submission\"]\n    F -->|Request Time-Off| G[\"Leave Application Modal<br/>(leaves/ajax/create.blade.php)\"]",
                 'legacy_friction' => 'EmployeeDashboard runs complex procedural date math and UTC loops on every request; AttendanceController has 1,300+ lines of duplicated permission checks; stopwatch mutates 3 activity tables synchronously.',
                 'modernization_gain' => 'Dedicated Attendance Domain Service with IP/geofence validation; Alpine.js reactive stopwatch syncing clean JSON state with asynchronous activity logging.',
                 'steps' => $empSteps,
@@ -3613,7 +3738,7 @@ PHP;
                     'resources/views/ticket-form.blade.php',
                 ],
                 'database_tables' => ['users', 'client_details', 'proposals', 'contracts', 'contract_signs', 'invoices', 'payments', 'tickets'],
-                'mermaid_flow' => "graph TD\n    A[proposal.blade.php] -->|Inspect Line Items| B[contract.blade.php]\n    B -->|Digital E-Signature| C[dashboard/client/index.blade.php]\n    C -->|Review Project Milestones| D[invoice.blade.php]\n    D -->|Stripe/PayPal Gateway| E[public-payment/index.blade.php]\n    E -->|Receipt Issued| F[dashboard/client/index.blade.php]\n    F -->|Open Support Ticket| G[ticket-form.blade.php]",
+                'mermaid_flow' => "flowchart TD\n    A[\"Commercial Proposal<br/>(proposal.blade.php)\"] -->|Inspect Line Items| B[\"Digital Contract E-Sign<br/>(contract.blade.php)\"]\n    B -->|Access Client Portal| C[\"Client Dashboard<br/>(dashboard/client/index.blade.php)\"]\n    C -->|Review Project Milestones| D[\"Tax Invoice Review<br/>(invoice.blade.php)\"]\n    D -->|Stripe / PayPal Gateway| E[\"Payment Checkout<br/>(public-payment/index.blade.php)\"]\n    E -->|Receipt Issued| F[\"Client Portal Overview\"]\n    F -->|Open Support Ticket| G[\"Ticket Intake Form<br/>(ticket-form.blade.php)\"]",
                 'legacy_friction' => 'Clients enter through the same monolithic /account route prefix as admins; layouts rely on fragile role conditionals with risk of internal rate leaks.',
                 'modernization_gain' => 'Completely isolated Client Portal domain slice (/portal) with dedicated BlatUI customer views, tokenized sign-offs, and zero employee ERP overhead.',
                 'steps' => $clientSteps,
@@ -3723,7 +3848,7 @@ PHP;
                     'resources/views/credit-notes/index.blade.php',
                 ],
                 'database_tables' => ['bank_accounts', 'invoices', 'invoice_items', 'recurring_invoices', 'payments', 'credit_notes', 'expenses'],
-                'mermaid_flow' => "graph TD\n    A[bank-account/index.blade.php] -->|Configure Chart of Accounts| B[invoices/ajax/create-timelog-invoice.blade.php]\n    B -->|Aggregate Unbilled Hours| C[invoices/ajax/create.blade.php]\n    C -->|Multi-Tax Calculation & Dispatch| D[recurring-invoices/index.blade.php]\n    D -->|Payment Gateway Callback| E[payments/ajax/create.blade.php]\n    E -->|Reconcile Bank Ledger| F[bank-account/index.blade.php]\n    F -->|Credit Adjustments| G[credit-notes/index.blade.php]",
+                'mermaid_flow' => "flowchart TD\n    A[\"Chart of Accounts<br/>(bank-account/index.blade.php)\"] -->|Aggregate Unbilled Hours| B[\"Timelog Invoicing<br/>(create-timelog-invoice.blade.php)\"]\n    B -->|Multi-Tax Calculation| C[\"Tax Invoice Dispatch<br/>(invoices/ajax/create.blade.php)\"]\n    C -->|Subscription Cycles| D[\"Recurring Billing<br/>(recurring-invoices/index.blade.php)\"]\n    D -->|Gateway Settlement| E[\"Payment Record & Match<br/>(payments/ajax/create.blade.php)\"]\n    E -->|Ledger Reconciliation| F[\"Bank Reconciliation\"]\n    F -->|Credit Adjustments| G[\"Credit Notes<br/>(credit-notes/index.blade.php)\"]",
                 'legacy_friction' => 'PaymentController::changeStatus performs raw mass updates without updating invoice totals or verifying settlement invariants; invoice creation lacks transaction safety.',
                 'modernization_gain' => 'Strict transactional boundaries with finite state machines (Draft -> Sent -> PartiallyPaid -> Paid) and automated ledger reconciliation.',
                 'steps' => $financeSteps,
@@ -3820,11 +3945,213 @@ PHP;
                     'resources/views/appreciations/index.blade.php',
                 ],
                 'database_tables' => ['users', 'employee_details', 'employee_shift_schedules', 'attendances', 'leave_types', 'employee_leave_quotas', 'leaves', 'awards', 'appreciations'],
-                'mermaid_flow' => "graph TD\n    A[employees/ajax/create.blade.php] -->|Recruitment & Dossier Intake| B[employee-shifts/index.blade.php]\n    B -->|Shift Roster Allocation| C[attendances/ajax/summary_data.blade.php]\n    C -->|Audit Biometric & Geo Logs| D[leaves/ajax/show.blade.php]\n    D -->|Multi-Tier Leave Approval| E[leaves/ajax/show.blade.php]\n    E -->|Reward & Performance Recognition| F[appreciations/index.blade.php]",
+                'mermaid_flow' => "flowchart TD\n    A[\"Recruitment Intake<br/>(employees/ajax/create.blade.php)\"] -->|Shift Allocation| B[\"Shift Rosters<br/>(employee-shifts/index.blade.php)\"]\n    B -->|Biometric & Geo Logs| C[\"Attendance Audit<br/>(attendances/ajax/summary_data.blade.php)\"]\n    C -->|Time-Off Request| D[\"Leave Review Modal<br/>(leaves/ajax/show.blade.php)\"]\n    D -->|Performance Reward| E[\"Peer Recognition & Awards<br/>(appreciations/index.blade.php)\"]",
                 'legacy_friction' => 'Employee profile scattered across 5 separate tables and controllers (visas, passports, emergency contacts, skills); AttendanceController has 1,300+ lines of redundant abort_403 checks.',
                 'modernization_gain' => 'Unified Employee Aggregate Root with multi-tab BlatUI detail view; clean Leave FSM (Draft -> Submitted -> ManagerApproved -> HRFinalized) with quota deduction.',
                 'steps' => $hrSteps,
             ];
+        }
+
+        return $journeys;
+    }
+
+    /**
+     * Dynamically discover and synthesize standardized BRD user journeys for ANY domain or custom application.
+     */
+    protected function discoverGenericUserJourneys(string $sourcePath, array $availableControllers, string $domain): array
+    {
+        $journeys = [];
+
+        // 1. Cluster controllers by common enterprise semantic roles
+        $clusters = [
+            'governance' => [
+                'id' => 'system_governance',
+                'name' => 'System Onboarding & Administrative Governance',
+                'title' => 'System Onboarding & Administrative Governance',
+                'persona' => 'System Administrator & Governance Lead',
+                'role' => 'admin',
+                'icon' => '👑',
+                'patterns' => ['auth', 'login', 'register', 'user', 'role', 'permission', 'setting', 'config', 'team', 'department'],
+                'steps' => [],
+            ],
+            'core_operations' => [
+                'id' => 'core_operations',
+                'name' => "{$domain} Core Operational Lifecycle",
+                'title' => "{$domain} Core Operational Lifecycle",
+                'persona' => 'Operational Manager & Specialist',
+                'role' => 'operations',
+                'icon' => '⚡',
+                'patterns' => [], // fallback for domain-specific resource controllers
+                'steps' => [],
+            ],
+            'stakeholder_portal' => [
+                'id' => 'stakeholder_portal',
+                'name' => 'External Stakeholder & Client Portal',
+                'title' => 'External Stakeholder & Client Portal',
+                'persona' => 'Customer, Client or External Stakeholder',
+                'role' => 'stakeholder',
+                'icon' => '🤝',
+                'patterns' => ['client', 'customer', 'patient', 'student', 'vendor', 'portal', 'ticket', 'contact', 'feedback', 'review'],
+                'steps' => [],
+            ],
+            'transaction_settlement' => [
+                'id' => 'transaction_settlement',
+                'name' => 'Commercial Settlement & Financial Realization',
+                'title' => 'Commercial Settlement & Financial Realization',
+                'persona' => 'Financial Controller & Billing Specialist',
+                'role' => 'finance',
+                'icon' => '💳',
+                'patterns' => ['order', 'invoice', 'payment', 'billing', 'cart', 'checkout', 'subscription', 'transaction', 'payout', 'tax'],
+                'steps' => [],
+            ],
+            'analytics_reporting' => [
+                'id' => 'analytics_reporting',
+                'name' => 'Executive Analytics & BI Intelligence',
+                'title' => 'Executive Analytics & BI Intelligence',
+                'persona' => 'Executive Director & Data Analyst',
+                'role' => 'analyst',
+                'icon' => '📊',
+                'patterns' => ['dashboard', 'report', 'analytics', 'stat', 'metric', 'summary', 'log'],
+                'steps' => [],
+            ],
+        ];
+
+        // Match available controllers into clusters
+        $assigned = [];
+        foreach ($availableControllers as $lower => $base) {
+            $placed = false;
+            foreach ($clusters as $cKey => $cDef) {
+                if ($cKey === 'core_operations') continue;
+                foreach ($cDef['patterns'] as $pat) {
+                    if (str_contains($lower, $pat)) {
+                        $clusters[$cKey]['steps'][] = $base;
+                        $assigned[$base] = $cKey;
+                        $placed = true;
+                        break 2;
+                    }
+                }
+            }
+            if (! $placed) {
+                $clusters['core_operations']['steps'][] = $base;
+                $assigned[$base] = 'core_operations';
+            }
+        }
+
+        // Build standardized step traces for each populated cluster
+        $activeClusters = [];
+        $viewDir = $sourcePath.'/resources/views';
+
+        foreach ($clusters as $cKey => $cDef) {
+            if (empty($cDef['steps'])) continue;
+
+            $stepObjects = [];
+            $bladeViews = [];
+            $ctrlList = array_slice($cDef['steps'], 0, 6); // Top representative controllers
+
+            foreach ($ctrlList as $idx => $ctrlName) {
+                $resource = strtolower(str_replace('Controller', '', $ctrlName));
+                $resourceKebab = Str::kebab($resource);
+
+                // Check for matching blade views
+                $matchedBlade = "resources/views/{$resourceKebab}/index.blade.php";
+                if (is_dir("{$viewDir}/{$resourceKebab}")) {
+                    $matchedBlade = "resources/views/{$resourceKebab}/index.blade.php";
+                } elseif (file_exists("{$viewDir}/{$resourceKebab}.blade.php")) {
+                    $matchedBlade = "resources/views/{$resourceKebab}.blade.php";
+                }
+
+                $bladeViews[] = $matchedBlade;
+                $sliceName = Str::studly($resource);
+
+                $stepObjects[] = [
+                    'title' => Str::headline($resource).' Execution & Management',
+                    'step' => Str::headline($resource).' Execution & Management',
+                    'blade_view' => $matchedBlade,
+                    'trigger_ui' => "<x-ui.button>Save ".Str::singular(Str::headline($resource))."</x-ui.button> Form Trigger",
+                    'controller' => $ctrlName,
+                    'controller_action' => "{$ctrlName}@store",
+                    'slice' => $sliceName,
+                    'persona' => $cDef['persona'],
+                    'legacy_behavior' => "Monolithic {$ctrlName} manages validation, business rules, and database mutations synchronously.",
+                    'vsa_improvement' => "Dedicated {$sliceName} Vertical Slice with isolated Action classes and modern BlatUI components.",
+                ];
+            }
+
+            // Synthesize dynamic Mermaid flowchart TD
+            $mermaidLines = ["flowchart TD"];
+            for ($i = 0; $i < count($stepObjects); $i++) {
+                $cur = $stepObjects[$i];
+                $char = chr(65 + $i);
+                $titleShort = Str::limit($cur['title'], 25);
+                $viewShort = basename($cur['blade_view']);
+                $mermaidLines[] = "    {$char}[\"{$titleShort}<br/>({$viewShort})\"]";
+                if ($i > 0) {
+                    $prevChar = chr(65 + $i - 1);
+                    $mermaidLines[] = "    {$prevChar} -->|Process Stage| {$char}";
+                }
+            }
+
+            $activeClusters[$cKey] = [
+                'id' => $cDef['id'],
+                'icon' => $cDef['icon'],
+                'name' => $cDef['name'],
+                'title' => $cDef['title'],
+                'persona' => $cDef['persona'],
+                'role' => $cDef['role'],
+                'entry_point' => "/".($stepObjects[0]['slice'] ?? 'dashboard'),
+                'auth_flow' => "Authenticated via standard guard ➔ Dispatches into {$cDef['name']}.",
+                'blade_views' => array_unique($bladeViews),
+                'database_tables' => array_map(fn($s) => Str::snake(Str::plural($s['slice'])), $stepObjects),
+                'mermaid_flow' => implode("\n", $mermaidLines),
+                'legacy_friction' => "Heavy cross-controller dependencies without modular separation of domain concerns.",
+                'vsa_improvement' => "Standardized LaraSlice Vertical Slice Architecture with decoupled action classes and reactive BlatUI components.",
+                'steps' => $stepObjects,
+            ];
+        }
+
+        // 2. Synthesize Master Value Stream (The Complete End-to-End BRD)
+        $masterSteps = [];
+        $masterMermaid = ["flowchart TD"];
+        $tierIdx = 1;
+        $prevTierId = null;
+
+        foreach ($activeClusters as $cKey => $cData) {
+            $repStep = $cData['steps'][0] ?? null;
+            if (! $repStep) continue;
+
+            $masterSteps[] = $repStep;
+            $tierId = "T{$tierIdx}";
+            $titleEsc = Str::limit($cData['title'], 30);
+            $subTitle = $repStep['slice'] ?? 'Core';
+            $masterMermaid[] = "    subgraph Stage{$tierIdx} [\"{$cData['icon']} Stage {$tierIdx}: {$titleEsc}\"]\n        {$tierId}[\"{$subTitle} Hub<br/>({$repStep['blade_view']})\"]\n    end";
+
+            if ($prevTierId) {
+                $masterMermaid[] = "    {$prevTierId} -->|Orchestration Transition| {$tierId}";
+            }
+            $prevTierId = $tierId;
+            $tierIdx++;
+        }
+
+        $journeys['master_value_stream'] = [
+            'id' => 'master_value_stream',
+            'icon' => '🌐',
+            'name' => "{$domain} Master Value Stream (The Complete End-to-End BRD)",
+            'title' => "{$domain} Master Value Stream (The Complete End-to-End BRD)",
+            'persona' => "Cross-Functional Actors across all {$domain} Lifecycle Stages",
+            'role' => 'master',
+            'entry_point' => '/dashboard',
+            'auth_flow' => "End-to-end multi-role choreography spanning ".count($activeClusters)." operational tiers.",
+            'blade_views' => !empty($activeClusters) ? array_values(array_unique(array_merge(...array_map(fn($c) => $c['blade_views'], $activeClusters)))) : [],
+            'database_tables' => !empty($activeClusters) ? array_values(array_unique(array_merge(...array_map(fn($c) => $c['database_tables'], $activeClusters)))) : [],
+            'mermaid_flow' => implode("\n", $masterMermaid),
+            'legacy_friction' => "Disjointed functional silos, undocumented procedural controller transitions, and monolithic shared models.",
+            'vsa_improvement' => "Unified Vertical Slice Architecture: Event-driven cross-slice choreography with clean boundaries and reactive BlatUI dashboards.",
+            'steps' => $masterSteps,
+        ];
+
+        // Merge active role clusters after master
+        foreach ($activeClusters as $k => $c) {
+            $journeys[$k] = $c;
         }
 
         return $journeys;

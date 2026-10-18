@@ -49,13 +49,22 @@
     <div class="px-4 py-4 md:px-6 md:py-6 max-w-7xl mx-auto space-y-4">
         <!-- Source selection card -->
         <div class="rounded-xl border border-border bg-card p-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
-                    <label class="block text-xs font-semibold text-foreground mb-1">Source Preset</label>
-                    <select x-model="preset" class="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
+                    <label class="block text-xs font-semibold text-foreground mb-1">System Archetype</label>
+                    <select x-model="preset" @change="onPresetChange()" class="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
+                        <option value="auto">⚡ Auto-Detect Archetype</option>
+                        <option value="custom">🔍 Custom Application / Service</option>
+                        <option value="healthcare">🏥 Healthcare & Clinical EMR</option>
+                        <option value="ecommerce">🛒 E-Commerce & Retail</option>
+                        <option value="edtech">🎓 EdTech & Learning (LMS)</option>
+                        <option value="fintech">💳 FinTech & Banking</option>
                         <option value="erp">🏢 ERP Enterprise Suite</option>
-                        <option value="custom">🔍 Custom Local Project</option>
                     </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-foreground mb-1">Domain Namespace</label>
+                    <input x-model="targetDomain" type="text" placeholder="e.g. Healthcare, Core, ERP" class="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground">
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-xs font-semibold text-foreground mb-1">Source Type</label>
@@ -175,16 +184,19 @@
                 <p>Run <strong>🔍 Analyze</strong> with the live source connection to introspect end-to-end user workflows.</p>
             </div>
 
-            <!-- BRD Role Filter Bar -->
+            <!-- Generic BRD Persona Filter Bar (Dynamically populated for ANY project domain) -->
             <div x-show="planData?.journeys" class="flex items-center gap-1.5 flex-wrap pb-3 border-b border-border/60">
                 <span class="text-xs font-semibold text-muted-foreground mr-1">Filter by Persona:</span>
-                <button type="button" @click="selectedRole = 'all'" :class="selectedRole === 'all' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">All Roles</button>
-                <button type="button" @click="selectedRole = 'admin'" :class="selectedRole === 'admin' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">👑 Company Admin</button>
-                <button type="button" @click="selectedRole = 'project_manager'" :class="selectedRole === 'project_manager' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">🚀 Project Manager</button>
-                <button type="button" @click="selectedRole = 'employee'" :class="selectedRole === 'employee' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">⏱️ Team Member</button>
-                <button type="button" @click="selectedRole = 'client'" :class="selectedRole === 'client' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">🤝 External Client</button>
-                <button type="button" @click="selectedRole = 'accountant'" :class="selectedRole === 'accountant' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">💳 Accountant</button>
-                <button type="button" @click="selectedRole = 'hr_manager'" :class="selectedRole === 'hr_manager' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">👥 HR Operations</button>
+                <button type="button" @click="selectedRole = 'all'" :class="selectedRole === 'all' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer flex items-center gap-1">
+                    <span>All Journeys</span>
+                    <span class="opacity-70 font-mono text-[10px]" x-text="'(' + Object.keys(planData?.journeys || {}).length + ')'"></span>
+                </button>
+                <template x-for="r in availableRoles()" :key="r.id">
+                    <button type="button" @click="selectedRole = r.id" :class="selectedRole === r.id ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer flex items-center gap-1">
+                        <span x-text="r.icon"></span>
+                        <span x-text="r.label"></span>
+                    </button>
+                </template>
             </div>
 
             <!-- BRD Persona Journey Cards -->
@@ -214,13 +226,81 @@
 
                     <p class="text-xs text-muted-foreground" x-text="journey.description"></p>
 
-                    <!-- Mermaid Flowchart (Collapsible) -->
-                    <div x-show="showMermaid[key]" class="rounded-xl border border-border bg-slate-950 p-3 text-[11px] font-mono text-cyan-400 overflow-x-auto whitespace-pre-wrap">
-                        <div class="flex items-center justify-between mb-1 pb-1 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            <span>BRD Flowchart (Mermaid)</span>
-                            <span class="font-normal text-slate-500">Renderable in Mermaid CLI / IDE</span>
+                    <!-- Interactive Diagram Viewport (Mermaid Rendered SVG + Zoom + Inspector) -->
+                    <div x-show="showMermaid[key]" class="rounded-xl border border-border bg-card p-3 space-y-3 transition">
+                        <!-- Diagram Controls Header -->
+                        <div class="flex items-center justify-between gap-2 flex-wrap border-b border-border/50 pb-2">
+                            <!-- View Switcher -->
+                            <div class="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 text-[11px]">
+                                <button type="button" @click="setDiagramMode(key, 'visual')" :class="(diagramModes[key] || 'visual') === 'visual' ? 'bg-background text-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="rounded px-2.5 py-1 transition cursor-pointer flex items-center gap-1">
+                                    <span>📊</span><span>Rendered Diagram</span>
+                                </button>
+                                <button type="button" @click="setDiagramMode(key, 'code')" :class="diagramModes[key] === 'code' ? 'bg-background text-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'" class="rounded px-2.5 py-1 transition cursor-pointer flex items-center gap-1">
+                                    <span>📝</span><span>Mermaid Code</span>
+                                </button>
+                            </div>
+
+                            <!-- Interactive Zoom & Copy Controls -->
+                            <div class="flex items-center gap-1.5 text-[11px]">
+                                <div x-show="(diagramModes[key] || 'visual') === 'visual'" class="flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
+                                    <button type="button" @click="zoomOut(key)" title="Zoom Out" class="rounded px-2 py-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition cursor-pointer font-bold">−</button>
+                                    <span class="px-1.5 font-mono text-[10px] text-muted-foreground" x-text="Math.round((zoomLevels[key] || 1) * 100) + '%'"></span>
+                                    <button type="button" @click="zoomIn(key)" title="Zoom In" class="rounded px-2 py-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition cursor-pointer font-bold">+</button>
+                                    <button type="button" @click="resetZoom(key)" title="Reset Zoom" class="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted transition cursor-pointer ml-0.5">⟲</button>
+                                </div>
+                                <button type="button" @click="copyMermaid(key)" class="rounded-lg border border-border bg-background px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-muted transition cursor-pointer flex items-center gap-1 text-[11px]">
+                                    <span x-text="copiedKey === key ? '✓ Copied' : '📋 Copy Syntax'"></span>
+                                </button>
+                            </div>
                         </div>
-                        <pre class="m-0 text-emerald-400 font-mono text-[11px]" x-text="journey.mermaid_flow"></pre>
+
+                        <!-- Rendered SVG Canvas Container -->
+                        <div x-show="(diagramModes[key] || 'visual') === 'visual'" class="relative rounded-xl border border-border/80 bg-slate-950 p-4 overflow-x-auto min-h-[180px] flex flex-col items-center justify-center">
+                            <div class="w-full overflow-x-auto py-2 flex justify-center">
+                                <div :id="'mermaid-render-' + key" class="mermaid-diagram-canvas transition-transform duration-150 origin-top text-center" :style="'transform: scale(' + (zoomLevels[key] || 1) + ');'">
+                                    <div class="py-6 text-xs text-muted-foreground animate-pulse">Rendering BRD flowchart...</div>
+                                </div>
+                            </div>
+                            <div class="w-full flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-900 mt-2">
+                                <span>💡 <strong>Click any diagram node</strong> to inspect its Blade view, trigger UI & VSA slice</span>
+                                <span>Mermaid.js Graphic Vector Engine</span>
+                            </div>
+                        </div>
+
+                        <!-- Interactive Node Inspector Box -->
+                        <div x-show="activeNodes[key]" class="rounded-xl border border-primary/40 bg-primary/5 p-3 text-xs space-y-1.5 transition">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2 font-bold text-foreground">
+                                    <span class="rounded-full bg-primary/20 text-primary size-5 flex items-center justify-center text-[10px]">🎯</span>
+                                    <span>Selected Flow Step:</span>
+                                    <span class="font-mono text-primary text-[12px]" x-text="activeNodes[key]?.title || activeNodes[key]?.step"></span>
+                                </div>
+                                <button type="button" @click="activeNodes[key] = null" class="text-muted-foreground hover:text-foreground text-xs font-semibold cursor-pointer">✕ Close</button>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
+                                <div>
+                                    <span class="text-muted-foreground block text-[10px] uppercase font-semibold">Blade View</span>
+                                    <code class="text-indigo-400 font-mono text-[11px] truncate block" x-text="activeNodes[key]?.blade_view || 'N/A'"></code>
+                                </div>
+                                <div>
+                                    <span class="text-muted-foreground block text-[10px] uppercase font-semibold">Trigger UI</span>
+                                    <span class="text-amber-500 font-medium truncate block" x-text="activeNodes[key]?.trigger_ui || 'Direct User Route Navigation'"></span>
+                                </div>
+                                <div>
+                                    <span class="text-muted-foreground block text-[10px] uppercase font-semibold">Target Slice</span>
+                                    <span class="text-primary font-bold font-mono text-[11px]" x-text="activeNodes[key]?.slice || 'Core Infrastructure'"></span>
+                                </div>
+                            </div>
+                            <div x-show="activeNodes[key]?.vsa_improvement" class="text-[11px] text-muted-foreground pt-1 border-t border-primary/10">
+                                <strong class="text-emerald-500">VSA Architectural Gain:</strong>
+                                <span x-text="activeNodes[key]?.vsa_improvement"></span>
+                            </div>
+                        </div>
+
+                        <!-- Raw Mermaid Code View -->
+                        <div x-show="diagramModes[key] === 'code'" class="rounded-xl border border-border bg-slate-950 p-4 font-mono text-[11px] text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+                            <pre class="m-0 select-all" x-text="journey.mermaid_flow"></pre>
+                        </div>
                     </div>
 
                     <!-- Real Architectural Contrast: Legacy Bottleneck vs VSA Modernization -->
@@ -239,7 +319,7 @@
                     <div class="space-y-2 pt-1">
                         <div class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Operational Step Traces & Blade Views:</div>
                         <template x-for="(step, sIdx) in (journey.steps || [])" :key="sIdx">
-                            <div class="rounded-lg border border-border/40 bg-muted/20 p-2.5 text-xs transition hover:border-border">
+                            <div :class="highlightedStep === (step.step || step.title) ? 'ring-2 ring-primary border-primary bg-primary/10 shadow-sm' : ''" class="rounded-lg border border-border/40 bg-muted/20 p-2.5 text-xs transition hover:border-border">
                                 <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                                     <div class="flex items-center gap-2 min-w-0">
                                         <span class="shrink-0 size-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center" x-text="sIdx + 1"></span>
@@ -674,7 +754,18 @@ function portingStudio() {
             { value: 'both', label: '🔀 Both', desc: 'Real + reference seeders' },
             { value: 'none', label: '🚫 None', desc: 'Schema only' },
         ],
-        preset: 'erp',
+        preset: 'auto',
+        targetDomain: 'Core',
+        onPresetChange() {
+            if (this.preset === 'healthcare') this.targetDomain = 'Healthcare';
+            else if (this.preset === 'ecommerce') this.targetDomain = 'Ecommerce';
+            else if (this.preset === 'edtech') this.targetDomain = 'EdTech';
+            else if (this.preset === 'fintech') this.targetDomain = 'FinTech';
+            else if (this.preset === 'erp') this.targetDomain = 'ERP';
+            else if (this.preset === 'custom' || this.preset === 'auto') {
+                if (this.targetDomain === 'ERP') this.targetDomain = 'Core';
+            }
+        },
         sourceType: 'local',
         sourcePath: '',
         gitUrl: '',
@@ -695,9 +786,169 @@ function portingStudio() {
         logs: [],
         selectedRole: 'all',
         showMermaid: {},
+        diagramModes: {},
+        zoomLevels: {},
+        activeNodes: {},
+        highlightedStep: null,
+        copiedKey: null,
+
         toggleMermaid(key) {
             this.showMermaid[key] = !this.showMermaid[key];
+            if (this.showMermaid[key]) {
+                if (!this.diagramModes[key]) this.diagramModes[key] = 'visual';
+                if (!this.zoomLevels[key]) this.zoomLevels[key] = 1;
+                this.$nextTick(() => {
+                    this.renderDiagram(key);
+                });
+            }
         },
+
+        setDiagramMode(key, mode) {
+            this.diagramModes[key] = mode;
+            if (mode === 'visual') {
+                this.$nextTick(() => {
+                    this.renderDiagram(key);
+                });
+            }
+        },
+
+        zoomIn(key) {
+            this.zoomLevels[key] = Math.min((this.zoomLevels[key] || 1) + 0.2, 2.5);
+        },
+
+        zoomOut(key) {
+            this.zoomLevels[key] = Math.max((this.zoomLevels[key] || 1) - 0.2, 0.5);
+        },
+
+        resetZoom(key) {
+            this.zoomLevels[key] = 1;
+        },
+
+        copyMermaid(key) {
+            const flow = this.planData?.journeys?.[key]?.mermaid_flow || '';
+            if (!flow) return;
+            navigator.clipboard.writeText(flow);
+            this.copiedKey = key;
+            setTimeout(() => { this.copiedKey = null; }, 2000);
+        },
+
+        async loadMermaid() {
+            if (window.mermaid) return;
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+                s.onload = () => {
+                    if (window.mermaid) {
+                        window.mermaid.initialize({
+                            startOnLoad: false,
+                            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+                            securityLevel: 'loose',
+                            flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' }
+                        });
+                    }
+                    resolve();
+                };
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        },
+
+        async renderDiagram(key) {
+            await this.loadMermaid();
+            const journey = this.planData?.journeys?.[key];
+            if (!journey || !journey.mermaid_flow) return;
+            
+            const container = document.getElementById('mermaid-render-' + key);
+            if (!container) return;
+
+            try {
+                if (window.mermaid) {
+                    window.mermaid.initialize({
+                        startOnLoad: false,
+                        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+                        securityLevel: 'loose',
+                        flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' }
+                    });
+                }
+                const uniqueId = 'svg_' + key.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Math.random().toString(36).substring(2, 7);
+                const { svg } = await window.mermaid.render(uniqueId, journey.mermaid_flow);
+                container.innerHTML = svg;
+
+                const svgEl = container.querySelector('svg');
+                if (svgEl) {
+                    svgEl.style.maxWidth = '100%';
+                    svgEl.style.height = 'auto';
+
+                    const nodes = svgEl.querySelectorAll('.node');
+                    nodes.forEach(node => {
+                        node.style.cursor = 'pointer';
+                        node.addEventListener('mouseenter', () => {
+                            node.style.filter = 'drop-shadow(0 0 6px #6366f1)';
+                        });
+                        node.addEventListener('mouseleave', () => {
+                            node.style.filter = '';
+                        });
+                        node.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.onNodeClick(key, node);
+                        });
+                    });
+                }
+            } catch (e) {
+                console.error('Mermaid render error for ' + key, e);
+                container.innerHTML = `
+                    <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-400">
+                        <p class="font-bold">Render Notification</p>
+                        <p class="text-[11px] mt-1">${e.message || 'Error parsing diagram syntax'}</p>
+                    </div>
+                `;
+            }
+        },
+
+        onNodeClick(key, node) {
+            const text = (node.textContent || '').trim();
+            const journey = this.planData?.journeys?.[key];
+            if (!journey) return;
+
+            let matched = (journey.steps || []).find(s => {
+                if (s.blade_view && text.includes(s.blade_view.split('/').pop().replace('.blade.php', ''))) return true;
+                if (s.blade_view && text.includes(s.blade_view)) return true;
+                if (s.title && text.toLowerCase().includes(s.title.toLowerCase().substring(0, 10))) return true;
+                if (s.step && text.toLowerCase().includes(s.step.toLowerCase().substring(0, 10))) return true;
+                return false;
+            });
+
+            if (!matched) {
+                matched = {
+                    title: text.split('\n')[0] || 'Selected Flow Node',
+                    step: text,
+                    blade_view: text.includes('.blade.php') ? text : null,
+                    slice: journey.role,
+                    persona: journey.persona,
+                };
+            }
+
+            this.activeNodes[key] = matched;
+            this.highlightedStep = matched.step || matched.title;
+            setTimeout(() => { this.highlightedStep = null; }, 5000);
+        },
+
+        availableRoles() {
+            const journeys = this.planData?.journeys || {};
+            const rolesMap = {};
+            for (const [k, j] of Object.entries(journeys)) {
+                const roleId = j.role || k;
+                if (!rolesMap[roleId]) {
+                    rolesMap[roleId] = {
+                        id: roleId,
+                        label: j.persona || j.name || j.title || roleId,
+                        icon: j.icon || (roleId === 'master' ? '🌐' : '👤'),
+                    };
+                }
+            }
+            return Object.values(rolesMap);
+        },
+
         filteredJourneys() {
             const journeys = this.planData?.journeys || {};
             if (this.selectedRole === 'all') return journeys;
@@ -718,7 +969,8 @@ function portingStudio() {
             this.analyzing = true;
             this.error = '';
             try {
-                const payload = { preset: this.preset, domain: 'ERP', source_type: this.sourceType };
+                const domainName = (this.targetDomain || (this.preset === 'erp' ? 'ERP' : 'Core')).trim();
+                const payload = { preset: this.preset, domain: domainName, source_type: this.sourceType };
                 if (this.sourceType === 'git') {
                     payload.source = this.gitUrl;
                     payload.git_branch = this.gitBranch;
@@ -790,7 +1042,7 @@ function portingStudio() {
                         source_type: this.sourceType,
                         source: this.sourceType === 'git' ? this.gitUrl : this.sourcePath,
                         git_branch: this.gitBranch,
-                        domain: 'ERP',
+                        domain: (this.targetDomain || this.planData?.domain || 'Core').trim(),
                     }),
                 });
                 const data = await res.json();
@@ -817,6 +1069,10 @@ function portingStudio() {
                 this.sourceType = p.source_type || 'local';
                 if (this.sourceType === 'git') { this.gitUrl = p.source || ''; this.gitBranch = p.git_branch || ''; }
                 else { this.sourcePath = p.source || p.source_application || ''; }
+                if (p.domain) {
+                    this.targetDomain = p.domain;
+                    if (p.domain.toLowerCase() === 'erp') this.preset = 'erp';
+                }
                 this.log('📂 Preset loaded: ' + (p.name || p.domain || this.selectedSavedPreset));
                 this.activeTab = 'journeys';
             } catch (e) {
@@ -896,4 +1152,5 @@ function portingStudio() {
     };
 }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 @endsection
