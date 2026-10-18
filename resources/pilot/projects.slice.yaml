@@ -1,0 +1,88 @@
+name: Projects
+title: Projects
+domain: ERP
+description: ERP pilot — projects directory with board/calendar and persona nav
+version: 1.1.0
+enabled: true
+multitenant: false
+navigation:
+  label: Projects
+  icon: folder-kanban
+  group: Work
+  order: 20
+  visible: true
+  roles:
+    - admin
+    - employee
+    - client
+ui:
+  directory:
+    views:
+      - table
+      - board
+      - calendar
+    default_view: table
+    inline_edit:
+      - status
+    bulk_actions:
+      - handle: delete
+        label: Delete
+        type: native
+      - handle: export
+        label: Export
+        type: native
+      - handle: complete
+        label: Mark complete
+        type: workflow
+    row_actions:
+      display: hybrid
+      items:
+        - handle: view
+          label: View
+          icon: eye
+          placement: inline
+        - handle: edit
+          label: Edit
+          icon: pencil
+          placement: dropdown
+        - handle: delete
+          label: Delete
+          icon: trash-2
+          placement: dropdown
+          danger: true
+    columns:
+      - key: name
+        label: Project
+        formatter: text
+        sortable: true
+      - key: status
+        label: Status
+        formatter: status_pill
+        sortable: true
+      - key: start_date
+        label: Start
+        formatter: date_time
+      - key: due_date
+        label: Due
+        formatter: date_time
+  dashboard:
+    enabled: true
+    widgets:
+      - type: stat
+        handle: total
+        label: Projects
+fields:
+  name:
+    name: name
+    type: string
+    searchable: true
+  status:
+    name: status
+    type: string
+  start_date:
+    name: start_date
+    type: date
+  due_date:
+    name: due_date
+    type: date
+workflow: true

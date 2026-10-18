@@ -1,0 +1,74 @@
+name: Tasks
+title: Tasks
+domain: ERP
+description: ERP pilot — tasks with priority badge, board, inline status
+version: 1.1.0
+enabled: true
+multitenant: false
+navigation:
+  label: Tasks
+  icon: check-square
+  group: Work
+  order: 30
+  visible: true
+  roles:
+    - admin
+    - employee
+    - client
+ui:
+  directory:
+    views:
+      - table
+      - board
+      - calendar
+    default_view: board
+    inline_edit:
+      - status
+    bulk_actions:
+      - handle: delete
+        label: Delete
+        type: native
+      - handle: export
+        label: Export
+        type: native
+      - handle: complete
+        label: Complete
+        type: workflow
+    row_actions:
+      display: hybrid
+    columns:
+      - key: title
+        label: Task
+        formatter: text_with_badge
+        badge_from: priority
+        sortable: true
+      - key: status
+        label: Status
+        formatter: status_pill
+      - key: priority
+        label: Priority
+        formatter: text
+      - key: due_date
+        label: Due
+        formatter: date_time
+  dashboard:
+    enabled: true
+    widgets:
+      - type: stat
+        handle: open
+        label: Open tasks
+fields:
+  title:
+    name: title
+    type: string
+    searchable: true
+  status:
+    name: status
+    type: string
+  priority:
+    name: priority
+    type: string
+  due_date:
+    name: due_date
+    type: date
+workflow: true

@@ -2,6 +2,8 @@
 
 namespace LaraSlice\Core\Discovery;
 
+// ManifestRepository is same namespace
+
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
@@ -636,7 +638,125 @@ class SliceManager
             }
         }
 
+
+        // Ensure index data-table reflects YAML ui.directory (views, inline_edit, date-key)
+        $this->repairIndexDirectoryUi($slice);
+
         return $this->repairedFiles;
+    }
+
+    /**
+     * Patch index.blade.php so <x-ui.data-table> receives views / inline_edit / date-key from slice.json.
+     */
+    protected function repairIndexDirectoryUi(SliceManifest $slice): void
+    {
+        $viewsPath = $slice->getViewsPath();
+        if (! $viewsPath) {
+            return;
+        }
+        $index = $viewsPath.'/index.blade.php';
+        if (! is_file($index)) {
+            return;
+        }
+        $manifestFile = $slice->path.'/slice.json';
+        if (! is_file($manifestFile)) {
+            return;
+        }
+        try {
+            $manifest = ManifestRepository::read($manifestFile);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $dir = is_array($manifest['ui']['directory'] ?? null) ? $manifest['ui']['directory'] : [];
+        $views = is_array($dir['views'] ?? null) && $dir['views'] !== [] ? array_values($dir['views']) : ['table'];
+        $defaultView = is_string($dir['default_view'] ?? null) ? $dir['default_view'] : 'table';
+        $inlineEdit = is_array($dir['inline_edit'] ?? null) ? array_values($dir['inline_edit']) : [];
+        $statusKey = 'status';
+        $dateKey = null;
+        foreach ($dir['columns'] ?? [] as $c) {
+            if (! is_array($c)) {
+                continue;
+            }
+            $ck = (string) ($c['key'] ?? $c['handle'] ?? '');
+            if (in_array($ck, ['status', 'state', 'stage'], true)) {
+                $statusKey = $ck;
+            }
+            if ($dateKey === null && (str_contains($ck, 'date') || str_ends_with($ck, '_at'))) {
+                $dateKey = $ck;
+            }
+        }
+        foreach (['due_date', 'start_date', 'issue_date', 'date'] as $prefer) {
+            foreach ($dir['columns'] ?? [] as $c) {
+                if (is_array($c) && (($c['key'] ?? $c['handle'] ?? '') === $prefer)) {
+                    $dateKey = $prefer;
+                    break 2;
+                }
+            }
+        }
+
+        $original = file_get_contents($index);
+        if ($original === false || ! str_contains($original, 'x-ui.data-table')) {
+            return;
+        }
+        $content = $original;
+
+        $viewsExport = var_export($views, true);
+        $inlineExport = var_export($inlineEdit, true);
+        $dateExport = $dateKey === null ? 'null' : var_export($dateKey, true);
+        $defaultViewEsc = addslashes($defaultView);
+        $statusKeyEsc = addslashes($statusKey);
+
+        if (! str_contains($content, '$tableViews')) {
+            $sliceJsonPath = str_replace('\\', '/', $slice->path.'/slice.json');
+            $bootstrap = <<<PHP
+@php
+    if (! isset(\$manifest) || ! is_array(\$manifest)) {
+        \$manifest = [];
+        try {
+            \$_mf = '{$sliceJsonPath}';
+            if (is_file(\$_mf)) {
+                \$manifest = json_decode((string) file_get_contents(\$_mf), true) ?: [];
+            }
+        } catch (\\Throwable \$e) {
+            \$manifest = [];
+        }
+    }
+    \$dirUi = \$manifest['ui']['directory'] ?? [];
+    \$tableViews = is_array(\$dirUi['views'] ?? null) && \$dirUi['views'] !== [] ? \$dirUi['views'] : {$viewsExport};
+    \$defaultView = \$dirUi['default_view'] ?? '{$defaultViewEsc}';
+    \$inlineEdit = is_array(\$dirUi['inline_edit'] ?? null) ? \$dirUi['inline_edit'] : {$inlineExport};
+    \$statusKey = '{$statusKeyEsc}';
+    \$dateKey = {$dateExport};
+@endphp
+
+PHP;
+            $content = preg_replace('/(<x-ui\.data-table\b)/', $bootstrap.'$1', $content, 1) ?? $content;
+        }
+
+        $requiredAttrs = [
+            ':views' => '$tableViews',
+            ':default-view' => '$defaultView',
+            ':status-key' => '$statusKey',
+            ':inline-edit' => '$inlineEdit',
+            ':date-key' => '$dateKey',
+        ];
+        if (preg_match('/<x-ui\.data-table\b[^>]*>/s', $content, $m)) {
+            $tag = $m[0];
+            $newTag = $tag;
+            foreach ($requiredAttrs as $attr => $var) {
+                if (! str_contains($newTag, $attr.'=') && ! str_contains($newTag, $attr.' =')) {
+                    $newTag = rtrim(substr($newTag, 0, -1))."\n            {$attr}=\"{$var}\">";
+                }
+            }
+            if ($newTag !== $tag) {
+                $content = preg_replace('/<x-ui\.data-table\b[^>]*>/s', $newTag, $content, 1) ?? $content;
+            }
+        }
+
+        if ($content !== $original) {
+            $this->writeRepair($index, $content);
+        }
     }
 
     /** Record (and unless dry-running, write) one repaired file. */
