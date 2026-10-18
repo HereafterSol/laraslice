@@ -761,6 +761,42 @@ class SliceManager
     /**
      * Get list of active slices formatted for navigation bars / sidebars
      */
+
+    /**
+     * Whether the user has any of the given role slugs (YAML navigation.roles).
+     * Works with HasSlicePermissions or direct role_user table.
+     *
+     * @param  list<string>  $roleSlugs
+     */
+    protected function userHasAnyRole(object $user, array $roleSlugs): bool
+    {
+        if ($roleSlugs === []) {
+            return true;
+        }
+        if (method_exists($user, 'hasRole')) {
+            return (bool) $user->hasRole($roleSlugs);
+        }
+        if (method_exists($user, 'roleSlugs')) {
+            return array_intersect($roleSlugs, $user->roleSlugs()) !== [];
+        }
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('role_user') || ! \Illuminate\Support\Facades\Schema::hasTable('roles')) {
+                return false;
+            }
+            $uid = $user->id ?? $user->getAuthIdentifier();
+            if (! $uid) {
+                return false;
+            }
+            return \Illuminate\Support\Facades\DB::table('role_user')
+                ->join('roles', 'role_user.role_id', '=', 'roles.id')
+                ->where('role_user.user_id', $uid)
+                ->whereIn('roles.slug', $roleSlugs)
+                ->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function getNavigableSlices(): array
     {
         $currentUser = auth()->check() ? auth()->user() : null;
@@ -807,8 +843,10 @@ class SliceManager
                 }
             }
 
-            // If user is authenticated and slice requires permission, verify authorization (Super Admin bypasses checks)
-            if ($requiredPermission && $currentUser && ! $isSuperAdmin) {
+            // Permission check (Super Admin bypasses). When navigation.roles is set, role gate below is the ERP persona source of truth.
+            $allowedRolesEarly = $slice->navigation['roles'] ?? $slice->navigation['personas'] ?? null;
+            $hasPersonaRoles = is_array($allowedRolesEarly) && $allowedRolesEarly !== [];
+            if ($requiredPermission && $currentUser && ! $isSuperAdmin && ! $hasPersonaRoles) {
                 if (method_exists($currentUser, 'hasPermission')) {
                     if (! $currentUser->hasPermission($requiredPermission)) {
                         continue;
@@ -834,12 +872,7 @@ class SliceManager
                     return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
                 }, $allowedRoles)));
                 if ($normalized !== []) {
-                    $ok = false;
-                    if (method_exists($currentUser, 'hasRole')) {
-                        $ok = (bool) $currentUser->hasRole($normalized);
-                    } elseif (method_exists($currentUser, 'roleSlugs')) {
-                        $ok = array_intersect($normalized, $currentUser->roleSlugs()) !== [];
-                    }
+                    $ok = $this->userHasAnyRole($currentUser, $normalized);
                     if (! $ok) {
                         continue;
                     }
@@ -909,13 +942,8 @@ class SliceManager
                             $r = strtolower(trim((string) $r));
                             return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
                         }, $childRoles)));
-                        if ($cn !== []) {
-                            $cok = method_exists($currentUser, 'hasRole')
-                                ? (bool) $currentUser->hasRole($cn)
-                                : false;
-                            if (! $cok) {
-                                continue;
-                            }
+                        if ($cn !== [] && ! $this->userHasAnyRole($currentUser, $cn)) {
+                            continue;
                         }
                     }
 

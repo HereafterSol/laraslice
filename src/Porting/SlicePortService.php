@@ -208,6 +208,7 @@ class SlicePortService
         $mappingResult = $this->buildSliceMapping($classified, $domain);
         $sliceMapping = $mappingResult['mapping'];
         $unmappedPivots = $mappingResult['unmapped_pivots'];
+        $sliceMapping = $this->applyPersonaNavigationToMapping($sliceMapping);
 
         $studioSlices = $this->buildStudioSlices($sliceMapping, $tables, $domain, [
             'multitenant' => $tenancy['enabled'],
@@ -1709,7 +1710,7 @@ PHP;
                 'models' => $models,
                 'workflow' => $workflow,
                 'roles' => $roles,
-                'navigation' => [
+                'navigation' => array_merge([
                     'label' => $sliceName,
                     'icon' => $icon,
                     'group' => $domain,
@@ -1717,8 +1718,29 @@ PHP;
                     // Akaunting-style: numeric ordering for easy insertion, permission-gated
                     'order' => $info['nav_order'] ?? 50,
                     'permission' => Str::snake(Str::singular($sliceName)).'.view',
-                ],
+                    'visible' => true,
+                ], is_array($info['navigation'] ?? null) ? $info['navigation'] : []),
             ];
+
+            // Prefer module group from persona mapping when present
+            if (! empty($info['navigation']['group'])) {
+                $blueprintObj['navigation']['group'] = $info['navigation']['group'];
+            }
+            if (! empty($info['navigation']['roles'])) {
+                $blueprintObj['navigation']['roles'] = $info['navigation']['roles'];
+            }
+            if (isset($info['navigation']['visible'])) {
+                $blueprintObj['navigation']['visible'] = (bool) $info['navigation']['visible'];
+            }
+
+            // Attach real UI from inspected fields (views, dashboard, money_breakdown)
+            $blueprintObj['ui'] = $this->buildUiFromInspectedFields(
+                $sliceName,
+                $primaryFields,
+                $tenantKey,
+                $rootRelations,
+                is_array($workflow) ? $workflow : null
+            );
 
             // 7. Generate Slice YAML representation
             $sourceYaml = Yaml::dump($blueprintObj, 8, 2);
@@ -2353,6 +2375,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         // 2. Dynamic generation for arbitrary legacy projects
         $sliceMapping = $inspection['slice_mapping'] ?? [];
         $sliceMapping = $this->applyPersonaNavigationToMapping($sliceMapping);
+        $inspection['slice_mapping'] = $sliceMapping;
         $tables = $inspection['tables'] ?? [];
         $totalTables = $inspection['total_tables'] ?? count($tables);
         $tenancy = $inspection['tenancy'] ?? ['enabled' => false, 'tenant_key' => null];
@@ -3145,7 +3168,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
      * - email → text (with mailto in UI)
      * - *_id (FK) → text (resolves to related name in UI)
      */
-    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = []): array
+    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = [], ?array $workflow = null): array
     {
         $columns = [];
         $formFields = [];

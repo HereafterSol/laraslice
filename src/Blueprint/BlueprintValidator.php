@@ -56,7 +56,7 @@ final class BlueprintValidator
 
                 continue;
             }
-            $this->checkKeys($model, ['handle', 'table', 'root', 'fields', 'relations', 'tenant', 'timestamps', 'soft_deletes', 'description', 'name'], $path, $errors);
+            $this->checkKeys($model, ['handle', 'table', 'root', 'fields', 'relations', 'tenant', 'timestamps', 'soft_deletes', 'description', 'name', 'multitenant', 'tenant_key'], $path, $errors);
 
             if (isset($model['tenant']) && ! is_bool($model['tenant'])) {
                 $errors[] = "{$path}.tenant must be a boolean.";
@@ -394,7 +394,7 @@ final class BlueprintValidator
             return;
         }
 
-        $this->checkKeys($ui, ['presentation', 'directory', 'forms', 'workspace'], $path, $errors);
+        $this->checkKeys($ui, ['presentation', 'directory', 'forms', 'workspace', 'dashboard', 'show'], $path, $errors);
 
         // 1. Presentation
         if (isset($ui['presentation'])) {
@@ -415,7 +415,7 @@ final class BlueprintValidator
             if (! is_array($ui['directory'])) {
                 $errors[] = "{$path}.directory must be a map.";
             } else {
-                $this->checkKeys($ui['directory'], ['columns', 'quick_filters', 'sidebar_filters', 'row_actions', 'searchable', 'search_placeholder', 'summary_cards', 'bulk_actions'], "{$path}.directory", $errors);
+                $this->checkKeys($ui['directory'], ['columns', 'quick_filters', 'sidebar_filters', 'row_actions', 'searchable', 'search_placeholder', 'summary_cards', 'bulk_actions', 'views', 'default_view', 'inline_edit'], "{$path}.directory", $errors);
 
                 if (isset($ui['directory']['columns'])) {
                     if (! is_array($ui['directory']['columns'])) {
