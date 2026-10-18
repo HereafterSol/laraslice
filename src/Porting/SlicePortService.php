@@ -375,7 +375,8 @@ class SlicePortService
 
             'Tickets' => 'ServiceDesk',
             'Events' => 'ServiceDesk',
-            'Notices' => 'ServiceDesk',
+            'Notices' => 'LegalRegistry',
+            'NoticeTitles' => 'LegalRegistry',
             'KnowledgeBases' => 'ServiceDesk',
 
             'UsersChat' => 'Operations',
@@ -391,14 +392,17 @@ class SlicePortService
         }
 
         $clusters = [
+            'CaseManagement' => ['complaint', 'case', 'dispute', 'claim', 'matter', 'grievance', 'petition', 'accused', 'respondent', 'complainant', 'approval'],
+            'JudicialHearings' => ['hearing', 'cause_list', 'decision', 'verdict', 'penalty', 'sentence', 'decree', 'ruling', 'appeal', 'order_case'],
+            'LegalRegistry' => ['notice', 'summons', 'citation', 'docket', 'representation', 'brief', 'scrutiny', 'maintainability', 'report_sought'],
             'FinancialAccounting' => ['invoice', 'payment', 'expense', 'estimate', 'credit_note', 'tax', 'bank', 'currency', 'transaction', 'recurring', 'quotation', 'subscription'],
             'HumanCapital' => ['employee', 'attendance', 'leave', 'holiday', 'shift', 'designation', 'department', 'appreciation', 'award', 'emergency_contact', 'passport', 'visa'],
             'SalesCRM' => ['lead', 'deal', 'proposal', 'pipeline', 'client', 'contract', 'leadboard'],
             'Work' => ['project', 'task', 'timelog', 'time_log', 'milestone', 'sub_task', 'taskboard'],
             'SupplyChain' => ['product', 'order', 'cart', 'item', 'inventory', 'warehouse', 'vendor'],
-            'ServiceDesk' => ['ticket', 'discussion', 'knowledge', 'faq', 'event', 'notice'],
-            'Settings' => ['company', 'setting', 'theme', 'role', 'permission', 'custom_field', 'custom_link', 'log', 'backup', 'translate', 'language', 'social_auth', 'pusher', 'slack'],
-            'ReferenceData' => ['countries', 'currencies', 'master_data', 'reference_data'],
+            'ServiceDesk' => ['ticket', 'discussion', 'knowledge', 'faq', 'event'],
+            'Settings' => ['company', 'setting', 'theme', 'role', 'permission', 'custom_field', 'custom_link', 'log', 'backup', 'translate', 'language', 'social_auth', 'pusher', 'slack', 'otp', 'api_user', 'api_log', 'activity_log', 'token', 'job_batch', 'cache'],
+            'ReferenceData' => ['countries', 'currencies', 'master_data', 'reference_data', 'province', 'district', 'tehsil', 'region', 'gender', 'organization', 'office', 'nature', 'status', 'subtype', 'category'],
         ];
 
         $lower = strtolower($sliceName . '_' . $primaryTable);
@@ -3199,6 +3203,13 @@ PHP;
             return null;
         };
 
+        // If FOSPAH domain or legal complaint management signature, build FOSPAH BRD journeys
+        $isFospahExplicit = strtolower($domain) === 'fospah' || strtolower($domain) === 'complaintmanagement';
+        $isFospahSignature = $findCtrl(['ComplaintController']) && ($findCtrl(['CauseListController']) || $findCtrl(['NoticeController']));
+        if (($isFospahExplicit || $isFospahSignature) && ! empty($availableControllers)) {
+            return $this->buildFospahUserJourneys($sourcePath, $availableControllers, $domain);
+        }
+
         // If not ERP domain and does not contain all ERP multi-pillar signatures, dynamically discover generic journeys
         $isErpExplicit = strtolower($domain) === 'erp';
         $isErpSignature = $findCtrl(['ProjectController', 'ProjectsController']) && $findCtrl(['EmployeeController', 'EmployeeDetailsController']) && $findCtrl(['InvoiceController', 'PaymentController']);
@@ -3955,6 +3966,739 @@ PHP;
         return $journeys;
     }
 
+/**
+     * Build standardized BRD user journeys and Mermaid flowcharts for the FOSPAH / Ombudsman Case Management domain.
+     * Derived from official Business Requirements Document (FOSPAH-BRD v_1.1 / NITB).
+     */
+    protected function buildFospahUserJourneys(string $sourcePath, array $availableControllers, string $domain = 'FOSPAH'): array
+    {
+        $journeys = [];
+
+        // 0. Complete Judicial Architecture (Master End-to-End BRD Process Stream - Page 6 of BRD)
+        $masterMermaid = [
+            'flowchart TD',
+            '    subgraph S1 ["📝 Stage 1: Citizen Intake & Initial Scrutiny"]',
+            '        A["Citizen Complaint Submission<br/>(complainant/complaints/create-step-1.blade.php)"] --> B["Assistant Registrar Scrutiny<br/>(admin/complaints/received.blade.php)"]',
+            '    end',
+            '    subgraph S2 ["⚖️ Stage 2: Registry Maintainability Determination"]',
+            '        B -->|Case Brief & Index| C["Registrar Verification<br/>(admin/complaints/open.blade.php)"]',
+            '        C -->|Maintainability Opinion| D{"Ombudsperson Ruling"}',
+            '        D -->|Non-Maintainable| D1["Case Disposed Off<br/>(admin/complaints/decided-cases.blade.php)"]',
+            '    end',
+            '    subgraph S3 ["📅 Stage 3: Hearing Docket & Summons"]',
+            '        D -->|Maintainable| E["Cause List Scheduling<br/>(admin/cause-list/calendar.blade.php)"]',
+            '        E --> F["Hearing Notice Delivery<br/>(admin/notices/create.blade.php)"]',
+            '    end',
+            '    subgraph S4 ["🏛️ Stage 4: Court Hearing & Order Formulation"]',
+            '        F --> G["Advisor Court Hearing<br/>(admin/complaints/hearings.blade.php)"]',
+            '        G --> H{"Order Type?"}',
+            '        H -->|Short Order| I["Short Order Review<br/>(admin/complaints/hearing-orders.blade.php)"]',
+            '        H -->|Detailed Order| J["Law Officer Legal Vetting<br/>(admin/complaints/orders-cases.blade.php)"]',
+            '    end',
+            '    subgraph S5 ["✍️ Stage 5: Ombudsperson Judgment & Signing"]',
+            '        I --> K["Ombudsperson Review & Comments"]',
+            '        J --> L["Ombudsperson Approval & Digital Sign"]',
+            '        K --> M["Attach Sealed Order to Case File"]',
+            '        L --> M',
+            '        M --> N["Registrar File Close / Execution Docket"]',
+            '    end',
+        ];
+
+        $masterSteps = [
+            [
+                'title' => 'Citizen Complaint Submission & Categorization',
+                'step' => 'Citizen Complaint Submission & Categorization',
+                'blade_view' => 'resources/views/complainant/complaints/create-step-1.blade.php',
+                'trigger_ui' => '<x-ui.button>Submit Complaint</x-ui.button>',
+                'controller' => 'Complainant\ComplaintController',
+                'controller_action' => 'ComplaintController@store',
+                'slice' => 'Complaints',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Paper-based physical complaint submission requiring in-person visits to Islamabad.',
+                'vsa_improvement' => 'Self-service citizen portal with 24/7 OTP authentication, digital evidence attachments, and automated case ID generation.',
+            ],
+            [
+                'title' => 'Assistant Registrar Initial Scrutiny & Deficiency Check',
+                'step' => 'Assistant Registrar Initial Scrutiny & Deficiency Check',
+                'blade_view' => 'resources/views/admin/complaints/received.blade.php',
+                'trigger_ui' => '<x-ui.button>Forward to Registrar</x-ui.button> or Deficiency Notice Button',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@received',
+                'slice' => 'Complaints',
+                'persona' => 'Assistant Registrar',
+                'legacy_behavior' => 'Manual paper file review with physical movement between desks; tracking delays across registry.',
+                'vsa_improvement' => 'Digital scrutiny docket with inline deficiency messaging, automated SMS alerts (masking FOSPAH), and one-click maintainability notes.',
+            ],
+            [
+                'title' => 'Registrar Maintainability Verification & Cause List Fixing',
+                'step' => 'Registrar Maintainability Verification & Cause List Fixing',
+                'blade_view' => 'resources/views/admin/complaints/open.blade.php',
+                'trigger_ui' => '<x-ui.button>Fix for Hearing</x-ui.button> on Cause List Calendar',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@open',
+                'slice' => 'Complaints',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'Physical court diaries and handwritten cause lists prone to scheduling conflicts.',
+                'vsa_improvement' => 'Integrated Cause List Calendar with automated watermarked hearing notice generation and QR code anti-tampering verification.',
+            ],
+            [
+                'title' => 'Court Hearing Adjudication & Order Formulation',
+                'step' => 'Court Hearing Adjudication & Order Formulation',
+                'blade_view' => 'resources/views/admin/complaints/hearings.blade.php',
+                'trigger_ui' => '<x-ui.button>Record Hearing Proceedings</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearings',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Legal Advisor',
+                'legacy_behavior' => 'Oral proceedings and handwritten minutes with high risk of documentation loss.',
+                'vsa_improvement' => 'Digital courtroom hearing docket: branching workflows for Short Orders (interim) vs Detailed Speaking Orders (substantive).',
+            ],
+            [
+                'title' => 'Law Officer Statutory Vetting & Ombudsperson Digital Signing',
+                'step' => 'Law Officer Statutory Vetting & Ombudsperson Digital Signing',
+                'blade_view' => 'resources/views/admin/complaints/orders-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Approve & Sign Judgment</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@ordersCases',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Physical dispatch of draft orders between legal officers and ombudsperson with slow courier delays.',
+                'vsa_improvement' => 'Cryptographic electronic/digital signing by Federal Ombudsperson, instant PDF judgment publishing, and SMS notification to parties.',
+            ],
+        ];
+
+        $journeys['master_value_stream'] = [
+            'id' => 'master_value_stream',
+            'icon' => '🌐',
+            'name' => 'FOSPAH Master Judicial Value Stream (The Complete End-to-End BRD)',
+            'title' => 'FOSPAH Master Judicial Value Stream (The Complete End-to-End BRD)',
+            'persona' => 'Cross-Functional Judicial Actors (Complainant, Assistant Registrar, Registrar, Legal Advisor, Law Officer, Ombudsperson)',
+            'role' => 'master',
+            'entry_point' => '/system/dashboard',
+            'auth_flow' => 'Citizen OTP / CNIC Onboarding & Judicial Role-Based Access Control.',
+            'blade_views' => [
+                'resources/views/complainant/complaints/create-step-1.blade.php',
+                'resources/views/admin/complaints/received.blade.php',
+                'resources/views/admin/complaints/open.blade.php',
+                'resources/views/admin/cause-list/calendar.blade.php',
+                'resources/views/admin/notices/create.blade.php',
+                'resources/views/admin/complaints/hearings.blade.php',
+                'resources/views/admin/complaints/orders-cases.blade.php',
+                'resources/views/admin/complaints/decided-cases.blade.php',
+            ],
+            'database_tables' => ['complaints', 'complaint_approvals', 'accused', 'hearings', 'notices', 'harassments_decisions', 'cause_lists'],
+            'mermaid_flow' => implode("\n", $masterMermaid),
+            'legacy_friction' => 'Physical movement of paper dossiers between 6 government offices; no real-time auditability or status tracking.',
+            'vsa_improvement' => 'Unified Judicial Vertical Slice Architecture: Event-driven complaint transitions governed by ComplaintApproval state machine.',
+            'steps' => $masterSteps,
+        ];
+
+        // 1. Complainant (Citizen) User Journey (Section 8.1 of BRD)
+        $complainantSteps = [
+            [
+                'title' => 'Citizen Registration & Mobile OTP Verification',
+                'step' => 'Citizen Registration & Mobile OTP Verification',
+                'blade_view' => 'resources/views/auth/register.blade.php',
+                'trigger_ui' => '<x-ui.button>Register Account</x-ui.button>',
+                'controller' => 'Auth\RegisterController',
+                'controller_action' => 'RegisterController@register',
+                'slice' => 'Users',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Citizens traveled in person to the Federal Secretariat in Islamabad or sent postal mail.',
+                'vsa_improvement' => 'Instant registration with OTP SMS verification (masking FOSPAH) and CNIC validation.',
+            ],
+            [
+                'title' => 'Complaint Categorization (Harassment vs Women Property Rights)',
+                'step' => 'Complaint Categorization (Harassment vs Women Property Rights)',
+                'blade_view' => 'resources/views/complainant/complaints/create-step-1.blade.php',
+                'trigger_ui' => '<x-ui.button>Next: Evidence & Respondent</x-ui.button>',
+                'controller' => 'Complainant\ComplaintController',
+                'controller_action' => 'ComplaintController@createStepOne',
+                'slice' => 'Complaints',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Unstructured paper petitions often missing statutory jurisdiction requirements.',
+                'vsa_improvement' => 'Guided intake wizard enforcing statutory fields (Property location & CDA/Housing society vs Harassment workplace nature).',
+            ],
+            [
+                'title' => 'Evidence Documentation & Respondent Details Submission',
+                'step' => 'Evidence Documentation & Respondent Details Submission',
+                'blade_view' => 'resources/views/complainant/complaints/create-step-2.blade.php',
+                'trigger_ui' => '<x-ui.button>Submit Official Complaint</x-ui.button>',
+                'controller' => 'Complainant\ComplaintController',
+                'controller_action' => 'ComplaintController@store',
+                'slice' => 'Complaints',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Physical photocopies submitted; evidence lost or damaged during file transport.',
+                'vsa_improvement' => 'Secure encrypted file attachment vault with automated case number generation.',
+            ],
+            [
+                'title' => 'Real-Time Progress Tracking & Deficiency Rectification',
+                'step' => 'Real-Time Progress Tracking & Deficiency Rectification',
+                'blade_view' => 'resources/views/complainant/complaints.blade.php',
+                'trigger_ui' => '<x-ui.button>Submit Deficiency Response</x-ui.button>',
+                'controller' => 'Complainant\ComplaintController',
+                'controller_action' => 'ComplaintController@submitDeficiencyResponse',
+                'slice' => 'Complaints',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Complainants had to call registry offices repeatedly to find out file status.',
+                'vsa_improvement' => 'Real-time timeline badge (Pending, Deficient, Scrutinized, Hearing Scheduled, Decided) with in-app response forms.',
+            ],
+            [
+                'title' => 'Hearing Notice Viewing & Cause List Verification',
+                'step' => 'Hearing Notice Viewing & Cause List Verification',
+                'blade_view' => 'resources/views/complainant/notices/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Download Summons / Notice PDF</x-ui.button>',
+                'controller' => 'Complainant\NoticeController',
+                'controller_action' => 'NoticeController@index',
+                'slice' => 'Notices',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Postal notices arrived after hearing date had passed, causing ex-parte proceedings.',
+                'vsa_improvement' => 'Instant downloadable watermarked PDF notice with SMS alert and live Cause List calendar.',
+            ],
+            [
+                'title' => 'Judicial Order Download & Experience Feedback',
+                'step' => 'Judicial Order Download & Experience Feedback',
+                'blade_view' => 'resources/views/complainant/complaint-details.blade.php',
+                'trigger_ui' => '<x-ui.button>Submit Service Feedback</x-ui.button>',
+                'controller' => 'Complainant\FeedbackController',
+                'controller_action' => 'FeedbackController@store',
+                'slice' => 'Complaints',
+                'persona' => 'Citizen / Complainant',
+                'legacy_behavior' => 'Certified copies required court clerk fees and weeks of manual processing.',
+                'vsa_improvement' => 'Immediate download of sealed final judgment and citizen satisfaction rating.',
+            ],
+        ];
+
+        $journeys['complainant'] = [
+            'id' => 'complainant',
+            'icon' => '👤',
+            'name' => 'Citizen Complaint Submission & Tracking Flow (BRD §8.1)',
+            'title' => 'Citizen Complaint Submission & Tracking Flow (BRD §8.1)',
+            'persona' => 'Citizen / Complainant (Workplace Harassment & Women Property Rights)',
+            'role' => 'complainant',
+            'entry_point' => '/register',
+            'auth_flow' => 'Citizen registers via CNIC, verified by mobile OTP, authenticated to /complainant/dashboard.',
+            'blade_views' => [
+                'resources/views/auth/register.blade.php',
+                'resources/views/complainant/profile-edit.blade.php',
+                'resources/views/complainant/complaints/create-step-1.blade.php',
+                'resources/views/complainant/complaints/create-step-2.blade.php',
+                'resources/views/complainant/complaints.blade.php',
+                'resources/views/complainant/notices/index.blade.php',
+                'resources/views/complainant/complaint-details.blade.php',
+            ],
+            'database_tables' => ['users', 'user_profiles', 'complaints', 'complaint_properties', 'accused', 'attachments', 'complaint_feedbacks'],
+            'mermaid_flow' => "flowchart TD\n    A[\"Citizen Sign Up<br/>(auth/register.blade.php)\"] --> B[\"Profile Setup<br/>(profile-edit.blade.php)\"]\n    B --> C[\"Complaint Category<br/>(create-step-1.blade.php)\"]\n    C --> D[\"Evidence & Respondent<br/>(create-step-2.blade.php)\"]\n    D --> E[\"Track Status<br/>(complaints.blade.php)\"]\n    E -->|Deficiency?| E1[\"Submit Missing Info\"]\n    E1 --> E\n    E --> F[\"Hearing Notice<br/>(notices/index.blade.php)\"]\n    F --> G[\"Download Judgment<br/>(complaint-details.blade.php)\"]",
+            'legacy_friction' => 'Paper submissions, lost physical files, lack of notification, requiring multiple travels to Islamabad.',
+            'vsa_improvement' => 'Dedicated Citizen Portal slice with automated OTP auth, encrypted file uploads, and real-time SMS status alerts.',
+            'steps' => $complainantSteps,
+        ];
+
+        // 2. Assistant Registrar Initial Scrutiny & Maintainability Brief (Section 8.2 of BRD)
+        $asstRegSteps = [
+            [
+                'title' => 'Received Complaints Scrutiny Docket',
+                'step' => 'Received Complaints Scrutiny Docket',
+                'blade_view' => 'resources/views/admin/complaints/received.blade.php',
+                'trigger_ui' => '<x-ui.button>Open Scrutiny View</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@received',
+                'slice' => 'Complaints',
+                'persona' => 'Assistant Registrar',
+                'legacy_behavior' => 'Unorganized physical mail bags sorted manually without systematic diary dates.',
+                'vsa_improvement' => 'Real-time received complaints table with instant search by CNIC, complaint type, and diary date.',
+            ],
+            [
+                'title' => 'Deficiency Audit & Applicant Notification Dispatch',
+                'step' => 'Deficiency Audit & Applicant Notification Dispatch',
+                'blade_view' => 'resources/views/admin/complaints/complaint-details.blade.php',
+                'trigger_ui' => '<x-ui.button>Mark Deficient & Notify</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@updateStatus',
+                'slice' => 'Complaints',
+                'persona' => 'Assistant Registrar',
+                'legacy_behavior' => 'Deficiencies communicated via postal letters taking weeks to reach complainants.',
+                'vsa_improvement' => 'One-click deficiency notice triggering automated SMS to applicant with link to rectify online.',
+            ],
+            [
+                'title' => 'Case Brief Indexing & Maintainability Formulation',
+                'step' => 'Case Brief Indexing & Maintainability Formulation',
+                'blade_view' => 'resources/views/admin/complaints/open.blade.php',
+                'trigger_ui' => '<x-ui.button>Record Preliminary Maintainability</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@open',
+                'slice' => 'Complaints',
+                'persona' => 'Assistant Registrar',
+                'legacy_behavior' => 'Typing paper briefs on typewriters and stapling physical tags onto folders.',
+                'vsa_improvement' => 'Digital Case Brief with statutory citations (Harassment Act 2010 vs Women Property Rights Act 2020).',
+            ],
+            [
+                'title' => 'File Completion Verification & Forwarding to Registrar',
+                'step' => 'File Completion Verification & Forwarding to Registrar',
+                'blade_view' => 'resources/views/admin/complaints/open.blade.php',
+                'trigger_ui' => '<x-ui.button>Forward to Registrar</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@updateStatus',
+                'slice' => 'Complaints',
+                'persona' => 'Assistant Registrar',
+                'legacy_behavior' => 'Physical file sent by peon between registry wings; files regularly misplaced.',
+                'vsa_improvement' => 'Atomic transition in ComplaintApproval table transferring jurisdiction instantly to Registrar.',
+            ],
+            [
+                'title' => 'Preliminary Review of Hearing Short Orders',
+                'step' => 'Preliminary Review of Hearing Short Orders',
+                'blade_view' => 'resources/views/admin/complaints/hearing-orders.blade.php',
+                'trigger_ui' => '<x-ui.button>Forward Short Order to Registrar</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearingOrders',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Assistant Registrar',
+                'legacy_behavior' => 'Short orders typed on paper without standard templates or index references.',
+                'vsa_improvement' => 'Standardized order drafting canvas with automatic file attachment.',
+            ],
+        ];
+
+        $journeys['assistant_registrar'] = [
+            'id' => 'assistant_registrar',
+            'icon' => '📋',
+            'name' => 'Assistant Registrar Initial Scrutiny & Maintainability (BRD §8.2)',
+            'title' => 'Assistant Registrar Initial Scrutiny & Maintainability (BRD §8.2)',
+            'persona' => 'Assistant Registrar (Initial Intake & Scrutiny Lead)',
+            'role' => 'assistant_registrar',
+            'entry_point' => '/system/complaints/received',
+            'auth_flow' => 'Administrative login, assigned Assistant Registrar role, redirected to scrutiny queue.',
+            'blade_views' => [
+                'resources/views/admin/complaints/received.blade.php',
+                'resources/views/admin/complaints/complaint-details.blade.php',
+                'resources/views/admin/complaints/open.blade.php',
+                'resources/views/admin/complaints/hearing-orders.blade.php',
+            ],
+            'database_tables' => ['complaints', 'complaint_approvals', 'attachments', 'complaint_statuses'],
+            'mermaid_flow' => "flowchart TD\n    A[\"Receive Complaint<br/>(complaints/received.blade.php)\"] --> B{\"Initial Scrutiny: Deficiency?\"}\n    B -->|Yes| C[\"Notify Applicant via SMS<br/>(complaint-details.blade.php)\"]\n    B -->|No| D[\"Prepare Case Brief & Index<br/>(complaints/open.blade.php)\"]\n    D --> E[\"Preliminary Maintainability View\"]\n    E --> F[\"Forward to Registrar\"]\n    G[\"Receive Short Order from Advisor\"] --> H[\"Preliminary Review Short Order\"]\n    H --> I[\"Forward to Registrar\"]",
+            'legacy_friction' => 'Manual scrutiny, paper-based indexing, no automated deficiency tracking.',
+            'vsa_improvement' => 'Dedicated Scrutiny slice with automated deficiency SMS alerts and structured maintainability notes.',
+            'steps' => $asstRegSteps,
+        ];
+
+        // 3. Registrar Case Scheduling, Summons & Verification (Section 8.3 of BRD)
+        $registrarSteps = [
+            [
+                'title' => 'Verify Assistant Registrar Maintainability Finding',
+                'step' => 'Verify Assistant Registrar Maintainability Finding',
+                'blade_view' => 'resources/views/admin/complaints/open.blade.php',
+                'trigger_ui' => '<x-ui.button>Endorse Agreement</x-ui.button> or Disagreement',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@open',
+                'slice' => 'Complaints',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'Physical file noting on green sheets without audit trail of who agreed or disagreed.',
+                'vsa_improvement' => 'Structured agreement/disagreement endorsement recorded with timestamp and digital signature.',
+            ],
+            [
+                'title' => 'Forward Case File to Ombudsperson for Maintainability Decision',
+                'step' => 'Forward Case File to Ombudsperson for Maintainability Decision',
+                'blade_view' => 'resources/views/admin/complaints/open.blade.php',
+                'trigger_ui' => '<x-ui.button>Forward to Ombudsperson</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@updateStatus',
+                'slice' => 'Complaints',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'Physical movement of case files to the Ombudsman chamber.',
+                'vsa_improvement' => 'Instant electronic file transmission into Ombudsperson adjudication inbox.',
+            ],
+            [
+                'title' => 'Fix Case for Hearing on Official Cause List Calendar',
+                'step' => 'Fix Case for Hearing on Official Cause List Calendar',
+                'blade_view' => 'resources/views/admin/cause-list/calendar.blade.php',
+                'trigger_ui' => '<x-ui.button>Schedule Hearing Date</x-ui.button>',
+                'controller' => 'Admin\CauseListController',
+                'controller_action' => 'AdminCauseListController@calendar',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'Scheduling cases in handwritten paper registers with double-booking errors.',
+                'vsa_improvement' => 'Interactive Cause List Calendar preventing courtroom and advisor double-booking.',
+            ],
+            [
+                'title' => 'Summons & Hearing Notice Generation with Watermarks/QR',
+                'step' => 'Summons & Hearing Notice Generation with Watermarks/QR',
+                'blade_view' => 'resources/views/admin/notices/create.blade.php',
+                'trigger_ui' => '<x-ui.button>Generate Official Summons</x-ui.button>',
+                'controller' => 'Admin\NoticeController',
+                'controller_action' => 'NoticeController@store',
+                'slice' => 'Notices',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'Typing notice letters individually in MS Word with manually pasted government seals.',
+                'vsa_improvement' => 'Template-driven PDF notice generation with dynamic placeholder merging and anti-tamper QR code.',
+            ],
+            [
+                'title' => 'Notice Delivery Tracking & Complainant Confirmation',
+                'step' => 'Notice Delivery Tracking & Complainant Confirmation',
+                'blade_view' => 'resources/views/admin/notices/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Mark Notice Delivered</x-ui.button>',
+                'controller' => 'Admin\NoticeController',
+                'controller_action' => 'NoticeController@index',
+                'slice' => 'Notices',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'No delivery tracking; court was unaware if respondent had received summons.',
+                'vsa_improvement' => 'Delivery confirmation audit trail verifying SMS and digital notice access before hearing proceeds.',
+            ],
+            [
+                'title' => 'Judicial Case File Custody & Final Order Archival',
+                'step' => 'Judicial Case File Custody & Final Order Archival',
+                'blade_view' => 'resources/views/admin/cause-list/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Archive Signed Case File</x-ui.button>',
+                'controller' => 'Admin\CauseListController',
+                'controller_action' => 'AdminCauseListController@index',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Registrar',
+                'legacy_behavior' => 'Archival in physical record rooms where old records deteriorated.',
+                'vsa_improvement' => 'Immutable digital repository of concluded cases with search by CNIC, party name, and judgment date.',
+            ],
+        ];
+
+        $journeys['registrar'] = [
+            'id' => 'registrar',
+            'icon' => '⚖️',
+            'name' => 'Registrar Case Scheduling, Summons & Verification Flow (BRD §8.3)',
+            'title' => 'Registrar Case Scheduling, Summons & Verification Flow (BRD §8.3)',
+            'persona' => 'Registrar (Chief Docket Master & Hearing Coordinator)',
+            'role' => 'registrar',
+            'entry_point' => '/system/complaints/open',
+            'auth_flow' => 'Registrar authenticated, manages court docket, cause lists, and notices.',
+            'blade_views' => [
+                'resources/views/admin/complaints/open.blade.php',
+                'resources/views/admin/cause-list/calendar.blade.php',
+                'resources/views/admin/notices/create.blade.php',
+                'resources/views/admin/notices/index.blade.php',
+                'resources/views/admin/cause-list/index.blade.php',
+            ],
+            'database_tables' => ['complaints', 'complaint_approvals', 'hearings', 'notices', 'cause_lists'],
+            'mermaid_flow' => "flowchart TD\n    A[\"Open Complaints Queue<br/>(complaints/open.blade.php)\"] --> B[\"Verify Asst Reg Maintainability View\"]\n    B --> C[\"Express Agreement / Disagreement\"]\n    C --> D[\"Forward to Ombudsperson\"]\n    E[\"Fix Cases for Hearing<br/>(cause-list/calendar.blade.php)\"] --> F[\"Notify Relevant Advisor\"]\n    E --> G[\"Issue Hearing Notice to Parties<br/>(notices/create.blade.php)\"]\n    G --> H{\"Notice Delivered?\"}\n    H -->|Yes| I[\"Notify Complainant\"]\n    H -->|No| G\n    J[\"Receive Short/Detailed Order\"] --> K[\"Maintain Files & Archive<br/>(cause-list/index.blade.php)\"]",
+            'legacy_friction' => 'Handwritten cause lists, untracked summons delivery, lost paper dockets.',
+            'vsa_improvement' => 'Interactive Cause List scheduling, automated QR-coded notice generation, and delivery tracking.',
+            'steps' => $registrarSteps,
+        ];
+
+        // 4. Federal Ombudsperson Adjudication & Judgment (Section 8.4 of BRD)
+        $ombudspersonSteps = [
+            [
+                'title' => 'Judicial Command Dashboard & Daily Cause List Review',
+                'step' => 'Judicial Command Dashboard & Daily Cause List Review',
+                'blade_view' => 'resources/views/admin/dashboard.blade.php',
+                'trigger_ui' => '<x-ui.button>View Daily Cause List</x-ui.button>',
+                'controller' => 'Admin\DashboardController',
+                'controller_action' => 'AdminDashboardController@index',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Ombudsperson had no real-time visibility over daily workload, pending hearings, or backlog.',
+                'vsa_improvement' => 'High-level executive dashboard showing total complaints, hearings today, pending orders, and disposal rates.',
+            ],
+            [
+                'title' => 'Maintainability Adjudication (Maintainable vs Disposed Off)',
+                'step' => 'Maintainability Adjudication (Maintainable vs Disposed Off)',
+                'blade_view' => 'resources/views/admin/complaints/open.blade.php',
+                'trigger_ui' => '<x-ui.button>Approve Maintainable</x-ui.button> or Dispose Off',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@open',
+                'slice' => 'Complaints',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Written endorsements on files requiring manual courier to registry.',
+                'vsa_improvement' => 'One-click maintainability adjudication with structured remarks and instant routing to Registrar.',
+            ],
+            [
+                'title' => 'Hearing Short Order Review & Guidance Notes',
+                'step' => 'Hearing Short Order Review & Guidance Notes',
+                'blade_view' => 'resources/views/admin/complaints/hearing-orders.blade.php',
+                'trigger_ui' => '<x-ui.button>Add Remarks & Forward</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearingOrders',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Delays reviewing preliminary short orders drafted after courtroom hearings.',
+                'vsa_improvement' => 'Interactive order review viewport with inline commenting and advisor notes.',
+            ],
+            [
+                'title' => 'Detailed Speaking Order Judicial Review',
+                'step' => 'Detailed Speaking Order Judicial Review',
+                'blade_view' => 'resources/views/admin/complaints/orders-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Review Detailed Judgment</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@ordersCases',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Lengthy physical reviews of drafted judgments with red pen edits.',
+                'vsa_improvement' => 'Rich text judgment preview with statutory citation validation and version tracking.',
+            ],
+            [
+                'title' => 'Electronic & Digital Signature Execution on Judgments',
+                'step' => 'Electronic & Digital Signature Execution on Judgments',
+                'blade_view' => 'resources/views/admin/complaints/orders-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Digitally Sign Order</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@ordersCases',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Physical ink signatures and rubber stamping on multi-page decrees.',
+                'vsa_improvement' => 'Cryptographic e-signature (FR-16), official watermark embedding, and instant PDF sealing.',
+            ],
+            [
+                'title' => 'Decided Cases Disposal & Public Cause List Telemetry',
+                'step' => 'Decided Cases Disposal & Public Cause List Telemetry',
+                'blade_view' => 'resources/views/admin/complaints/decided-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Publish to Public Archive</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@decidedCases',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Federal Ombudsperson',
+                'legacy_behavior' => 'Decided judgments were not published online, limiting institutional transparency.',
+                'vsa_improvement' => 'Public judicial decision repository with automated PII redacting options for victim protection.',
+            ],
+        ];
+
+        $journeys['ombudsperson'] = [
+            'id' => 'ombudsperson',
+            'icon' => '🏛️',
+            'name' => 'Federal Ombudsperson Adjudication & Final Judgment Flow (BRD §8.4)',
+            'title' => 'Federal Ombudsperson Adjudication & Final Judgment Flow (BRD §8.4)',
+            'persona' => 'Federal Ombudsperson (Apex Judicial Authority)',
+            'role' => 'ombudsperson',
+            'entry_point' => '/system/dashboard',
+            'auth_flow' => 'Highest authority access with digital signature capabilities.',
+            'blade_views' => [
+                'resources/views/admin/dashboard.blade.php',
+                'resources/views/admin/complaints/open.blade.php',
+                'resources/views/admin/complaints/hearing-orders.blade.php',
+                'resources/views/admin/complaints/orders-cases.blade.php',
+                'resources/views/admin/complaints/decided-cases.blade.php',
+            ],
+            'database_tables' => ['complaints', 'complaint_approvals', 'harassments_decisions', 'hearings', 'cause_lists'],
+            'mermaid_flow' => "flowchart TD\n    A[\"Dashboard & Cause List<br/>(admin/dashboard.blade.php)\"] --> B[\"Open Complaints Review<br/>(complaints/open.blade.php)\"]\n    B --> C{\"Case Maintainable?\"}\n    C -->|No| D[\"Dispose Off Case<br/>(complaints/decided-cases.blade.php)\"]\n    C -->|Yes| E[\"Forward to Registrar for Hearing\"]\n    F[\"Receive Short Order from Registrar\"] --> G[\"Review & Add Comments<br/>(hearing-orders.blade.php)\"]\n    H[\"Receive Detailed Order from Law Officer\"] --> I[\"Review Detailed Order<br/>(orders-cases.blade.php)\"]\n    G --> J{\"Approve / Sign?\"}\n    I --> J\n    J -->|Yes| K[\"Digital Signature & Seal<br/>(orders-cases.blade.php)\"]\n    K --> L[\"Forward Signed Order to Registrar\"]",
+            'legacy_friction' => 'Physical ink signatures, lack of executive dashboard telemetry, delayed decree issuances.',
+            'vsa_improvement' => 'Executive KPI dashboard, cryptographic e-signing of judgments, and automated public transparency publishing.',
+            'steps' => $ombudspersonSteps,
+        ];
+
+        // 5. Legal Advisor Court Hearings & Order Drafting (Section 8.5 of BRD)
+        $advisorSteps = [
+            [
+                'title' => 'Receipt of Case File Docket from Registrar',
+                'step' => 'Receipt of Case File Docket from Registrar',
+                'blade_view' => 'resources/views/admin/complaints/hearings.blade.php',
+                'trigger_ui' => '<x-ui.button>Open Hearing Dossier</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearings',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Legal Advisor',
+                'legacy_behavior' => 'Physical file sent to Advisor room on the morning of hearing, giving minimal prep time.',
+                'vsa_improvement' => 'Pre-hearing digital file access with indexed evidence, previous orders, and party statements.',
+            ],
+            [
+                'title' => 'Conduct Court Hearing & Record Party Evidence',
+                'step' => 'Conduct Court Hearing & Record Party Evidence',
+                'blade_view' => 'resources/views/admin/complaints/hearings.blade.php',
+                'trigger_ui' => '<x-ui.button>Record Hearing Evidence</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearings',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Legal Advisor',
+                'legacy_behavior' => 'Court stenographer took handwritten notes with delay before transcription.',
+                'vsa_improvement' => 'Structured hearing proceedings form (Complainant present, Respondent present, Evidence produced, Next steps).',
+            ],
+            [
+                'title' => 'Draft Hearing Short Order (Forward to Assistant Registrar)',
+                'step' => 'Draft Hearing Short Order (Forward to Assistant Registrar)',
+                'blade_view' => 'resources/views/admin/complaints/hearing-orders.blade.php',
+                'trigger_ui' => '<x-ui.button>Submit Short Order</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearingOrders',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Legal Advisor',
+                'legacy_behavior' => 'Adjournment short orders were physically typed and manually routed.',
+                'vsa_improvement' => 'Rapid short order generator for next hearing dates, witness summons, and interim injunctions.',
+            ],
+            [
+                'title' => 'Draft Detailed Speaking Order (Forward to Law Officer)',
+                'step' => 'Draft Detailed Speaking Order (Forward to Law Officer)',
+                'blade_view' => 'resources/views/admin/complaints/hearing-orders.blade.php',
+                'trigger_ui' => '<x-ui.button>Submit Detailed Order</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearingOrders',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Legal Advisor',
+                'legacy_behavior' => 'Complex judgments typed across multiple draft versions with no diff tracking.',
+                'vsa_improvement' => 'Structured speaking order editor with issues framed, findings on each issue, and penalty determination.',
+            ],
+            [
+                'title' => 'Attach Signed Order to Case File and Transmit to Registrar',
+                'step' => 'Attach Signed Order to Case File and Transmit to Registrar',
+                'blade_view' => 'resources/views/admin/complaints/hearing-orders.blade.php',
+                'trigger_ui' => '<x-ui.button>Transmit Concluded File</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@hearingOrders',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Legal Advisor',
+                'legacy_behavior' => 'Physical file hand-carried back to registry.',
+                'vsa_improvement' => 'Automated atomic status update returning case custody to Registrar.',
+            ],
+        ];
+
+        $journeys['advisor'] = [
+            'id' => 'advisor',
+            'icon' => '📜',
+            'name' => 'Legal Advisor Court Hearing & Order Formulation (BRD §8.5)',
+            'title' => 'Legal Advisor Court Hearing & Order Formulation (BRD §8.5)',
+            'persona' => 'Legal Advisor (Hearing Adjudicator & Case Examiner)',
+            'role' => 'advisor',
+            'entry_point' => '/system/complaints/hearings',
+            'auth_flow' => 'Advisor signs in, accesses hearing docket and cause list files.',
+            'blade_views' => [
+                'resources/views/admin/complaints/hearings.blade.php',
+                'resources/views/admin/complaints/hearing-orders.blade.php',
+            ],
+            'database_tables' => ['hearings', 'complaints', 'complaint_approvals', 'attachments', 'harassments_decisions'],
+            'mermaid_flow' => "flowchart TD\n    A[\"Receive File from Registrar<br/>(complaints/hearings.blade.php)\"] --> B[\"Conduct Court Hearing\"]\n    B --> C[\"Prepare Order after Hearing<br/>(complaints/hearing-orders.blade.php)\"]\n    C --> D{\"Order Type?\"}\n    D -->|Short Order| E[\"Forward to Assistant Registrar\"]\n    D -->|Detailed Order| F[\"Forward to Law Officer\"]\n    G[\"Receive Reviewed & Signed Order from Ombudsperson\"] --> H[\"Attach Signed Order to File\"]\n    H --> I[\"Forward File to Registrar\"]",
+            'legacy_friction' => 'Late file delivery on hearing day, manual minutes taking, disjointed short vs detailed order workflows.',
+            'vsa_improvement' => 'Pre-hearing digital dossier, structured hearing proceedings capture, and automated branching order dispatch.',
+            'steps' => $advisorSteps,
+        ];
+
+        // 6. Law Officer Legal Vetting & Content Examination (Section 8.6 of BRD)
+        $lawOfficerSteps = [
+            [
+                'title' => 'Receipt of Detailed Order from Legal Advisor',
+                'step' => 'Receipt of Detailed Order from Legal Advisor',
+                'blade_view' => 'resources/views/admin/complaints/orders-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Open Order for Vetting</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@ordersCases',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Law Officer',
+                'legacy_behavior' => 'Draft judgments physically passed back and forth between advisor and law officer.',
+                'vsa_improvement' => 'Instant electronic order queue with diff highlighting and previous precedent references.',
+            ],
+            [
+                'title' => 'Statutory Compliance & Legal Language Vetting',
+                'step' => 'Statutory Compliance & Legal Language Vetting',
+                'blade_view' => 'resources/views/admin/complaints/orders-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Certify Legal Language</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@ordersCases',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Law Officer',
+                'legacy_behavior' => 'No standardized statutory review; risk of linguistic ambiguities or procedural defects.',
+                'vsa_improvement' => 'Compliance checklist verifying Act sections, penalty provisions (minor/major penalties), and appellate timeline disclosures.',
+            ],
+            [
+                'title' => 'Forward Detailed Order to Ombudsperson for Review & Signature',
+                'step' => 'Forward Detailed Order to Ombudsperson for Review & Signature',
+                'blade_view' => 'resources/views/admin/complaints/orders-cases.blade.php',
+                'trigger_ui' => '<x-ui.button>Forward to Ombudsperson</x-ui.button>',
+                'controller' => 'Admin\ComplaintController',
+                'controller_action' => 'ComplaintController@updateStatus',
+                'slice' => 'JudicialHearings',
+                'persona' => 'Law Officer',
+                'legacy_behavior' => 'Physical file delivered to Ombudsman office.',
+                'vsa_improvement' => 'Secure transmission directly to the Federal Ombudsperson signing workbench.',
+            ],
+        ];
+
+        $journeys['law_officer'] = [
+            'id' => 'law_officer',
+            'icon' => '🔍',
+            'name' => 'Law Officer Legal Vetting & Content Examination Flow (BRD §8.6)',
+            'title' => 'Law Officer Legal Vetting & Content Examination Flow (BRD §8.6)',
+            'persona' => 'Law Officer (Judicial Language & Legal Quality Specialist)',
+            'role' => 'law_officer',
+            'entry_point' => '/system/complaints/orders-cases',
+            'auth_flow' => 'Law officer authenticated, examines detailed orders and statutory citations.',
+            'blade_views' => [
+                'resources/views/admin/complaints/orders-cases.blade.php',
+            ],
+            'database_tables' => ['complaints', 'complaint_approvals', 'harassments_decisions', 'attachments'],
+            'mermaid_flow' => "flowchart TD\n    A[\"Open Complaints Queue<br/>(complaints/orders-cases.blade.php)\"] --> B[\"Receive Detailed Order from Advisor\"]\n    B --> C[\"Check Legal Content & Language\"]\n    C --> D[\"Forward to Ombudsperson for Review & Approval/Sign\"]",
+            'legacy_friction' => 'Paper draft exchange, lack of statutory checking tools, delayed final signing.',
+            'vsa_improvement' => 'Vetting queue with automated statutory compliance checklist and one-click forward to Ombudsperson.',
+            'steps' => $lawOfficerSteps,
+        ];
+
+        // 7. IT & Super Admin System Governance (Section 7 of BRD)
+        $adminSteps = [
+            [
+                'title' => 'User Provisioning & Judicial Role Assignment',
+                'step' => 'User Provisioning & Judicial Role Assignment',
+                'blade_view' => 'resources/views/admin/users/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Create Judicial Staff User</x-ui.button>',
+                'controller' => 'Admin\UserController',
+                'controller_action' => 'UserController@store',
+                'slice' => 'Users',
+                'persona' => 'IT / Super Admin',
+                'legacy_behavior' => 'Staff had shared physical logins or access to all files without granular restrictions.',
+                'vsa_improvement' => 'Role-Based Access Control (RBAC) enforcing strict separation of duties (FR-11).',
+            ],
+            [
+                'title' => 'Notice Templates & Watermark Configuration',
+                'step' => 'Notice Templates & Watermark Configuration',
+                'blade_view' => 'resources/views/admin/notice-templates/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Save Notice Template</x-ui.button>',
+                'controller' => 'Admin\NoticeTemplateController',
+                'controller_action' => 'NoticeTemplateController@store',
+                'slice' => 'Notices',
+                'persona' => 'IT / Super Admin',
+                'legacy_behavior' => 'Each clerk created their own notice wording leading to legal inconsistencies.',
+                'vsa_improvement' => 'Centralized notice template engine with legally approved phrasing, watermarks, and QR seals (FR-14).',
+            ],
+            [
+                'title' => 'Daily Cause List Upload & PDF Publishing',
+                'step' => 'Daily Cause List Upload & PDF Publishing',
+                'blade_view' => 'resources/views/admin/cause-list/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Upload / Publish Daily Cause List</x-ui.button>',
+                'controller' => 'Admin\CauseListController',
+                'controller_action' => 'AdminCauseListController@store',
+                'slice' => 'JudicialHearings',
+                'persona' => 'IT / Super Admin',
+                'legacy_behavior' => 'Cause lists pinned on physical court notice boards outside the Secretariat.',
+                'vsa_improvement' => 'Instant web cause list publication (FR-09) with automated PDF download for citizens and lawyers.',
+            ],
+            [
+                'title' => 'System Activity Logs & User Audit Trail Auditing',
+                'step' => 'System Activity Logs & User Audit Trail Auditing',
+                'blade_view' => 'resources/views/admin/activity-logs/index.blade.php',
+                'trigger_ui' => '<x-ui.button>Inspect Audit Trail</x-ui.button>',
+                'controller' => 'Admin\ActivityLogController',
+                'controller_action' => 'ActivityLogController@index',
+                'slice' => 'Settings',
+                'persona' => 'IT / Super Admin',
+                'legacy_behavior' => 'No record of who viewed, modified, or forwarded sensitive harassment case files.',
+                'vsa_improvement' => 'Comprehensive tamper-proof audit trail (FR-12) tracking all file views, document downloads, and status transitions.',
+            ],
+        ];
+
+        $journeys['admin'] = [
+            'id' => 'admin',
+            'icon' => '⚙️',
+            'name' => 'System Governance, RBAC & Audit Trail Flow (BRD §7)',
+            'title' => 'System Governance, RBAC & Audit Trail Flow (BRD §7)',
+            'persona' => 'IT / Super Admin',
+            'role' => 'admin',
+            'entry_point' => '/system/users',
+            'auth_flow' => 'Super admin authenticated with system configuration privileges.',
+            'blade_views' => [
+                'resources/views/admin/users/index.blade.php',
+                'resources/views/admin/notice-templates/index.blade.php',
+                'resources/views/admin/cause-list/index.blade.php',
+                'resources/views/admin/activity-logs/index.blade.php',
+                'resources/views/admin/api-logs/index.blade.php',
+            ],
+            'database_tables' => ['users', 'roles', 'permissions', 'notice_templates', 'cause_lists', 'activity_logs', 'api_logs'],
+            'mermaid_flow' => "flowchart TD\n    A[\"User Management & RBAC<br/>(admin/users/index.blade.php)\"] --> B[\"Notice Template Engine<br/>(notice-templates/index.blade.php)\"]\n    B --> C[\"Cause List Publishing<br/>(cause-list/index.blade.php)\"]\n    C --> D[\"Audit Trail & Activity Logs<br/>(activity-logs/index.blade.php)\"]",
+            'legacy_friction' => 'No access control auditability, manual template updates, security vulnerabilities.',
+            'vsa_improvement' => 'Granular RBAC, audit logs, template standardization, and secure third-party API controls.',
+            'steps' => $adminSteps,
+        ];
+
+        return $journeys;
+    }
+
     /**
      * Dynamically discover and synthesize standardized BRD user journeys for ANY domain or custom application.
      */
@@ -4052,12 +4796,34 @@ PHP;
                 $resource = strtolower(str_replace('Controller', '', $ctrlName));
                 $resourceKebab = Str::kebab($resource);
 
-                // Check for matching blade views
+                // Check for matching blade views (including admin/, complainant/, client/ subdirectories)
                 $matchedBlade = "resources/views/{$resourceKebab}/index.blade.php";
-                if (is_dir("{$viewDir}/{$resourceKebab}")) {
-                    $matchedBlade = "resources/views/{$resourceKebab}/index.blade.php";
-                } elseif (file_exists("{$viewDir}/{$resourceKebab}.blade.php")) {
-                    $matchedBlade = "resources/views/{$resourceKebab}.blade.php";
+                if (is_dir($viewDir)) {
+                    $candidates = [
+                        "{$viewDir}/{$resourceKebab}/index.blade.php",
+                        "{$viewDir}/{$resourceKebab}.blade.php",
+                        "{$viewDir}/admin/{$resourceKebab}/index.blade.php",
+                        "{$viewDir}/admin/{$resourceKebab}.blade.php",
+                        "{$viewDir}/complainant/{$resourceKebab}/index.blade.php",
+                        "{$viewDir}/complainant/{$resourceKebab}.blade.php",
+                        "{$viewDir}/admin/{$resourceKebab}s/received.blade.php",
+                        "{$viewDir}/admin/{$resourceKebab}s/open.blade.php",
+                        "{$viewDir}/admin/{$resourceKebab}s/index.blade.php",
+                    ];
+                    $found = false;
+                    foreach ($candidates as $cand) {
+                        if (file_exists($cand)) {
+                            $matchedBlade = str_replace([$sourcePath . '/', '\\'], ['', '/'], $cand);
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (! $found) {
+                        $matches = glob("{$viewDir}/*/{$resourceKebab}*.blade.php");
+                        if (! empty($matches)) {
+                            $matchedBlade = str_replace([$sourcePath . '/', '\\'], ['', '/'], $matches[0]);
+                        }
+                    }
                 }
 
                 $bladeViews[] = $matchedBlade;
@@ -4141,8 +4907,8 @@ PHP;
             'role' => 'master',
             'entry_point' => '/dashboard',
             'auth_flow' => "End-to-end multi-role choreography spanning ".count($activeClusters)." operational tiers.",
-            'blade_views' => !empty($activeClusters) ? array_values(array_unique(array_merge(...array_map(fn($c) => $c['blade_views'], $activeClusters)))) : [],
-            'database_tables' => !empty($activeClusters) ? array_values(array_unique(array_merge(...array_map(fn($c) => $c['database_tables'], $activeClusters)))) : [],
+            'blade_views' => !empty($activeClusters) ? array_values(array_unique(array_merge(...array_values(array_map(fn($c) => $c['blade_views'], $activeClusters))))) : [],
+            'database_tables' => !empty($activeClusters) ? array_values(array_unique(array_merge(...array_values(array_map(fn($c) => $c['database_tables'], $activeClusters))))) : [],
             'mermaid_flow' => implode("\n", $masterMermaid),
             'legacy_friction' => "Disjointed functional silos, undocumented procedural controller transitions, and monolithic shared models.",
             'vsa_improvement' => "Unified Vertical Slice Architecture: Event-driven cross-slice choreography with clean boundaries and reactive BlatUI dashboards.",
