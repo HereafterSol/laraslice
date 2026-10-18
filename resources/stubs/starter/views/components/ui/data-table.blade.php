@@ -13,6 +13,9 @@
     'workflowTransitions' => [], // [['slug'=>'approve','label'=>'Approve','requires_remarks'=>true], ...]
     'workflowBulkUrl' => null,   // route for POST bulk transition
     'workflowSlice' => null,
+    'views' => ['table'],        // YAML ui.directory.views: table | board | calendar
+    'defaultView' => 'table',    // YAML ui.directory.default_view
+    'statusKey' => 'status',     // column key used for board columns
 ])
 
 @php
@@ -24,7 +27,7 @@
         'label' => $c['label'] ?? ucfirst($c['key'] ?? ''),
         'sortable' => $c['sortable'] ?? true,
         'class' => $c['class'] ?? '',
-        'html' => (bool) ($c['html'] ?? in_array($c['formatter'] ?? '', ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar'], true)),
+        'html' => (bool) ($c['html'] ?? in_array($c['formatter'] ?? '', ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge'], true)),
     ])->values();
     $searchKeys = $searchKey ? [$searchKey] : $cols->pluck('key')->all();
 @endphp
@@ -41,6 +44,9 @@
         workflowBulkUrl: @js($workflowBulkUrl),
         workflowSlice: @js($workflowSlice),
         csrf: @js(csrf_token()),
+        views: @js(array_values($views ?: ['table'])),
+        defaultView: @js($defaultView ?: 'table'),
+        statusKey: @js($statusKey ?: 'status'),
     })"
     x-init="$watch('q', () => page = 1)"
     @export-table.window="exportCsv()"
@@ -143,10 +149,50 @@
                 </button>
             @endisset
 
+
+            <!-- YAML-driven view switcher (table / board / calendar) -->
+            <template x-if="views && views.length > 1">
+                <div class="inline-flex items-center rounded-xl border border-border bg-card p-0.5 shadow-2xs">
+                    <template x-for="v in views" :key="v">
+                        <button type="button" @click="viewMode = v"
+                            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold capitalize transition-colors cursor-pointer"
+                            :class="viewMode === v ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'"
+                            x-text="v"></button>
+                    </template>
+                </div>
+            </template>
+
             @isset($tableActions)
                 {{ $tableActions }}
             @endisset
         </div>
+    </div>
+
+    <!-- Board view (YAML ui.directory.views includes board) -->
+    <div x-show="viewMode === 'board'" x-cloak class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pt-2">
+        <template x-for="col in boardColumns" :key="col.key">
+            <div class="rounded-2xl border border-border bg-card/80 min-h-[200px] flex flex-col">
+                <div class="px-3 py-2 border-b border-border flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wide text-foreground" x-text="col.label"></span>
+                    <span class="text-[10px] font-mono text-muted-foreground" x-text="col.rows.length"></span>
+                </div>
+                <div class="p-2 space-y-2 flex-1 overflow-y-auto max-h-[28rem]">
+                    <template x-for="row in col.rows" :key="row[rowKey] || JSON.stringify(row)">
+                        <div class="rounded-xl border border-border/80 bg-background p-2.5 shadow-2xs text-xs space-y-1">
+                            <template x-for="c in cols.slice(0, 3)" :key="c.key">
+                                <div class="truncate" x-html="(c.html && row[c.key]) ? row[c.key] : (row[c.key] ?? '—')"></div>
+                            </template>
+                        </div>
+                    </template>
+                    <p x-show="col.rows.length === 0" class="text-[11px] text-muted-foreground text-center py-6">Empty</p>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Calendar placeholder (hook for full calendar component) -->
+    <div x-show="viewMode === 'calendar'" x-cloak class="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
+        Calendar view uses date columns from this directory. Configure date fields in Slice Studio.
     </div>
 
     <!-- Off-Canvas Right Filter Sidebar Drawer (Matches ERP Screenshot 3 & 4) -->
@@ -187,6 +233,7 @@
     @endisset
 
     <!-- High-Density Data Grid -->
+    <div x-show="viewMode === 'table' || !views || views.length <= 1" x-cloak>
     <div class="relative w-full overflow-x-auto rounded-xl border border-border bg-card shadow-2xs">
         <table data-slot="table" class="w-full caption-bottom text-xs">
             <thead data-slot="table-header" class="bg-muted/30 border-b border-border">
@@ -304,6 +351,24 @@ if (typeof window.blatDataTable === 'undefined') {
             workflowSlice: cfg.workflowSlice || null,
             csrf: cfg.csrf || '',
             rowKey: cfg.rowKey || 'id',
+            views: (cfg.views && cfg.views.length) ? cfg.views : ['table'],
+            viewMode: cfg.defaultView || (cfg.views && cfg.views[0]) || 'table',
+            statusKey: cfg.statusKey || 'status',
+            get boardColumns() {
+                const key = this.statusKey;
+                const filtered = this.filtered.map(({ r }) => r);
+                const groups = {};
+                for (const row of filtered) {
+                    const raw = String(row[key + '__raw'] ?? row[key] ?? 'unknown').replace(/<[^>]*>/g, '').trim() || 'unknown';
+                    if (!groups[raw]) groups[raw] = [];
+                    groups[raw].push(row);
+                }
+                return Object.keys(groups).sort().map(k => ({
+                    key: k,
+                    label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                    rows: groups[k],
+                }));
+            },
             get sidebarFilterCount() {
                 let count = 0;
                 for (const [k, v] of Object.entries(this.filters)) {

@@ -1247,6 +1247,21 @@ ACTIONS;
                 } catch (\\Throwable) {}
             }
         @endphp
+        @php
+            \$dirUi = \$manifest['ui']['directory'] ?? [];
+            \$tableViews = \$dirUi['views'] ?? ['table'];
+            if (! is_array(\$tableViews) || \$tableViews === []) {
+                \$tableViews = ['table'];
+            }
+            \$defaultView = \$dirUi['default_view'] ?? 'table';
+            \$statusKey = 'status';
+            foreach (\$columns as \$c) {
+                if (in_array(\$c['key'] ?? '', ['status', 'state', 'stage'], true)) {
+                    \$statusKey = \$c['key'];
+                    break;
+                }
+            }
+        @endphp
         <x-ui.data-table 
             :columns="\$columns" 
             :rows="\$rows" 
@@ -1255,6 +1270,9 @@ ACTIONS;
             :workflow-transitions="\$wfTransitions"
             :workflow-bulk-url="\$wfBulkUrl"
             workflow-slice="{$studlyName}"
+            :views="\$tableViews"
+            :default-view="\$defaultView"
+            :status-key="\$statusKey"
         >
 {$rowActionsSlot}
         </x-ui.data-table>

@@ -1624,6 +1624,13 @@ function larasliceWizard() {
             this.uiDefaultView = slice.ui?.directory?.default_view || 'table';
             this.uiInlineEdit = Array.isArray(slice.ui?.directory?.inline_edit) ? [...slice.ui.directory.inline_edit] : [];
             this.uiDashboardWidgets = Array.isArray(slice.ui?.dashboard?.widgets) ? [...slice.ui.dashboard.widgets] : [];
+            const bas = slice.ui?.directory?.bulk_actions;
+            if (Array.isArray(bas) && bas.length) {
+                this.uiBulkActions = bas.map(b => typeof b === 'string' ? b : (b.handle || b.slug || 'action'));
+            }
+            if (slice.ui?.directory?.row_actions) {
+                this.uiRowActions = JSON.parse(JSON.stringify(slice.ui.directory.row_actions));
+            }
             this.loadAuditLogs(slice.name);
             const primary = (slice.tables_data || []).find(t => t.is_primary) || (slice.tables_data || [])[0] || null;
             this.selectedTable = primary;
@@ -2040,11 +2047,18 @@ function larasliceWizard() {
                     quick_filters: quickFilters,
                     sidebar_filters: this.uiSidebarFilters,
                     summary_cards: this.uiSummaryCards,
-                    bulk_actions: this.uiBulkActions,
+                    bulk_actions: (this.uiBulkActions || []).map(ba => {
+                        if (typeof ba === 'object') return ba;
+                        return { handle: ba, label: ba.charAt(0).toUpperCase() + ba.slice(1), type: ba === 'delete' ? 'native' : (ba === 'export' ? 'native' : 'workflow') };
+                    }),
+                    row_actions: this.uiRowActions || { display: 'dropdown', items: [
+                        { handle: 'view', label: 'View', icon: 'eye', placement: 'inline' },
+                        { handle: 'edit', label: 'Edit', icon: 'pencil', placement: 'dropdown' },
+                        { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'dropdown', danger: true },
+                    ]},
                     views: this.uiViews || ['table'],
                     default_view: this.uiDefaultView || 'table',
                     inline_edit: this.uiInlineEdit || [],
-                    row_actions: this.uiRowActions,
                 },
                 forms: {
                     mode: this.uiFormMode,
@@ -4506,6 +4520,30 @@ function larasliceWizard() {
                                         @change="uiInlineEdit = $event.target.checked ? [...new Set([...uiInlineEdit, 'status'])] : uiInlineEdit.filter(x => x !== 'status')">
                                     <span>Inline edit status (workflow)</span>
                                 </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Bulk actions</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="ba in ['delete','export','approve','reject','complete']" :key="ba">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer">
+                                            <input type="checkbox" class="rounded"
+                                                :checked="uiBulkActions.includes(ba)"
+                                                @change="uiBulkActions = $event.target.checked ? [...new Set([...uiBulkActions, ba])] : uiBulkActions.filter(x => x !== ba)">
+                                            <span x-text="ba"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <p class="text-[10px] text-muted-foreground">Native delete/export + workflow transition handles (approve/reject/complete).</p>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Row actions display</label>
+                                <select x-model="uiRowActions.display" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-xs">
+                                    <option value="dropdown">Dropdown</option>
+                                    <option value="hybrid">Hybrid (view inline + menu)</option>
+                                    <option value="inline">Inline icons</option>
+                                </select>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
