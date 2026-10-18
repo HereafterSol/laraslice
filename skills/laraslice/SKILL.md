@@ -344,7 +344,7 @@ This copies the core slice from the framework into `app/Slices/Users`. Once publ
 ### How Developers Contribute to Core Slices
 
 #### 1. Open Source Contributions to Framework Core
-1. **Fork the Repository**: [github.com/AbdurRehman712/laraslice](https://github.com/AbdurRehman712/laraslice)
+1. **Fork the Repository**: [github.com/HereafterSol/laraslice](https://github.com/HereafterSol/laraslice)
 2. **Edit the Core Slice**: Make enhancements directly in `src/Slices/{SliceName}` (e.g., `src/Slices/Users`, `src/Slices/Roles`, `src/Slices/Settings`).
 3. **Run the Test Suite**:
    ```bash
