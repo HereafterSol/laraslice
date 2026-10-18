@@ -964,20 +964,78 @@ Developers can inspect and edit the entire ported architecture interactively in 
    - The **📄 Page & UI Architecture Plan** card renders the 4-step BlatUI plan for that slice, with full stats ribbons, filter bar definitions, sub-tabs, form sections, and workflow state transitions.
    - Developers can edit any field or state directly in the Visual Designer or YAML editor, click **`Save Changes`**, and then click **`⚡ Run Migrations`** to scaffold and migrate.
 
-### 16.9 User Journey Analysis (Persona-Based Workflows)
+### 16.9 BRD-Grade Role-Based User Journey Mapping (Flows, State Transitions, Blade Views & Slice Integration)
 
-**The most important part of porting is understanding HOW users flow through the system** — not just what tables exist.
+**The foundation of enterprise porting is understanding HOW human actors and system agents flow through the business domain** — not just what database tables or controller methods exist.
 
-The porter automatically detects four journey types:
+A true enterprise modernization or porting effort must act as a **Business Requirements Document (BRD)**: it documents role-based actor lifecycles, authentication/onboarding gates, interactive Blade page triggers, state transitions, and database mutations.
 
-1. **Onboarding** (`end_user` persona): Wizard controllers (`Wizard/Companies.php`, `Wizard/Currencies.php`) reveal the first-time setup flow.
-2. **Client Portal** (`client` persona): Portal controllers (`Portal/Invoices.php`, `Portal/Payments.php`) show external user workflows.
-3. **Core Workflows** (`end_user` persona): Business processes like "Invoice to Cash" (create → send → view → pay) and "Bank Reconciliation" (import → match → report).
-4. **Admin** (`admin` persona): System management areas (users, roles, settings, templates).
+#### 1. The 6 Enterprise Persona Lifecycles
+The porter introspects the legacy source across routes, middleware, session managers, controllers, Blade views, and database scopes to model 6 authentic actor journeys:
 
-**Viewing journeys:** In the Porting Studio dialog, click the **🧭 User Journeys** tab after Analyze. Each journey shows the persona, description, and step-by-step flow with slice mappings.
+1. **Company Owner & Administrator** (`admin`):
+   - **Lifecycle**: Self-Service Tenant Registration (`auth/register.blade.php`) → Setup Checklist (`dashboard/checklist.blade.php`) → Master Taxonomy (Currencies, Taxes, Banks) → RBAC Matrix (`role-permissions/`) → Org Structure (Departments/Teams, Designations) → Executive Overview (`dashboard/admin.blade.php`).
+   - **VSA Slice Mapping**: `Settings`, `Roles`, `OverviewDashboard`.
+2. **Project Manager** (`project_manager`):
+   - **Lifecycle**: Project Charter Definition (`projects/ajax/create.blade.php`) → Team Allocation (`projects/ajax/members.blade.php`) → Milestone Roadmapping (`projects/ajax/milestones.blade.php`) → Agile Task Breakdown (`tasks/ajax/create.blade.php`) → Kanban & Gantt Verification (`projects/ajax/taskboard.blade.php`, `projects/ajax/gantt.blade.php`) → Budget & Milestone Deliverable Signoff.
+   - **VSA Slice Mapping**: `Projects` (Aggregate Root), `Tasks`, `Contracts`.
+3. **Team Member / Employee** (`employee`):
+   - **Lifecycle**: Invitation Token Activation (`auth/invitation.blade.php`) → Profile Dossier (Emergency Contacts, Skills, Compliance) → Shift Lookup (`employee-shifts/`) → Geofenced Clock-In (`dashboard/employee/clock_in_modal.blade.php`) → Task Kanban & Live Stopwatch Timer (`timelogs/ajax/timer.blade.php`) → Leave Application & Quota Audit (`leaves/ajax/create.blade.php`).
+   - **VSA Slice Mapping**: `Attendances`, `Tasks`, `TimeLogs`, `Leaves`.
+4. **External Client / Stakeholder** (`client`):
+   - **Lifecycle**: Client Portal Invitation → Interactive Proposal Review (`proposal.blade.php`) → Digital Contract E-Signing (`contract.blade.php`) → Milestone Deliverable Inspection → Tax Invoice Review (`invoice.blade.php`) → Online Gateway Payment (Stripe/PayPal) → Support Ticket Intake (`ticket-form.blade.php`).
+   - **VSA Slice Mapping**: `ClientPortal`, `Contracts`, `Invoices`, `Tickets`.
+5. **Financial Controller & Accountant** (`accountant`):
+   - **Lifecycle**: Chart of Accounts & Bank Setup (`bank-account/`) → Unbilled Timelog & Milestone Aggregation (`invoices/ajax/create-timelog-invoice.blade.php`) → Multi-Currency & Tax Invoice Generation (`invoices/ajax/create.blade.php`) → Subscription / Recurring Billing (`recurring-invoices/`) → Payment Settlement & Bank Reconciliation (`payments/ajax/create.blade.php`) → Credit Notes & Expense Auditing (`credit-notes/`, `expenses/`).
+   - **VSA Slice Mapping**: `Invoices`, `Payments`, `CreditNotes`, `Expenses`.
+6. **People Operations & HR Manager** (`hr_manager`):
+   - **Lifecycle**: Employee Recruitment Intake (`employees/ajax/create.blade.php`) → Shift Roster Planning (`shift-rosters/`) → Biometric & Geolocation Attendance Auditing (`attendances/ajax/summary_data.blade.php`) → Multi-tier Leave Approval Chain (`leaves/ajax/show.blade.php`) → Recognition & Appreciations (`appreciations/`).
+   - **VSA Slice Mapping**: `Employees`, `Attendances`, `Leaves`, `Shifts`, `Appreciations`.
 
-**Why this matters:** A developer who understands that "Invoice to Cash" spans Invoices → Portal → Payments will build the right integrations. A developer who only sees tables will build disconnected CRUD.
+#### 2. Dual-Level Reflection: Domain Plan vs. Slice Manifest (`slice.yaml`)
+To ensure both human developers and AI assistants have full clarity:
+
+- **Domain-Level (`porting-architecture-plan.json` & `domain.slice.yaml`)**:
+  Contains the macro role journeys with Mermaid state diagrams, legacy controller bottlenecks, and cross-slice orchestration.
+- **Slice-Level (`slice.yaml`)**:
+  Each slice manifest includes a `user_journeys:` block linking that slice directly into the enterprise workflow:
+  ```yaml
+  name: Projects
+  domain: ERP
+  module: Work
+  user_journeys:
+    - journey: project_delivery
+      persona: Project Manager & Team
+      role: project_admin
+      entry_point: /erp/work/projects/create
+      blade_source: resources/views/projects/ajax/create.blade.php
+      triggers:
+        - action: create_charter
+          ui: "<x-ui.button>Save Project</x-ui.button>"
+          mutation: "INSERT INTO projects (project_name, client_id, deadline, status)"
+          emits_event: "ProjectCharterCreated"
+        - action: add_milestone
+          ui: "Milestones Tab -> Add Milestone Modal"
+          mutation: "INSERT INTO project_milestones (project_id, milestone_title, cost)"
+      state_machine:
+        field: status
+        states: [not_started, in_progress, on_hold, canceled, finished]
+        transitions:
+          - from: not_started
+            to: in_progress
+            trigger: assign_first_task
+          - from: in_progress
+            to: finished
+            trigger: all_milestones_completed
+      modernization_gain: "Replaces 64KB god-controller ProjectController with Project Aggregate Root and discrete BlatUI Action classes."
+  ```
+
+#### 3. Why This Matters for BRDs and AI Agents
+1. **Business Analyst (BA) Alignment**: Business stakeholders and BAs can review the visual Mermaid diagrams and role interactions directly in Porting Studio to validate that all regulatory and functional business requirements are met.
+2. **Deterministic AI Code Generation**: When an AI agent ports or builds a slice, it does NOT guess business rules or write simple disconnected CRUD. It inspects the `user_journeys` block to know:
+   - What Blade views to construct (e.g. BlatUI forms matching legacy modal fields).
+   - What Action classes to write (`CreateProjectAction`, `StartTimerAction`).
+   - What events must be dispatched (`ContractSigned`, `InvoicePaid`) to keep other slices in sync.
 
 ### 16.10 AI-First Porting Intelligence (Dead Tables, Business Logic, Workflows)
 

@@ -174,43 +174,91 @@
                 <p class="font-bold mb-1">No user journeys detected</p>
                 <p>Run <strong>🔍 Analyze</strong> with the live source connection to introspect end-to-end user workflows.</p>
             </div>
-            <template x-for="(journey, key) in (planData?.journeys || {})" :key="key">
-                <div class="rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 shadow-xs">
-                    <div class="flex items-center gap-2 mb-2 flex-wrap">
-                        <span class="text-xl" x-text="journey.icon || '🧭'"></span>
-                        <h3 class="font-bold text-sm md:text-base text-foreground" x-text="journey.name || journey.title"></h3>
-                        <span class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400" x-text="journey.persona"></span>
+
+            <!-- BRD Role Filter Bar -->
+            <div x-show="planData?.journeys" class="flex items-center gap-1.5 flex-wrap pb-3 border-b border-border/60">
+                <span class="text-xs font-semibold text-muted-foreground mr-1">Filter by Persona:</span>
+                <button type="button" @click="selectedRole = 'all'" :class="selectedRole === 'all' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">All Roles</button>
+                <button type="button" @click="selectedRole = 'admin'" :class="selectedRole === 'admin' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">👑 Company Admin</button>
+                <button type="button" @click="selectedRole = 'project_manager'" :class="selectedRole === 'project_manager' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">🚀 Project Manager</button>
+                <button type="button" @click="selectedRole = 'employee'" :class="selectedRole === 'employee' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">⏱️ Team Member</button>
+                <button type="button" @click="selectedRole = 'client'" :class="selectedRole === 'client' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">🤝 External Client</button>
+                <button type="button" @click="selectedRole = 'accountant'" :class="selectedRole === 'accountant' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">💳 Accountant</button>
+                <button type="button" @click="selectedRole = 'hr_manager'" :class="selectedRole === 'hr_manager' ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted text-muted-foreground hover:text-foreground'" class="rounded-full px-2.5 py-1 text-[11px] transition cursor-pointer">👥 HR Operations</button>
+            </div>
+
+            <!-- BRD Persona Journey Cards -->
+            <template x-for="(journey, key) in filteredJourneys()" :key="key">
+                <div class="rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-xl" x-text="journey.icon || '🧭'"></span>
+                            <h3 class="font-bold text-sm md:text-base text-foreground" x-text="journey.name || journey.title"></h3>
+                            <span class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400" x-text="journey.persona"></span>
+                            <span x-show="journey.role" class="rounded-full bg-muted px-2 py-0.5 text-[9px] font-mono text-muted-foreground uppercase" x-text="`Role: ${journey.role}`"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span x-show="journey.entry_point" class="rounded bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground" x-text="`🚪 ${journey.entry_point}`"></span>
+                            <button type="button" @click="toggleMermaid(key)" class="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:bg-muted transition cursor-pointer flex items-center gap-1">
+                                <span>📊</span>
+                                <span x-text="showMermaid[key] ? 'Hide Diagram' : 'View BRD Flowchart'"></span>
+                            </button>
+                        </div>
                     </div>
-                    <p class="text-xs text-muted-foreground mb-3" x-text="journey.description"></p>
+
+                    <!-- Auth & Onboarding Flow Ribbon -->
+                    <div x-show="journey.auth_flow" class="rounded-lg bg-muted/40 border border-border/50 px-3 py-1.5 text-[11px] text-muted-foreground flex items-center gap-2">
+                        <span class="font-semibold text-foreground shrink-0">🔐 Auth & Entry Lifecycle:</span>
+                        <span x-text="journey.auth_flow"></span>
+                    </div>
+
+                    <p class="text-xs text-muted-foreground" x-text="journey.description"></p>
+
+                    <!-- Mermaid Flowchart (Collapsible) -->
+                    <div x-show="showMermaid[key]" class="rounded-xl border border-border bg-slate-950 p-3 text-[11px] font-mono text-cyan-400 overflow-x-auto whitespace-pre-wrap">
+                        <div class="flex items-center justify-between mb-1 pb-1 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            <span>BRD Flowchart (Mermaid)</span>
+                            <span class="font-normal text-slate-500">Renderable in Mermaid CLI / IDE</span>
+                        </div>
+                        <pre class="m-0 text-emerald-400 font-mono text-[11px]" x-text="journey.mermaid_flow"></pre>
+                    </div>
 
                     <!-- Real Architectural Contrast: Legacy Bottleneck vs VSA Modernization -->
-                    <div x-show="journey.legacy_friction || journey.modernization_gain" class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 text-[11px]">
-                        <div x-show="journey.legacy_friction" class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-amber-600 dark:text-amber-400">
+                    <div x-show="journey.legacy_friction || journey.modernization_gain" class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                        <div x-show="journey.legacy_friction" class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-amber-600 dark:text-amber-400">
                             <span class="font-bold block mb-0.5">⚠️ Legacy Monolith Bottleneck:</span>
                             <span x-text="journey.legacy_friction"></span>
                         </div>
-                        <div x-show="journey.modernization_gain" class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2 text-emerald-600 dark:text-emerald-400">
+                        <div x-show="journey.modernization_gain" class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-emerald-600 dark:text-emerald-400">
                             <span class="font-bold block mb-0.5">✨ LaraSlice VSA Real Improvement:</span>
                             <span x-text="journey.modernization_gain"></span>
                         </div>
                     </div>
 
-                    <!-- Steps Timeline -->
-                    <div class="space-y-2">
+                    <!-- Interactive Steps Timeline -->
+                    <div class="space-y-2 pt-1">
+                        <div class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Operational Step Traces & Blade Views:</div>
                         <template x-for="(step, sIdx) in (journey.steps || [])" :key="sIdx">
-                            <div class="rounded-lg border border-border/40 bg-muted/20 p-2.5 text-xs">
-                                <div class="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                            <div class="rounded-lg border border-border/40 bg-muted/20 p-2.5 text-xs transition hover:border-border">
+                                <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                                     <div class="flex items-center gap-2 min-w-0">
                                         <span class="shrink-0 size-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center" x-text="sIdx + 1"></span>
-                                        <span class="font-semibold text-foreground truncate" x-text="step.title || step.step || step.label || (typeof step === 'string' ? step : JSON.stringify(step))"></span>
+                                        <span class="font-semibold text-foreground truncate" x-text="step.title || step.step || step.label"></span>
                                     </div>
-                                    <div class="flex items-center gap-1.5 shrink-0">
-                                        <span x-show="step.persona" class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-medium text-indigo-400" x-text="step.persona"></span>
-                                        <span x-show="step.slice" class="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary font-medium" x-text="step.slice"></span>
-                                        <span x-show="step.controller" class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" x-text="step.controller"></span>
+                                    <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
+                                        <span x-show="step.slice" class="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary font-bold" x-text="`Slice: ${step.slice}`"></span>
+                                        <span x-show="step.controller_action || step.controller" class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" x-text="step.controller_action || step.controller"></span>
                                     </div>
                                 </div>
-                                <div x-show="step.legacy_behavior || step.vsa_improvement" class="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-1.5 text-[10px] pl-7">
+
+                                <!-- Blade View & Trigger Badges -->
+                                <div x-show="step.blade_view || step.trigger_ui" class="flex items-center gap-2 flex-wrap mb-1.5 text-[10px]">
+                                    <span x-show="step.blade_view" class="rounded bg-indigo-500/10 px-2 py-0.5 font-mono text-indigo-400" x-text="`📄 View: ${step.blade_view}`"></span>
+                                    <span x-show="step.trigger_ui" class="rounded bg-amber-500/10 px-2 py-0.5 text-amber-600 dark:text-amber-400" x-text="`🖱️ Trigger: ${step.trigger_ui}`"></span>
+                                </div>
+
+                                <!-- Architectural Transformation -->
+                                <div x-show="step.legacy_behavior || step.vsa_improvement" class="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[10px] pl-7 pt-1 border-t border-border/20">
                                     <div x-show="step.legacy_behavior" class="text-muted-foreground">
                                         <strong class="text-amber-600 dark:text-amber-400">Legacy:</strong> <span x-text="step.legacy_behavior"></span>
                                     </div>
@@ -645,6 +693,22 @@ function portingStudio() {
         planData: null,
         planJsonText: '',
         logs: [],
+        selectedRole: 'all',
+        showMermaid: {},
+        toggleMermaid(key) {
+            this.showMermaid[key] = !this.showMermaid[key];
+        },
+        filteredJourneys() {
+            const journeys = this.planData?.journeys || {};
+            if (this.selectedRole === 'all') return journeys;
+            const res = {};
+            for (const [k, v] of Object.entries(journeys)) {
+                if (v.role === this.selectedRole || (v.role && v.role.includes(this.selectedRole))) {
+                    res[k] = v;
+                }
+            }
+            return res;
+        },
         log(msg) {
             const ts = new Date().toLocaleTimeString();
             this.logs.push(`[${ts}] ${msg}`);
