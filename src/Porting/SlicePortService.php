@@ -554,8 +554,14 @@ class SlicePortService
                     'multitenant' => $multitenant,
                     'tenant_key' => $tenantKey,
                     'description' => $info['description'] ?? "Vertical slice for {$sliceName}",
-                    // v1.6.2: Generate canonical ui: block from real inspected fields
-                    'ui' => $this->buildUiFromInspectedFields($sliceName, $fields, $tenantKey),
+                    // v1.6.2: Generate canonical ui: block from real inspected fields + workflow bulk_actions
+                    'ui' => $this->buildUiFromInspectedFields(
+                        $sliceName,
+                        $fields,
+                        $tenantKey,
+                        [],
+                        $workflowConfigs[$sliceName] ?? null
+                    ),
                     // Workflow: pass detected state machine to generator
                     'workflowConfig' => $workflowConfigs[$sliceName] ?? null,
                 ];
@@ -3447,7 +3453,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 'views' => $views,
                 'default_view' => 'table',
                 'inline_edit' => $hasStatus ? ['status'] : [],
-                'bulk_actions' => $this->buildBulkActionsForWorkflow($workflow),
+                'bulk_actions' => $this->buildBulkActionsForWorkflow($workflow ?? null),
                 'row_actions' => [
                     'display' => 'dropdown',
                     'items' => [
