@@ -1697,7 +1697,7 @@ PHP;
     /**
      * Generate complete unified domain blueprint YAML.
      */
-    public function generateDomainBlueprintYaml(array $studioSlices, string $domain, array $inspection): string
+    public function generateDomainBlueprintYaml(array $studioSlices, string $domain, array $inspection = []): string
     {
         $domainData = [
             // NOTE: This is a PORT ANALYSIS REPORT, not an appliable blueprint.
@@ -1707,13 +1707,13 @@ PHP;
             'kind' => 'laraslice-port-analysis-report',
             'schema_version' => 1,
             'domain' => $domain,
-            'source_application' => basename($inspection['source_path']),
-            'total_tables' => $inspection['total_tables'],
+            'source_application' => basename($inspection['source_path'] ?? 'legacy-app'),
+            'total_tables' => $inspection['total_tables'] ?? count($studioSlices),
             'total_slices' => count($studioSlices),
             'tenancy' => $inspection['tenancy'] ?? ['enabled' => false],
             'generated_at' => date('Y-m-d H:i:s'),
             'slices' => array_map(function($s) {
-                return $s['blueprint'];
+                return $s['blueprint'] ?? $s;
             }, $studioSlices),
         ];
 
@@ -2235,6 +2235,7 @@ PHP;
             ],
             'modules' => $formattedModules,
             'studio_slices' => $inspection['studio_slices'] ?? [],
+            'domain_blueprint_yaml' => $inspection['domain_blueprint_yaml'] ?? $this->generateDomainBlueprintYaml($inspection['studio_slices'] ?? [], $domain, $inspection),
             'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? '', $domain),
             'data_sources' => $this->analyzeDataSources($inspection['source_path'] ?? '', $sliceMapping),
             'etl_data_pipeline' => [

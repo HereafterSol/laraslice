@@ -43,8 +43,34 @@
             </p>
         </div>
 
-        <!-- Controls: Template selector, Slice selector, View mode -->
+        <!-- Controls: Preset selector, Template selector, Slice selector, View mode -->
         <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Preset & Archetype Chooser (Matching Porting Studio) -->
+            <div class="relative">
+                <select x-model="selectedPreset" @change="choosePreset($event.target.value)" 
+                        class="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 shadow-sm hover:bg-indigo-500/20 focus:outline-none cursor-pointer">
+                    <option value="" disabled selected>⚡ Choose Preset / Archetype...</option>
+                    <optgroup label="⚖️ Statutory & Dispute Adjudication">
+                        <option value="fospah">⚖️ FOSPAH Dispute Adjudication (7 Slices: Complaints, Hearings, Notices, etc.)</option>
+                        <option value="legal_dispute_adjudication">⚖️ Dispute Adjudication Standard Suite (6 Slices)</option>
+                    </optgroup>
+                    <optgroup label="🏢 Enterprise & Commercial Archetypes">
+                        <option value="erp">🏢 ERP Enterprise Operations (23 Slices)</option>
+                        <option value="healthcare">🏥 Healthcare & Clinical EMR</option>
+                        <option value="ecommerce">🛒 E-Commerce & Retail</option>
+                        <option value="edtech">🎓 EdTech & Learning (LMS)</option>
+                        <option value="fintech">💳 FinTech & Core Banking</option>
+                    </optgroup>
+                    <template x-if="savedPresets && savedPresets.length > 0">
+                        <optgroup label="💾 Saved Custom Presets">
+                            <template x-for="p in savedPresets" :key="p.slug">
+                                <option :value="'saved:' + p.slug" x-text="'💾 ' + (p.name || p.slug)"></option>
+                            </template>
+                        </optgroup>
+                    </template>
+                </select>
+            </div>
+
             <!-- Template Quick Load -->
             <div class="relative">
                 <select @change="loadStudioPreset($event.target.value); $event.target.value = '';" class="h-9 rounded-lg border border-input bg-card px-3 text-xs font-medium text-foreground shadow-sm hover:bg-accent/50 focus:outline-none">
@@ -101,16 +127,16 @@
                 <span>+ New Slice</span>
             </button>
 
-                        <!-- Port Legacy App Button -->
-            <button type="button" @click="showPortModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Reverse-engineer and port a legacy Laravel application">
+            <!-- Port Legacy App Button -->
+            <a href="/laraslice/wizard/porting" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Open full Porting Studio workspace">
                 <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
-                <span>🚀 Port Legacy App</span>
-            </button>
+                <span>🚀 Porting Studio</span>
+            </a>
 
             <!-- Load Ported Suite into Blueprint Studio Trigger -->
-            <button type="button" @click="loadPortedToStudio()" x-show="portPlanData || portInspectionData" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer" title="Load entire ported suite directly into Blueprint Studio canvas">
+            <button type="button" @click="loadPortedToStudio()" x-show="portPlanData || portInspectionData || hasStoredPortPlan()" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer" title="Load entire ported suite directly into Blueprint Studio canvas">
                 <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                <span>📥 Load Ported Suite (<span x-text="portPlanData?.studio_slices?.length || portPlanData?.summary?.total_canonical_slices || 28"></span> Slices)</span>
+                <span>📥 Load Ported Suite (<span x-text="(portPlanData?.studio_slices?.length || portPlanData?.summary?.total_canonical_slices || getStoredSliceCount() || 7) + ' Slices: ' + (portPlanData?.domain || getStoredDomain() || 'Suite')"></span>)</span>
             </button>
 
             <!-- Mode Switcher -->
@@ -4544,6 +4570,9 @@ const studioPresets = {
 
 window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrfToken, introspectUrl, studioUrl, allSlicesJson, activeSliceIdx, initialPlanScope, initialPortPlan }) => ({
         mode: 'visual', // 'visual', 'preview', 'split', 'yaml'
+        selectedPreset: '',
+        savedPresets: [],
+        presetLoading: false,
         activeModelIndex: 0,
         source: initialSource || '',
         format: initialFormat || 'yaml',
@@ -4997,6 +5026,15 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
         loadPortedToStudio() {
+            if (!this.portPlanData || !this.portPlanData.studio_slices) {
+                try {
+                    const raw = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                    if (raw) {
+                        this.portPlanData = JSON.parse(raw);
+                    }
+                } catch(e) {}
+            }
+
             let targetSlices = null;
             if (this.portPlanData && Array.isArray(this.portPlanData.studio_slices) && this.portPlanData.studio_slices.length > 0) {
                 targetSlices = this.portPlanData.studio_slices;
@@ -5004,15 +5042,29 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 targetSlices = this.portInspectionData.studio_slices;
             } else if (this.portPlanData && Array.isArray(this.portPlanData.modules)) {
                 targetSlices = this.convertModulesToStudioSlices(this.portPlanData.modules);
+            } else {
+                try {
+                    const rawSlices = sessionStorage.getItem('laraslice_studio_slices') || localStorage.getItem('laraslice_studio_slices');
+                    if (rawSlices) {
+                        const parsed = JSON.parse(rawSlices);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            targetSlices = parsed;
+                        }
+                    }
+                } catch(e) {}
             }
 
             if (!targetSlices || !targetSlices.length) {
+                if (studioPresets['legal_dispute_adjudication']) {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                    return;
+                }
                 this.portError = 'Please inspect the project schema or load an architecture plan first.';
                 return;
             }
 
             this.slices = JSON.parse(JSON.stringify(targetSlices));
-            this.domainName = this.portPlanData?.domain || this.portInspectionData?.domain || this.portDomain || 'ERP';
+            this.domainName = this.portPlanData?.domain || this.portInspectionData?.domain || this.portDomain || 'Adjudication';
             this.blueprint.domain = this.domainName;
             this.activeSliceIdx = 0;
             if (this.slices.length > 0 && this.slices[0].blueprint) {
@@ -5021,8 +5073,12 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 this.source = this.slices[0].source || '';
                 this.syncToYaml();
             }
-            if (this.portInspectionData?.domain_blueprint_yaml) {
+            if (this.portPlanData?.domain_blueprint_yaml) {
+                this.domainYamlSource = this.portPlanData.domain_blueprint_yaml;
+            } else if (this.portInspectionData?.domain_blueprint_yaml) {
                 this.domainYamlSource = this.portInspectionData.domain_blueprint_yaml;
+            } else {
+                this.generateDomainYaml();
             }
             this.showPortModal = false;
             this.mode = 'visual';
@@ -5030,6 +5086,93 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 sessionStorage.setItem('laraslice_studio_slices', JSON.stringify(this.slices));
                 sessionStorage.setItem('laraslice_active_slice_idx', '0');
             } catch(e) {}
+        },
+
+        async choosePreset(presetKey) {
+            if (!presetKey) return;
+            this.presetLoading = true;
+            try {
+                if (presetKey.startsWith('saved:')) {
+                    const slug = presetKey.replace('saved:', '');
+                    const res = await fetch('/laraslice/wizard/port-saved-presets/' + encodeURIComponent(slug), { headers: { 'Accept': 'application/json' } });
+                    const data = await res.json();
+                    if (data.success && data.preset?.plan) {
+                        this.portPlanData = data.preset.plan;
+                        sessionStorage.setItem('laraslice_port_plan', JSON.stringify(data.preset.plan));
+                        localStorage.setItem('laraslice_port_plan', JSON.stringify(data.preset.plan));
+                        this.loadPortedToStudio();
+                        return;
+                    }
+                }
+
+                if (presetKey === 'legal_dispute_adjudication') {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                    return;
+                }
+
+                // If template preset exists in studioPresets
+                if (studioPresets[presetKey]) {
+                    this.loadStudioPreset(presetKey);
+                    return;
+                }
+
+                // Fetch authentic plan from backend
+                const domain = presetKey === 'fospah' ? 'Adjudication' : (presetKey === 'erp' ? 'ERP' : presetKey.charAt(0).toUpperCase() + presetKey.slice(1));
+                const res = await fetch('/laraslice/wizard/blueprint/port-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                    body: JSON.stringify({ preset: presetKey, domain: domain, source_type: 'local' })
+                });
+                const data = await res.json();
+                if (data.success && data.plan) {
+                    this.portPlanData = data.plan;
+                    sessionStorage.setItem('laraslice_port_plan', JSON.stringify(data.plan));
+                    localStorage.setItem('laraslice_port_plan', JSON.stringify(data.plan));
+                    this.loadPortedToStudio();
+                    return;
+                }
+
+                // Fallback for fospah
+                if (presetKey === 'fospah' && studioPresets['legal_dispute_adjudication']) {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                }
+            } catch (e) {
+                console.error('Error loading preset:', e);
+                if (presetKey === 'fospah' && studioPresets['legal_dispute_adjudication']) {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                }
+            } finally {
+                this.presetLoading = false;
+                this.selectedPreset = '';
+            }
+        },
+
+        hasStoredPortPlan() {
+            try {
+                return !!(sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan'));
+            } catch(e) { return false; }
+        },
+
+        getStoredSliceCount() {
+            try {
+                const raw = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    return p.studio_slices?.length || p.summary?.total_canonical_slices || 0;
+                }
+            } catch(e) {}
+            return 0;
+        },
+
+        getStoredDomain() {
+            try {
+                const raw = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    return p.domain || '';
+                }
+            } catch(e) {}
+            return '';
         },
 
         generateDomainYaml() {
@@ -5397,12 +5540,34 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
         init() {
+            // Restore active ported plan from Porting Studio (sessionStorage or localStorage)
+            try {
+                const rawPlan = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                if (rawPlan) {
+                    const parsedPlan = JSON.parse(rawPlan);
+                    if (parsedPlan && (parsedPlan.studio_slices || parsedPlan.modules)) {
+                        this.portPlanData = parsedPlan;
+                    }
+                }
+            } catch(e) {}
+
+            // Load saved presets from backend
+            fetch('/laraslice/wizard/port-saved-presets', { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(d => { if (d.success) this.savedPresets = d.presets || []; })
+                .catch(() => {});
+
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('port') === '1') {
                 this.showPortModal = true;
             }
             if (urlParams.get('load_port') === '1' || urlParams.get('auto_load_port') === '1') {
                 this.loadPortedToStudio();
+                return;
+            }
+            if (urlParams.get('preset')) {
+                this.choosePreset(urlParams.get('preset'));
+                return;
             }
             // NOTE: Porting Analyze is intentionally NOT auto-fired here.
             // The developer opens the Porting Studio dialog and clicks Analyze explicitly.

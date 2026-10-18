@@ -988,20 +988,52 @@ final class BlueprintStudioController extends Controller
             'success' => true,
             'presets' => [
                 [
+                    'id' => 'fospah',
+                    'name' => '⚖️ FOSPAH Dispute Adjudication',
+                    'badge' => '7 Slices: Complaints, Hearings, Notices, etc.',
+                    'domain' => 'Adjudication',
+                    'source_path' => 'e:/laragon/www/fospha-complaint-managment',
+                    'description' => 'Statutory dispute adjudication: Citizen Intake, Scrutiny, Hearings, Notices, and Speaking Orders',
+                ],
+                [
                     'id' => 'erp',
-                    'name' => 'ERP Enterprise Suite',
+                    'name' => '🏢 ERP Enterprise Suite',
                     'badge' => '358 tables → 23 Slices (15k records)',
                     'domain' => 'ERP',
                     'source_path' => 'e:/laragon/www/erp',
                     'description' => 'Comprehensive enterprise suite with Projects, Tasks, Invoices, HR, CRM, Tickets and Unified Settings Hub',
                 ],
                 [
-                    'id' => 'fospah',
-                    'name' => 'FOSPAH Judicial Case Management',
-                    'badge' => 'Petitions, Scrutiny & Cause Lists',
-                    'domain' => 'Legal',
-                    'source_path' => 'e:/laragon/www/wwf-old',
-                    'description' => 'Statutory judicial case workflow: Citizen Intake, Scrutiny, Hearings and Speaking Orders',
+                    'id' => 'healthcare',
+                    'name' => '🏥 Healthcare & Clinical EMR',
+                    'badge' => 'Patients, Encounters, Prescriptions',
+                    'domain' => 'Healthcare',
+                    'source_path' => '',
+                    'description' => 'Clinical practice & patient management: Patient Registry, Consultations, Clinical Notes, Labs, Pharmacy',
+                ],
+                [
+                    'id' => 'ecommerce',
+                    'name' => '🛒 E-Commerce & Retail',
+                    'badge' => 'Products, Orders, Customers, Inventory',
+                    'domain' => 'Ecommerce',
+                    'source_path' => '',
+                    'description' => 'Multi-channel commerce: Catalog, Inventory, Cart, Checkout, Orders, Shipping, Subscriptions',
+                ],
+                [
+                    'id' => 'edtech',
+                    'name' => '🎓 EdTech & Learning (LMS)',
+                    'badge' => 'Courses, Lessons, Enrollments',
+                    'domain' => 'EdTech',
+                    'source_path' => '',
+                    'description' => 'Educational delivery: Curricula, Course Modules, Quizzes, Grading, Student Progress, Certifications',
+                ],
+                [
+                    'id' => 'fintech',
+                    'name' => '💳 FinTech & Core Banking',
+                    'badge' => 'Accounts, Transactions, Ledger',
+                    'domain' => 'FinTech',
+                    'source_path' => '',
+                    'description' => 'Financial operations: Double-entry ledger, Wallets, Escrow, Transfers, AML screening, Statements',
                 ],
             ],
         ]);
@@ -1026,8 +1058,27 @@ final class BlueprintStudioController extends Controller
 
         $preset = (string) $request->input('preset', '');
         $source = (string) $request->input('source', '');
-        $domain = (string) $request->input('domain', 'ERP');
+        $domain = (string) $request->input('domain', '');
         $planJson = (string) $request->input('plan_json', '');
+
+        // Resolve preset defaults if source/domain are empty
+        if ($preset === 'fospah' || strtolower($domain) === 'adjudication') {
+            if (empty($domain)) $domain = 'Adjudication';
+            if (empty($source) && \Illuminate\Support\Facades\File::isDirectory('e:/laragon/www/fospha-complaint-managment')) {
+                $source = 'e:/laragon/www/fospha-complaint-managment';
+            }
+        } elseif ($preset === 'erp' || strtolower($domain) === 'erp') {
+            if (empty($domain)) $domain = 'ERP';
+            if (empty($source) && \Illuminate\Support\Facades\File::isDirectory('e:/laragon/www/erp')) {
+                $source = 'e:/laragon/www/erp';
+            }
+        } elseif (! empty($preset) && empty($domain)) {
+            $domain = ucfirst($preset);
+        }
+
+        if (empty($domain)) {
+            $domain = 'Core';
+        }
 
         // Git repository source: clone first, then analyze the local clone
         $sourceType = (string) $request->input('source_type', 'local');
@@ -1046,20 +1097,12 @@ final class BlueprintStudioController extends Controller
                 return response()->json(['success' => true, 'plan' => $plan]);
             }
 
-            // 2. Load ERP preset example plan if requested
-            if ($preset === 'erp' || (empty($source) && strtolower($domain) === 'erp')) {
+            // 2. Load ERP preset example plan if requested and installed
+            if ($preset === 'erp' && empty($source)) {
                 $examplePlan = base_path('docs/porting-architecture-plan.json');
                 if (\Illuminate\Support\Facades\File::exists($examplePlan)) {
                     $plan = json_decode(\Illuminate\Support\Facades\File::get($examplePlan), true);
                     return response()->json(['success' => true, 'plan' => $plan, 'example' => true]);
-                }
-                // The preset was chosen explicitly but no example plan is installed:
-                // return a clear error instead of falling through to inspect() with a bogus path.
-                if ($preset === 'erp') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'The ERP example plan is not installed in this project (docs/porting-architecture-plan.json not found). Choose "Inspect Custom Local Project" and enter a valid Source Application Path instead.',
-                    ], 422);
                 }
             }
 
@@ -1077,8 +1120,20 @@ final class BlueprintStudioController extends Controller
                 $clonedFrom = $request->input('source'); // original URL, token never included
             }
 
+            if (empty($source) || ! \Illuminate\Support\Facades\File::isDirectory($source)) {
+                // If preset is legal_dispute_adjudication or fospah, fallback to FOSPAH path or informative message
+                if (\Illuminate\Support\Facades\File::isDirectory('e:/laragon/www/fospha-complaint-managment') && ($preset === 'fospah' || $domain === 'Adjudication')) {
+                    $source = 'e:/laragon/www/fospha-complaint-managment';
+                } else {
+                    throw new \InvalidArgumentException("Source application directory not found: [{$source}]. Please provide a valid local project path or Git URL.");
+                }
+            }
+
             $inspection = $portService->inspect($source, $domain);
             $plan = $portService->generateArchitecturePlan($inspection, $domain);
+            if (empty($plan['domain_blueprint_yaml'])) {
+                $plan['domain_blueprint_yaml'] = $inspection['domain_blueprint_yaml'] ?? $portService->generateDomainBlueprintYaml($inspection['studio_slices'] ?? [], $domain, $inspection);
+            }
 
             return response()->json([
                 'success' => true,

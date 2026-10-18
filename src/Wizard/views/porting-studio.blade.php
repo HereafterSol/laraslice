@@ -27,15 +27,9 @@
         <div class="px-4 pb-2 md:px-6">
             <!-- Mobile: select dropdown -->
             <select x-model="activeTab" class="w-full md:hidden h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground">
-                <option value="guide">🧭 Workflow Guide</option>
-                <option value="journeys">👥 User Journeys</option>
-                <option value="sidebar">🖥️ Sidebar & Navigation</option>
-                <option value="vsa">🏗️ VSA Architecture</option>
-                <option value="pages">📄 Page & UI</option>
-                <option value="datasources">💾 Data Sources</option>
-                <option value="etl">⚡ ETL Pipeline</option>
-                <option value="json">📋 JSON Plan</option>
-                <option value="log">📟 Execution Log</option>
+                <template x-for="tab in tabs" :key="tab.id">
+                    <option :value="tab.id" x-text="tab.label"></option>
+                </template>
             </select>
             <!-- Desktop: tab bar -->
             <div class="hidden md:flex gap-1 overflow-x-auto">
@@ -54,6 +48,7 @@
                     <label class="block text-xs font-semibold text-foreground mb-1">System Archetype</label>
                     <select x-model="preset" @change="onPresetChange()" class="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
                         <option value="auto">⚡ Auto-Detect Archetype</option>
+                        <option value="fospah">⚖️ FOSPAH Dispute Adjudication (Ombudsman)</option>
                         <option value="custom">🔍 Custom Application / Service</option>
                         <option value="healthcare">🏥 Healthcare & Clinical EMR</option>
                         <option value="ecommerce">🛒 E-Commerce & Retail</option>
@@ -772,6 +767,37 @@
         </div>
         </div>
 
+        <!-- Tab: YAML Blueprint -->
+        <div x-show="activeTab === 'yaml'" class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-foreground">📄 domain.blueprint.yaml</span>
+                    <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary" 
+                          x-text="(planData?.studio_slices?.length || 0) + ' Slices in [' + (planData?.domain || targetDomain || 'Core') + ']'"></span>
+                    <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">schema_version: 1</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="copyYaml()" 
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs cursor-pointer">
+                        <span x-show="!yamlCopied">📋 Copy YAML</span>
+                        <span x-show="yamlCopied" class="text-emerald-500 font-bold">✅ Copied!</span>
+                    </button>
+                    <button type="button" @click="downloadYaml()" 
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs cursor-pointer">
+                        <span>💾 Download YAML</span>
+                    </button>
+                    <button type="button" @click="loadIntoBlueprint()" x-show="planData"
+                            class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-xs cursor-pointer">
+                        <span>📥 Open in Blueprint Studio</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-border bg-slate-950 p-4 overflow-x-auto relative group">
+                <pre class="text-[11px] font-mono text-emerald-300 whitespace-pre leading-relaxed select-all max-h-[70vh] overflow-y-auto"><code x-text="getYamlBlueprint()"></code></pre>
+            </div>
+        </div>
+
         <!-- Tab: JSON Plan -->
         <div x-show="activeTab === 'json'" class="rounded-xl border border-border bg-slate-950 p-4 overflow-x-auto">
             <pre class="text-[11px] font-mono text-emerald-400 whitespace-pre-wrap break-words" x-text="planJsonText || 'No plan yet. Click Analyze.'"></pre>
@@ -806,6 +832,7 @@ function portingStudio() {
             { id: 'pages', label: '📄 Page & UI' },
             { id: 'datasources', label: '💾 Data Sources' },
             { id: 'etl', label: '⚡ ETL Pipeline' },
+            { id: 'yaml', label: '📄 YAML Blueprint' },
             { id: 'json', label: '📋 JSON Plan' },
             { id: 'log', label: '📟 Execution Log' },
         ],
@@ -824,14 +851,24 @@ function portingStudio() {
         ],
         preset: 'auto',
         targetDomain: 'Core',
+        yamlCopied: false,
         onPresetChange() {
-            if (this.preset === 'healthcare') this.targetDomain = 'Healthcare';
-            else if (this.preset === 'ecommerce') this.targetDomain = 'Ecommerce';
-            else if (this.preset === 'edtech') this.targetDomain = 'EdTech';
-            else if (this.preset === 'fintech') this.targetDomain = 'FinTech';
-            else if (this.preset === 'erp') this.targetDomain = 'ERP';
-            else if (this.preset === 'custom' || this.preset === 'auto') {
-                if (this.targetDomain === 'ERP') this.targetDomain = 'Core';
+            if (this.preset === 'fospah' || this.preset === 'adjudication') {
+                this.targetDomain = 'Adjudication';
+                if (!this.sourcePath) this.sourcePath = 'e:/laragon/www/fospha-complaint-managment';
+            } else if (this.preset === 'healthcare') {
+                this.targetDomain = 'Healthcare';
+            } else if (this.preset === 'ecommerce') {
+                this.targetDomain = 'Ecommerce';
+            } else if (this.preset === 'edtech') {
+                this.targetDomain = 'EdTech';
+            } else if (this.preset === 'fintech') {
+                this.targetDomain = 'FinTech';
+            } else if (this.preset === 'erp') {
+                this.targetDomain = 'ERP';
+                if (!this.sourcePath) this.sourcePath = 'e:/laragon/www/erp';
+            } else if (this.preset === 'custom' || this.preset === 'auto') {
+                if (this.targetDomain === 'ERP' || this.targetDomain === 'Adjudication') this.targetDomain = 'Core';
             }
         },
         sourceType: 'local',
@@ -1077,10 +1114,87 @@ function portingStudio() {
             groups.splice(newIdx, 0, moved);
         },
 
+        getYamlBlueprint() {
+            if (this.planData?.domain_blueprint_yaml) return this.planData.domain_blueprint_yaml;
+            if (this.planData?.studio_slices && this.planData.studio_slices.length > 0) {
+                return this.generateFallbackYaml();
+            }
+            return '# No architecture plan analyzed yet.\n# Select a preset or enter a source path, then click "⚡ Analyze Legacy Architecture".';
+        },
+
+        generateFallbackYaml() {
+            const domain = this.planData?.domain || this.targetDomain || 'Core';
+            const slices = this.planData?.studio_slices || [];
+            let lines = [];
+            lines.push('schema_version: 1');
+            lines.push(`domain: ${domain}`);
+            lines.push(`generated_at: "${new Date().toISOString()}"`);
+            lines.push(`total_slices: ${slices.length}`);
+            lines.push('slices:');
+            for (const s of slices) {
+                const bp = s.blueprint || s;
+                lines.push(`  - name: ${bp.name || s.name}`);
+                lines.push(`    handle: ${bp.handle || s.handle}`);
+                lines.push(`    domain: ${bp.domain || domain}`);
+                if (bp.description) lines.push(`    description: "${bp.description}"`);
+                if (bp.permissions && bp.permissions.length) {
+                    lines.push('    permissions:');
+                    for (const p of bp.permissions) lines.push(`      - ${p}`);
+                }
+                if (bp.models && bp.models.length) {
+                    lines.push('    models:');
+                    for (const m of bp.models) {
+                        lines.push(`      - name: ${m.name || m.handle}`);
+                        lines.push(`        handle: ${m.handle}`);
+                        lines.push(`        table: ${m.table || m.handle}`);
+                        if (m.fields && m.fields.length) {
+                            lines.push('        fields:');
+                            for (const f of m.fields) {
+                                lines.push(`          - handle: ${f.handle}`);
+                                lines.push(`            type: ${f.type || 'string'}`);
+                            }
+                        }
+                    }
+                }
+            }
+            return lines.join('\n');
+        },
+
+        async copyYaml() {
+            const text = this.getYamlBlueprint();
+            try {
+                await navigator.clipboard.writeText(text);
+                this.yamlCopied = true;
+                setTimeout(() => { this.yamlCopied = false; }, 2000);
+            } catch (e) {
+                prompt('Copy YAML:', text);
+            }
+        },
+
+        downloadYaml() {
+            const text = this.getYamlBlueprint();
+            const blob = new Blob([text], { type: 'text/yaml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const domainSlug = (this.planData?.domain || this.targetDomain || 'domain').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            a.download = `${domainSlug}.blueprint.yaml`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+
         loadIntoBlueprint() {
             if (!this.planData) return;
             sessionStorage.setItem('laraslice_port_plan', JSON.stringify(this.planData));
-            window.location.href = '/laraslice/wizard/blueprint';
+            localStorage.setItem('laraslice_port_plan', JSON.stringify(this.planData));
+            if (this.planData.studio_slices) {
+                sessionStorage.setItem('laraslice_studio_slices', JSON.stringify(this.planData.studio_slices));
+                localStorage.setItem('laraslice_studio_slices', JSON.stringify(this.planData.studio_slices));
+            }
+            sessionStorage.setItem('laraslice_active_slice_idx', '0');
+            window.location.href = '/laraslice/wizard/blueprint?load_port=1';
         },
 
         csrf() {
