@@ -532,6 +532,8 @@ When an AI agent or developer is tasked with porting an existing monolithic appl
 4. **Aggregates over table explosion**: `*_items` / `*_lines` are children; `*_settings` / `*_types` go to Settings Hub or taxonomy — not sidebar noise.
 5. **Studios after port**: Blueprint/Slice Studio edit YAML (`ui.directory`, workflow, bulk_actions); Porting Studio shows real nav + slim journeys for customization before Apply.
 6. **Every project differs**: FOSPAH is process-core; ERP is multi-module. Detect signatures; do not force FOSPAH BRD packs onto ERP or vice versa.
+7. **All domains use `laraslice.journeys.v2`**: ERP → admin/employee/client; FOSPAH → admin/complainant/mobile; other → operational nav-derived personas. No mermaid BRD novels in the port plan.
+8. **100% port checklist (ERP benchmark)**: aggregates + settings hub + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order. Apply must leave Porting/Blueprint/Slice Studio useful for customization.
 
 Over **50% to 60% of an application's architecture can be accurately reverse-engineered directly from its database schema, foreign keys, and seeders**.
 
