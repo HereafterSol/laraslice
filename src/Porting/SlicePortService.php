@@ -1001,6 +1001,7 @@ PHP;
             'roots' => [],
             'children' => [],
             'taxonomies' => [],
+            'settings' => [],
             'pivots' => [],
             'system' => [],
         ];
@@ -1041,13 +1042,28 @@ PHP;
             'products', 'orders',
             'tickets', 'events', 'knowledge_bases',
             'users_chat', 'sticky_notes',
-            'global_settings',
         ];
 
         // 2. Classify each table
         foreach ($tables as $tName => $tInfo) {
             if (preg_match($systemPattern, $tName) || in_array(strtolower($tName), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                 $classified['system'][$tName] = $tInfo;
+                continue;
+            }
+
+            // Settings hub: configuration tables must never become sidebar roots
+            $settingsExact = [
+                'global_settings', 'company_settings', 'theme_settings', 'language_settings',
+                'social_auth_settings', 'file_storage_settings', 'company_addresses',
+                'log_time_for', 'custom_fields', 'custom_field_groups', 'custom_links',
+            ];
+            if (
+                str_ends_with($tName, '_settings')
+                || str_contains($tName, 'custom_field')
+                || (str_contains($tName, 'backup') && ! str_contains($tName, 'employee'))
+                || in_array($tName, $settingsExact, true)
+            ) {
+                $classified['settings'][$tName] = $tInfo;
                 continue;
             }
 
@@ -1121,6 +1137,24 @@ PHP;
             ];
         }
 
+        // 1b. Settings hub — single slice, never N sidebar entries for *_settings tables
+        if (! empty($classified['settings'])) {
+            $settingsNames = array_keys($classified['settings']);
+            sort($settingsNames);
+            $primarySettings = in_array('global_settings', $settingsNames, true)
+                ? 'global_settings'
+                : $settingsNames[0];
+            $childrenSettings = array_values(array_filter($settingsNames, fn ($n) => $n !== $primarySettings));
+            $mapping['Settings'] = [
+                'type' => 'settings_hub',
+                'primary_table' => $primarySettings,
+                'child_tables' => $childrenSettings,
+                'description' => 'Unified Settings Hub — configuration, themes, integrations, custom fields',
+                'nav_group' => 'Settings',
+                'nav_order' => 90,
+            ];
+        }
+
         // 2. Attach children to corresponding root slice
         foreach ($classified['children'] as $cName => $cInfo) {
             $attached = false;
@@ -1180,16 +1214,19 @@ PHP;
             // Fallback 2: Bundle auxiliary settings into the Settings hub instead of polluting the sidebar
             if (! $attached) {
                 if (str_ends_with($cName, '_settings') || str_contains($cName, 'backup') || str_contains($cName, 'custom_field') || in_array($cName, ['log_time_for', 'language_settings', 'company_addresses', 'social_auth_settings', 'file_storage_settings', 'theme_settings'], true)) {
-                    $settingsSlice = 'GlobalSettings';
+                    $settingsSlice = 'Settings';
                     if (! isset($mapping[$settingsSlice])) {
                         $mapping[$settingsSlice] = [
-                            'type' => 'aggregate_root',
-                            'primary_table' => 'global_settings',
+                            'type' => 'settings_hub',
+                            'primary_table' => $cName,
                             'child_tables' => [],
-                            'description' => 'Unified Enterprise Settings Hub',
+                            'description' => 'Unified Settings Hub — configuration, themes, integrations',
+                            'nav_group' => 'Settings',
+                            'nav_order' => 90,
                         ];
+                    } else {
+                        $mapping[$settingsSlice]['child_tables'][] = $cName;
                     }
-                    $mapping[$settingsSlice]['child_tables'][] = $cName;
                     $attached = true;
                 }
             }
@@ -2473,10 +2510,12 @@ public function analyzeSourceNavigation(string $sourcePath): array
             'domain_blueprint_yaml' => $inspection['domain_blueprint_yaml'] ?? $this->generateDomainBlueprintYaml($inspection['studio_slices'] ?? [], $domain, $inspection),
             'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? '', $domain),
             'data_sources' => $this->analyzeDataSources($inspection['source_path'] ?? '', $sliceMapping),
+            'etl_order' => $this->buildEtlOrder($sliceMapping, $tables, $inspection['classified'] ?? []),
             'etl_data_pipeline' => [
                 'source_connection' => 'mysql (legacy database)',
                 'target_connection' => 'mysql (current database)',
-                'execution_strategy' => 'Foreign key checks disabled during streaming; records imported in dependency-aware batches with auto-id preservation.',
+                'execution_strategy' => 'Foreign key checks disabled during streaming; import phases: taxonomies → settings → aggregate roots → children → pivots (id-preserving).',
+                'phases' => $this->buildEtlOrder($sliceMapping, $tables, $inspection['classified'] ?? []),
                 'top_tables_to_migrate' => $topMigrations,
             ],
             'page_architecture_guide' => $this->getPageArchitectureGuide(),
@@ -3212,13 +3251,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 'quick_filters' => $quickFilters,
                 'sidebar_filters' => $sidebarFilters,
                 'summary_cards' => $summaryCards,
-                'bulk_actions' => [
-                    ['handle' => 'export', 'label' => 'Export Selected', 'type' => 'native', 'icon' => 'download'],
-                    ['handle' => 'delete', 'label' => 'Delete Selected', 'type' => 'native', 'icon' => 'trash-2', 'danger' => true],
-                    ['handle' => 'submit', 'label' => 'Submit', 'type' => 'workflow', 'transition' => 'submit', 'icon' => 'send'],
-                    ['handle' => 'approve', 'label' => 'Approve', 'type' => 'workflow', 'transition' => 'approve', 'icon' => 'check'],
-                    ['handle' => 'reject', 'label' => 'Reject', 'type' => 'workflow', 'transition' => 'reject', 'icon' => 'x', 'requires_remarks' => true, 'danger' => true],
-                ],
+                'bulk_actions' => $this->buildBulkActionsForWorkflow($workflow),
                 'row_actions' => [
                     'display' => 'dropdown',
                     'items' => [
@@ -3243,6 +3276,125 @@ public function analyzeSourceNavigation(string $sourcePath): array
      *
      * @return array List of dead table names
      */
+
+    /**
+     * Deterministic ETL / apply order for a port plan.
+     *
+     * Phase 1 taxonomies & lookups, Phase 2 settings hub, Phase 3 aggregate roots,
+     * Phase 4 child line-items, Phase 5 pivots — so FKs resolve without circular loaders.
+     *
+     * @param  array<string, array<string, mixed>>  $sliceMapping
+     * @param  array<string, array<string, mixed>>  $tables
+     * @param  array<string, array<string, mixed>>  $classified
+     * @return list<array{phase: int, name: string, tables: list<string>, slices: list<string>}>
+     */
+    protected function buildEtlOrder(array $sliceMapping, array $tables, array $classified): array
+    {
+        $tax = array_keys($classified['taxonomies'] ?? []);
+        $settings = array_keys($classified['settings'] ?? []);
+        $pivots = array_keys($classified['pivots'] ?? []);
+        $children = array_keys($classified['children'] ?? []);
+
+        $rootTables = [];
+        $rootSlices = [];
+        $settingsSlices = [];
+        $childBySlice = [];
+
+        foreach ($sliceMapping as $sliceName => $info) {
+            $type = $info['type'] ?? 'aggregate_root';
+            $primary = $info['primary_table'] ?? null;
+            if ($type === 'settings_hub') {
+                $settingsSlices[] = $sliceName;
+                if ($primary && ! in_array($primary, $settings, true)) {
+                    $settings[] = $primary;
+                }
+                foreach ($info['child_tables'] ?? [] as $ct) {
+                    if (! in_array($ct, $settings, true)) {
+                        $settings[] = $ct;
+                    }
+                }
+                continue;
+            }
+            if ($type === 'taxonomy_catalog') {
+                if ($primary && ! in_array($primary, $tax, true)) {
+                    $tax[] = $primary;
+                }
+                continue;
+            }
+            if ($primary) {
+                $rootTables[] = $primary;
+                $rootSlices[] = $sliceName;
+            }
+            foreach ($info['child_tables'] ?? [] as $ct) {
+                $childBySlice[$sliceName][] = $ct;
+                if (! in_array($ct, $children, true) && ! in_array($ct, $tax, true) && ! in_array($ct, $settings, true)) {
+                    $children[] = $ct;
+                }
+            }
+        }
+
+        $rootTables = array_values(array_unique($rootTables));
+        $children = array_values(array_unique(array_filter($children, fn ($c) => ! in_array($c, $rootTables, true) && ! in_array($c, $tax, true) && ! in_array($c, $settings, true))));
+        $settings = array_values(array_unique($settings));
+        $tax = array_values(array_unique($tax));
+        $pivots = array_values(array_unique($pivots));
+
+        return [
+            ['phase' => 1, 'name' => 'taxonomies', 'tables' => $tax, 'slices' => array_values(array_filter(array_keys($sliceMapping), fn ($s) => ($sliceMapping[$s]['type'] ?? '') === 'taxonomy_catalog'))],
+            ['phase' => 2, 'name' => 'settings_hub', 'tables' => $settings, 'slices' => array_values(array_unique($settingsSlices))],
+            ['phase' => 3, 'name' => 'aggregate_roots', 'tables' => $rootTables, 'slices' => array_values(array_unique($rootSlices))],
+            ['phase' => 4, 'name' => 'children', 'tables' => $children, 'slices' => array_keys($childBySlice)],
+            ['phase' => 5, 'name' => 'pivots', 'tables' => $pivots, 'slices' => []],
+        ];
+    }
+
+
+    /**
+     * Native + workflow bulk actions for index multi-select bar (Studio-editable).
+     *
+     * @param  array<string, mixed>|null  $workflow
+     * @return list<array<string, mixed>>
+     */
+    protected function buildBulkActionsForWorkflow(?array $workflow): array
+    {
+        $actions = [
+            ['handle' => 'export', 'label' => 'Export Selected', 'type' => 'native', 'icon' => 'download'],
+            ['handle' => 'delete', 'label' => 'Delete Selected', 'type' => 'native', 'icon' => 'trash-2', 'danger' => true],
+        ];
+
+        if (! is_array($workflow) || empty($workflow['enabled'])) {
+            return $actions;
+        }
+
+        $iconMap = [
+            'submit' => 'send',
+            'start' => 'play',
+            'complete' => 'check-circle',
+            'approve' => 'check',
+            'reject' => 'x',
+            'cancel' => 'ban',
+            'reopen' => 'rotate-ccw',
+        ];
+
+        foreach ($workflow['transitions'] ?? [] as $tr) {
+            $slug = (string) ($tr['slug'] ?? $tr['handle'] ?? '');
+            if ($slug === '') {
+                continue;
+            }
+            $actions[] = [
+                'handle' => $slug,
+                'label' => (string) ($tr['name'] ?? $tr['label'] ?? str_replace('_', ' ', ucfirst($slug))),
+                'type' => 'workflow',
+                'transition' => $slug,
+                'icon' => $iconMap[$slug] ?? 'git-branch',
+                'requires_remarks' => (bool) ($tr['requires_remarks'] ?? false),
+                'danger' => in_array($slug, ['reject', 'cancel', 'delete'], true),
+            ];
+        }
+
+        return $actions;
+    }
+
     public function detectDeadTables(array $tables, string $sourcePath): array
     {
         $dead = [];
