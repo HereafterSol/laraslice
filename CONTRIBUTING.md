@@ -4,7 +4,7 @@ Thank you for your interest in contributing to **LaraSlice**! We welcome bug fix
 
 ---
 
-## 🏛️ Architecture Overview: Core vs. Application Slices
+## Architecture Overview: Core vs. Application Slices
 
 LaraSlice operates on the **Three-Layer Packaging Model (ADR-001)**:
 1. **Core Framework (`vendor/hereafter/laraslice` / `src/`)**: Contains the discovery engine, declarative schema system, CLI generators, and default starter core slices (`Users`, `Roles`, `Settings`, `Auth`).
@@ -15,7 +15,7 @@ LaraSlice's discovery system is explicitly designed so that **any slice located 
 
 ---
 
-## 🛠️ How to Customize a Core Slice in Your Project
+## How to Customize a Core Slice in Your Project
 
 If your project needs to customize a core slice (for instance, adding `cnic`, `phone`, or custom relationships to `Users`):
 ```bash
@@ -33,12 +33,12 @@ php artisan slice:publish --all
 
 ---
 
-## 🌐 Open Source Contributions to Framework Core
+## Open Source Contributions to Framework Core
 
 If you want to contribute enhancements or fixes directly back to LaraSlice's core starter slices or framework engine:
 
 ### 1. Fork & Clone
-1. Fork the official repository: [github.com/AbdurRehman712/laraslice](https://github.com/AbdurRehman712/laraslice)
+1. Fork the official repository: [github.com/HereafterSol/laraslice](https://github.com/HereafterSol/laraslice)
 2. Clone your fork locally:
    ```bash
    git clone https://github.com/<your-username>/laraslice.git
@@ -52,7 +52,7 @@ If you want to contribute enhancements or fixes directly back to LaraSlice's cor
 - Ensure all views use pure **BlatUI standard** (Blade + Tailwind CSS v4 + Alpine.js + Lucide icons). Zero Metronic or Keenicons dependencies.
 
 ### 3. Running the Test Suite
-Unit, feature and architecture-boundary tests, formatting (Pint) and static analysis (Larastan) must pass; CI runs the same checks on PHP 8.2–8.4 and Laravel 11–13:
+Unit, feature and architecture-boundary tests, formatting (Pint) and static analysis (Larastan) must pass; CI runs the same checks on PHP 8.2-8.4 and Laravel 11-13:
 ```bash
 composer test     # PHPUnit
 composer lint     # pint --test, then phpstan
@@ -61,12 +61,22 @@ composer format   # fix formatting
 Larastan starts from a baseline (`phpstan-baseline.neon`) of findings that predate it. Fix entries rather than adding new ones.
 
 ### 4. Submitting a Pull Request
-1. Commit your changes with descriptive commit messages following the Conventional Commits specification (e.g., `feat:`, `fix:`, `docs:`).
-2. Push to your fork and submit a Pull Request on GitHub against the `master` branch.
+1. Create a **feature branch** from `master` (never commit directly on `master` for shared work):
+   ```bash
+   git checkout master
+   git pull origin master
+   git checkout -b feat/your-change
+   ```
+2. Commit with Conventional Commits (`feat:`, `fix:`, `docs:`, ...).
+3. Push **only the feature branch** to your fork (or a collaborator branch on the org repo):
+   ```bash
+   git push -u origin feat/your-change
+   ```
+4. Open a **Pull Request** against `HereafterSol/laraslice` **`master`**. Do not force-push or push straight to `master` on the organization repository.
 
 ---
 
-## 💻 Local Development Workflow (Path Repository)
+## Local Development Workflow (Path Repository)
 
 When developing a feature or bug fix for LaraSlice, the best way to verify your changes live is by linking your local LaraSlice repository to a Laravel test application using Composer's path repository:
 
