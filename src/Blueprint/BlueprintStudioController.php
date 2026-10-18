@@ -1382,15 +1382,34 @@ final class BlueprintStudioController extends Controller
         try {
             if (! empty($planInput)) {
                 $plan = is_array($planInput) ? $planInput : json_decode($planInput, true);
+                if (! is_array($plan)) {
+                    return response()->json(['success' => false, 'message' => 'Invalid plan payload (expected JSON object).'], 422);
+                }
                 $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth);
             } else {
+                if ($source === '') {
+                    return response()->json(['success' => false, 'message' => 'Provide a plan from Analyze or a source path.'], 422);
+                }
                 $result = $portService->execute($source, $domain, $mode, $withFiles, $importData, null, $importAuth);
             }
 
+            $created = $result['slices_created'] ?? $result['slices_generated'] ?? [];
+            $createdCount = is_array($created) ? count($created) : 0;
+            $errors = $result['errors'] ?? [];
+            $errorCount = is_array($errors) ? count($errors) : 0;
+            $ok = ($result['success'] ?? true) && $errorCount === 0;
+
+            $message = $ok
+                ? "Porting finished: {$createdCount} slice(s) written to disk."
+                : "Porting finished with {$errorCount} error(s); {$createdCount} slice(s) written.";
+
             return response()->json([
-                'success' => true,
+                'success' => $ok,
+                'message' => $message,
                 'result' => $result,
-            ]);
+                'slices_created_count' => $createdCount,
+                'errors_count' => $errorCount,
+            ], $ok ? 200 : 422);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,

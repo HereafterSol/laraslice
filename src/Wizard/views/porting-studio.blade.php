@@ -815,7 +815,8 @@
         <div x-show="planData" class="sticky bottom-0 -mx-4 px-4 py-3 bg-card/95 backdrop-blur border-t border-border md:static md:mx-0 md:px-0 md:bg-transparent md:border-0">
             <div class="flex gap-2">
                 <button @click="loadIntoBlueprint()" class="flex-1 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500">📥 Load into Blueprint Studio</button>
-                <button @click="execute()" :disabled="executing" class="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50">⚡ Execute Porting</button>
+                <button @click="execute()" :disabled="executing || !planData" class="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50">⚡ Execute Porting (scaffold slices)</button>
+                <p class="text-[10px] text-muted-foreground w-full mt-1">Analyze plans only. <strong>Execute</strong> writes <code class="font-mono">app/Slices</code> from the plan. Then customize in Slice Studio + <code class="font-mono">slice:sync</code>.</p>
             </div>
         </div>
     </div>
@@ -1317,15 +1318,37 @@ function portingStudio() {
         async execute() {
             this.executing = true;
             this.activeTab = 'log';
-            this.logs.push('→ Starting porting execution (data source: ' + this.dataSource + ')...');
+            if (!this.planData) {
+                this.logs.push('✗ Run Analyze first — Execute needs a port plan (not only domain YAML).');
+                this.executing = false;
+                return;
+            }
+            this.logs.push('→ Starting porting execution (writes physical slices under app/Slices)…');
+            this.logs.push('  domain=' + (this.planData.domain || this.domain || 'ERP') + ' import_auth=' + !!this.importAuth);
             try {
                 const res = await fetch('/laraslice/wizard/port-execute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
-                    body: JSON.stringify({ plan: this.planData, data_source: this.dataSource, import_auth: this.importAuth }),
+                    body: JSON.stringify({
+                        plan: this.planData,
+                        domain: this.planData.domain || this.domain || 'ERP',
+                        source: this.sourcePath || '',
+                        data_source: this.dataSource,
+                        import_data: !!this.importData,
+                        import_auth: !!this.importAuth,
+                        with_files: !!this.withFiles,
+                    }),
                 });
                 const data = await res.json();
-                this.logs.push('✓ ' + (data.message || 'Porting completed'));
+                if (!res.ok || data.success === false) {
+                    this.logs.push('✗ ' + (data.message || 'Porting failed'));
+                    const errs = data.result?.errors || {};
+                    Object.keys(errs).slice(0, 25).forEach(k => this.logs.push('  · ' + k + ': ' + errs[k]));
+                    if (Object.keys(errs).length > 25) this.logs.push('  · … ' + (Object.keys(errs).length - 25) + ' more');
+                } else {
+                    this.logs.push('✓ ' + (data.message || 'Porting completed'));
+                    this.logs.push('  slices written: ' + (data.slices_created_count ?? Object.keys(data.result?.slices_created || {}).length));
+                }
             } catch (e) {
                 this.logs.push('✗ Error: ' + e.message);
             } finally {

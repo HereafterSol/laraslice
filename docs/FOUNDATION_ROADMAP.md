@@ -83,7 +83,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| E1 | Port Execute should optionally scaffold (UI parity with CLI) | NEXT | Studio green ≠ files written |
+| E1 | Port Execute reports slice counts + errors (UI parity) | DONE | Execute needs plan; logs slices_created |
 | E2 | Regression test: buildUiFromInspectedFields without workflow | NEXT | |
 | E3 | Regression test: slice:repair --remap-nav | NEXT | |
 | E4 | CONTRIBUTING / fork URL | DONE | |
@@ -92,11 +92,12 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 
 ## Immediate next steps (this session → next)
 
-1. **DONE this turn:** Fix `$changed` before `--remap-nav` in `slice:repair`.
-2. **NEXT:** Wire Porting Studio **Execute** to optional scaffold (or clear UI copy: Analyze ≠ scaffold).
-3. **NEXT:** Domain group picker + primary-only nav defaults in Slice Studio.
-4. **NEXT:** Dashboard widgets from YAML on generated index.
+1. **DONE:** Fix `$changed` before `--remap-nav` in `slice:repair`.
+2. **DONE:** Porting Studio Execute shows real slice write counts + per-slice errors.
+3. **NEXT:** Domain group picker (Work/Finance/HR…) in Slice Studio Config panel.
+4. **NEXT:** Dashboard widgets from `ui.dashboard` on generated index.
 5. **NEXT:** Local pilot re-apply + 3-persona checklist vs demo.
+6. **NEXT:** Regression tests for workflow UI build + remap-nav.
 
 ---
 
