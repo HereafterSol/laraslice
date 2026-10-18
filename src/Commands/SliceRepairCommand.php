@@ -28,13 +28,13 @@ class SliceRepairCommand extends Command
         }
 
         $dryRun = (bool) $this->option('dry-run');
+        $changed = 0;
         if ($this->option('publish-ui') && ! $dryRun) {
             $this->publishBlatUiComponents();
         }
         if ($this->option('remap-nav') && ! $dryRun) {
             $changed += $this->remapNavigationGroups($manager, $slices);
         }
-        $changed = 0;
         foreach ($slices as $slice) {
             foreach ($manager->repairSlice($slice, $dryRun) as $file) {
                 $this->line(($dryRun ? '<fg=yellow>would update</> ' : '<fg=green>updated</> ').$file);
