@@ -1254,11 +1254,27 @@ ACTIONS;
                 \$tableViews = ['table'];
             }
             \$defaultView = \$dirUi['default_view'] ?? 'table';
+            \$inlineEdit = \$dirUi['inline_edit'] ?? [];
+            if (! is_array(\$inlineEdit)) {
+                \$inlineEdit = [];
+            }
             \$statusKey = 'status';
+            \$dateKey = null;
             foreach (\$columns as \$c) {
-                if (in_array(\$c['key'] ?? '', ['status', 'state', 'stage'], true)) {
-                    \$statusKey = \$c['key'];
-                    break;
+                \$ck = \$c['key'] ?? '';
+                if (in_array(\$ck, ['status', 'state', 'stage'], true)) {
+                    \$statusKey = \$ck;
+                }
+                if (\$dateKey === null && (str_contains(\$ck, 'date') || str_ends_with(\$ck, '_at'))) {
+                    \$dateKey = \$ck;
+                }
+            }
+            foreach (['due_date', 'start_date', 'issue_date', 'date'] as \$preferDate) {
+                foreach (\$columns as \$c) {
+                    if ((\$c['key'] ?? '') === \$preferDate) {
+                        \$dateKey = \$preferDate;
+                        break 2;
+                    }
                 }
             }
         @endphp
@@ -1273,6 +1289,8 @@ ACTIONS;
             :views="\$tableViews"
             :default-view="\$defaultView"
             :status-key="\$statusKey"
+            :inline-edit="\$inlineEdit"
+            :date-key="\$dateKey"
         >
 {$rowActionsSlot}
         </x-ui.data-table>

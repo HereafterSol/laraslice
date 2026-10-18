@@ -16,6 +16,8 @@
     'views' => ['table'],        // YAML ui.directory.views: table | board | calendar
     'defaultView' => 'table',    // YAML ui.directory.default_view
     'statusKey' => 'status',     // column key used for board columns
+    'inlineEdit' => [],          // YAML ui.directory.inline_edit e.g. ['status']
+    'dateKey' => null,           // preferred date column for calendar view
 ])
 
 @php
@@ -47,6 +49,13 @@
         views: @js(array_values($views ?: ['table'])),
         defaultView: @js($defaultView ?: 'table'),
         statusKey: @js($statusKey ?: 'status'),
+        inlineEdit: @js(array_values($inlineEdit ?: [])),
+        dateKey: @js($dateKey),
+        workflowTransitionUrlTemplate: @js(
+            \Illuminate\Support\Facades\Route::has('workflows.transition')
+                ? url('/admin/workflows/transition/'.($workflowSlice ?: '__SLICE__').'/__ID__')
+                : null
+        ),
     })"
     x-init="$watch('q', () => page = 1)"
     @export-table.window="exportCsv()"
@@ -191,8 +200,29 @@
     </div>
 
     <!-- Calendar placeholder (hook for full calendar component) -->
-    <div x-show="viewMode === 'calendar'" x-cloak class="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
-        Calendar view uses date columns from this directory. Configure date fields in Slice Studio.
+    <div x-show="viewMode === 'calendar'" x-cloak class="space-y-3 pt-2">
+        <div class="flex items-center justify-between gap-2">
+            <button type="button" @click="calPrevMonth()" class="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted cursor-pointer">←</button>
+            <span class="text-sm font-bold text-foreground" x-text="calMonthLabel"></span>
+            <button type="button" @click="calNextMonth()" class="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted cursor-pointer">→</button>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">
+            <template x-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d"><div class="py-1" x-text="d"></div></template>
+        </div>
+        <div class="grid grid-cols-7 gap-1">
+            <template x-for="cell in calCells" :key="cell.key">
+                <div class="min-h-[5.5rem] rounded-xl border border-border/70 bg-card p-1.5 flex flex-col gap-1"
+                     :class="cell.inMonth ? '' : 'opacity-40'">
+                    <span class="text-[11px] font-bold text-muted-foreground" x-text="cell.day"></span>
+                    <template x-for="row in cell.rows.slice(0, 3)" :key="row[rowKey] || JSON.stringify(row)">
+                        <div class="rounded-md bg-primary/10 text-primary text-[10px] px-1 py-0.5 truncate font-medium"
+                             x-text="calendarLabel(row)"></div>
+                    </template>
+                    <span x-show="cell.rows.length > 3" class="text-[10px] text-muted-foreground" x-text="'+' + (cell.rows.length - 3) + ' more'"></span>
+                </div>
+            </template>
+        </div>
+        <p class="text-[11px] text-muted-foreground" x-show="!resolvedDateKey">No date column detected — set a date field in Slice Studio (due_date, start_date, …).</p>
     </div>
 
     <!-- Off-Canvas Right Filter Sidebar Drawer (Matches ERP Screenshot 3 & 4) -->
@@ -286,7 +316,20 @@
                             </td>
                         @endif
                         @foreach ($cols as $col)
-                            @if (!empty($col['html']))
+                            @if (($col['key'] ?? '') === ($statusKey ?? 'status') && in_array($statusKey ?? 'status', $inlineEdit ?: [], true))
+                                <td class="px-3 py-2.5 align-middle whitespace-nowrap {{ $col['class'] }}">
+                                    <select
+                                        class="h-8 min-w-[7.5rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                                        :value="item.r['{{ $col['key'] }}__raw'] || ''"
+                                        @change="applyInlineTransition(item.r, $event.target.value)"
+                                    >
+                                        <option value="" x-text="item.r['{{ $col['key'] }}__raw'] || '—'"></option>
+                                        <template x-for="wt in workflowTransitions" :key="wt.slug">
+                                            <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
+                                        </template>
+                                    </select>
+                                </td>
+                            @elseif (!empty($col['html']))
                                 <td class="px-3 py-2.5 align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
                             @else
                                 <td class="px-3 py-2.5 align-middle whitespace-nowrap text-foreground {{ $col['class'] }}" x-text="item.r['{{ $col['key'] }}']"></td>
@@ -327,6 +370,7 @@
             </div>
         </div>
     </div>
+    </div><!-- /table viewMode -->
 </div>
 
 <script>
@@ -368,6 +412,107 @@ if (typeof window.blatDataTable === 'undefined') {
                     label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
                     rows: groups[k],
                 }));
+            },
+            inlineEdit: cfg.inlineEdit || [],
+            dateKey: cfg.dateKey || null,
+            workflowTransitionUrlTemplate: cfg.workflowTransitionUrlTemplate || null,
+            calCursor: new Date(),
+            get resolvedDateKey() {
+                if (this.dateKey) return this.dateKey;
+                const candidates = ['due_date', 'start_date', 'date', 'scheduled_at', 'created_at', 'issue_date'];
+                for (const c of candidates) {
+                    if (this.cols.some(col => col.key === c)) return c;
+                }
+                for (const col of this.cols) {
+                    if ((col.key || '').includes('date') || (col.key || '').endsWith('_at')) return col.key;
+                }
+                return null;
+            },
+            get calMonthLabel() {
+                return this.calCursor.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+            },
+            calPrevMonth() { this.calCursor = new Date(this.calCursor.getFullYear(), this.calCursor.getMonth() - 1, 1); },
+            calNextMonth() { this.calCursor = new Date(this.calCursor.getFullYear(), this.calCursor.getMonth() + 1, 1); },
+            calendarLabel(row) {
+                const keys = this.cols.map(c => c.key);
+                for (const k of ['title', 'name', 'heading', 'invoice_number', 'subject']) {
+                    if (keys.includes(k) && row[k]) return String(row[k]).replace(/<[^>]*>/g, '').slice(0, 40);
+                }
+                return String(row[keys[0]] || 'Item').replace(/<[^>]*>/g, '').slice(0, 40);
+            },
+            get calCells() {
+                const y = this.calCursor.getFullYear();
+                const m = this.calCursor.getMonth();
+                const first = new Date(y, m, 1);
+                const startPad = first.getDay();
+                const daysInMonth = new Date(y, m + 1, 0).getDate();
+                const key = this.resolvedDateKey;
+                const filtered = this.filtered.map(({ r }) => r);
+                const byDay = {};
+                if (key) {
+                    for (const row of filtered) {
+                        const raw = String(row[key + '__raw'] ?? row[key] ?? '').replace(/<[^>]*>/g, '').trim();
+                        if (!raw) continue;
+                        const d = new Date(raw);
+                        if (isNaN(d.getTime())) continue;
+                        if (d.getFullYear() !== y || d.getMonth() !== m) continue;
+                        const day = d.getDate();
+                        if (!byDay[day]) byDay[day] = [];
+                        byDay[day].push(row);
+                    }
+                }
+                const cells = [];
+                const total = Math.ceil((startPad + daysInMonth) / 7) * 7;
+                for (let i = 0; i < total; i++) {
+                    const dayNum = i - startPad + 1;
+                    const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
+                    cells.push({
+                        key: y + '-' + m + '-' + i,
+                        day: inMonth ? dayNum : '',
+                        inMonth,
+                        rows: inMonth ? (byDay[dayNum] || []) : [],
+                    });
+                }
+                return cells;
+            },
+            async applyInlineTransition(row, transitionSlug) {
+                if (!transitionSlug || !this.workflowSlice) return;
+                const id = row[this.rowKey] ?? row.id;
+                if (!id) { alert('Missing record id'); return; }
+                let url = this.workflowTransitionUrlTemplate;
+                if (!url && this.workflowBulkUrl) {
+                    // fallback: single via bulk endpoint
+                }
+                if (!url) {
+                    url = '/admin/workflows/transition/' + encodeURIComponent(this.workflowSlice) + '/' + encodeURIComponent(id);
+                } else {
+                    url = url.replace('__SLICE__', encodeURIComponent(this.workflowSlice)).replace('__ID__', encodeURIComponent(id));
+                }
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': this.csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({ transition: transitionSlug }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.success === false) {
+                        alert(data.message || 'Transition failed');
+                        return;
+                    }
+                    // optimistic: update raw status from transition label if present
+                    const wt = (this.workflowTransitions || []).find(t => t.slug === transitionSlug);
+                    if (wt && this.statusKey) {
+                        row[this.statusKey + '__raw'] = wt.label || transitionSlug;
+                    }
+                    window.location.reload();
+                } catch (e) {
+                    alert(e.message || String(e));
+                }
             },
             get sidebarFilterCount() {
                 let count = 0;
