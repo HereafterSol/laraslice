@@ -363,51 +363,72 @@ class SlicePortService
      */
     public function detectModuleForSlice(string $sliceName, string $primaryTable): string
     {
+        // Demo-aligned short module labels (Worksuite-class sidebar: Work, Finance, HR, …)
+        // Domain namespace stays ERP; navigation.group is the collapsible sidebar section.
         $directMap = [
             'Projects' => 'Work',
             'Tasks' => 'Work',
             'Contracts' => 'Work',
             'ProjectTimeLogs' => 'Work',
             'TimeLogs' => 'Work',
+            'Timelogs' => 'Work',
+            'Milestones' => 'Work',
+            'SubTasks' => 'Work',
+            'Taskboards' => 'Work',
 
-            'Leads' => 'SalesCRM',
-            'Deals' => 'SalesCRM',
-            'ClientDetails' => 'SalesCRM',
-            'Clients' => 'SalesCRM',
+            'Leads' => 'CRM',
+            'Deals' => 'CRM',
+            'ClientDetails' => 'CRM',
+            'Clients' => 'CRM',
+            'ClientContacts' => 'CRM',
+            'Contacts' => 'CRM',
+            'Companies' => 'CRM',
 
-            'Invoices' => 'FinancialAccounting',
-            'Payments' => 'FinancialAccounting',
-            'Estimates' => 'FinancialAccounting',
-            'Proposals' => 'FinancialAccounting',
-            'CreditNotes' => 'FinancialAccounting',
-            'Expenses' => 'FinancialAccounting',
-            'BankAccounts' => 'FinancialAccounting',
+            'Invoices' => 'Finance',
+            'Payments' => 'Finance',
+            'Estimates' => 'Finance',
+            'Proposals' => 'Finance',
+            'CreditNotes' => 'Finance',
+            'Creditnotes' => 'Finance',
+            'Expenses' => 'Finance',
+            'BankAccounts' => 'Finance',
+            'Recurrings' => 'Finance',
+            'Taxes' => 'Finance',
+            'ItemTaxes' => 'Finance',
+            'TransactionTaxes' => 'Finance',
 
-            'EmployeeDetails' => 'HumanCapital',
-            'Employees' => 'HumanCapital',
-            'Attendances' => 'HumanCapital',
-            'Attendance' => 'HumanCapital',
-            'Leaves' => 'HumanCapital',
-            'EmployeeShiftSchedules' => 'HumanCapital',
-            'ShiftRoster' => 'HumanCapital',
-            'Teams' => 'HumanCapital',
-            'Departments' => 'HumanCapital',
-            'Designations' => 'HumanCapital',
-            'Appreciations' => 'HumanCapital',
+            'EmployeeDetails' => 'HR',
+            'Employees' => 'HR',
+            'Attendances' => 'HR',
+            'Attendance' => 'HR',
+            'Leaves' => 'HR',
+            'EmployeeShiftSchedules' => 'HR',
+            'ShiftRoster' => 'HR',
+            'Teams' => 'HR',
+            'Departments' => 'HR',
+            'Designations' => 'HR',
+            'Appreciations' => 'HR',
+            'Holidays' => 'HR',
 
-            'Products' => 'SupplyChain',
-            'Orders' => 'SupplyChain',
+            'Products' => 'Orders',
+            'Orders' => 'Orders',
+            'OrderItems' => 'Orders',
 
-            'Tickets' => 'ServiceDesk',
-            'Events' => 'ServiceDesk',
-            'Notices' => 'LegalRegistry',
-            'NoticeTitles' => 'LegalRegistry',
-            'KnowledgeBases' => 'ServiceDesk',
+            'Tickets' => 'Tickets',
+            'Events' => 'Events',
+            'Notices' => 'HR',
+            'NoticeTitles' => 'Settings',
+            'KnowledgeBases' => 'Tickets',
 
-            'UsersChat' => 'Operations',
-            'Messages' => 'Operations',
-            'StickyNotes' => 'Operations',
+            'UsersChat' => 'Messages',
+            'Messages' => 'Messages',
+            'StickyNotes' => 'Messages',
 
+            'Categories' => 'Settings',
+            'Accounts' => 'Finance',
+            'BillHistories' => 'Finance',
+            'Dashboards' => 'Settings',
+            'Documents' => 'Settings',
             'GlobalSettings' => 'Settings',
             'Settings' => 'Settings',
         ];
@@ -417,17 +438,15 @@ class SlicePortService
         }
 
         $clusters = [
-            'CaseManagement' => ['complaint', 'case', 'dispute', 'claim', 'matter', 'grievance', 'petition', 'accused', 'respondent', 'complainant', 'approval'],
-            'JudicialHearings' => ['hearing', 'cause_list', 'decision', 'verdict', 'penalty', 'sentence', 'decree', 'ruling', 'appeal', 'order_case'],
-            'LegalRegistry' => ['notice', 'summons', 'citation', 'docket', 'representation', 'brief', 'scrutiny', 'maintainability', 'report_sought'],
-            'FinancialAccounting' => ['invoice', 'payment', 'expense', 'estimate', 'credit_note', 'tax', 'bank', 'currency', 'transaction', 'recurring', 'quotation', 'subscription'],
-            'HumanCapital' => ['employee', 'attendance', 'leave', 'holiday', 'shift', 'designation', 'department', 'appreciation', 'award', 'emergency_contact', 'passport', 'visa'],
-            'SalesCRM' => ['lead', 'deal', 'proposal', 'pipeline', 'client', 'contract', 'leadboard'],
-            'Work' => ['project', 'task', 'timelog', 'time_log', 'milestone', 'sub_task', 'taskboard'],
-            'SupplyChain' => ['product', 'order', 'cart', 'item', 'inventory', 'warehouse', 'vendor'],
-            'ServiceDesk' => ['ticket', 'discussion', 'knowledge', 'faq', 'event'],
-            'Settings' => ['company', 'setting', 'theme', 'role', 'permission', 'custom_field', 'custom_link', 'log', 'backup', 'translate', 'language', 'social_auth', 'pusher', 'slack', 'otp', 'api_user', 'api_log', 'activity_log', 'token', 'job_batch', 'cache'],
-            'ReferenceData' => ['countries', 'currencies', 'master_data', 'reference_data', 'province', 'district', 'tehsil', 'region', 'gender', 'organization', 'office', 'nature', 'status', 'subtype', 'category'],
+            'Work' => ['project', 'task', 'timelog', 'time_log', 'milestone', 'sub_task', 'taskboard', 'contract'],
+            'CRM' => ['lead', 'deal', 'client', 'contact', 'company', 'prospect'],
+            'Finance' => ['invoice', 'payment', 'expense', 'estimate', 'credit_note', 'tax', 'bank', 'currency', 'transaction', 'recurring', 'quotation', 'subscription', 'bill', 'account'],
+            'HR' => ['employee', 'attendance', 'leave', 'shift', 'department', 'designation', 'holiday', 'appreciation', 'team', 'notice'],
+            'Orders' => ['product', 'order', 'sku', 'cart'],
+            'Tickets' => ['ticket', 'knowledge'],
+            'Events' => ['event', 'calendar'],
+            'Messages' => ['message', 'chat', 'sticky'],
+            'Settings' => ['setting', 'config', 'dashboard', 'document', 'category', 'custom_field'],
         ];
 
         $lower = strtolower($sliceName . '_' . $primaryTable);
@@ -1713,7 +1732,8 @@ PHP;
                 'navigation' => array_merge([
                     'label' => $sliceName,
                     'icon' => $icon,
-                    'group' => $domain,
+                    // Module group (Work/Finance/HR) — not the ERP domain namespace
+                    'group' => $info['module'] ?? $info['navigation']['group'] ?? $this->detectModuleForSlice($sliceName, $primaryTable),
                     'route' => Str::slug($domain) . '/' . Str::slug($sliceHandle),
                     // Akaunting-style: numeric ordering for easy insertion, permission-gated
                     'order' => $info['nav_order'] ?? 50,
@@ -3532,10 +3552,41 @@ public function analyzeSourceNavigation(string $sourcePath): array
     protected function applyPersonaNavigationToMapping(array $sliceMapping): array
     {
         $allow = $this->erpPersonaSliceAllowlist();
+        // Tables that are real data but must NOT pollute the top-level sidebar (Settings or parent-only).
+        $sidebarNoise = [
+            'ItemTaxes', 'TransactionTaxes', 'BillHistories', 'Categories', 'Dashboards',
+            'Documents', 'Accounts', 'Taxes', 'Recurrings', 'CustomFields', 'CustomFieldGroups',
+            'CustomLinks', 'NoticeTitles', 'GlobalSettings', 'StickyNotes', 'ProjectMilestones',
+            'TaskUsers', 'ProjectMembers', 'InvoiceItems', 'EstimateItems', 'OrderItems',
+            'SubTasks', 'TaskComments', 'ProjectFiles', 'TicketReplies',
+        ];
+        // Preferred sidebar order matching ERP demo module sequence
+        $moduleOrder = [
+            'CRM' => 10,
+            'Work' => 20,
+            'HR' => 30,
+            'Finance' => 40,
+            'Orders' => 50,
+            'Tickets' => 60,
+            'Events' => 70,
+            'Messages' => 80,
+            'Settings' => 90,
+        ];
+
         foreach ($sliceMapping as $name => &$info) {
             $type = $info['type'] ?? 'aggregate_root';
             $nav = $info['navigation'] ?? [];
-            if ($type === 'settings_hub' || $type === 'settings' || $type === 'taxonomy') {
+            $primary = $info['primary_table'] ?? \Illuminate\Support\Str::snake($name);
+            $module = $this->detectModuleForSlice($name, $primary);
+
+            if ($type === 'settings_hub' || $type === 'settings' || $type === 'taxonomy'
+                || in_array($name, $sidebarNoise, true)
+                || str_ends_with($name, 'Items')
+                || str_ends_with($name, 'Members')
+                || str_ends_with($name, 'Replies')
+                || str_ends_with($name, 'Files')
+                || str_ends_with($name, 'Comments')
+            ) {
                 $nav['visible'] = false;
                 $nav['roles'] = ['admin'];
             } else {
@@ -3546,16 +3597,20 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         $roles[] = $persona;
                     }
                 }
-                // Always allow admin for operational roots
                 if (! in_array('admin', $roles, true)) {
                     $roles[] = 'admin';
                 }
                 $nav['roles'] = array_values(array_unique($roles));
+                // Primary operational roots only (Projects, Tasks, Invoices, …)
                 $nav['visible'] = $nav['visible'] ?? true;
             }
+
+            $info['module'] = $module;
             $info['navigation'] = array_merge($nav, [
-                'group' => $nav['group'] ?? ($info['module'] ?? $info['domain'] ?? 'General'),
+                // Always stamp demo-aligned short group (never long FinancialAccounting)
+                'group' => $module,
                 'icon' => $nav['icon'] ?? ($info['icon'] ?? 'package'),
+                'order' => $moduleOrder[$module] ?? ($nav['order'] ?? 50),
             ]);
         }
         unset($info);

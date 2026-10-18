@@ -25,3 +25,14 @@ Branch policy: feature branches + PR to `master` only (never push `master` direc
 15. **Column formatters**: `money_breakdown` (total/paid/unpaid), `status_pill`, `code_badge`, `text_with_badge` (priority on title).
 
 All of the above must survive Blueprint Apply → `slice.json` / `slice.yaml` GitOps so Studios remain the customization surface.
+
+
+## Rule: Sidebar module groups (demo parity)
+
+- **Domain namespace** (e.g. `ERP`) is the code/folder boundary — not every sidebar section.
+- **`navigation.group`** must use **short demo-aligned labels**: Work, Finance, HR, CRM, Orders, Tickets, Events, Messages, Settings.
+- Never stamp long internal names (`FinancialAccounting`, `HumanCapital`, `ServiceDesk`) as sidebar groups.
+- **Primary roots only** in the sidebar: Projects, Tasks, Invoices, Leads, Employees, …
+- **Auxiliary / child / tax / history** tables: `navigation.visible: false` (Settings hub or parent tabs).
+- Porting Analyze must compile groups from source `menu.blade.php` / x-menu-item **and** the module map; Slice Studio can override group/roles in YAML.
+- After upgrading the package: `php artisan slice:repair --remap-nav --publish-ui`
