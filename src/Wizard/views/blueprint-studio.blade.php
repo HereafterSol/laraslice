@@ -38,6 +38,7 @@
                     Declarative YAML & Visual
                 </span>
             </h1>
+        <p class="text-xs text-muted-foreground mt-2 max-w-3xl">Blueprint Studio is for plan/apply of new domains. Day-to-day edits, history, and YAML↔DB sync live in <a href="{{ route('laraslice.wizard.studio') }}" class="text-primary font-semibold underline">Slice Studio</a>.</p>
             <p class="mt-0.5 text-sm text-muted-foreground">
                 Dual Visual Designer & YAML Modeler with October-style DB introspection, Statamic field widths, and durable slice.yaml persistence.
             </p>

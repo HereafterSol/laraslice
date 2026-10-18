@@ -200,15 +200,7 @@ PHP;
             'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
-        ManifestRepository::write($manifestFile, $manifest);
-
-        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
-        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
-            $staleYaml = $sliceDir.'/'.$yamlExt;
-            if (file_exists($staleYaml)) {
-                @unlink($staleYaml);
-            }
-        }
+        ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
@@ -699,15 +691,7 @@ PHP;
         if ($routeContent !== null) {
             file_put_contents($webRouteFile, $routeContent, LOCK_EX);
         }
-        ManifestRepository::write($manifestFile, $manifest);
-
-        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
-        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
-            $staleYaml = $sliceDir.'/'.$yamlExt;
-            if (file_exists($staleYaml)) {
-                @unlink($staleYaml);
-            }
-        }
+        ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
@@ -1107,15 +1091,7 @@ REL;
             'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
-        ManifestRepository::write($manifestFile, $manifest);
-
-        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
-        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
-            $staleYaml = $sliceDir.'/'.$yamlExt;
-            if (file_exists($staleYaml)) {
-                @unlink($staleYaml);
-            }
-        }
+        ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
@@ -1470,15 +1446,7 @@ REL;
         $manifest['version'] = $targetVersion;
         $manifest['version_history'] = $keptHistory;
 
-        ManifestRepository::write($manifestFile, $manifest);
-
-        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
-        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
-            $staleYaml = $sliceDir.'/'.$yamlExt;
-            if (file_exists($staleYaml)) {
-                @unlink($staleYaml);
-            }
-        }
+        ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
@@ -1764,15 +1732,7 @@ PHP;
             'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
-        ManifestRepository::write($manifestFile, $manifest);
-
-        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
-        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
-            $staleYaml = $sliceDir.'/'.$yamlExt;
-            if (file_exists($staleYaml)) {
-                @unlink($staleYaml);
-            }
-        }
+        ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
@@ -1905,15 +1865,7 @@ PHP;
             'snapshot' => $this->buildSnapshot($manifest, $newVersion),
         ];
 
-        ManifestRepository::write($manifestFile, $manifest);
-
-        // Remove redundant/stale slice.yaml so slice.json remains the authoritative manifest
-        foreach (['slice.yaml', 'slice.yml'] as $yamlExt) {
-            $staleYaml = $sliceDir.'/'.$yamlExt;
-            if (file_exists($staleYaml)) {
-                @unlink($staleYaml);
-            }
-        }
+        ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
             app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
@@ -1925,5 +1877,90 @@ PHP;
             'version' => $newVersion,
             'message' => 'Successfully saved '.count($cleanedRelations)." relationship(s) for [{$sliceName}]!",
         ];
+    }
+
+    /**
+     * Save declarative UI + navigation from Slice Studio (YAML-centric GitOps).
+     * Writes slice.json + slice.yaml and appends version_history ledger entry.
+     *
+     * @param  array<string, mixed>  $ui
+     * @param  array<string, mixed>  $navigation
+     * @return array<string, mixed>
+     */
+    public function saveStudioConfig(string $sliceName, array $ui = [], array $navigation = [], string $author = 'Developer via Slice Studio'): array
+    {
+        $slice = $this->findSlice($sliceName);
+        $manifestFile = $slice->path.'/slice.json';
+        $manifest = ManifestRepository::read($manifestFile);
+
+        $oldVersion = $manifest['version'] ?? '1.0.0';
+        $parts = explode('.', (string) $oldVersion);
+        while (count($parts) < 3) {
+            $parts[] = '0';
+        }
+        $parts[2] = (string) ((int) $parts[2] + 1);
+        $newVersion = implode('.', $parts);
+
+        if ($ui !== []) {
+            $manifest['ui'] = array_replace_recursive($manifest['ui'] ?? [], $ui);
+        }
+        if ($navigation !== []) {
+            $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $navigation);
+        }
+
+        $manifest['version'] = $newVersion;
+        if (! isset($manifest['version_history']) || ! is_array($manifest['version_history'])) {
+            $manifest['version_history'] = [];
+        }
+        $manifest['version_history'][] = [
+            'version' => $newVersion,
+            'type' => 'studio_config',
+            'description' => 'Slice Studio config: '.implode(', ', array_filter([
+                $ui !== [] ? 'ui' : null,
+                $navigation !== [] ? 'navigation' : null,
+            ])),
+            'author' => $author,
+            'date' => date('Y-m-d H:i:s'),
+            'snapshot' => $this->buildSnapshot($manifest, $newVersion),
+        ];
+
+        ManifestRepository::writeBoth($manifestFile, $manifest);
+
+        try {
+            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
+
+        // Sync workflow to DB if present
+        if (! empty($manifest['workflow']) && is_array($manifest['workflow'])) {
+            try {
+                app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)
+                    ->syncWorkflowFromManifest($manifest['workflow'], $sliceName, $slice->getModelClass());
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return [
+            'success' => true,
+            'version' => $newVersion,
+            'ui' => $manifest['ui'] ?? [],
+            'navigation' => $manifest['navigation'] ?? [],
+            'version_history' => $manifest['version_history'],
+            'message' => "Studio config saved for [{$sliceName}] v{$newVersion} (JSON + YAML).",
+        ];
+    }
+
+    /**
+     * Bump patch version helper used by studio saves.
+     */
+    protected function bumpPatchVersion(string $version): string
+    {
+        $parts = explode('.', $version);
+        while (count($parts) < 3) {
+            $parts[] = '0';
+        }
+        $parts[2] = (string) ((int) $parts[2] + 1);
+
+        return implode('.', $parts);
     }
 }

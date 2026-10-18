@@ -14,6 +14,7 @@
                     </a>
                     <div class="min-w-0">
                         <h1 class="text-base md:text-xl font-bold text-foreground truncate">🔄 Porting Studio</h1>
+        <p class="text-xs text-muted-foreground mt-2 max-w-3xl">After Analyze → Apply, all ongoing customization (fields, UI, personas, bulk actions, history) should go through <a href="{{ route('laraslice.wizard.studio') }}" class="text-primary font-semibold underline">Slice Studio</a> — YAML + JSON stay in sync with <code class="font-mono">slice:sync</code>.</p>
                         <p class="text-[11px] md:text-xs text-muted-foreground truncate hidden sm:block">Reverse-engineer legacy apps into LaraSlice vertical slices</p>
                     </div>
                 </div>

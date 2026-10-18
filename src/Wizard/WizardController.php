@@ -1342,4 +1342,103 @@ class WizardController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
     }
+
+    /**
+     * Save UI + navigation from Slice Studio (JSON + YAML + version_history + optional workflow DB sync).
+     */
+    public function saveStudioConfig(Request $request)
+    {
+        $validated = $request->validate([
+            'slice' => 'required|string',
+            'ui' => 'nullable|array',
+            'navigation' => 'nullable|array',
+        ]);
+
+        try {
+            $modifier = new \LaraSlice\Generator\SliceModifier;
+            $result = $modifier->saveStudioConfig(
+                $validated['slice'],
+                $validated['ui'] ?? [],
+                $validated['navigation'] ?? [],
+                'Developer via Slice Studio'
+            );
+
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Reconcile slice.yaml ↔ slice.json and sync workflow to DB (GitOps pull into runtime).
+     */
+    public function syncManifest(Request $request)
+    {
+        $validated = $request->validate([
+            'slice' => 'required|string',
+            'prefer' => 'nullable|string|in:json,yaml',
+        ]);
+        $prefer = $validated['prefer'] ?? 'json';
+
+        try {
+            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $slice = null;
+            foreach ($manager->getAllSlices() as $s) {
+                if (strcasecmp($s->name, $validated['slice']) === 0) {
+                    $slice = $s;
+                    break;
+                }
+            }
+            if (! $slice) {
+                return response()->json(['success' => false, 'message' => 'Slice not found'], 404);
+            }
+
+            $jsonFile = $slice->path.'/slice.json';
+            $yamlFile = $slice->path.'/slice.yaml';
+            $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($jsonFile);
+
+            if ($prefer === 'yaml' && is_file($yamlFile)) {
+                $raw = file_get_contents($yamlFile);
+                if (class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+                    $fromYaml = \Symfony\Component\Yaml\Yaml::parse($raw);
+                    if (is_array($fromYaml)) {
+                        $manifest = \LaraSlice\Core\Discovery\ManifestRepository::normalize($fromYaml);
+                    }
+                }
+            }
+
+            // Bump ledger for sync event
+            $manifest['version_history'] = $manifest['version_history'] ?? [];
+            $manifest['version_history'][] = [
+                'version' => $manifest['version'] ?? '1.0.0',
+                'type' => 'sync_manifest',
+                'description' => "Reconciled JSON+YAML (prefer={$prefer})",
+                'author' => 'Developer via Slice Studio',
+                'date' => date('Y-m-d H:i:s'),
+            ];
+
+            \LaraSlice\Core\Discovery\ManifestRepository::writeBoth($jsonFile, $manifest);
+
+            if (! empty($manifest['workflow']) && is_array($manifest['workflow'])) {
+                try {
+                    app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)
+                        ->syncWorkflowFromManifest($manifest['workflow'], $slice->name, $slice->getModelClass());
+                } catch (\Throwable $e) {
+                }
+            }
+
+            $manager->clearCache();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Manifest synced for [{$slice->name}] (file JSON+YAML + DB workflow).",
+                'version' => $manifest['version'] ?? null,
+                'navigation' => $manifest['navigation'] ?? [],
+                'ui' => $manifest['ui'] ?? [],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
 }

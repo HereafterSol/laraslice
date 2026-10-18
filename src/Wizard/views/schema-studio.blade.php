@@ -15,6 +15,7 @@
                 <a href="{{ route('laraslice.wizard.blueprint') }}" class="hover:text-primary transition">Blueprint Studio</a>
                 <span>/</span>
                 <span class="text-foreground font-semibold">Schema Studio</span>
+                <span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/30 text-[10px] font-mono">Fields + relations</span>
                 <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono">2-Column Canvas</span>
             </div>
             <h1 class="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">

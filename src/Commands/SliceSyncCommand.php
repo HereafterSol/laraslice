@@ -143,7 +143,19 @@ class SliceSyncCommand extends Command
         $manager->clearCache();
         $manager->discover();
 
-        $this->info('All slice manifests, permissions, and routes are synchronized with environment.');
+        // Ensure GitOps YAML twin exists for every slice
+        foreach ($manager->getAllSlices() as $slice) {
+            $jsonFile = $slice->path.'/slice.json';
+            if (is_file($jsonFile)) {
+                try {
+                    $m = \LaraSlice\Core\Discovery\ManifestRepository::read($jsonFile);
+                    \LaraSlice\Core\Discovery\ManifestRepository::writeYamlTwin($jsonFile, $m);
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+
+        $this->info('All slice manifests, permissions, and routes are synchronized with environment (JSON + YAML + DB).');
         return self::SUCCESS;
     }
 }

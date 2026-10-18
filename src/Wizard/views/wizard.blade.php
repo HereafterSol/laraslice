@@ -929,6 +929,14 @@ function larasliceWizard() {
         uiSummaryCards: [],
         uiSidebarFilters: [],
         uiBulkActions: ['delete', 'export'],
+        uiViews: ['table'],
+        uiDefaultView: 'table',
+        uiInlineEdit: [],
+        uiDashboardWidgets: [],
+        navRoles: [],
+        navVisible: true,
+        studioConfigSaving: false,
+        studioConfigMessage: '',
         // Form sections (Step 3: Create & Edit Form)
         uiFormSections: [],
         uiFormMode: 'drawer',
@@ -1610,6 +1618,12 @@ function larasliceWizard() {
         },
         selectSlice(slice) {
             this.selectedSlice = slice;
+            this.navRoles = Array.isArray(slice.navigation?.roles) ? [...slice.navigation.roles] : [];
+            this.navVisible = slice.navigation?.visible !== false;
+            this.uiViews = Array.isArray(slice.ui?.directory?.views) ? [...slice.ui.directory.views] : ['table'];
+            this.uiDefaultView = slice.ui?.directory?.default_view || 'table';
+            this.uiInlineEdit = Array.isArray(slice.ui?.directory?.inline_edit) ? [...slice.ui.directory.inline_edit] : [];
+            this.uiDashboardWidgets = Array.isArray(slice.ui?.dashboard?.widgets) ? [...slice.ui.dashboard.widgets] : [];
             this.loadAuditLogs(slice.name);
             const primary = (slice.tables_data || []).find(t => t.is_primary) || (slice.tables_data || [])[0] || null;
             this.selectedTable = primary;
@@ -1764,6 +1778,67 @@ function larasliceWizard() {
                     this.loadSlices();
                 }
             });
+        },
+        async saveStudioConfig() {
+            if (!this.selectedSlice) return;
+            this.studioConfigSaving = true;
+            this.studioConfigMessage = '';
+            try {
+                const ui = this.buildUiConfig();
+                ui.dashboard = { enabled: true, widgets: this.uiDashboardWidgets || [] };
+                const navigation = {
+                    roles: this.navRoles || [],
+                    visible: this.navVisible !== false,
+                    label: this.navConfig?.title || this.selectedSlice.navigation?.label || this.selectedSlice.title || this.selectedSlice.name,
+                    icon: this.navConfig?.icon || this.selectedSlice.navigation?.icon || 'package',
+                    group: this.navConfig?.group || this.selectedSlice.navigation?.group || this.selectedSlice.domain || 'General',
+                    order: this.navConfig?.order || 50,
+                    hidden: !!this.navConfig?.hidden,
+                };
+                const res = await fetch('{{ route('laraslice.wizard.save_studio_config') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ slice: this.selectedSlice.name, ui, navigation }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.success === false) throw new Error(data.message || 'Save failed');
+                this.studioConfigMessage = data.message || 'Saved';
+                if (data.version) this.selectedSlice.version = data.version;
+                if (data.version_history) this.selectedSlice.version_history = data.version_history;
+                if (data.ui) this.selectedSlice.ui = data.ui;
+                if (data.navigation) this.selectedSlice.navigation = data.navigation;
+            } catch (e) {
+                this.studioConfigMessage = e.message || String(e);
+            } finally {
+                this.studioConfigSaving = false;
+            }
+        },
+        async syncManifestPrefer(prefer = 'json') {
+            if (!this.selectedSlice) return;
+            this.studioConfigSaving = true;
+            try {
+                const res = await fetch('{{ route('laraslice.wizard.sync_manifest') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ slice: this.selectedSlice.name, prefer }),
+                });
+                const data = await res.json();
+                this.studioConfigMessage = data.message || (data.success ? 'Synced' : 'Sync failed');
+                if (data.ui) this.selectedSlice.ui = data.ui;
+                if (data.navigation) this.selectedSlice.navigation = data.navigation;
+            } catch (e) {
+                this.studioConfigMessage = e.message || String(e);
+            } finally {
+                this.studioConfigSaving = false;
+            }
         },
         generateDomainSuite(domain, slicesList) {
             const domainName = (domain || this.domain || 'General').trim();
@@ -1966,6 +2041,9 @@ function larasliceWizard() {
                     sidebar_filters: this.uiSidebarFilters,
                     summary_cards: this.uiSummaryCards,
                     bulk_actions: this.uiBulkActions,
+                    views: this.uiViews || ['table'],
+                    default_view: this.uiDefaultView || 'table',
+                    inline_edit: this.uiInlineEdit || [],
                     row_actions: this.uiRowActions,
                 },
                 forms: {
@@ -4370,6 +4448,84 @@ function larasliceWizard() {
                             </template>
                             <button type="button" @click="uiFormSections.push({title: 'New Section', description: '', columns: 2, fields: []})"
                                 class="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary">+ Add Section Card</button>
+                        </div>
+                    </div>
+
+
+                    <!-- Slice Studio GitOps: persona roles, views, YAML+JSON sync -->
+                    <div class="rounded-2xl border border-emerald-500/30 bg-card p-5 shadow-sm space-y-4 mt-4" x-show="selectedSlice">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                    <span class="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-sm">⚙</span>
+                                    <span>Studio Config & GitOps</span>
+                                    <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">JSON + YAML</span>
+                                    <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">History</span>
+                                </h2>
+                                <p class="text-xs text-muted-foreground mt-0.5">Primary DX surface — persona nav, directory views, dashboard widgets. Saves <code class="font-mono bg-muted px-1 rounded">slice.json</code> + <code class="font-mono bg-muted px-1 rounded">slice.yaml</code> with version ledger; optional DB workflow sync.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Persona roles (navigation.roles)</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="role in ['admin','employee','client','manager','user']" :key="role">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer hover:border-primary">
+                                            <input type="checkbox" class="rounded" :value="role"
+                                                :checked="navRoles.includes(role)"
+                                                @change="navRoles = $event.target.checked ? [...new Set([...navRoles, role])] : navRoles.filter(r => r !== role)">
+                                            <span x-text="role"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <label class="flex items-center gap-2 text-xs mt-2">
+                                    <input type="checkbox" class="rounded" x-model="navVisible">
+                                    <span>Visible in sidebar</span>
+                                </label>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Directory views</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="v in ['table','board','calendar']" :key="v">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer">
+                                            <input type="checkbox" class="rounded"
+                                                :checked="uiViews.includes(v)"
+                                                @change="uiViews = $event.target.checked ? [...new Set([...uiViews, v])] : uiViews.filter(x => x !== v)">
+                                            <span x-text="v"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground block mt-2">Default view</label>
+                                <select x-model="uiDefaultView" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-xs">
+                                    <option value="table">table</option>
+                                    <option value="board">board</option>
+                                    <option value="calendar">calendar</option>
+                                </select>
+                                <label class="flex items-center gap-2 text-xs mt-2">
+                                    <input type="checkbox" class="rounded" :checked="uiInlineEdit.includes('status')"
+                                        @change="uiInlineEdit = $event.target.checked ? [...new Set([...uiInlineEdit, 'status'])] : uiInlineEdit.filter(x => x !== 'status')">
+                                    <span>Inline edit status (workflow)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
+                            <button type="button" @click="saveStudioConfig()" :disabled="studioConfigSaving"
+                                class="rounded-xl bg-primary text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm hover:opacity-90 disabled:opacity-50">
+                                <span x-text="studioConfigSaving ? 'Saving…' : 'Save config (JSON + YAML)'"></span>
+                            </button>
+                            <button type="button" @click="syncManifestPrefer('json')" :disabled="studioConfigSaving"
+                                class="rounded-xl border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">
+                                Sync → DB (prefer JSON)
+                            </button>
+                            <button type="button" @click="syncManifestPrefer('yaml')" :disabled="studioConfigSaving"
+                                class="rounded-xl border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">
+                                Sync from YAML
+                            </button>
+                            <span class="text-xs text-emerald-500" x-text="studioConfigMessage" x-show="studioConfigMessage"></span>
+                        </div>
+                        <div class="text-[11px] text-muted-foreground" x-show="selectedSlice?.version_history?.length">
+                            History entries: <span class="font-mono font-semibold text-foreground" x-text="selectedSlice?.version_history?.length || 0"></span>
+                            · Version <span class="font-mono" x-text="selectedSlice?.version || '1.0.0'"></span>
                         </div>
                     </div>
 
