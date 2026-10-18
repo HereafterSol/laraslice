@@ -1511,6 +1511,51 @@ BLADE;
             <span>Workflow & Audit Trail</span>
         </button>
         @endif
+
+        {{-- Aggregate related records (ERP Project hub parity) --}}
+        @php
+            \$relatedTabs = \$relatedTabs ?? [];
+            if (\$relatedTabs === [] && isset(\$record) && is_object(\$record)) {
+                try {
+                    \$_mf = __DIR__ . '/../../slice.json';
+                    if (is_file(\$_mf)) {
+                        \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
+                        foreach ((\$_m['ui']['show']['tabs'] ?? []) as \$_tab) {
+                            if ((\$_tab['type'] ?? '') === 'relation') {
+                                \$relatedTabs[] = \$_tab;
+                            }
+                        }
+                        if (\$relatedTabs === []) {
+                            foreach ((\$_m['models'][0]['relations'] ?? []) as \$_rel) {
+                                if ((\$_rel['type'] ?? '') === 'hasMany') {
+                                    \$relatedTabs[] = [
+                                        'handle' => \$_rel['name'] ?? '',
+                                        'label' => \\Illuminate\\Support\\Str::headline(\$_rel['name'] ?? 'Related'),
+                                        'type' => 'relation',
+                                        'relation' => \$_rel['name'] ?? '',
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                } catch (\\Throwable \$e) {
+                    \$relatedTabs = [];
+                }
+            }
+        @endphp
+        @foreach(\$relatedTabs as \$rtab)
+            @if(!empty(\$rtab['handle']))
+            <button
+                type="button"
+                @click="activeTab = '{{ \$rtab['handle'] }}'; window.history.replaceState(null, '', '?tab={{ \$rtab['handle'] }}')"
+                class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
+                :class="activeTab === '{{ \$rtab['handle'] }}' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            >
+                <x-lucide-layers class="size-4" />
+                <span>{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</span>
+            </button>
+            @endif
+        @endforeach
     </div>
 
     <!-- Tab 1: Overview & Parameters -->
@@ -1631,6 +1676,55 @@ BLADE;
             </div>
         </div>
     </div>
+
+    @foreach(\$relatedTabs ?? [] as \$rtab)
+        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? 'relation') === 'relation')
+        <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm font-bold text-foreground">{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</h3>
+            </div>
+            @php
+                \$relName = \$rtab['relation'] ?? \$rtab['handle'];
+                \$relRows = [];
+                try {
+                    if (isset(\$record) && method_exists(\$record, \$relName)) {
+                        \$relRows = \$record->{\$relName}()->limit(50)->get();
+                    } elseif (isset(\$record) && \$record->relationLoaded(\$relName)) {
+                        \$relRows = \$record->getRelation(\$relName);
+                    }
+                } catch (\\Throwable \$e) {
+                    \$relRows = [];
+                }
+            @endphp
+            @if(count(\$relRows) === 0)
+                <div class="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                    No related records yet.
+                </div>
+            @else
+                <div class="rounded-xl border border-border overflow-hidden bg-card">
+                    <table class="w-full text-xs">
+                        <thead class="bg-muted/40 border-b border-border">
+                            <tr>
+                                <th class="px-3 py-2 text-start font-semibold">ID</th>
+                                <th class="px-3 py-2 text-start font-semibold">Summary</th>
+                                <th class="px-3 py-2 text-start font-semibold">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border/50">
+                            @foreach(\$relRows as \$row)
+                            <tr class="hover:bg-muted/30">
+                                <td class="px-3 py-2 font-mono">{{ \$row->id ?? '—' }}</td>
+                                <td class="px-3 py-2 font-medium">{{ \$row->title ?? \$row->name ?? \$row->subject ?? ('#'.(\$row->id ?? '')) }}</td>
+                                <td class="px-3 py-2">{{ \$row->status ?? '—' }}</td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+        @endif
+    @endforeach
 
     @if(\$workflow)
     <!-- Tab 2: Workflow History & Decision Timeline -->

@@ -1352,6 +1352,7 @@ class WizardController extends Controller
             'slice' => 'required|string',
             'ui' => 'nullable|array',
             'navigation' => 'nullable|array',
+            'workflow' => 'nullable|array',
         ]);
 
         try {
@@ -1360,6 +1361,7 @@ class WizardController extends Controller
                 $validated['slice'],
                 $validated['ui'] ?? [],
                 $validated['navigation'] ?? [],
+                $request->has('workflow') ? ($validated['workflow'] ?? []) : null,
                 'Developer via Slice Studio'
             );
 

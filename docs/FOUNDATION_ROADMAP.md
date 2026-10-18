@@ -44,7 +44,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | B3 | `save-studio-config` + `sync-manifest` APIs | DONE | |
 | B4 | version_history on every studio save | DONE | |
 | B5 | Bulk / row action editors | DONE | basic toggles |
-| B6 | Workflow transition editor in Studio | NEXT | edit states/transitions in YAML UI |
+| B6 | Workflow transition editor in Studio | DONE | GitOps panel + saveStudioConfig workflow |
 | B7 | Domain group picker (Work/Finance/…) in Studio | DONE | navGroup select + save to YAML |
 | B8 | Slice Studio UX polish (density, empty states) | NEXT | |
 
@@ -63,7 +63,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | C7 | `--publish-ui` BlatUI stubs | DONE | |
 | C8 | Full calendar component (events drag) | LATER | |
 | C9 | Dashboard widgets from `ui.dashboard` | DONE | index KPI strip + Studio editor |
-| C10 | Show-page aggregate tabs from relations | NEXT | |
+| C10 | Show-page aggregate tabs from relations | DONE | hasMany tabs on generated show |
 
 ---
 
@@ -96,9 +96,10 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 2. **DONE:** Porting Studio Execute shows real slice write counts + per-slice errors.
 3. **DONE:** Domain group picker (Work/Finance/HR…) in Slice Studio.
 4. **DONE:** Dashboard widgets from `ui.dashboard` on generated index + Studio editor.
-5. **NEXT:** Local pilot re-apply + 3-persona checklist vs demo.
-6. **NEXT:** Workflow transition editor in Studio (B6).
-7. **NEXT:** Regression tests for workflow UI build + remap-nav.
+5. **DONE:** Workflow transition editor in Studio (B6).
+6. **DONE:** Show-page aggregate tabs from relations (C10).
+7. **NEXT:** Local pilot re-apply + 3-persona checklist vs demo (D2–D5).
+8. **NEXT:** Regression tests for workflow UI build + remap-nav (E2–E3).
 
 ---
 

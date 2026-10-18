@@ -1887,7 +1887,7 @@ PHP;
      * @param  array<string, mixed>  $navigation
      * @return array<string, mixed>
      */
-    public function saveStudioConfig(string $sliceName, array $ui = [], array $navigation = [], string $author = 'Developer via Slice Studio'): array
+    public function saveStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null, string $author = 'Developer via Slice Studio'): array
     {
         $slice = $this->findSlice($sliceName);
         $manifestFile = $slice->path.'/slice.json';
@@ -1907,6 +1907,18 @@ PHP;
         if ($navigation !== []) {
             $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $navigation);
         }
+        if ($workflow !== null) {
+            if ($workflow === [] || (isset($workflow['enabled']) && $workflow['enabled'] === false && empty($workflow['states']))) {
+                // explicit clear
+                $manifest['workflow'] = false;
+            } else {
+                $manifest['workflow'] = array_merge(
+                    is_array($manifest['workflow'] ?? null) ? $manifest['workflow'] : [],
+                    $workflow
+                );
+                $manifest['workflow']['enabled'] = $manifest['workflow']['enabled'] ?? true;
+            }
+        }
 
         $manifest['version'] = $newVersion;
         if (! isset($manifest['version_history']) || ! is_array($manifest['version_history'])) {
@@ -1918,6 +1930,7 @@ PHP;
             'description' => 'Slice Studio config: '.implode(', ', array_filter([
                 $ui !== [] ? 'ui' : null,
                 $navigation !== [] ? 'navigation' : null,
+                $workflow !== null ? 'workflow' : null,
             ])),
             'author' => $author,
             'date' => date('Y-m-d H:i:s'),
@@ -1945,6 +1958,7 @@ PHP;
             'version' => $newVersion,
             'ui' => $manifest['ui'] ?? [],
             'navigation' => $manifest['navigation'] ?? [],
+            'workflow' => $manifest['workflow'] ?? null,
             'version_history' => $manifest['version_history'],
             'message' => "Studio config saved for [{$sliceName}] v{$newVersion} (JSON + YAML).",
         ];

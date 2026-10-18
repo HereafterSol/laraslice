@@ -1626,6 +1626,18 @@ function larasliceWizard() {
             this.uiDefaultView = slice.ui?.directory?.default_view || 'table';
             this.uiInlineEdit = Array.isArray(slice.ui?.directory?.inline_edit) ? [...slice.ui.directory.inline_edit] : [];
             this.uiDashboardWidgets = Array.isArray(slice.ui?.dashboard?.widgets) ? [...slice.ui.dashboard.widgets] : [];
+            // Hydrate workflow editor from manifest (Slice Studio GitOps)
+            if (slice.workflow && typeof slice.workflow === 'object') {
+                this.workflowConfig = JSON.parse(JSON.stringify(slice.workflow));
+                if (!Array.isArray(this.workflowConfig.states)) this.workflowConfig.states = [];
+                if (!Array.isArray(this.workflowConfig.transitions)) this.workflowConfig.transitions = [];
+                this.includeWorkflow = this.workflowConfig.enabled !== false;
+            } else if (slice.workflow === true) {
+                this.initDefaultWorkflow();
+                this.includeWorkflow = true;
+            } else {
+                this.workflowConfig = this.workflowConfig || null;
+            }
             const bas = slice.ui?.directory?.bulk_actions;
             if (Array.isArray(bas) && bas.length) {
                 this.uiBulkActions = bas.map(b => typeof b === 'string' ? b : (b.handle || b.slug || 'action'));
@@ -1804,6 +1816,15 @@ function larasliceWizard() {
                     order: this.navConfig?.order || 50,
                     hidden: !!this.navConfig?.hidden,
                 };
+                const workflowPayload = this.includeWorkflow && this.workflowConfig
+                    ? {
+                        enabled: true,
+                        state_field: this.workflowConfig.state_field || this.workflowConfig.state_column || 'status',
+                        initial_state: this.workflowConfig.initial_state || (this.workflowConfig.states?.[0]?.slug || 'draft'),
+                        states: this.workflowConfig.states || [],
+                        transitions: this.workflowConfig.transitions || [],
+                    }
+                    : (this.includeWorkflow === false ? { enabled: false, states: [], transitions: [] } : null);
                 const res = await fetch('{{ route('laraslice.wizard.save_studio_config') }}', {
                     method: 'POST',
                     headers: {
@@ -1811,7 +1832,12 @@ function larasliceWizard() {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify({ slice: this.selectedSlice.name, ui, navigation }),
+                    body: JSON.stringify({
+                        slice: this.selectedSlice.name,
+                        ui,
+                        navigation,
+                        ...(workflowPayload !== null ? { workflow: workflowPayload } : {}),
+                    }),
                 });
                 const data = await res.json();
                 if (!res.ok || data.success === false) throw new Error(data.message || 'Save failed');
@@ -1820,6 +1846,7 @@ function larasliceWizard() {
                 if (data.version_history) this.selectedSlice.version_history = data.version_history;
                 if (data.ui) this.selectedSlice.ui = data.ui;
                 if (data.navigation) this.selectedSlice.navigation = data.navigation;
+                if (data.workflow !== undefined) this.selectedSlice.workflow = data.workflow;
                 if (this.navGroup) {
                     this.selectedSlice.navigation = this.selectedSlice.navigation || {};
                     this.selectedSlice.navigation.group = this.navGroup;
@@ -4583,6 +4610,45 @@ function larasliceWizard() {
                                 </template>
                                 <button type="button" @click="uiDashboardWidgets.push({ type: 'stat', handle: 'total', label: 'Total', query: 'count' })"
                                     class="rounded-lg border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">+ Widget</button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 pt-2 border-t border-border" x-show="selectedSlice">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Workflow (states & transitions)</label>
+                                <label class="flex items-center gap-1.5 text-xs">
+                                    <input type="checkbox" class="rounded" x-model="includeWorkflow" @change="if (includeWorkflow && !workflowConfig) initDefaultWorkflow()">
+                                    <span>Enabled</span>
+                                </label>
+                            </div>
+                            <div x-show="includeWorkflow" class="space-y-2">
+                                <div class="flex flex-wrap gap-1.5">
+                                    <template x-for="(st, sIdx) in (workflowConfig?.states || [])" :key="sIdx">
+                                        <span class="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-semibold">
+                                            <span class="font-mono" x-text="st.slug || st.name"></span>
+                                            <button type="button" class="text-rose-500" @click="workflowConfig.states.splice(sIdx, 1)">✕</button>
+                                        </span>
+                                    </template>
+                                    <button type="button" @click="if (!workflowConfig) initDefaultWorkflow(); workflowConfig.states.push({ slug: 'state_' + (workflowConfig.states.length+1), label: 'New state', color: 'slate' })"
+                                        class="rounded-lg border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">+ State</button>
+                                </div>
+                                <div class="space-y-1">
+                                    <p class="text-[10px] text-muted-foreground font-semibold uppercase">Transitions</p>
+                                    <template x-for="(tr, tIdx) in (workflowConfig?.transitions || [])" :key="tIdx">
+                                        <div class="flex flex-wrap items-center gap-1 text-[11px]">
+                                            <input type="text" x-model="tr.slug" class="h-7 w-24 rounded border border-border bg-background px-1 font-mono" placeholder="slug">
+                                            <input type="text" x-model="tr.name" class="h-7 w-28 rounded border border-border bg-background px-1" placeholder="Label">
+                                            <span class="text-muted-foreground">→</span>
+                                            <input type="text" x-model="tr.to" class="h-7 w-24 rounded border border-border bg-background px-1 font-mono" placeholder="to state"
+                                                :value="typeof tr.to === 'string' ? tr.to : (tr.to_state || '')"
+                                                @input="tr.to = $event.target.value; tr.to_state = $event.target.value">
+                                            <button type="button" class="text-rose-500" @click="workflowConfig.transitions.splice(tIdx, 1)">✕</button>
+                                        </div>
+                                    </template>
+                                    <button type="button" @click="if (!workflowConfig) initDefaultWorkflow(); workflowConfig.transitions = workflowConfig.transitions || []; workflowConfig.transitions.push({ slug: 'go', name: 'Go', from: ['draft'], to: 'pending' })"
+                                        class="rounded-lg border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">+ Transition</button>
+                                </div>
+                                <p class="text-[10px] text-muted-foreground">Saved into <code class="font-mono">slice.yaml</code> workflow + synced to DB on Save.</p>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
