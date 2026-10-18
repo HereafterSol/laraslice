@@ -3199,159 +3199,309 @@ PHP;
             return null;
         };
 
-        // 1. Project Delivery & Execution
+        // 1. Project Delivery & Agile Execution
         $workSteps = [];
         if ($c = $findCtrl(['ProjectController', 'ProjectsController'])) {
-            $workSteps[] = ['step' => 'Project Intake & Charter Setup', 'controller' => $c, 'slice' => 'Projects'];
-        }
-        if ($c = $findCtrl(['ProjectMilestoneController', 'MilestoneController'])) {
-            $workSteps[] = ['step' => 'Milestones & Roadmapping', 'controller' => $c, 'slice' => 'Projects'];
+            $workSteps[] = [
+                'title' => 'Project Charter & Milestone Roadmapping',
+                'step' => 'Project Charter & Milestone Roadmapping',
+                'controller' => $c,
+                'slice' => 'Projects',
+                'persona' => 'Project Manager',
+                'legacy_behavior' => '64KB god-controller manages milestones, members, files, and ratings in one coupled file.',
+                'vsa_improvement' => 'Isolated Project Aggregate Root governing child milestones and members with strict invariants.',
+            ];
         }
         if ($c = $findCtrl(['TaskController', 'TasksController'])) {
-            $workSteps[] = ['step' => 'Task Assignment & Scheduling', 'controller' => $c, 'slice' => 'Tasks'];
-        }
-        if ($c = $findCtrl(['TaskBoardController', 'TaskCalendarController'])) {
-            $workSteps[] = ['step' => 'Kanban Board & Sprint Tracking', 'controller' => $c, 'slice' => 'Tasks'];
+            $workSteps[] = [
+                'title' => 'Agile Task Decomposition & Scheduling',
+                'step' => 'Agile Task Decomposition & Scheduling',
+                'controller' => $c,
+                'slice' => 'Tasks',
+                'persona' => 'Project Manager',
+                'legacy_behavior' => 'Tasks tightly coupled to project queries with duplicated permission checks in every method.',
+                'vsa_improvement' => 'Single-responsibility Task slice with subtasks, comments, and task users encapsulated.',
+            ];
         }
         if ($c = $findCtrl(['TimelogController', 'ProjectTimelogBreakController'])) {
-            $workSteps[] = ['step' => 'Billable Time Logging & Timesheets', 'controller' => $c, 'slice' => 'TimeLogs'];
+            $workSteps[] = [
+                'title' => 'Live Stopwatch & Billable Time Logging',
+                'step' => 'Live Stopwatch & Billable Time Logging',
+                'controller' => $c,
+                'slice' => 'TimeLogs',
+                'persona' => 'Team Member',
+                'legacy_behavior' => 'Timer start mutates tasks inline and renders 2 server-side Blade fragments for jQuery DOM injection.',
+                'vsa_improvement' => 'Alpine.js reactive stopwatch syncing clean JSON state with asynchronous activity logging.',
+            ];
         }
         if ($c = $findCtrl(['ContractController', 'ProposalController'])) {
-            $workSteps[] = ['step' => 'Client Legal Sign-off & Delivery', 'controller' => $c, 'slice' => 'Contracts'];
+            $workSteps[] = [
+                'title' => 'Deliverable Verification & Sign-Off',
+                'step' => 'Deliverable Verification & Sign-Off',
+                'controller' => $c,
+                'slice' => 'Contracts',
+                'persona' => 'Project Manager & Client',
+                'legacy_behavior' => 'Manual status changes without domain events or client acceptance audit logs.',
+                'vsa_improvement' => 'Domain event ContractExecuted triggers automated billing and project status transitions.',
+            ];
         }
         if (! empty($workSteps)) {
             $journeys['project_delivery'] = [
-                'icon' => '💼',
-                'name' => 'Project Delivery & Execution',
-                'persona' => 'Project Manager / Team',
-                'description' => 'Complete operational flow: project charters, milestone roadmaps, task boards, and time tracking.',
+                'icon' => '🚀',
+                'name' => 'Project Delivery & Agile Execution',
+                'title' => 'Project Delivery & Agile Execution',
+                'persona' => 'Project Manager & Team',
+                'description' => 'Complete delivery lifecycle: charter creation, milestone roadmaps, agile task breakdown, real-time stopwatch timelogging, and deliverable sign-offs.',
+                'legacy_friction' => 'ProjectController is a 64KB god-object coupled with 12 distinct DataTables; timer start creates tasks on-the-fly and performs 3 synchronous DB log writes.',
+                'modernization_gain' => 'Aggregate Root architecture where Project governs Milestones and Tasks; dedicated StartTimerAction with asynchronous activity logging and reactive Alpine.js timer widget.',
                 'steps' => $workSteps,
             ];
         }
 
-        // 2. Sales & Client Acquisition
+        // 2. Sales & Commercial Pipeline
         $salesSteps = [];
         if ($c = $findCtrl(['LeadController', 'LeadsController'])) {
-            $salesSteps[] = ['step' => 'Inbound Lead Qualification & Intake', 'controller' => $c, 'slice' => 'Leads'];
+            $salesSteps[] = [
+                'title' => 'Inbound Lead Qualification & Intake',
+                'step' => 'Inbound Lead Qualification & Intake',
+                'controller' => $c,
+                'slice' => 'Leads',
+                'persona' => 'Sales Representative',
+                'legacy_behavior' => 'Lead forms mixed with GDPR consents in unstructured controllers.',
+                'vsa_improvement' => 'Dedicated Lead Intake action with clean BlatUI form components and validated sources.',
+            ];
         }
         if ($c = $findCtrl(['DealController', 'DealsController'])) {
-            $salesSteps[] = ['step' => 'Opportunity Pipeline & Stage Progression', 'controller' => $c, 'slice' => 'Deals'];
+            $salesSteps[] = [
+                'title' => 'Deal Pipeline & Kanban Progression',
+                'step' => 'Deal Pipeline & Kanban Progression',
+                'controller' => $c,
+                'slice' => 'Deals',
+                'persona' => 'Sales Executive',
+                'legacy_behavior' => 'Deal::all() memory-exhausting collection filter used to count converted clients.',
+                'vsa_improvement' => 'High-performance SQL indexed aggregation and reactive Alpine.js pipeline drag-and-drop.',
+            ];
         }
         if ($c = $findCtrl(['ProposalController', 'ProposalTemplateController'])) {
-            $salesSteps[] = ['step' => 'Sales Proposal & Scope Negotiation', 'controller' => $c, 'slice' => 'Contracts'];
+            $salesSteps[] = [
+                'title' => 'Proposal Composition & Dynamic Quotation',
+                'step' => 'Proposal Composition & Dynamic Quotation',
+                'controller' => $c,
+                'slice' => 'Proposals',
+                'persona' => 'Sales Executive',
+                'legacy_behavior' => 'Proposals duplicate taxes and item lists procedurally without shared pricing engine.',
+                'vsa_improvement' => 'Shared pricing and tax calculation service ensuring 100% currency accuracy.',
+            ];
         }
-        if ($c = $findCtrl(['ClientController', 'ClientsController'])) {
-            $salesSteps[] = ['step' => 'Client Account Onboarding', 'controller' => $c, 'slice' => 'Clients'];
+        if ($c = $findCtrl(['PublicUrlController', 'ContractSignController'])) {
+            $salesSteps[] = [
+                'title' => 'Public E-Signature & Client Provisioning',
+                'step' => 'Public E-Signature & Client Provisioning',
+                'controller' => $c,
+                'slice' => 'Contracts',
+                'persona' => 'Client / Prospect',
+                'legacy_behavior' => 'Controller procedurally copies files on disk and instantiates invoices line-by-line.',
+                'vsa_improvement' => 'Event-driven: ContractSigned event triggers asynchronous invoice generation and client account setup.',
+            ];
         }
         if (! empty($salesSteps)) {
             $journeys['sales_acquisition'] = [
                 'icon' => '🎯',
-                'name' => 'Sales & Client Acquisition',
-                'persona' => 'Sales Executive',
-                'description' => 'Pipeline from lead capture and deal negotiation to customer account activation.',
+                'name' => 'Lead-to-Contract & Proposal Pipeline',
+                'title' => 'Lead-to-Contract & Proposal Pipeline',
+                'persona' => 'Sales Executive & Client',
+                'description' => 'Commercial pipeline: lead capture, deal qualification, dynamic proposal quotation, public digital e-signing, and automated client onboarding.',
+                'legacy_friction' => 'DealController::index loads Deal::all() into PHP memory; PublicUrlController procedurally copies files and duplicates items line-by-line upon signature.',
+                'modernization_gain' => 'Event-driven workflow with ProposalAccepted and ContractSigned events triggering asynchronous invoice creation and client portal activation.',
                 'steps' => $salesSteps,
             ];
         }
 
-        // 3. Financial Billing & Revenue
+        // 3. Quote-to-Cash & Revenue Realization
         $financeSteps = [];
         if ($c = $findCtrl(['EstimateController', 'EstimatesController'])) {
-            $financeSteps[] = ['step' => 'Cost Estimation & Quotation', 'controller' => $c, 'slice' => 'Estimates'];
+            $financeSteps[] = [
+                'title' => 'Cost Estimation & Commercial Quotation',
+                'step' => 'Cost Estimation & Commercial Quotation',
+                'controller' => $c,
+                'slice' => 'Estimates',
+                'persona' => 'Financial Controller',
+                'legacy_behavior' => 'Estimates duplicate invoice item structures without aggregate relationship.',
+                'vsa_improvement' => 'Canonical Quote Aggregate with one-click conversion to Tax Invoices.',
+            ];
         }
         if ($c = $findCtrl(['InvoiceController', 'InvoicesController'])) {
-            $financeSteps[] = ['step' => 'Tax Invoice Generation & Dispatch', 'controller' => $c, 'slice' => 'Invoices'];
-        }
-        if ($c = $findCtrl(['RecurringInvoiceController'])) {
-            $financeSteps[] = ['step' => 'Automated Subscription Billing', 'controller' => $c, 'slice' => 'Invoices'];
+            $financeSteps[] = [
+                'title' => 'Tax Invoice Generation & Dispatch',
+                'step' => 'Tax Invoice Generation & Dispatch',
+                'controller' => $c,
+                'slice' => 'Invoices',
+                'persona' => 'Accountant',
+                'legacy_behavior' => 'InvoiceController is 53KB handling PDF rendering, email dispatch, and payment links inline.',
+                'vsa_improvement' => 'Isolated Invoice Aggregate Root with queued PDF generation and event-driven notifications.',
+            ];
         }
         if ($c = $findCtrl(['PaymentController', 'PaymentsController'])) {
-            $financeSteps[] = ['step' => 'Payment Gateway Settlement & Ledger', 'controller' => $c, 'slice' => 'Payments'];
+            $financeSteps[] = [
+                'title' => 'Payment Settlement & Automated Ledger',
+                'step' => 'Payment Settlement & Automated Ledger',
+                'controller' => $c,
+                'slice' => 'Payments',
+                'persona' => 'Accountant / Gateway',
+                'legacy_behavior' => 'PaymentController::changeStatus performs raw mass updates without updating invoice totals or verifying settlement invariants.',
+                'vsa_improvement' => 'Atomic database transactions with finite state machines (Draft -> Sent -> PartiallyPaid -> Paid) and automated bank ledger reconciliation.',
+            ];
         }
-        if ($c = $findCtrl(['ExpenseController', 'ExpensesController'])) {
-            $financeSteps[] = ['step' => 'Operational Expense Auditing', 'controller' => $c, 'slice' => 'Expenses'];
+        if ($c = $findCtrl(['CreditNoteController'])) {
+            $financeSteps[] = [
+                'title' => 'Credit Notes & Adjustment Reconciliation',
+                'step' => 'Credit Notes & Adjustment Reconciliation',
+                'controller' => $c,
+                'slice' => 'CreditNotes',
+                'persona' => 'Accountant',
+                'legacy_behavior' => 'Credit adjustments require manual cross-controller ledger edits.',
+                'vsa_improvement' => 'Seamless credit allocation linked directly to customer balance sheet.',
+            ];
         }
         if (! empty($financeSteps)) {
             $journeys['finance_billing'] = [
                 'icon' => '💳',
-                'name' => 'Quote-to-Cash & Revenue Cycle',
-                'persona' => 'Finance Director',
-                'description' => 'Commercial billing workflow from quotation to tax invoicing, payment reconciliation, and ledger recording.',
+                'name' => 'Quote-to-Cash & Revenue Realization',
+                'title' => 'Quote-to-Cash & Revenue Realization',
+                'persona' => 'Financial Controller & Accountant',
+                'description' => 'Complete billing lifecycle: cost quotation, tax invoicing, automated subscription billing, payment gateway callbacks, and multi-currency bank reconciliation.',
+                'legacy_friction' => 'PaymentController::changeStatus performs raw mass updates without updating invoice totals or verifying settlement invariants; invoice creation lacks transaction safety.',
+                'modernization_gain' => 'Strict transactional boundaries with finite state machines (Draft -> Sent -> PartiallyPaid -> Paid) and automated ledger reconciliation.',
                 'steps' => $financeSteps,
             ];
         }
 
-        // 4. Human Capital & People Operations
+        // 4. Human Capital & Workforce Lifecycle
         $hrSteps = [];
         if ($c = $findCtrl(['EmployeeController', 'EmployeesController'])) {
-            $hrSteps[] = ['step' => 'Employee Profile & Compliance Intake', 'controller' => $c, 'slice' => 'Employees'];
-        }
-        if ($c = $findCtrl(['EmployeeShiftController', 'ShiftController'])) {
-            $hrSteps[] = ['step' => 'Work Shift & Roster Allocation', 'controller' => $c, 'slice' => 'Shifts'];
+            $hrSteps[] = [
+                'title' => 'Employee Profile & Onboarding Dossier',
+                'step' => 'Employee Profile & Onboarding Dossier',
+                'controller' => $c,
+                'slice' => 'Employees',
+                'persona' => 'HR Manager',
+                'legacy_behavior' => 'Employee profile spread across emergency contacts, documents, visas, and skills in separate controllers.',
+                'vsa_improvement' => 'Unified Employee Aggregate Root with multi-tab BlatUI detail view.',
+            ];
         }
         if ($c = $findCtrl(['AttendanceController', 'AttendancesController'])) {
-            $hrSteps[] = ['step' => 'Daily Clock-in & Attendance Auditing', 'controller' => $c, 'slice' => 'Attendances'];
+            $hrSteps[] = [
+                'title' => 'Shift Verification & Geofenced Clock-In',
+                'step' => 'Shift Verification & Geofenced Clock-In',
+                'controller' => $c,
+                'slice' => 'Attendances',
+                'persona' => 'Employee',
+                'legacy_behavior' => 'EmployeeDashboard runs procedural date math and UTC loops on every request; 1,300+ line controller with repeated permission checks.',
+                'vsa_improvement' => 'Dedicated Attendance Domain Service with IP/geofence validation and lightweight Alpine clock widget.',
+            ];
         }
         if ($c = $findCtrl(['LeaveController', 'LeavesController'])) {
-            $hrSteps[] = ['step' => 'Leave Entitlement & Approval Workflow', 'controller' => $c, 'slice' => 'Leaves'];
-        }
-        if ($c = $findCtrl(['AppreciationController', 'AwardController'])) {
-            $hrSteps[] = ['step' => 'Employee Recognition & Awards', 'controller' => $c, 'slice' => 'Appreciations'];
+            $hrSteps[] = [
+                'title' => 'Leave Application & Approval Chain',
+                'step' => 'Leave Application & Approval Chain',
+                'controller' => $c,
+                'slice' => 'Leaves',
+                'persona' => 'Employee & HR Manager',
+                'legacy_behavior' => 'Magic status strings without explicit state machine or approval hierarchy audit trail.',
+                'vsa_improvement' => 'Strict Leave FSM (Draft -> Submitted -> ManagerApproved -> HRFinalized) with quota deduction.',
+            ];
         }
         if (! empty($hrSteps)) {
             $journeys['people_operations'] = [
                 'icon' => '👥',
-                'name' => 'Human Capital & People Operations',
-                'persona' => 'People Operations (HR)',
-                'description' => 'Employee lifecycle management: recruitment dossier, shifts, biometric attendance, leaves, and recognition.',
+                'name' => 'Human Capital & Workforce Lifecycle',
+                'title' => 'Human Capital & Workforce Lifecycle',
+                'persona' => 'Employee & People Operations (HR)',
+                'description' => 'Workforce management: employee profile dossier, shift rostering, geolocation clock-in/out, leave entitlement FSM, and peer appreciation.',
+                'legacy_friction' => 'EmployeeDashboard executes complex procedural date/timezone math on every single request; AttendanceController has 1,300+ lines of duplicated permission checks.',
+                'modernization_gain' => 'Clean Attendance Domain Service with geofencing validation and Leave state machine with multi-tier approval chains.',
                 'steps' => $hrSteps,
             ];
         }
 
-        // 5. Customer Service & Issue Escalation
+        // 5. Dedicated Client Collaboration Portal
+        $clientSteps = [];
+        if ($c = $findCtrl(['ClientController', 'ClientsController', 'PublicUrlController'])) {
+            $clientSteps[] = [
+                'title' => 'Secure Portal Access & Project Milestones',
+                'step' => 'Secure Portal Access & Project Milestones',
+                'controller' => $c,
+                'slice' => 'ClientPortal',
+                'persona' => 'Client',
+                'legacy_behavior' => 'Clients share the /account route prefix with employees; UI relies on fragile @if(user_roles()) Blade conditionals.',
+                'vsa_improvement' => 'Dedicated /portal slice with tailored client-facing layout and zero employee ERP overhead.',
+            ];
+            $clientSteps[] = [
+                'title' => 'Contract & Estimate Digital E-Signing',
+                'step' => 'Contract & Estimate Digital E-Signing',
+                'controller' => $c,
+                'slice' => 'Contracts',
+                'persona' => 'Client',
+                'legacy_behavior' => 'Public URLs handle base64 image decoding directly in public HTTP controller.',
+                'vsa_improvement' => 'Secure tokenized e-signature service with cryptographically verified audit certificates.',
+            ];
+            $clientSteps[] = [
+                'title' => 'Online Invoice Payment & Receipt Download',
+                'step' => 'Online Invoice Payment & Receipt Download',
+                'controller' => $c,
+                'slice' => 'Invoices',
+                'persona' => 'Client',
+                'legacy_behavior' => 'Redirects through heavy administrative layouts with suppressed navigation bars.',
+                'vsa_improvement' => 'Clean checkout experience with instant PDF receipt download and payment confirmations.',
+            ];
+        }
+        if (! empty($clientSteps)) {
+            $journeys['client_portal'] = [
+                'icon' => '🤝',
+                'name' => 'Dedicated Client Collaboration Portal',
+                'title' => 'Dedicated Client Collaboration Portal',
+                'persona' => 'Client & External Partner',
+                'description' => 'Self-service client experience: project milestone tracking, interactive deliverable sign-offs, digital contract signing, one-click invoice payment, and ticket support.',
+                'legacy_friction' => 'Clients enter through the same monolithic /account route prefix as admins; layouts rely on fragile role conditionals with risk of internal rate leaks.',
+                'modernization_gain' => 'Completely isolated Client Portal domain slice (/portal) with dedicated BlatUI customer views, tokenized sign-offs, and zero employee ERP overhead.',
+                'steps' => $clientSteps,
+            ];
+        }
+
+        // 6. Customer Support & Issue Escalation
         $supportSteps = [];
         if ($c = $findCtrl(['TicketController', 'TicketsController'])) {
-            $supportSteps[] = ['step' => 'Ticket Intake & Priority Triage', 'controller' => $c, 'slice' => 'Tickets'];
+            $supportSteps[] = [
+                'title' => 'Ticket Intake & Priority SLA Triage',
+                'step' => 'Ticket Intake & Priority SLA Triage',
+                'controller' => $c,
+                'slice' => 'Tickets',
+                'persona' => 'Support Agent',
+                'legacy_behavior' => 'Ticket queries mixed with global dashboard statistics causing slow query execution.',
+                'vsa_improvement' => 'Dedicated ServiceDesk slice with automated SLA timer tracking and priority queues.',
+            ];
         }
         if ($c = $findCtrl(['TicketReplyController', 'TicketCustomFormController'])) {
-            $supportSteps[] = ['step' => 'Agent Communication & Resolution', 'controller' => $c, 'slice' => 'Tickets'];
-        }
-        if ($c = $findCtrl(['NoticeController', 'NoticesController'])) {
-            $supportSteps[] = ['step' => 'Internal Announcements & Bulletins', 'controller' => $c, 'slice' => 'Notices'];
-        }
-        if ($c = $findCtrl(['EventController', 'EventsController'])) {
-            $supportSteps[] = ['step' => 'Company Events & Schedule Coordination', 'controller' => $c, 'slice' => 'Events'];
+            $supportSteps[] = [
+                'title' => 'Threaded Correspondence & Resolution',
+                'step' => 'Threaded Correspondence & Resolution',
+                'controller' => $c,
+                'slice' => 'Tickets',
+                'persona' => 'Support Agent & Client',
+                'legacy_behavior' => 'Replies submitted via legacy AJAX modal forms with full HTML page re-renders.',
+                'vsa_improvement' => 'Reactive Alpine chat thread with real-time response previews and file attachments.',
+            ];
         }
         if (! empty($supportSteps)) {
             $journeys['service_desk'] = [
                 'icon' => '🎫',
                 'name' => 'Customer Support & Incident Escalation',
-                'persona' => 'Support Agent / Client',
-                'description' => 'Multi-channel support desk: ticketing SLAs, client correspondence, internal notices, and calendar events.',
+                'title' => 'Customer Support & Incident Escalation',
+                'persona' => 'Support Agent & Client',
+                'description' => 'Multi-channel support lifecycle: ticket intake via forms/email, SLA priority triage, agent correspondence, and knowledge base resolution.',
+                'legacy_friction' => 'Ticket handling coupled with general administrative dashboard widgets and lack of clear SLA escalation events.',
+                'modernization_gain' => 'Dedicated ServiceDesk slice with automated SLA timer triggers and streamlined customer discussion threads.',
                 'steps' => $supportSteps,
-            ];
-        }
-
-        // 6. Enterprise Governance & Administration
-        $adminSteps = [];
-        if ($c = $findCtrl(['RolePermissionController', 'UserPermissionController'])) {
-            $adminSteps[] = ['step' => 'RBAC Matrix & Security Boundaries', 'controller' => $c, 'slice' => 'Settings'];
-        }
-        if ($c = $findCtrl(['SettingsController', 'CompanyController'])) {
-            $adminSteps[] = ['step' => 'Enterprise Multi-tenant Configuration', 'controller' => $c, 'slice' => 'Settings'];
-        }
-        if ($c = $findCtrl(['SmtpSettingController', 'SlackSettingController', 'PusherSettingsController'])) {
-            $adminSteps[] = ['step' => 'Notification Gateways & Integrations', 'controller' => $c, 'slice' => 'Settings'];
-        }
-        if ($c = $findCtrl(['SecuritySettingController', 'TwoFASettingController'])) {
-            $adminSteps[] = ['step' => 'Audit Trails & Authentication Policy', 'controller' => $c, 'slice' => 'Settings'];
-        }
-        if (! empty($adminSteps)) {
-            $journeys['system_administration'] = [
-                'icon' => '⚙️',
-                'name' => 'Enterprise System Administration',
-                'persona' => 'System Administrator',
-                'description' => 'Central control hub: role permissions, security enforcement, communication gateways, and multi-tenancy.',
-                'steps' => $adminSteps,
             ];
         }
 

@@ -166,26 +166,57 @@
         </div>
 
         <!-- Tab: User Journeys -->
-        <div x-show="activeTab === 'journeys'" class="space-y-3">
+        <div x-show="activeTab === 'journeys'" class="space-y-4">
             <div x-show="!planData" class="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                 Click <strong>🔍 Analyze</strong> to detect user journeys from the source system.
             </div>
+            <div x-show="planData && (!planData.journeys || Object.keys(planData.journeys).length === 0)" class="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-600 dark:text-amber-400">
+                <p class="font-bold mb-1">No user journeys detected</p>
+                <p>Run <strong>🔍 Analyze</strong> with the live source connection to introspect end-to-end user workflows.</p>
+            </div>
             <template x-for="(journey, key) in (planData?.journeys || {})" :key="key">
-                <div class="rounded-xl border border-border bg-card p-4">
+                <div class="rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 shadow-xs">
                     <div class="flex items-center gap-2 mb-2 flex-wrap">
-                        <span class="text-lg" x-text="journey.icon || '🧭'"></span>
+                        <span class="text-xl" x-text="journey.icon || '🧭'"></span>
                         <h3 class="font-bold text-sm md:text-base text-foreground" x-text="journey.name || journey.title"></h3>
                         <span class="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-400" x-text="journey.persona"></span>
                     </div>
                     <p class="text-xs text-muted-foreground mb-3" x-text="journey.description"></p>
-                    <div class="space-y-1.5">
+
+                    <!-- Real Architectural Contrast: Legacy Bottleneck vs VSA Modernization -->
+                    <div x-show="journey.legacy_friction || journey.modernization_gain" class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 text-[11px]">
+                        <div x-show="journey.legacy_friction" class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-amber-600 dark:text-amber-400">
+                            <span class="font-bold block mb-0.5">⚠️ Legacy Monolith Bottleneck:</span>
+                            <span x-text="journey.legacy_friction"></span>
+                        </div>
+                        <div x-show="journey.modernization_gain" class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2 text-emerald-600 dark:text-emerald-400">
+                            <span class="font-bold block mb-0.5">✨ LaraSlice VSA Real Improvement:</span>
+                            <span x-text="journey.modernization_gain"></span>
+                        </div>
+                    </div>
+
+                    <!-- Steps Timeline -->
+                    <div class="space-y-2">
                         <template x-for="(step, sIdx) in (journey.steps || [])" :key="sIdx">
-                            <div class="flex items-start gap-2 text-xs">
-                                <span class="shrink-0 size-5 rounded-full bg-muted text-muted-foreground font-bold text-[10px] flex items-center justify-center" x-text="sIdx + 1"></span>
-                                <div class="min-w-0">
-                                    <span class="font-semibold text-foreground" x-text="step.step || step.label || (typeof step === 'string' ? step : JSON.stringify(step))"></span>
-                                    <span x-show="step.controller" class="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" x-text="step.controller"></span>
-                                    <span x-show="step.slice" class="ml-1 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary" x-text="step.slice"></span>
+                            <div class="rounded-lg border border-border/40 bg-muted/20 p-2.5 text-xs">
+                                <div class="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="shrink-0 size-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center" x-text="sIdx + 1"></span>
+                                        <span class="font-semibold text-foreground truncate" x-text="step.title || step.step || step.label || (typeof step === 'string' ? step : JSON.stringify(step))"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        <span x-show="step.persona" class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-medium text-indigo-400" x-text="step.persona"></span>
+                                        <span x-show="step.slice" class="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary font-medium" x-text="step.slice"></span>
+                                        <span x-show="step.controller" class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" x-text="step.controller"></span>
+                                    </div>
+                                </div>
+                                <div x-show="step.legacy_behavior || step.vsa_improvement" class="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-1.5 text-[10px] pl-7">
+                                    <div x-show="step.legacy_behavior" class="text-muted-foreground">
+                                        <strong class="text-amber-600 dark:text-amber-400">Legacy:</strong> <span x-text="step.legacy_behavior"></span>
+                                    </div>
+                                    <div x-show="step.vsa_improvement" class="text-muted-foreground">
+                                        <strong class="text-emerald-600 dark:text-emerald-400">VSA Gain:</strong> <span x-text="step.vsa_improvement"></span>
+                                    </div>
                                 </div>
                             </div>
                         </template>
