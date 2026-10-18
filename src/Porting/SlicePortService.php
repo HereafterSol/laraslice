@@ -3175,92 +3175,183 @@ PHP;
     public function analyzeUserJourneys(string $sourcePath): array
     {
         $journeys = [];
+        $controllerDir = $sourcePath.'/app/Http/Controllers';
 
-        // 1. Onboarding journey - look for Wizard controllers
-        $wizardDir = $sourcePath.'/app/Http/Controllers/Wizard';
-        if (is_dir($wizardDir)) {
-            $steps = [];
-            foreach (glob($wizardDir.'/*.php') as $file) {
-                $base = basename($file, '.php');
-                $steps[] = [
-                    'step' => \Illuminate\Support\Str::headline($base),
-                    'controller' => $base,
-                ];
-            }
-            if (! empty($steps)) {
-                $journeys['onboarding'] = [
-                    'name' => 'New User Onboarding',
-                    'persona' => 'end_user',
-                    'description' => 'First-time setup wizard for new companies',
-                    'steps' => $steps,
-                ];
+        $availableControllers = [];
+        if (is_dir($controllerDir)) {
+            $rii = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($controllerDir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($rii as $file) {
+                if ($file->isFile() && $file->getExtension() === 'php') {
+                    $base = $file->getBasename('.php');
+                    $availableControllers[strtolower($base)] = $base;
+                }
             }
         }
 
-        // 2. Client/Portal journey - external users
-        $portalDir = $sourcePath.'/app/Http/Controllers/Portal';
-        if (is_dir($portalDir)) {
-            $steps = [];
-            foreach (glob($portalDir.'/*.php') as $file) {
-                $base = basename($file, '.php');
-                $steps[] = [
-                    'step' => \Illuminate\Support\Str::headline($base),
-                    'controller' => 'Portal\\'.$base,
-                ];
+        // Helper to find controller if exists
+        $findCtrl = function (array $names) use ($availableControllers): ?string {
+            foreach ($names as $n) {
+                $lower = strtolower($n);
+                if (isset($availableControllers[$lower])) {
+                    return $availableControllers[$lower];
+                }
             }
-            if (! empty($steps)) {
-                $journeys['client_portal'] = [
-                    'name' => 'Client Portal Journey',
-                    'persona' => 'client',
-                    'description' => 'External client workflow: view invoices, make payments',
-                    'steps' => $steps,
-                ];
-            }
-        }
+            return null;
+        };
 
-        // 3. End user core workflows - from main controllers
-        $coreFlows = [];
-        $salesDir = $sourcePath.'/app/Http/Controllers/Sales';
-        if (is_dir($salesDir)) {
-            // Invoice lifecycle: create → send → paid
-            $coreFlows[] = [
-                'name' => 'Invoice to Cash',
-                'steps' => [
-                    ['step' => 'Create Invoice', 'slice' => 'Invoices', 'action' => 'create'],
-                    ['step' => 'Send to Client', 'slice' => 'Invoices', 'action' => 'email'],
-                    ['step' => 'Client Views', 'slice' => 'Portal', 'action' => 'view'],
-                    ['step' => 'Record Payment', 'slice' => 'Invoices', 'action' => 'add_payment'],
-                ],
-            ];
+        // 1. Project Delivery & Execution
+        $workSteps = [];
+        if ($c = $findCtrl(['ProjectController', 'ProjectsController'])) {
+            $workSteps[] = ['step' => 'Project Intake & Charter Setup', 'controller' => $c, 'slice' => 'Projects'];
         }
-        $bankingDir = $sourcePath.'/app/Http/Controllers/Banking';
-        if (is_dir($bankingDir)) {
-            $coreFlows[] = [
-                'name' => 'Bank Reconciliation',
-                'steps' => [
-                    ['step' => 'Import Transactions', 'slice' => 'Accounts', 'action' => 'import'],
-                    ['step' => 'Match & Reconcile', 'slice' => 'Reconciliations', 'action' => 'reconcile'],
-                    ['step' => 'Review Reports', 'slice' => 'Reports', 'action' => 'view'],
-                ],
-            ];
+        if ($c = $findCtrl(['ProjectMilestoneController', 'MilestoneController'])) {
+            $workSteps[] = ['step' => 'Milestones & Roadmapping', 'controller' => $c, 'slice' => 'Projects'];
         }
-        if (! empty($coreFlows)) {
-            $journeys['core_workflows'] = [
-                'name' => 'Core Business Workflows',
-                'persona' => 'end_user',
-                'description' => 'Daily operational workflows',
-                'flows' => $coreFlows,
+        if ($c = $findCtrl(['TaskController', 'TasksController'])) {
+            $workSteps[] = ['step' => 'Task Assignment & Scheduling', 'controller' => $c, 'slice' => 'Tasks'];
+        }
+        if ($c = $findCtrl(['TaskBoardController', 'TaskCalendarController'])) {
+            $workSteps[] = ['step' => 'Kanban Board & Sprint Tracking', 'controller' => $c, 'slice' => 'Tasks'];
+        }
+        if ($c = $findCtrl(['TimelogController', 'ProjectTimelogBreakController'])) {
+            $workSteps[] = ['step' => 'Billable Time Logging & Timesheets', 'controller' => $c, 'slice' => 'TimeLogs'];
+        }
+        if ($c = $findCtrl(['ContractController', 'ProposalController'])) {
+            $workSteps[] = ['step' => 'Client Legal Sign-off & Delivery', 'controller' => $c, 'slice' => 'Contracts'];
+        }
+        if (! empty($workSteps)) {
+            $journeys['project_delivery'] = [
+                'icon' => '💼',
+                'name' => 'Project Delivery & Execution',
+                'persona' => 'Project Manager / Team',
+                'description' => 'Complete operational flow: project charters, milestone roadmaps, task boards, and time tracking.',
+                'steps' => $workSteps,
             ];
         }
 
-        // 4. Admin journey
-        $settingsDir = $sourcePath.'/app/Http/Controllers/Settings';
-        if (is_dir($settingsDir)) {
-            $journeys['admin'] = [
-                'name' => 'System Administration',
-                'persona' => 'admin',
-                'description' => 'Manage users, roles, settings, and system configuration',
-                'areas' => ['User Management', 'Role & Permissions', 'System Settings', 'Email Templates', 'Tax Configuration'],
+        // 2. Sales & Client Acquisition
+        $salesSteps = [];
+        if ($c = $findCtrl(['LeadController', 'LeadsController'])) {
+            $salesSteps[] = ['step' => 'Inbound Lead Qualification & Intake', 'controller' => $c, 'slice' => 'Leads'];
+        }
+        if ($c = $findCtrl(['DealController', 'DealsController'])) {
+            $salesSteps[] = ['step' => 'Opportunity Pipeline & Stage Progression', 'controller' => $c, 'slice' => 'Deals'];
+        }
+        if ($c = $findCtrl(['ProposalController', 'ProposalTemplateController'])) {
+            $salesSteps[] = ['step' => 'Sales Proposal & Scope Negotiation', 'controller' => $c, 'slice' => 'Contracts'];
+        }
+        if ($c = $findCtrl(['ClientController', 'ClientsController'])) {
+            $salesSteps[] = ['step' => 'Client Account Onboarding', 'controller' => $c, 'slice' => 'Clients'];
+        }
+        if (! empty($salesSteps)) {
+            $journeys['sales_acquisition'] = [
+                'icon' => '🎯',
+                'name' => 'Sales & Client Acquisition',
+                'persona' => 'Sales Executive',
+                'description' => 'Pipeline from lead capture and deal negotiation to customer account activation.',
+                'steps' => $salesSteps,
+            ];
+        }
+
+        // 3. Financial Billing & Revenue
+        $financeSteps = [];
+        if ($c = $findCtrl(['EstimateController', 'EstimatesController'])) {
+            $financeSteps[] = ['step' => 'Cost Estimation & Quotation', 'controller' => $c, 'slice' => 'Estimates'];
+        }
+        if ($c = $findCtrl(['InvoiceController', 'InvoicesController'])) {
+            $financeSteps[] = ['step' => 'Tax Invoice Generation & Dispatch', 'controller' => $c, 'slice' => 'Invoices'];
+        }
+        if ($c = $findCtrl(['RecurringInvoiceController'])) {
+            $financeSteps[] = ['step' => 'Automated Subscription Billing', 'controller' => $c, 'slice' => 'Invoices'];
+        }
+        if ($c = $findCtrl(['PaymentController', 'PaymentsController'])) {
+            $financeSteps[] = ['step' => 'Payment Gateway Settlement & Ledger', 'controller' => $c, 'slice' => 'Payments'];
+        }
+        if ($c = $findCtrl(['ExpenseController', 'ExpensesController'])) {
+            $financeSteps[] = ['step' => 'Operational Expense Auditing', 'controller' => $c, 'slice' => 'Expenses'];
+        }
+        if (! empty($financeSteps)) {
+            $journeys['finance_billing'] = [
+                'icon' => '💳',
+                'name' => 'Quote-to-Cash & Revenue Cycle',
+                'persona' => 'Finance Director',
+                'description' => 'Commercial billing workflow from quotation to tax invoicing, payment reconciliation, and ledger recording.',
+                'steps' => $financeSteps,
+            ];
+        }
+
+        // 4. Human Capital & People Operations
+        $hrSteps = [];
+        if ($c = $findCtrl(['EmployeeController', 'EmployeesController'])) {
+            $hrSteps[] = ['step' => 'Employee Profile & Compliance Intake', 'controller' => $c, 'slice' => 'Employees'];
+        }
+        if ($c = $findCtrl(['EmployeeShiftController', 'ShiftController'])) {
+            $hrSteps[] = ['step' => 'Work Shift & Roster Allocation', 'controller' => $c, 'slice' => 'Shifts'];
+        }
+        if ($c = $findCtrl(['AttendanceController', 'AttendancesController'])) {
+            $hrSteps[] = ['step' => 'Daily Clock-in & Attendance Auditing', 'controller' => $c, 'slice' => 'Attendances'];
+        }
+        if ($c = $findCtrl(['LeaveController', 'LeavesController'])) {
+            $hrSteps[] = ['step' => 'Leave Entitlement & Approval Workflow', 'controller' => $c, 'slice' => 'Leaves'];
+        }
+        if ($c = $findCtrl(['AppreciationController', 'AwardController'])) {
+            $hrSteps[] = ['step' => 'Employee Recognition & Awards', 'controller' => $c, 'slice' => 'Appreciations'];
+        }
+        if (! empty($hrSteps)) {
+            $journeys['people_operations'] = [
+                'icon' => '👥',
+                'name' => 'Human Capital & People Operations',
+                'persona' => 'People Operations (HR)',
+                'description' => 'Employee lifecycle management: recruitment dossier, shifts, biometric attendance, leaves, and recognition.',
+                'steps' => $hrSteps,
+            ];
+        }
+
+        // 5. Customer Service & Issue Escalation
+        $supportSteps = [];
+        if ($c = $findCtrl(['TicketController', 'TicketsController'])) {
+            $supportSteps[] = ['step' => 'Ticket Intake & Priority Triage', 'controller' => $c, 'slice' => 'Tickets'];
+        }
+        if ($c = $findCtrl(['TicketReplyController', 'TicketCustomFormController'])) {
+            $supportSteps[] = ['step' => 'Agent Communication & Resolution', 'controller' => $c, 'slice' => 'Tickets'];
+        }
+        if ($c = $findCtrl(['NoticeController', 'NoticesController'])) {
+            $supportSteps[] = ['step' => 'Internal Announcements & Bulletins', 'controller' => $c, 'slice' => 'Notices'];
+        }
+        if ($c = $findCtrl(['EventController', 'EventsController'])) {
+            $supportSteps[] = ['step' => 'Company Events & Schedule Coordination', 'controller' => $c, 'slice' => 'Events'];
+        }
+        if (! empty($supportSteps)) {
+            $journeys['service_desk'] = [
+                'icon' => '🎫',
+                'name' => 'Customer Support & Incident Escalation',
+                'persona' => 'Support Agent / Client',
+                'description' => 'Multi-channel support desk: ticketing SLAs, client correspondence, internal notices, and calendar events.',
+                'steps' => $supportSteps,
+            ];
+        }
+
+        // 6. Enterprise Governance & Administration
+        $adminSteps = [];
+        if ($c = $findCtrl(['RolePermissionController', 'UserPermissionController'])) {
+            $adminSteps[] = ['step' => 'RBAC Matrix & Security Boundaries', 'controller' => $c, 'slice' => 'Settings'];
+        }
+        if ($c = $findCtrl(['SettingsController', 'CompanyController'])) {
+            $adminSteps[] = ['step' => 'Enterprise Multi-tenant Configuration', 'controller' => $c, 'slice' => 'Settings'];
+        }
+        if ($c = $findCtrl(['SmtpSettingController', 'SlackSettingController', 'PusherSettingsController'])) {
+            $adminSteps[] = ['step' => 'Notification Gateways & Integrations', 'controller' => $c, 'slice' => 'Settings'];
+        }
+        if ($c = $findCtrl(['SecuritySettingController', 'TwoFASettingController'])) {
+            $adminSteps[] = ['step' => 'Audit Trails & Authentication Policy', 'controller' => $c, 'slice' => 'Settings'];
+        }
+        if (! empty($adminSteps)) {
+            $journeys['system_administration'] = [
+                'icon' => '⚙️',
+                'name' => 'Enterprise System Administration',
+                'persona' => 'System Administrator',
+                'description' => 'Central control hub: role permissions, security enforcement, communication gateways, and multi-tenancy.',
+                'steps' => $adminSteps,
             ];
         }
 
