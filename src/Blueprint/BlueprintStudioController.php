@@ -1359,7 +1359,7 @@ final class BlueprintStudioController extends Controller
      * @param  array<string, mixed>  $blueprint
      * @return array<string, mixed>
      */
-    private function sanitizeBlueprint(array $blueprint): array
+    public function sanitizeBlueprint(array $blueprint): array
     {
         if (! isset($blueprint['models']) || ! is_array($blueprint['models'])) {
             return $blueprint;
@@ -1413,6 +1413,36 @@ final class BlueprintStudioController extends Controller
                     }
                     $seenHandles[$fHandle] = true;
                     $f['handle'] = $fHandle;
+
+                    $rawType = strtolower((string) ($f['type'] ?? 'string'));
+                    if (str_ends_with($fHandle, '_id')) {
+                        $canonicalType = 'foreign_id';
+                    } else {
+                        $canonicalType = match ($rawType) {
+                            'string', 'varchar', 'char', 'tinytext' => 'string',
+                            'text', 'mediumtext', 'longtext' => 'text',
+                            'integer', 'int', 'mediumint', 'smallint', 'tinyint' => 'integer',
+                            'biginteger', 'bigint' => 'bigInteger',
+                            'foreign_id', 'foreignid' => 'foreign_id',
+                            'decimal', 'numeric' => 'decimal',
+                            'float', 'double', 'real' => 'float',
+                            'boolean', 'bool' => 'boolean',
+                            'date' => 'date',
+                            'datetime' => 'datetime',
+                            'timestamp' => 'timestamp',
+                            'enum' => (! empty($f['options']) && is_array($f['options']) ? 'enum' : 'string'),
+                            'email' => 'email',
+                            'url' => 'url',
+                            'json' => 'json',
+                            default => 'string',
+                        };
+                    }
+                    $f['type'] = $canonicalType;
+
+                    if ($f['type'] === 'enum' && (empty($f['options']) || ! is_array($f['options']))) {
+                        $f['type'] = 'string';
+                        unset($f['options']);
+                    }
 
                     $req = $f['required'] ?? null;
                     $nll = $f['nullable'] ?? null;
@@ -1517,6 +1547,14 @@ final class BlueprintStudioController extends Controller
                         'nullable' => true,
                         'width' => 50,
                     ];
+                } else {
+                    foreach ($childModel['fields'] as &$cf) {
+                        if (($cf['handle'] ?? '') === $bestFk) {
+                            $cf['type'] = 'foreign_id';
+                            break;
+                        }
+                    }
+                    unset($cf);
                 }
 
                 // Add hasMany on the parent model
