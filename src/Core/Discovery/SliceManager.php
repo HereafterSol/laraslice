@@ -820,6 +820,32 @@ class SliceManager
                 }
             }
 
+            // YAML-centric persona / role gates (ERP-class: admin | employee | client)
+            // navigation.roles: list of role slugs; user must match at least one (unless super-admin)
+            // navigation.personas: alias for roles for Studio readability
+            $allowedRoles = $slice->navigation['roles']
+                ?? $slice->navigation['personas']
+                ?? $slice->raw['navigation']['roles']
+                ?? null;
+            if (is_array($allowedRoles) && $allowedRoles !== [] && $currentUser && ! $isSuperAdmin) {
+                $normalized = array_values(array_filter(array_map(static function ($r) {
+                    $r = strtolower(trim((string) $r));
+                    // accept "role:employee" from journeys.v2 gates
+                    return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
+                }, $allowedRoles)));
+                if ($normalized !== []) {
+                    $ok = false;
+                    if (method_exists($currentUser, 'hasRole')) {
+                        $ok = (bool) $currentUser->hasRole($normalized);
+                    } elseif (method_exists($currentUser, 'roleSlugs')) {
+                        $ok = array_intersect($normalized, $currentUser->roleSlugs()) !== [];
+                    }
+                    if (! $ok) {
+                        continue;
+                    }
+                }
+            }
+
             $group = $slice->navigation['group'] ?? $slice->raw['domain'] ?? $slice->domain ?? null;
             $groupSlug = $group ? Str::slug($group) : null;
             $groupDot = $groupSlug ? str_replace('-', '_', $groupSlug).'.' : '';
@@ -875,6 +901,21 @@ class SliceManager
                             continue;
                         } elseif (method_exists($currentUser, 'can') && ! $currentUser->can($childPerm)) {
                             continue;
+                        }
+                    }
+                    $childRoles = $child['roles'] ?? $child['personas'] ?? null;
+                    if (is_array($childRoles) && $childRoles !== [] && $currentUser && ! $isSuperAdmin) {
+                        $cn = array_values(array_filter(array_map(static function ($r) {
+                            $r = strtolower(trim((string) $r));
+                            return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
+                        }, $childRoles)));
+                        if ($cn !== []) {
+                            $cok = method_exists($currentUser, 'hasRole')
+                                ? (bool) $currentUser->hasRole($cn)
+                                : false;
+                            if (! $cok) {
+                                continue;
+                            }
                         }
                     }
 

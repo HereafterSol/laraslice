@@ -2352,6 +2352,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
 
         // 2. Dynamic generation for arbitrary legacy projects
         $sliceMapping = $inspection['slice_mapping'] ?? [];
+        $sliceMapping = $this->applyPersonaNavigationToMapping($sliceMapping);
         $tables = $inspection['tables'] ?? [];
         $totalTables = $inspection['total_tables'] ?? count($tables);
         $tenancy = $inspection['tenancy'] ?? ['enabled' => false, 'tenant_key' => null];
@@ -3297,6 +3298,97 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
         }
 
+        // Composite money column (ERP invoice: Total / Paid / Unpaid in one cell)
+        $handles = array_column($columns, 'handle');
+        $hasTotal = in_array('total', $handles, true) || in_array('amount', $handles, true);
+        $hasPaid = in_array('paid', $handles, true) || in_array('paid_amount', $handles, true) || in_array('amount_paid', $handles, true);
+        if ($hasTotal && $hasPaid) {
+            $columns = array_values(array_filter($columns, static function ($c) {
+                return ! in_array($c['handle'] ?? '', ['paid', 'paid_amount', 'amount_paid', 'due_amount', 'unpaid'], true);
+            }));
+            foreach ($columns as &$col) {
+                if (in_array($col['handle'] ?? '', ['total', 'amount'], true)) {
+                    $col['formatter'] = 'money_breakdown';
+                    $col['breakdown'] = [
+                        'total' => $col['handle'],
+                        'paid' => in_array('paid_amount', $handles, true) ? 'paid_amount' : (in_array('amount_paid', $handles, true) ? 'amount_paid' : 'paid'),
+                        'unpaid' => in_array('due_amount', $handles, true) ? 'due_amount' : null,
+                    ];
+                }
+            }
+            unset($col);
+        }
+
+        // Priority badge in title (ERP tasks)
+        $hasPriority = in_array('priority', $handles, true);
+        if ($hasPriority) {
+            foreach ($columns as &$col) {
+                if (in_array($col['handle'] ?? '', ['title', 'name', 'subject', 'task'], true)) {
+                    $col['badge_from'] = 'priority';
+                    $col['formatter'] = $col['formatter'] ?? 'text_with_badge';
+                }
+            }
+            unset($col);
+        }
+
+        // Multi-view directory (ERP Tasks parity: table / board / calendar when status exists)
+        $hasStatus = false;
+        foreach ($columns as $c) {
+            $h = strtolower((string) ($c['handle'] ?? $c['field'] ?? ''));
+            if (in_array($h, ['status', 'state', 'stage'], true) || ($c['type'] ?? '') === 'badge') {
+                $hasStatus = true;
+                break;
+            }
+        }
+        if (! $hasStatus && is_array($workflow) && ! empty($workflow['states'])) {
+            $hasStatus = true;
+        }
+        $views = ['table'];
+        if ($hasStatus) {
+            $views[] = 'board';
+        }
+        $dateish = false;
+        foreach ($columns as $c) {
+            if (in_array(($c['type'] ?? ''), ['date', 'datetime'], true) || str_contains(strtolower((string) ($c['handle'] ?? '')), 'date')) {
+                $dateish = true;
+                break;
+            }
+        }
+        if ($dateish || in_array(strtolower($sliceName), ['events', 'attendances', 'leaves', 'timelogs', 'holidays'], true)) {
+            $views[] = 'calendar';
+        }
+
+        // Dashboard widgets (YAML-centric) — KPI + list patterns from ERP demo
+        $dashboard = [
+            'enabled' => true,
+            'widgets' => [
+                [
+                    'type' => 'stat',
+                    'handle' => 'total',
+                    'label' => 'Total',
+                    'query' => 'count',
+                    'roles' => ['admin', 'employee', 'client'],
+                ],
+            ],
+        ];
+        if ($hasStatus) {
+            $dashboard['widgets'][] = [
+                'type' => 'stat',
+                'handle' => 'open',
+                'label' => 'Open',
+                'query' => 'count',
+                'filter' => ['status' => ['draft', 'pending', 'open', 'to_do', 'todo', 'doing', 'in_progress']],
+                'roles' => ['admin', 'employee', 'client'],
+            ];
+            $dashboard['widgets'][] = [
+                'type' => 'board_preview',
+                'handle' => 'by_status',
+                'label' => 'By status',
+                'group_by' => 'status',
+                'roles' => ['admin', 'employee'],
+            ];
+        }
+
         return [
             'presentation' => [
                 'create' => 'drawer',
@@ -3309,6 +3401,9 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 'quick_filters' => $quickFilters,
                 'sidebar_filters' => $sidebarFilters,
                 'summary_cards' => $summaryCards,
+                'views' => $views,
+                'default_view' => 'table',
+                'inline_edit' => $hasStatus ? ['status'] : [],
                 'bulk_actions' => $this->buildBulkActionsForWorkflow($workflow),
                 'row_actions' => [
                     'display' => 'dropdown',
@@ -3319,10 +3414,45 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     ],
                 ],
             ],
+            'dashboard' => $dashboard,
             'forms' => [
                 'sections' => $sections,
             ],
+            'show' => [
+                'tabs' => $this->buildShowTabsFromRelations($relations ?? []),
+            ],
         ];
+    }
+
+    /**
+     * Aggregate show tabs from hasMany children (ERP Project hub parity).
+     *
+     * @param  list<array<string, mixed>>  $relations
+     * @return list<array<string, mixed>>
+     */
+    protected function buildShowTabsFromRelations(array $relations): array
+    {
+        $tabs = [
+            ['handle' => 'overview', 'label' => 'Overview', 'type' => 'fields'],
+        ];
+        foreach ($relations as $rel) {
+            if (($rel['type'] ?? '') !== 'hasMany') {
+                continue;
+            }
+            $name = (string) ($rel['name'] ?? '');
+            if ($name === '') {
+                continue;
+            }
+            $tabs[] = [
+                'handle' => $name,
+                'label' => \Illuminate\Support\Str::headline($name),
+                'type' => 'relation',
+                'relation' => $name,
+            ];
+        }
+        $tabs[] = ['handle' => 'activity', 'label' => 'Activity', 'type' => 'audit'];
+
+        return $tabs;
     }
 
     /**
@@ -3346,6 +3476,70 @@ public function analyzeSourceNavigation(string $sourcePath): array
      * @param  array<string, array<string, mixed>>  $classified
      * @return list<array{phase: int, name: string, tables: list<string>, slices: list<string>}>
      */
+
+    /**
+     * ERP-class persona → slice visibility (YAML navigation.roles).
+     * Matches live multi-role ERP demo: admin sees all; employee/client see scoped modules.
+     *
+     * @return array{admin: list<string>, employee: list<string>, client: list<string>}
+     */
+    protected function erpPersonaSliceAllowlist(): array
+    {
+        return [
+            'admin' => ['*'],
+            'employee' => [
+                'Dashboard', 'Tasks', 'Projects', 'TimeLogs', 'Timelogs', 'Attendances', 'Attendance',
+                'Leaves', 'Tickets', 'Notices', 'Events', 'Messages', 'Expenses', 'Employees',
+                'Holidays', 'Appreciations', 'Contracts',
+            ],
+            'client' => [
+                'Dashboard', 'Projects', 'Contracts', 'Tasks', 'TimeLogs', 'Timelogs',
+                'Invoices', 'Estimates', 'Payments', 'CreditNotes', 'Creditnotes',
+                'Orders', 'Tickets', 'Events', 'Notices',
+            ],
+        ];
+    }
+
+    /**
+     * Attach navigation.roles + settings visibility onto each slice mapping entry.
+     *
+     * @param  array<string, array<string, mixed>>  $sliceMapping
+     * @return array<string, array<string, mixed>>
+     */
+    protected function applyPersonaNavigationToMapping(array $sliceMapping): array
+    {
+        $allow = $this->erpPersonaSliceAllowlist();
+        foreach ($sliceMapping as $name => &$info) {
+            $type = $info['type'] ?? 'aggregate_root';
+            $nav = $info['navigation'] ?? [];
+            if ($type === 'settings_hub' || $type === 'settings' || $type === 'taxonomy') {
+                $nav['visible'] = false;
+                $nav['roles'] = ['admin'];
+            } else {
+                $roles = [];
+                foreach (['admin', 'employee', 'client'] as $persona) {
+                    $list = $allow[$persona];
+                    if ($list === ['*'] || in_array($name, $list, true)) {
+                        $roles[] = $persona;
+                    }
+                }
+                // Always allow admin for operational roots
+                if (! in_array('admin', $roles, true)) {
+                    $roles[] = 'admin';
+                }
+                $nav['roles'] = array_values(array_unique($roles));
+                $nav['visible'] = $nav['visible'] ?? true;
+            }
+            $info['navigation'] = array_merge($nav, [
+                'group' => $nav['group'] ?? ($info['module'] ?? $info['domain'] ?? 'General'),
+                'icon' => $nav['icon'] ?? ($info['icon'] ?? 'package'),
+            ]);
+        }
+        unset($info);
+
+        return $sliceMapping;
+    }
+
     protected function buildEtlOrder(array $sliceMapping, array $tables, array $classified): array
     {
         $tax = array_keys($classified['taxonomies'] ?? []);

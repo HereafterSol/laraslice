@@ -136,3 +136,19 @@ Enforce `navigation.visible: false` for settings_hub children and taxonomies.
 | Biggest foundation hole? | **Runtime persona navigation + dashboard/index density**, not more YAML fields. |
 
 Next engineering slice: implement **role-gated `navigation` resolution** + **`ui.dashboard.widgets`** + **inline status on directory**, then re-Apply a thin pilot (Projects + Tasks + Invoices) and re-compare against demo screenshots.
+
+---
+
+## Implementation status (foundation pass)
+
+| Item | Status |
+|------|--------|
+| Role-scoped sidebar (`navigation.roles`) | **Implemented** in SliceManager + port mapping |
+| Settings/taxonomy `visible: false` | **Implemented** |
+| `ui.directory.views` table/board/calendar | **Implemented** in port UI builder |
+| `ui.directory.inline_edit` status | **Implemented** (YAML) |
+| `ui.dashboard.widgets` | **Implemented** (YAML) |
+| `ui.show.tabs` from relations | **Implemented** |
+| money_breakdown / priority badge columns | **Implemented** |
+| Full Apply pilot + live UI parity test | Pending (next: Apply Projects+Tasks+Invoices) |
+

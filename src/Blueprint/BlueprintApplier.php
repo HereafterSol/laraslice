@@ -286,6 +286,17 @@ final class BlueprintApplier
         if (! empty($blueprint['navigation']) && is_array($blueprint['navigation'])) {
             $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $blueprint['navigation']);
         }
+        // Persona gates from blueprint root (YAML-centric)
+        if (! empty($blueprint['roles_gate']) && is_array($blueprint['roles_gate'])) {
+            $manifest['navigation']['roles'] = $blueprint['roles_gate'];
+        }
+        if (! empty($blueprint['personas']) && is_array($blueprint['personas']) && empty($manifest['navigation']['roles'])) {
+            $manifest['navigation']['roles'] = $blueprint['personas'];
+        }
+        // Settings / taxonomy never pollute main sidebar
+        if (in_array(($blueprint['type'] ?? ''), ['settings_hub', 'settings', 'taxonomy'], true)) {
+            $manifest['navigation']['visible'] = false;
+        }
         if (! empty($blueprint['permissions']) && is_array($blueprint['permissions'])) {
             $manifest['permissions'] = $blueprint['permissions'];
         }
