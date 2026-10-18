@@ -524,6 +524,15 @@ When a user asks: `"add [field] in [table]"`, the AI Copilot:
 
 When an AI agent or developer is tasked with porting an existing monolithic application (e.g. FOSPAH Complaint Management, BEOEMIS, or any legacy Laravel/PHP application) into LaraSlice, the process must follow a rigorous, deterministic 7-step analysis workflow. 
 
+### Porting foundation rules (ERP benchmark = Worksuite-class)
+
+1. **Source of truth order**: DB schema + FKs → **real menu/nav** (`menu.blade.php` / `x-menu-item`) → routes/controllers → status enums → optional journey steps.
+2. **Do not invent BRD essays** as journeys. Journeys must be operational: `persona → steps[{slice, action, route?}]` (`schema: laraslice.journeys.v2`). Admin / Employee / Client match Worksuite demo roles when ERP is detected.
+3. **Navigation compiler**: Prefer `parseWorksuiteMenuBlade` / blade sidebars; map groups to Porting Studio `sidebar_preview` with modules/permissions hints. Never replace gated menus with generic table lists.
+4. **Aggregates over table explosion**: `*_items` / `*_lines` are children; `*_settings` / `*_types` go to Settings Hub or taxonomy — not sidebar noise.
+5. **Studios after port**: Blueprint/Slice Studio edit YAML (`ui.directory`, workflow, bulk_actions); Porting Studio shows real nav + slim journeys for customization before Apply.
+6. **Every project differs**: FOSPAH is process-core; ERP is multi-module. Detect signatures; do not force FOSPAH BRD packs onto ERP or vice versa.
+
 Over **50% to 60% of an application's architecture can be accurately reverse-engineered directly from its database schema, foreign keys, and seeders**.
 
 ### Step 1: Database DDL & Schema Graph Extraction
