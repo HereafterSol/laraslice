@@ -1184,9 +1184,35 @@ $seeders = $dataService->analyzeSeeders('/path/to/source', $sliceMapping);
 - Protected from deletion in the Roles UI and from ETL wipes
 - Sync via `SliceManager::syncPermissions()` assigns all permissions to both super-admin and super-dev
 
----
+### 16.14 The Code-First Ground Truth Principle & Zero-Infrastructure Clutter Standard
+
+In enterprise modernization and reverse-engineering, **the codebase is the single indisputable source of ground truth**.
+
+#### 1. The Code-First Principle ("Code is Reality, BRD is Contextual Reference")
+- **BRDs Drift; Code Runs**: Business Requirements Documents (BRDs), architecture PDFs, and planning specs represent the initial aspirational vision. Over years of active production operation, features are refactored, edge cases are patched, approval chains change, and real routes diverge from the original documentation.
+- **Verification Workflow**: When porting any legacy application to LaraSlice Vertical Slice Architecture (VSA), AI assistants and developers must prioritize **live code analysis** (routes in `routes/web.php`, middleware guards, controller actions, Blade navigation templates, and active database tables) over static documentation.
+- **Discrepancy Resolution**: When a discrepancy arises between the BRD and the code (e.g. BRD mentions a role or stage not present in the code, or the code introduces role-gated menus like `Hearing Order Processing` for Advisors), **the code wins**. The BRD provides semantic context and user intentions; the code dictates operational realities.
+
+#### 2. The Zero-Infrastructure Clutter Standard
+- Framework plumbing and internal queuing/caching tables (`password_reset_tokens`, `job_batches`, `failed_jobs`, `jobs`, `cache`, `cache_locks`, `sessions`, `migrations`, `personal_access_tokens`, `telescope_*`, `pulse_*`, `horizon_*`) must **never** be treated as business slices, nor dumped onto the proposed sidebar or navigation!
+- These tables are automatically intercepted and quarantined by `SlicePortService::FRAMEWORK_INFRASTRUCTURE_TABLES`. They are excluded from table analysis and vertical slice generation.
+
+#### 3. Authentic Navigation Discovery from Blade Components
+- The porting engine inspects source Blade navigation components (`resources/views/components/**/sidebar*.blade.php`, `layouts/navigation*.blade.php`, `partials/sidebar*.blade.php`).
+- Rather than guessing labels from raw route slugs (`system.complaints.received` -> "System complaints received"), the parser extracts:
+  - **Real Human Anchor Text**: Inside `<span>...</span>` or anchor body (`"Received Complaints"`).
+  - **Authentic Role Gates**: Preceding `@if(in_array($role, [...]))`, `@role(...)`, or `@can(...)` directives.
+  - **Icon Telemetry**: Image assets or SVG tags mapped directly to standardized BlatUI / Lucide icons (`inbox`, `folder-open`, `file-signature`, `calendar-check`, `bell`, `users`).
+  - **Context Separation**: Distinguishing administrative back-office portals (e.g. `Judicial Secretariat`) from public stakeholder portals (e.g. `Citizen / Complainant Portal`).
+
+#### 4. Domain Bounded Aggregates vs. Reference Taxonomies
+- In relational databases, lookup/taxonomy tables (e.g., `provinces`, `districts`, `regions`, `tehsils`, `genders`, `statuses`, `types`, `organizations`) naturally have high incoming reference counts (in-degrees) because almost every business entity points to them.
+- High in-degree must **never** promote a lookup table into an independent top-level root slice.
+- All lookup and taxonomy tables are consolidated into a unified `MasterData` (for Adjudication/Legal) or `ReferenceData` (for ERP/Commerce) slice, preventing sidebar pollution.
+- Core operational entities with dates, notes, and lifecycle events (e.g. `Hearings`, `Notices`, `Representations`, `Complaints`) are first-class aggregate roots, never misclassified as many-to-many pivots.
 
 ---
+
 
 ## 17. Declarative UI Schema, TypeSafe Jev UI Synthesis & Modular YAML Standards
 

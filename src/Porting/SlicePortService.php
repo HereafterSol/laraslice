@@ -11,6 +11,30 @@ use Throwable;
 class SlicePortService
 {
     /**
+     * Framework infrastructure and queue/cache plumbing tables that must NEVER
+     * be treated as domain slices or clutter the navigation/sidebar.
+     */
+    public const FRAMEWORK_INFRASTRUCTURE_TABLES = [
+        'migrations',
+        'password_reset_tokens',
+        'password_resets',
+        'job_batches',
+        'jobs',
+        'failed_jobs',
+        'cache',
+        'cache_locks',
+        'sessions',
+        'personal_access_tokens',
+        'telescope_entries',
+        'telescope_entries_tags',
+        'telescope_monitoring',
+        'pulse_entries',
+        'pulse_aggregates',
+        'pulse_values',
+        'horizon_jobs',
+    ];
+
+    /**
      * Clone a Git repository (GitHub, GitLab, or any Git host) into a local
      * cache directory so it can be analyzed like a local source path.
      *
@@ -797,7 +821,7 @@ PHP;
             }
 
             foreach ($tableNames as $t) {
-                if (in_array($t, ['migrations', 'failed_jobs', 'personal_access_tokens', 'jobs', 'cache', 'sessions'], true)) {
+                if (in_array(strtolower($t), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                     continue;
                 }
 
@@ -895,6 +919,9 @@ PHP;
             $count = count($createMatches[0]);
             for ($i = 0; $i < $count; $i++) {
                 $tableName = $createMatches[1][$i][0];
+                if (in_array(strtolower($tableName), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
+                    continue;
+                }
                 $startPos = $createMatches[0][$i][1];
                 $endPos = ($i + 1 < $count) ? $createMatches[0][$i + 1][1] : strlen($content);
                 $blockContent = substr($content, $startPos, $endPos - $startPos);
@@ -942,7 +969,7 @@ PHP;
         try {
             $dbTables = Schema::getTableListing();
             foreach ($dbTables as $t) {
-                if (in_array($t, ['migrations', 'failed_jobs', 'personal_access_tokens'], true)) {
+                if (in_array(strtolower($t), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                     continue;
                 }
                 $cols = [];
@@ -968,7 +995,7 @@ PHP;
         return $tables;
     }
 
-    private function classifyTables(array $tables): array
+        private function classifyTables(array $tables): array
     {
         $classified = [
             'roots' => [],
@@ -978,8 +1005,8 @@ PHP;
             'system' => [],
         ];
 
-        $taxonomyPattern = '/(types?|natures?|statuse?s?|modes?|regions?|genders?|provinces?|districts?|tehsils?|categories?|faqs?|priorities?|currencies?|departments?|designations?|grades?|units?|sources?|stages?|channels?)$/i';
-        $systemPattern = '/^(users|user_profiles|roles|permissions|otps|sms_logs|activity_logs|api_logs|api_users|jobs|cache|notifications|personal_access_tokens|failed_jobs|sessions|password_resets|telescope_|pulse_)/i';
+        $taxonomyPattern = '/(types?|natures?|statuse?s?|modes?|regions?|genders?|provinces?|districts?|tehsils?|categories?|faqs?|priorities?|currencies?|departments?|designations?|grades?|units?|sources?|stages?|channels?|concerned_organizations?)$/i';
+        $systemPattern = '/^(users|user_profiles|roles|permissions|otps|sms_logs|activity_logs|api_logs|api_users|jobs|job_batches|failed_jobs|cache|cache_locks|sessions|notifications|personal_access_tokens|password_resets?(_tokens)?|telescope_|pulse_|horizon_)/i';
 
         // 1. Calculate in-degrees (foreign key references from other tables)
         $inDegrees = [];
@@ -989,7 +1016,7 @@ PHP;
             $knownTableSingulars[Str::singular($tName)] = $tName;
         }
 
-        $ignoredInDegreeKeys = ['company', 'tenant', 'organization', 'account', 'user', 'created_by', 'updated_by', 'deleted_by', 'status', 'type', 'currency'];
+        $ignoredInDegreeKeys = ['company', 'tenant', 'organization', 'account', 'user', 'created_by', 'updated_by', 'deleted_by', 'status', 'type', 'currency', 'from_user', 'to_user'];
 
         foreach ($tables as $tName => $tInfo) {
             foreach ($tInfo['foreign_keys'] as $fk) {
@@ -1004,56 +1031,61 @@ PHP;
             }
         }
 
+        // Canonical enterprise business entities are NEVER demoted to child or taxonomy tables
+        $canonicalRoots = [
+            'complaints', 'hearings', 'notices', 'representations', 'report_soughts', 'notice_titles',
+            'projects', 'tasks', 'contracts', 'project_time_logs',
+            'leads', 'deals', 'client_details', 'clients',
+            'invoices', 'payments', 'estimates', 'proposals', 'credit_notes', 'expenses', 'bank_accounts',
+            'employee_details', 'employees', 'attendances', 'leaves', 'employee_shift_schedules', 'teams', 'designations', 'appreciations',
+            'products', 'orders',
+            'tickets', 'events', 'knowledge_bases',
+            'users_chat', 'sticky_notes',
+            'global_settings',
+        ];
+
         // 2. Classify each table
         foreach ($tables as $tName => $tInfo) {
-            if (preg_match($systemPattern, $tName)) {
+            if (preg_match($systemPattern, $tName) || in_array(strtolower($tName), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                 $classified['system'][$tName] = $tInfo;
                 continue;
             }
 
-            // Pivot table detection: tenant/audit keys are not relationship FKs,
-            // so a line-item table like invoice_items (invoice_id + company_id)
-            // must not be misclassified as a pivot.
-            $tenantFkPattern = '/^(company_id|tenant_id|organization_id|created_by|updated_by)$/';
+            // Pivot table detection: tenant, audit, and actor keys are not relationship FKs.
+            // Furthermore, a table is only a pure pivot if it has NO domain/operational columns.
+            $actorOrTenantFkPattern = '/^(company_id|tenant_id|organization_id|account_id|created_by|updated_by|user_id|from_user_id|to_user_id|assigned_to|assigned_by|actor_id)$/';
             $relationshipFks = array_values(array_filter(
                 $tInfo['foreign_keys'],
-                fn ($fk) => ! preg_match($tenantFkPattern, $fk)
+                fn ($fk) => ! preg_match($actorOrTenantFkPattern, $fk)
             ));
-            if (str_contains($tName, '__') || (count($relationshipFks) >= 2 && count($tInfo['columns']) <= 5)) {
+
+            $nonFkColumns = array_filter($tInfo['columns'] ?? [], function($c) {
+                $cn = is_array($c) ? ($c['name'] ?? '') : ($c->name ?? '');
+                return !in_array($cn, ['id', 'created_at', 'updated_at', 'deleted_at'], true) && !str_ends_with($cn, '_id');
+            });
+
+            if (str_contains($tName, '__') || (count($relationshipFks) >= 2 && count($nonFkColumns) === 0)) {
                 $classified['pivots'][$tName] = $tInfo;
                 continue;
             }
 
-            // High incoming reference roots should never be taxonomies even if named categories/types
-            $hasHighInbound = ($inDegrees[$tName] ?? 0) >= 3;
+            $isCanonicalRoot = in_array($tName, $canonicalRoots, true);
 
-            // Taxonomy detection
-            if (! $hasHighInbound && preg_match($taxonomyPattern, $tName)) {
+            // Taxonomy detection: lookup tables match taxonomy pattern
+            if (! $isCanonicalRoot && preg_match($taxonomyPattern, $tName)) {
                 $classified['taxonomies'][$tName] = $tInfo;
                 continue;
             }
 
-            // Canonical enterprise business entities are NEVER demoted to child tables
-            $canonicalRoots = [
-                'projects', 'tasks', 'contracts', 'project_time_logs',
-                'leads', 'deals', 'client_details',
-                'invoices', 'payments', 'estimates', 'proposals', 'credit_notes', 'expenses', 'bank_accounts',
-                'employee_details', 'attendances', 'leaves', 'employee_shift_schedules', 'teams', 'designations', 'appreciations',
-                'products', 'orders',
-                'tickets', 'events', 'notices', 'knowledge_bases',
-                'users_chat', 'sticky_notes',
-                'global_settings',
-            ];
-
             // Determine if table is a child entity of an existing root
             $isChild = false;
-            if (! in_array($tName, $canonicalRoots, true)) {
+            if (! $isCanonicalRoot) {
                 foreach ($tInfo['foreign_keys'] as $fk) {
                     $base = preg_replace('/_id$/', '', $fk);
                     if (in_array($base, $ignoredInDegreeKeys, true)) {
                         continue;
                     }
-                    if (isset($knownTableSingulars[$base]) && $knownTableSingulars[$base] !== $tName) {
+                    if (isset($knownTableSingulars[$base])) {
                         $parentTable = $knownTableSingulars[$base];
                         if (($inDegrees[$parentTable] ?? 0) > ($inDegrees[$tName] ?? 0)) {
                             $isChild = true;
@@ -1695,10 +1727,11 @@ PHP;
      * Analyze source system's navigation structure.
      * Detects how the source groups menu items (dropdowns, order, icons, permissions).
      */
-    public function analyzeSourceNavigation(string $sourcePath): array
+        public function analyzeSourceNavigation(string $sourcePath): array
     {
         $navigation = [
             'groups' => [],
+            'contexts' => [],
             'source' => 'not_detected',
         ];
 
@@ -1736,12 +1769,13 @@ PHP;
             }
         }
 
-        // Strategy 3: Blade sidebar with hardcoded links
+        // Strategy 3: Blade sidebar with hardcoded links & role-based items
         if (empty($navigation['groups'])) {
-            $groups = $this->parseBladeNavigation($sourcePath);
-            if (! empty($groups)) {
+            $bladeNav = $this->parseBladeNavigation($sourcePath);
+            if (! empty($bladeNav['items'])) {
                 $navigation['source'] = 'blade_templates';
-                $navigation['groups'] = $groups;
+                $navigation['groups'] = $bladeNav['items'];
+                $navigation['contexts'] = $bladeNav['contexts'];
             }
         }
 
@@ -1755,54 +1789,25 @@ PHP;
     {
         $groups = [];
 
-        // Match: $menu->route('route.name', $title, [], ORDER, ['icon' => 'xxx'])
-        // Match: $menu->dropdown($title, function..., ORDER, ['icon' => 'xxx'])
-        // Titles are often trans() calls, so we extract the variable assignment above
-
-        // First, extract title assignments: $title = trim(trans_choice('general.xxx', 2));
-        $titles = [];
-        if (preg_match_all("/\\\$title\s*=\s*trim\(\s*trans_choice?\(\s*['\"]([^'\"]+)['\"]/", $content, $tm)) {
-            foreach ($tm[1] as $idx => $transKey) {
-                // Extract the last part: 'general.invoices' -> 'invoices'
-                $parts = explode('.', $transKey);
-                $titles[$idx] = ucfirst(end($parts));
-            }
-        }
-
         // Match menu items with order and icon
-        // Pattern: $menu->route('xxx', $title, [], ORDER, ['icon' => 'yyy'])
-        if (preg_match_all("/\\\$menu->(route|dropdown)\(\s*['\"]([^'\"]+)['\"]\s*,\s*\\\$title\s*,\s*\[\]\s*,\s*(\d+)\s*,\s*\[[^\]]*'icon'\s*=>\s*['\"]([^'\"]+)['\"]/", $content, $matches, PREG_SET_ORDER)) {
-            $titleIdx = 0;
+        if (preg_match_all('/\$menu->(route|dropdown)\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*\$title\s*,\s*\[\]\s*,\s*(\d+)\s*,\s*\[[^\]]*\'icon\'\s*=>\s*[\'"]([^\'"]+)[\'"]/', $content, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $m) {
-                $type = $m[1]; // route or dropdown
+                $type = $m[1];
                 $route = $m[2];
                 $order = (int) $m[3];
                 $icon = $m[4];
-                $label = $titles[$titleIdx] ?? ucfirst($route);
-                $titleIdx++;
-
-                // Check if it's a dropdown (has sub-items)
-                $children = [];
-                if ($type === 'dropdown') {
-                    // Extract sub-items: $sub->route('xxx', $title, [], ORDER, $attr)
-                    // This is simplified — full parsing would need AST
-                    $children = ['_has_children' => true];
-                }
-
                 $groups[] = [
-                    'label' => $label,
+                    'label' => ucfirst($route),
                     'route' => $route,
                     'order' => $order,
                     'icon' => $icon,
                     'type' => $type,
-                    'children' => $children,
+                    'children' => [],
                 ];
             }
         }
 
-        // Sort by order
         usort($groups, fn($a, $b) => $a['order'] <=> $b['order']);
-
         return $groups;
     }
 
@@ -1814,7 +1819,6 @@ PHP;
         $groups = [];
         try {
             $config = include $configFile;
-            // Config format varies — try common patterns
             if (isset($config['items']) && is_array($config['items'])) {
                 foreach ($config['items'] as $idx => $item) {
                     $groups[] = [
@@ -1833,48 +1837,160 @@ PHP;
     }
 
     /**
-     * Parse Blade templates for hardcoded navigation.
+     * Parse Blade templates for authentic navigation components, human labels, and role constraints.
      */
     private function parseBladeNavigation(string $sourcePath): array
     {
-        $groups = [];
         $sidebarFiles = [];
+        $viewsDir = $sourcePath . '/resources/views';
+        if (! is_dir($viewsDir)) {
+            return ['items' => [], 'contexts' => []];
+        }
 
-        // Find sidebar/nav Blade files
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($sourcePath.'/resources/views', \FilesystemIterator::SKIP_DOTS)
-        );
-
-        foreach ($iterator as $file) {
-            $filename = strtolower($file->getFilename());
-            if (str_contains($filename, 'sidebar') || str_contains($filename, 'nav') || str_contains($filename, 'menu')) {
-                $sidebarFiles[] = $file->getPathname();
-                if (count($sidebarFiles) >= 5) break;
+        // 1. Look for canonical sidebar components first
+        $candidatePatterns = [
+            $viewsDir . '/components/admin/sidebar.blade.php',
+            $viewsDir . '/components/complainant/sidebar.blade.php',
+            $viewsDir . '/components/sidebar.blade.php',
+            $viewsDir . '/layouts/sidebar.blade.php',
+            $viewsDir . '/partials/sidebar.blade.php',
+        ];
+        foreach ($candidatePatterns as $p) {
+            if (file_exists($p)) {
+                $sidebarFiles[] = $p;
             }
         }
 
-        foreach ($sidebarFiles as $file) {
-            $content = file_get_contents($file);
-            // Extract route() calls with surrounding text for labels
-            if (preg_match_all("/route\(\s*['\"]([^'\"]+)['\"]\s*\)/", $content, $m)) {
-                foreach (array_unique($m[1]) as $route) {
-                    // Skip non-navigation routes
-                    if (str_contains($route, 'create') || str_contains($route, 'edit') || str_contains($route, 'destroy')) {
-                        continue;
-                    }
-                    $groups[] = [
-                        'label' => ucfirst(str_replace(['.', '_', '-'], ' ', $route)),
-                        'route' => $route,
-                        'order' => count($groups) * 10,
-                        'icon' => 'circle',
-                        'type' => 'route',
-                        'children' => [],
-                    ];
+        if (empty($sidebarFiles)) {
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($viewsDir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $f) {
+                $fn = strtolower($f->getFilename());
+                if (str_contains($fn, 'sidebar') && str_ends_with($fn, '.blade.php')) {
+                    $sidebarFiles[] = $f->getPathname();
+                    if (count($sidebarFiles) >= 5) break;
                 }
             }
         }
 
-        return array_slice($groups, 0, 20);
+        $iconMap = [
+            'dashboard' => 'layout-dashboard',
+            'complain' => 'inbox',
+            'opencomplains' => 'folder-open',
+            'order&casefiles' => 'file-signature',
+            'hearingorderprocessing' => 'file-text',
+            'hearingmanagment' => 'calendar-check',
+            'causelist' => 'calendar',
+            'decided-cases' => 'archive',
+            'notices' => 'bell',
+            'faq' => 'help-circle',
+            'usermanagment' => 'users',
+            'api' => 'cpu',
+            'activity' => 'activity',
+            'profile' => 'user',
+            'logout' => 'log-out',
+        ];
+
+        $items = [];
+        $contexts = [];
+
+        foreach ($sidebarFiles as $filePath) {
+            $rawContent = file_get_contents($filePath);
+            $context = 'admin';
+            if (str_contains(strtolower($filePath), 'complainant')) {
+                $context = 'complainant';
+            } elseif (str_contains(strtolower($filePath), 'portal') || str_contains(strtolower($filePath), 'client')) {
+                $context = 'portal';
+            }
+
+            // Split into <li> elements with optional @if wrap
+            $liPattern = chr(47) . '(?:@if\s*\((.*?)\)\s*)?<li>\s*<a\s+[^>]*href=["\x27]{{\s*route\(\s*["\x27]([^"\x27]+)["\x27](?:\s*,\s*[^)]+)?\s*\)\s*}}["\x27][^>]*>(.*?)<\/a>\s*<\/li>(?:\s*@endif)?' . chr(47) . 's';
+            if (preg_match_all($liPattern, $rawContent, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $cond = trim($m[1] ?? '');
+                    $route = trim($m[2]);
+                    $innerHtml = $m[3];
+
+                    // Skip non-nav routes
+                    if (in_array($route, ['logout'], true)) continue;
+
+                    // Extract roles from condition: in_array($role, ['Assistant Registrar', ...])
+                    $roles = [];
+                    if ($cond) {
+                        if (preg_match('/in_array\s*\(\s*\$role\s*,\s*\[(.*?)\]\s*\)/', $cond, $rm)) {
+                            preg_match_all('/["\x27]([^"\x27]+)["\x27]/', $rm[1], $roleMatches);
+                            $roles = $roleMatches[1] ?? [];
+                        } elseif (preg_match('/\$role\s*===?\s*["\x27]([^"\x27]+)["\x27]/', $cond, $rm)) {
+                            $roles = [$rm[1]];
+                        }
+                    }
+
+                    // Extract label from <span ...>Label</span>
+                    $label = '';
+                    if (preg_match('/<span[^>]*>(.*?)<\/span>/s', $innerHtml, $sm)) {
+                        $label = trim(strip_tags($sm[1]));
+                    }
+                    if (empty($label)) {
+                        if (preg_match('/alt=["\x27]([^"\x27]+)["\x27]/', $innerHtml, $am)) {
+                            $label = trim($am[1]);
+                        }
+                    }
+                    if (empty($label)) {
+                        $label = ucfirst(str_replace(['.', '_', '-'], ' ', $route));
+                    }
+
+                    // Extract icon from image or Lucide tag
+                    $icon = 'circle';
+                    if (preg_match('/(?:assets\/|\/)([a-zA-Z0-9_\-&]+)\.(?:svg|png|webp|jpg)/i', $innerHtml, $im)) {
+                        $rawIcon = strtolower($im[1]);
+                        foreach ($iconMap as $key => $targetIcon) {
+                            if (str_contains($rawIcon, $key)) {
+                                $icon = $targetIcon;
+                                break;
+                            }
+                        }
+                    } elseif (preg_match('/<x-lucide-([a-z0-9-]+)/i', $innerHtml, $lm)) {
+                        $icon = strtolower($lm[1]);
+                    }
+
+                    $navEntry = [
+                        'label' => $label,
+                        'route' => $route,
+                        'icon' => $icon,
+                        'context' => $context,
+                        'roles' => $roles,
+                        'order' => count($items) * 10,
+                        'type' => 'route',
+                        'children' => [],
+                    ];
+
+                    $items[] = $navEntry;
+                    $contexts[$context][] = $navEntry;
+                }
+            } else {
+                // Fallback for simple blade routes
+                if (preg_match_all('/route\(\s*[\'"]([^\'"]+)[\'"]\s*\)/', $rawContent, $m)) {
+                    foreach (array_unique($m[1]) as $route) {
+                        if (str_contains($route, 'create') || str_contains($route, 'edit') || str_contains($route, 'destroy') || in_array($route, ['logout'], true)) {
+                            continue;
+                        }
+                        $navEntry = [
+                            'label' => ucfirst(str_replace(['.', '_', '-'], ' ', $route)),
+                            'route' => $route,
+                            'order' => count($items) * 10,
+                            'icon' => 'circle',
+                            'type' => 'route',
+                            'context' => $context,
+                            'roles' => [],
+                            'children' => [],
+                        ];
+                        $items[] = $navEntry;
+                        $contexts[$context][] = $navEntry;
+                    }
+                }
+            }
+        }
+
+        return ['items' => $items, 'contexts' => $contexts];
     }
 
     /**
@@ -2030,6 +2146,9 @@ PHP;
                 'operations' => 'message-square',
                 'settings', 'administration' => 'settings',
                 'referencedata', 'masterdata' => 'database',
+                'casemanagement' => 'inbox',
+                'judicialhearings' => 'gavel',
+                'legalregistry' => 'file-signature',
                 default => 'layers',
             };
 
@@ -2060,6 +2179,13 @@ PHP;
                         'leads' => 'target',
                         'tickets' => 'life-buoy',
                         'settings' => 'settings',
+                        'complaints' => 'inbox',
+                        'hearings' => 'calendar-check',
+                        'notices' => 'bell',
+                        'representations' => 'shield-alert',
+                        'reportsoughts' => 'file-search',
+                        'faqs' => 'help-circle',
+                        'masterdata', 'referencedata' => 'database',
                         default => 'circle',
                     },
                     'route' => '/' . Str::slug($domain) . '/' . $mSlug . '/' . $s['handle'],
@@ -2074,7 +2200,7 @@ PHP;
                 'name' => Str::headline($mName),
                 'icon' => $icon,
                 'collapsible' => true,
-                'default_open' => in_array(strtolower($mName), ['work', 'salescrm', 'finance'], true),
+                'default_open' => in_array(strtolower($mName), ['work', 'salescrm', 'finance', 'casemanagement', 'judicialhearings'], true),
                 'items' => $sidebarItems,
             ];
         }

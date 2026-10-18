@@ -360,12 +360,80 @@
             </div>
             <div x-show="planData">
                 <!-- Source navigation comparison -->
-                <div x-show="planData?.sidebar_preview?.source_navigation?.groups?.length" class="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-                    <p class="font-bold text-sm text-foreground mb-1">🔍 Source Navigation Detected</p>
-                    <div class="flex flex-wrap gap-1.5 mt-2">
-                        <template x-for="(nav, nIdx) in (planData.sidebar_preview.source_navigation.groups || [])" :key="nIdx">
-                            <span class="rounded-full bg-indigo-500/10 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 border border-indigo-500/20" x-text="nav.label"></span>
-                        </template>
+                <div x-show="planData?.sidebar_preview?.source_navigation?.groups?.length" class="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-sm text-foreground flex items-center gap-2">
+                                <span>🔍 Real Source Code Navigation</span>
+                                <span class="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-mono text-indigo-300" x-text="(planData?.sidebar_preview?.source_navigation?.groups || []).length + ' items detected'"></span>
+                            </p>
+                            <p class="text-[11px] text-muted-foreground mt-0.5">Parsed directly from live Blade navigation components (<code class="font-mono text-indigo-400">sidebar.blade.php</code>) with role-gated permissions and icon telemetry.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                        <!-- Admin / Primary Context -->
+                        <div x-show="(planData?.sidebar_preview?.source_navigation?.contexts?.admin || []).length" class="rounded-lg border border-indigo-500/20 bg-indigo-950/20 p-3 space-y-2">
+                            <div class="flex items-center justify-between border-b border-indigo-500/20 pb-1.5">
+                                <span class="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                                    <span>🏛️</span>
+                                    <span>Judicial Secretariat / Admin Navigation</span>
+                                </span>
+                                <span class="text-[10px] text-indigo-400/80 font-mono" x-text="(planData?.sidebar_preview?.source_navigation?.contexts?.admin || []).length + ' links'"></span>
+                            </div>
+                            <div class="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
+                                <template x-for="(nav, nIdx) in (planData?.sidebar_preview?.source_navigation?.contexts?.admin || [])" :key="nIdx">
+                                    <div class="flex items-start justify-between rounded-md bg-indigo-500/10 p-2 text-xs border border-indigo-500/10 hover:border-indigo-500/30 transition">
+                                        <div class="space-y-0.5">
+                                            <div class="font-medium text-slate-200 flex items-center gap-1.5">
+                                                <span class="text-indigo-400 font-mono text-[10px]" x-text="'[' + nav.icon + ']'"></span>
+                                                <span x-text="nav.label"></span>
+                                            </div>
+                                            <div class="text-[10px] font-mono text-slate-400 truncate max-w-[260px]" x-text="nav.route"></div>
+                                        </div>
+                                        <div class="flex flex-wrap gap-1 max-w-[150px] justify-end">
+                                            <template x-for="r in (nav.roles || ['All Roles'])" :key="r">
+                                                <span class="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-medium text-indigo-300" x-text="r"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Complainant / Citizen Context -->
+                        <div x-show="(planData?.sidebar_preview?.source_navigation?.contexts?.complainant || []).length" class="rounded-lg border border-emerald-500/20 bg-emerald-950/20 p-3 space-y-2">
+                            <div class="flex items-center justify-between border-b border-emerald-500/20 pb-1.5">
+                                <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                                    <span>👥</span>
+                                    <span>Citizen / Complainant Portal Navigation</span>
+                                </span>
+                                <span class="text-[10px] text-emerald-400/80 font-mono" x-text="(planData?.sidebar_preview?.source_navigation?.contexts?.complainant || []).length + ' links'"></span>
+                            </div>
+                            <div class="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
+                                <template x-for="(nav, nIdx) in (planData?.sidebar_preview?.source_navigation?.contexts?.complainant || [])" :key="nIdx">
+                                    <div class="flex items-start justify-between rounded-md bg-emerald-500/10 p-2 text-xs border border-emerald-500/10 hover:border-emerald-500/30 transition">
+                                        <div class="space-y-0.5">
+                                            <div class="font-medium text-slate-200 flex items-center gap-1.5">
+                                                <span class="text-emerald-400 font-mono text-[10px]" x-text="'[' + nav.icon + ']'"></span>
+                                                <span x-text="nav.label"></span>
+                                            </div>
+                                            <div class="text-[10px] font-mono text-slate-400 truncate max-w-[260px]" x-text="nav.route"></div>
+                                        </div>
+                                        <div>
+                                            <span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">Citizen Portal</span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Fallback flat list if no contexts -->
+                        <div x-show="!(planData?.sidebar_preview?.source_navigation?.contexts?.admin || planData?.sidebar_preview?.source_navigation?.contexts?.complainant)" class="col-span-2 flex flex-wrap gap-1.5">
+                            <template x-for="(nav, nIdx) in (planData?.sidebar_preview?.source_navigation?.groups || [])" :key="nIdx">
+                                <span class="rounded-full bg-indigo-500/10 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 border border-indigo-500/20" x-text="nav.label"></span>
+                            </template>
+                        </div>
                     </div>
                 </div>
                 <!-- Proposed groups (reorderable) -->
