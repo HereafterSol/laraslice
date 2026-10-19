@@ -560,7 +560,8 @@ class SlicePortService
                         $fields,
                         $tenantKey,
                         [],
-                        $workflowConfigs[$sliceName] ?? null
+                        $workflowConfigs[$sliceName] ?? null,
+                        $sourcePath ?: null
                     ),
                     // Workflow: pass detected state machine to generator
                     'workflowConfig' => $workflowConfigs[$sliceName] ?? null,
@@ -1765,7 +1766,8 @@ PHP;
                 $primaryFields,
                 $tenantKey,
                 $rootRelations,
-                is_array($workflow) ? $workflow : null
+                is_array($workflow) ? $workflow : null,
+                $inspection['source_path'] ?? ($sourcePath ?? null)
             );
 
             // 7. Generate Slice YAML representation
@@ -3242,7 +3244,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
      * - email → text (with mailto in UI)
      * - *_id (FK) → text (resolves to related name in UI)
      */
-    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = [], ?array $workflow = null): array
+    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = [], ?array $workflow = null, ?string $sourcePath = null): array
     {
         $columns = [];
         $formFields = [];
@@ -3523,7 +3525,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             ];
         }
 
-        return [
+        $ui = [
             'presentation' => [
                 'create' => 'drawer',
                 'edit' => 'drawer',
@@ -3556,6 +3558,21 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 'tabs' => $this->buildShowTabsFromRelations($relations ?? []),
             ],
         ];
+
+        // Phase 2: DataTable.php static extraction overrides Phase 1 name guesses
+        if (is_string($sourcePath) && $sourcePath !== '') {
+            try {
+                $parser = new DataTableUiParser;
+                $hints = $parser->parseForSlice($sourcePath, $sliceName);
+                if (! empty($hints['columns'])) {
+                    $ui = $parser->mergeIntoUi($ui, $hints);
+                }
+            } catch (\Throwable $e) {
+                // Never fail scaffold/port on parser issues
+            }
+        }
+
+        return $ui;
     }
 
     /**

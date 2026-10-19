@@ -1,6 +1,6 @@
 # LaraSlice Foundation Roadmap (YAML-centric porting + DX)
 
-Last updated: 2026-10-19 (Muse f78e1f0 + UI richness F2–F4)  
+Last updated: 2026-10-19 (Phase 2 DataTable classifier + Slice YAML v0.1 draft)  
 Branch: `feat/workflow-bulk-actions`
 
 Goal: ERP-class porting that is **usable for admin / employee / client**, with **demo-aligned IA**, **Slice Studio as daily driver**, and **JSON + YAML + DB** sync.
@@ -117,7 +117,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | F11 | `slice:repair --re-infer-ui` for existing slices | DONE | Muse `b72820c` |
 | F12 | Dual-write conflict rule documented (JSON wins runtime) | DONE | |
 | F13 | YAML-only elimination (spec) | LATER | after branch merge |
-| F8 | DataTable.php AST parser (Phase 2) | LATER | |
+| F8 | DataTable classifier (Phase 2) | DONE | intent→v0.1 formatters; Tasks/Projects/Invoices |
 | F9 | AI → YAML UI (Phase 3) | LATER | |
 | F10 | Craft-style slice:sync apply/rebuild/check | LATER | 
 
