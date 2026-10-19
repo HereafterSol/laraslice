@@ -700,6 +700,7 @@ class SliceManager
             return;
         }
         $content = $original;
+        $content = $this->injectRuntimeDirectoryColumns($content);
 
         $viewsExport = var_export($views, true);
         $inlineExport = var_export($inlineEdit, true);
@@ -1891,4 +1892,80 @@ PHP;
 
         return @rmdir($dir);
     }
+
+    /**
+     * Ensure index.blade.php loads directory columns (with formatters) from slice.json at runtime.
+     */
+    protected function injectRuntimeDirectoryColumns(string $content): string
+    {
+        if (str_contains($content, 'load formatters from slice.json')) {
+            return $content;
+        }
+
+        $snippet = <<<'BLADE'
+
+        // Runtime: load formatters from slice.json
+        $__mf = __DIR__ . '/../../slice.json';
+        if (! is_file($__mf)) { $__mf = __DIR__ . '/../../slice.yaml'; }
+        if (is_file($__mf)) {
+            try {
+                $__m = str_ends_with($__mf, '.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)
+                    ? \Symfony\Component\Yaml\Yaml::parseFile($__mf)
+                    : json_decode((string) file_get_contents($__mf), true);
+                $__dirCols = $__m['ui']['directory']['columns'] ?? [];
+                if (is_array($__dirCols) && $__dirCols !== []) {
+                    $__htmlFmt = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'];
+                    $columns = [];
+                    foreach ($__dirCols as $__c) {
+                        $__key = $__c['key'] ?? $__c['handle'] ?? null;
+                        if (! $__key) { continue; }
+                        $__fmt = $__c['formatter'] ?? $__c['type'] ?? 'text';
+                        $columns[] = array_filter([
+                            'key' => $__key,
+                            'label' => $__c['label'] ?? \Illuminate\Support\Str::headline((string) $__key),
+                            'sortable' => $__c['sortable'] ?? true,
+                            'formatter' => $__fmt,
+                            'html' => in_array($__fmt, $__htmlFmt, true),
+                            'badge_from' => $__c['badge_from'] ?? null,
+                            'breakdown' => $__c['breakdown'] ?? null,
+                        ], fn ($v) => $v !== null);
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+BLADE;
+
+        if (preg_match('/\$rows\s*=\s*\\LaraSlice\\Support\\DataTableRows::from/', $content)) {
+            return preg_replace(
+                '/\$rows\s*=\s*\\LaraSlice\\Support\\DataTableRows::from/',
+                $snippet.'$rows = \\LaraSlice\\Support\\DataTableRows::from',
+                $content,
+                1
+            ) ?? $content;
+        }
+
+        if (preg_match('/\$rows\s*=\s*\\LaraSlice\\Support\\DataTableRows::from/', $content)) {
+            return $content;
+        }
+
+        // Unescaped form in some blades
+        if (str_contains($content, '$rows = \LaraSlice\Support\DataTableRows::from')) {
+            return str_replace(
+                '$rows = \LaraSlice\Support\DataTableRows::from',
+                $snippet.'$rows = \LaraSlice\Support\DataTableRows::from',
+                $content
+            );
+        }
+        if (str_contains($content, '$rows = \LaraSlice\Support\DataTableRows::from')) {
+            return str_replace(
+                '$rows = \LaraSlice\Support\DataTableRows::from',
+                $snippet.'$rows = \LaraSlice\Support\DataTableRows::from',
+                $content
+            );
+        }
+
+        return $content;
+    }
+
 }

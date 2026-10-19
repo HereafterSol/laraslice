@@ -1143,7 +1143,36 @@ ACTIONS;
 {$dataTableColumns}
             // @laraslice:columns
         ];
-        \$rows = \LaraSlice\Support\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
+        // Runtime: load formatters from slice.json so re-infer applies without regenerating this blade
+        \$__mf = __DIR__ . '/../../slice.json';
+        if (! is_file(\$__mf)) { \$__mf = __DIR__ . '/../../slice.yaml'; }
+        if (is_file(\$__mf)) {
+            try {
+                \$__m = str_ends_with(\$__mf, '.yaml') && class_exists(\\Symfony\\Component\\Yaml\\Yaml::class)
+                    ? \\Symfony\\Component\\Yaml\\Yaml::parseFile(\$__mf)
+                    : json_decode((string) file_get_contents(\$__mf), true);
+                \$__dirCols = \$__m['ui']['directory']['columns'] ?? [];
+                if (is_array(\$__dirCols) && \$__dirCols !== []) {
+                    \$__htmlFmt = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'];
+                    \$columns = [];
+                    foreach (\$__dirCols as \$__c) {
+                        \$__key = \$__c['key'] ?? \$__c['handle'] ?? null;
+                        if (! \$__key) { continue; }
+                        \$__fmt = \$__c['formatter'] ?? \$__c['type'] ?? 'text';
+                        \$columns[] = array_filter([
+                            'key' => \$__key,
+                            'label' => \$__c['label'] ?? \\Illuminate\\Support\\Str::headline((string) \$__key),
+                            'sortable' => \$__c['sortable'] ?? true,
+                            'formatter' => \$__fmt,
+                            'html' => in_array(\$__fmt, \$__htmlFmt, true),
+                            'badge_from' => \$__c['badge_from'] ?? null,
+                            'breakdown' => \$__c['breakdown'] ?? null,
+                        ], fn (\$v) => \$v !== null);
+                    }
+                }
+            } catch (\\Throwable \$e) {}
+        }
+        \$rows = \\LaraSlice\\Support\\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
             'show_url'   => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.show') ? route('{$pluralSnake}.show', \$item->id) : null,
             'edit_url'   => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.edit') ? route('{$pluralSnake}.edit', \$item->id) : null,
             'delete_url' => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.destroy') ? route('{$pluralSnake}.destroy', \$item->id) : null,

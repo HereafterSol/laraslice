@@ -47,3 +47,20 @@ php artisan slice:repair --re-infer-ui --source=/path/to/erp
 ## Honest merge story
 
 Infrastructure (parser, schema, validate) is real. List **config** parity moved ~2 → ~3.5 on the three pilots. Detail pages and full 85-slice visual QA remain host-side work.
+
+
+## Follow-up fix (visual pipeline)
+
+Muse found: YAML declared `status_pill` but cells stayed plain text.
+
+**Root cause:** generated `index.blade.php` passed `$columns` with `html: true` but **without** `formatter` → `DataTableRows` never ran named formatters.
+
+**Fixes:**
+1. Generator emits `formatter` on columns; index loads columns from `slice.json` at runtime.
+2. `slice:repair` injects the same runtime loader into existing indexes.
+3. `--re-infer-ui` merges formatters onto **real field handles** (project_name stays project_name; title maps only when that field exists).
+
+```bash
+php artisan slice:repair --re-infer-ui --source=/path/to/erp
+php artisan slice:repair   # patches index blades
+```

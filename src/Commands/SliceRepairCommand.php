@@ -184,21 +184,34 @@ class SliceRepairCommand extends Command
             );
 
             // buildUiFromInspectedFields returns { directory: {...}, dashboard, forms, show, ... }
-            // NOT a flat columns list — reading $ui['columns'] left formatters empty (Muse merge bug).
             $inferredDir = is_array($ui['directory'] ?? null) ? $ui['directory'] : [];
             $old = $manifest['ui']['directory'] ?? [];
             $manifest['ui'] = $manifest['ui'] ?? [];
+
+            // Preserve real DB field handles: map inferred keys onto existing fields
+            // so re-infer does not clobber project_name → title and empty the grid.
+            $fieldHandles = [];
+            foreach ($normalized as $nf) {
+                $fieldHandles[] = (string) ($nf['handle'] ?? '');
+            }
+            $fieldHandles = array_values(array_filter($fieldHandles));
+            $mergedColumns = $this->mergeInferredColumns(
+                $old['columns'] ?? [],
+                $inferredDir['columns'] ?? [],
+                $fieldHandles
+            );
+
             $manifest['ui']['directory'] = array_merge($old, [
-                'columns' => $inferredDir['columns'] ?? $old['columns'] ?? [],
+                'columns' => $mergedColumns,
                 'quick_filters' => $inferredDir['quick_filters'] ?? $old['quick_filters'] ?? [],
                 'sidebar_filters' => $inferredDir['sidebar_filters'] ?? $old['sidebar_filters'] ?? [],
-                'searchable' => $inferredDir['searchable'] ?? $old['searchable'] ?? [],
+                'searchable' => $this->filterSearchableToFields($inferredDir['searchable'] ?? $old['searchable'] ?? [], $fieldHandles),
                 'search_placeholder' => $inferredDir['search_placeholder'] ?? $old['search_placeholder'] ?? null,
                 'views' => $inferredDir['views'] ?? $old['views'] ?? ['table'],
                 'default_view' => $inferredDir['default_view'] ?? $old['default_view'] ?? 'table',
                 'inline_edit' => $inferredDir['inline_edit'] ?? $old['inline_edit'] ?? [],
                 'bulk_actions' => $inferredDir['bulk_actions'] ?? $old['bulk_actions'] ?? [],
-                'row_actions' => $inferredDir['row_actions'] ?? $old['row_actions'] ?? ($old['row_actions'] ?? []),
+                'row_actions' => $inferredDir['row_actions'] ?? $old['row_actions'] ?? [],
                 'summary_cards' => $inferredDir['summary_cards'] ?? $old['summary_cards'] ?? [],
             ]);
             if (! empty($ui['dashboard'])) {
@@ -218,5 +231,130 @@ class SliceRepairCommand extends Command
         $this->info("Re-inferred directory UI on {$n} slice(s)".($skipped ? ", skipped {$skipped} with Studio customizations" : "").".");
 
         return $n;
+    }
+
+    /**
+     * Merge inferred directory columns onto real field handles.
+     *
+     * @param  list<array<string, mixed>>  $existing
+     * @param  list<array<string, mixed>>  $inferred
+     * @param  list<string>  $fieldHandles
+     * @return list<array<string, mixed>>
+     */
+    protected function mergeInferredColumns(array $existing, array $inferred, array $fieldHandles): array
+    {
+        $aliases = [
+            'title' => ['heading', 'name', 'subject', 'label', 'project_name', 'task'],
+            'name' => ['title', 'heading', 'label', 'project_name'],
+            'description' => ['desc', 'details', 'summary', 'notes', 'project_summary'],
+            'status' => ['board_column', 'state', 'stage', 'project_status', 'invoice_status_code'],
+            'due_date' => ['deadline', 'due_on', 'due_at'],
+            'start_date' => ['starts_at', 'start_at'],
+            'total' => ['amount', 'grand_total', 'price'],
+            'amount' => ['total', 'grand_total'],
+        ];
+
+        $resolve = function (string $handle) use ($fieldHandles, $aliases): ?string {
+            if (in_array($handle, $fieldHandles, true)) {
+                return $handle;
+            }
+            // inferred canonical → actual field
+            foreach ($aliases as $canonical => $alts) {
+                if ($handle === $canonical || in_array($handle, $alts, true)) {
+                    if (in_array($canonical, $fieldHandles, true)) {
+                        return $canonical;
+                    }
+                    foreach ($alts as $a) {
+                        if (in_array($a, $fieldHandles, true)) {
+                            return $a;
+                        }
+                    }
+                }
+            }
+
+            return null;
+        };
+
+        $byKey = [];
+        // Start from existing columns that still match fields (preserve working keys)
+        foreach ($existing as $col) {
+            $k = $col['key'] ?? $col['handle'] ?? null;
+            if (! $k) {
+                continue;
+            }
+            $resolved = $resolve((string) $k) ?? (in_array($k, $fieldHandles, true) ? $k : null);
+            if ($resolved) {
+                $col['key'] = $resolved;
+                $col['handle'] = $resolved;
+                $byKey[$resolved] = $col;
+            }
+        }
+
+        // Apply inferred formatters onto resolved keys
+        foreach ($inferred as $col) {
+            $k = $col['handle'] ?? $col['key'] ?? null;
+            if (! $k) {
+                continue;
+            }
+            $resolved = $resolve((string) $k);
+            if (! $resolved) {
+                continue;
+            }
+            $base = $byKey[$resolved] ?? [
+                'key' => $resolved,
+                'handle' => $resolved,
+                'label' => $col['label'] ?? \Illuminate\Support\Str::headline($resolved),
+                'sortable' => true,
+            ];
+            if (! empty($col['formatter'])) {
+                $base['formatter'] = $col['formatter'];
+                $base['type'] = $col['formatter'];
+            }
+            if (! empty($col['badge_from'])) {
+                $base['badge_from'] = $col['badge_from'];
+            }
+            if (! empty($col['breakdown'])) {
+                $base['breakdown'] = $col['breakdown'];
+            }
+            if (! empty($col['inferred_from'])) {
+                $base['inferred_from'] = $col['inferred_from'];
+            }
+            $byKey[$resolved] = $base;
+        }
+
+        // If nothing matched, fall back to inferred filtered to field handles only
+        if ($byKey === []) {
+            foreach ($inferred as $col) {
+                $k = $col['handle'] ?? $col['key'] ?? null;
+                $resolved = $k ? $resolve((string) $k) : null;
+                if ($resolved) {
+                    $col['key'] = $resolved;
+                    $col['handle'] = $resolved;
+                    $byKey[$resolved] = $col;
+                }
+            }
+        }
+
+        return array_values($byKey);
+    }
+
+    /**
+     * @param  list<string>|mixed  $searchable
+     * @param  list<string>  $fieldHandles
+     * @return list<string>
+     */
+    protected function filterSearchableToFields(mixed $searchable, array $fieldHandles): array
+    {
+        if (! is_array($searchable)) {
+            return [];
+        }
+        $out = [];
+        foreach ($searchable as $s) {
+            if (is_string($s) && in_array($s, $fieldHandles, true)) {
+                $out[] = $s;
+            }
+        }
+
+        return $out !== [] ? $out : array_slice($fieldHandles, 0, 3);
     }
 }
