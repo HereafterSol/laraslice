@@ -185,4 +185,53 @@ PHP;
         $this->assertArrayHasKey('bulk_actions', $ui['directory']);
         $this->assertNotEmpty($ui['directory']['bulk_actions']);
     }
+
+    public function test_build_ui_infers_rich_formatters_for_erp_fields(): void
+    {
+        // Phase 1 UI richness (handoff): infer status_pill, progress_bar, date_overdue,
+        // money_breakdown, composite_user, text_with_badge from field names.
+        $service = new SlicePortService();
+        $ui = $service->buildUiFromInspectedFields('Tasks', [
+            ['handle' => 'id', 'type' => 'bigint'],
+            ['handle' => 'title', 'type' => 'string'],
+            ['handle' => 'status', 'type' => 'string'],
+            ['handle' => 'priority', 'type' => 'string'],
+            ['handle' => 'due_date', 'type' => 'date'],
+            ['handle' => 'progress', 'type' => 'integer'],
+            ['handle' => 'user_id', 'type' => 'integer'],
+            ['handle' => 'total', 'type' => 'decimal'],
+            ['handle' => 'paid_amount', 'type' => 'decimal'],
+        ], 'company_id', [], null);
+
+        $byHandle = [];
+        foreach ($ui['directory']['columns'] ?? [] as $col) {
+            $byHandle[$col['handle'] ?? ''] = $col['formatter'] ?? '';
+        }
+
+        $this->assertSame('status_pill', $byHandle['status'] ?? null);
+        $this->assertSame('date_overdue', $byHandle['due_date'] ?? null);
+        $this->assertSame('progress_bar', $byHandle['progress'] ?? null);
+        $this->assertSame('composite_user', $byHandle['user_id'] ?? null);
+        $this->assertContains('board', $ui['directory']['views'] ?? []);
+        $this->assertContains('status', $ui['directory']['inline_edit'] ?? []);
+        // title may pick up priority badge
+        if (isset($byHandle['title'])) {
+            $this->assertTrue(
+                in_array($byHandle['title'], ['text', 'text_with_badge'], true),
+                'title formatter should be text or text_with_badge'
+            );
+        }
+        // money pair
+        if (isset($byHandle['total'])) {
+            $this->assertSame('money_breakdown', $byHandle['total']);
+        }
+    }
+
+    public function test_date_overdue_formatter_marks_past_dates(): void
+    {
+        $html = \LaraSlice\Support\DataTableRows::dateOverdue('2000-01-01');
+        $this->assertStringContainsString('rose', $html);
+        $html2 = \LaraSlice\Support\DataTableRows::dateOverdue(null);
+        $this->assertStringContainsString('—', $html2);
+    }
 }

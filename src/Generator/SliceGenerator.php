@@ -244,7 +244,7 @@ class SliceGenerator
             foreach ($uiConfig['directory']['columns'] as $c) {
                 $handle = $c['handle'] ?? $c['key'] ?? 'id';
                 $label = $c['label'] ?? \Illuminate\Support\Str::headline($handle);
-                $isHtml = in_array($c['type'] ?? '', ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge'], true);
+                $isHtml = in_array($c['type'] ?? '', ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'], true);
                 $dtCols[] = "            ['key' => '{$handle}', 'label' => '{$label}', 'sortable' => true" . ($isHtml ? ", 'html' => true" : '') . "],";
             }
             $dataTableColumns = implode("

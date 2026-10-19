@@ -71,6 +71,7 @@ class DataTableRows
                         ),
                         'progress_bar' => static::progressBar((float) $val),
                         'date_time' => static::display($val),
+                        'date_overdue' => static::dateOverdue($val),
                         default => static::display($val),
                     };
                     continue;
@@ -293,7 +294,42 @@ class DataTableRows
             .'</span><span class="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[10px] font-bold border '.$colors.'">'.$badgeLabel.'</span></div>';
     }
 
-    public static function progressBar(float|int $percent, ?string $label = null): string
+    /**
+     * Date cell with overdue / today / future coloring (ERP Tasks due_date parity).
+     */
+    public static function dateOverdue(mixed $val): string
+    {
+        if ($val === null || $val === '') {
+            return '<span class="text-muted-foreground">—</span>';
+        }
+        try {
+            if ($val instanceof \DateTimeInterface) {
+                $dt = \Illuminate\Support\Carbon::instance(\DateTimeImmutable::createFromInterface($val));
+            } else {
+                $dt = \Illuminate\Support\Carbon::parse((string) $val);
+            }
+        } catch (\Throwable $e) {
+            return htmlspecialchars((string) $val, ENT_QUOTES, 'UTF-8');
+        }
+        $label = $dt->format('M j, Y');
+        $end = $dt->copy()->endOfDay();
+        if ($end->isPast()) {
+            $cls = 'text-rose-600 dark:text-rose-400 font-semibold';
+            $hint = 'Overdue';
+        } elseif ($dt->isToday()) {
+            $cls = 'text-amber-600 dark:text-amber-400 font-semibold';
+            $hint = 'Due today';
+        } else {
+            $cls = 'text-foreground';
+            $hint = '';
+        }
+        $safe = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+        $title = $hint !== '' ? ' title="'.htmlspecialchars($hint, ENT_QUOTES, 'UTF-8').'"' : '';
+
+        return '<span class="text-xs '.$cls.'"'.$title.'>'.$safe.'</span>';
+    }
+
+        public static function progressBar(float|int $percent, ?string $label = null): string
     {
         $pct = max(0, min(100, (int) round($percent)));
         $lbl = $label !== null ? htmlspecialchars($label, ENT_QUOTES, 'UTF-8') : ($pct . '%');

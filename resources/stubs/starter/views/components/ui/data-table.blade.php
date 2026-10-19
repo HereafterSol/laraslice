@@ -30,7 +30,7 @@
         'label' => $c['label'] ?? ucfirst($c['key'] ?? ''),
         'sortable' => $c['sortable'] ?? true,
         'class' => $c['class'] ?? '',
-        'html' => (bool) ($c['html'] ?? in_array($c['formatter'] ?? '', ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge'], true)),
+        'html' => (bool) ($c['html'] ?? in_array($c['formatter'] ?? '', ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue'], true)),
     ])->values();
     $searchKeys = $searchKey ? [$searchKey] : $cols->pluck('key')->all();
 @endphp

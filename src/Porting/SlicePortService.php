@@ -3261,38 +3261,57 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $type = $f['type'] ?? 'string';
             $lower = strtolower($handle);
 
-            // Infer formatter from field name/type
+            // Infer formatter from field name/type (Phase 1 UI richness — handoff)
             $formatter = 'text';
-            $isMoney = str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || $type === 'decimal';
-            $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state';
+            $isMoney = str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || str_contains($lower, 'grand_total') || $type === 'decimal';
+            $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state' || $lower === 'stage';
             $isDate = str_ends_with($lower, '_at') || str_starts_with($lower, 'date') || in_array($type, ['datetime', 'date', 'timestamp'], true);
+            $isDue = in_array($lower, ['due_date', 'deadline', 'due_on'], true) || str_ends_with($lower, '_due');
+            $isProgress = str_contains($lower, 'progress') || str_contains($lower, 'percent') || str_contains($lower, 'completion') || $lower === 'completion_percent';
+            $isAssignee = in_array($lower, ['user_id', 'assignee_id', 'assigned_to', 'employee_id', 'owner_id'], true)
+                || str_ends_with($lower, '_by') && str_contains($lower, 'assign');
+            $isPriority = $lower === 'priority' || $lower === 'urgency';
+            $isCode = $lower === 'code' || str_ends_with($lower, '_code') || in_array($lower, ['invoice_number', 'order_number', 'task_short_code', 'project_short_code'], true);
 
-            if ($isMoney) {
+            if ($isProgress) {
+                $formatter = 'progress_bar';
+            } elseif ($isMoney) {
+                // Prefer plain currency until paid/total pair is detected below
                 $formatter = 'money_breakdown';
             } elseif ($isStatus) {
                 $formatter = 'status_pill';
+            } elseif ($isDue) {
+                $formatter = 'date_overdue';
             } elseif ($isDate) {
                 $formatter = 'date_time';
-            } elseif ($lower === 'code' || str_ends_with($lower, '_code') || $lower === 'invoice_number' || $lower === 'order_number') {
+            } elseif ($isCode) {
                 $formatter = 'code_badge';
+            } elseif ($isAssignee) {
+                $formatter = 'composite_user';
+            } elseif ($isPriority) {
+                $formatter = 'status_pill';
             } elseif (str_contains($lower, 'email')) {
-                $formatter = 'text'; // UI renders mailto link
-            } elseif (str_contains($lower, 'progress') || str_contains($lower, 'percent')) {
-                $formatter = 'progress_bar';
+                $formatter = 'text';
             }
 
-            // Directory columns: first 6 meaningful fields
-            if (count($columns) < 6) {
-                $columns[] = [
+            // Directory columns: up to 8 meaningful fields (ERP density)
+            if (count($columns) < 8) {
+                $col = [
                     'handle' => $handle,
+                    'key' => $handle,
                     'label' => $label,
                     'formatter' => $formatter,
+                    'type' => $formatter,
                     'sortable' => true,
                 ];
+                if ($isAssignee) {
+                    $col['relation'] = \Illuminate\Support\Str::camel(str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle);
+                }
+                $columns[] = $col;
             }
 
-            // Quick filters: status/enum fields become tab-style quick filters
-            if ($isStatus && count($quickFilters) < 4) {
+            // Quick filters: status / priority / enum-ish
+            if (($isStatus || $isPriority) && count($quickFilters) < 5) {
                 $quickFilters[] = [
                     'handle' => $handle,
                     'label' => $label,
@@ -3415,6 +3434,24 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
             unset($col);
         }
+
+        // Due dates → overdue coloring
+        foreach ($columns as &$col) {
+            $h = strtolower((string) ($col['handle'] ?? ''));
+            if (in_array($h, ['due_date', 'deadline', 'due_on'], true) || str_ends_with($h, '_due')) {
+                $col['formatter'] = 'date_overdue';
+                $col['type'] = 'date_overdue';
+            }
+            if (str_contains($h, 'progress') || str_contains($h, 'completion') || $h === 'completion_percent') {
+                $col['formatter'] = 'progress_bar';
+                $col['type'] = 'progress_bar';
+            }
+            if (in_array($h, ['user_id', 'assignee_id', 'assigned_to', 'employee_id'], true)) {
+                $col['formatter'] = 'composite_user';
+                $col['type'] = 'composite_user';
+            }
+        }
+        unset($col);
 
         // Priority badge in title (ERP tasks)
         $hasPriority = in_array('priority', $handles, true);

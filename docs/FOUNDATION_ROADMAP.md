@@ -113,6 +113,10 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | F4 | Directory density (compact rows) | DONE | data-table density prop |
 | F5 | Full calendar drag-drop | LATER | was C8 |
 | F6 | Live 3-persona E2E vs demo screenshots | NEXT | operator on host app |
+| F7 | Phase 1 formatter inference (status/progress/due/assignee) | DONE | handoff UI richness |
+| F8 | DataTable.php AST parser (Phase 2) | LATER | |
+| F9 | AI → YAML UI (Phase 3) | LATER | |
+| F10 | Craft-style slice:sync apply/rebuild/check | LATER | 
 
 Merged Muse work at `f78e1f0`. Handoff doc `GROK-HANDOFF-UI-RICHNESS.md` was local to Muse workspace (not in repo).
 
