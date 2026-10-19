@@ -106,4 +106,58 @@ class SliceRepairTest extends TestCase
             app('files')->deleteDirectory($testPath);
         }
     }
+
+    public function test_re_infer_ui_skips_slices_with_studio_history(): void
+    {
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestReInfer';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestReInfer',
+            'fields' => [
+                'title' => ['name' => 'title', 'label' => 'Title', 'type' => 'string'],
+                'status' => ['name' => 'status', 'label' => 'Status', 'type' => 'string'],
+            ],
+            'ui' => ['directory' => ['columns' => [['key' => 'title', 'formatter' => 'text']]]],
+            // Simulate user customization in Studio
+            'version_history' => [['at' => now()->toIso8601String(), 'actor' => 'test', 'note' => 'customized']],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'TestReInfer', '--re-infer-ui' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+
+            $manifest = json_decode(file_get_contents($testPath.'/slice.json'), true);
+            // Should NOT have been overwritten — user customization preserved
+            $this->assertEquals('text', $manifest['ui']['directory']['columns'][0]['formatter']);
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
+
+    public function test_re_infer_ui_updates_columns_without_history(): void
+    {
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestReInfer2';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestReInfer2',
+            'fields' => [
+                'title' => ['name' => 'title', 'label' => 'Title', 'type' => 'string'],
+                'status' => ['name' => 'status', 'label' => 'Status', 'type' => 'string'],
+            ],
+            'ui' => ['directory' => ['columns' => []]],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'TestReInfer2', '--re-infer-ui' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+
+            $manifest = json_decode(file_get_contents($testPath.'/slice.json'), true);
+            // Should have inferred columns with rich formatters
+            $this->assertNotEmpty($manifest['ui']['directory']['columns']);
+            $formatters = array_column($manifest['ui']['directory']['columns'], 'formatter');
+            $this->assertContains('status_pill', $formatters);
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
 }
