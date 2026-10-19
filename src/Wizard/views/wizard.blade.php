@@ -1,7 +1,7 @@
 @extends(view()->exists('layouts.app') ? 'layouts.app' : 'laraslice::layout')
 
 @section('content')
-<style>[x-cloak] { display: none !important; }</style>
+<style>[x-cloak] { display: none !important; } .laraslice-studio-root { max-width: 100vw; overflow-x: hidden; } .laraslice-studio-root table { display: block; max-width: 100%; overflow-x: auto; }</style>
 <script>
 function larasliceWizard() {
     return {

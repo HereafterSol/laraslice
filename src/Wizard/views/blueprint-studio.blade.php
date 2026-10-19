@@ -3,7 +3,7 @@
 @section('title', 'Blueprint Studio · Low-Code Slice Modeler')
 
 @section('content')
-<main class="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8" x-data="blueprintStudio({
+<main class="mx-auto max-w-[1600px] w-full max-w-[100vw] overflow-x-hidden space-y-6 px-3 py-4 sm:px-6 lg:px-8" x-data="blueprintStudio({
     initialSource: @js(old('source', $source ?? '')),
     initialFormat: @js(old('format', $format ?? 'yaml')),
     initialBlueprint: @js($blueprintData ?? null),
