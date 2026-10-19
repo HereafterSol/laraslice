@@ -12,65 +12,71 @@ navigation:
   order: 20
   visible: true
   roles:
-    - admin
-    - employee
-    - client
+  - admin
+  - employee
+  - client
 ui:
   directory:
     views:
-      - table
-      - board
-      - calendar
+    - table
+    - board
+    - calendar
     default_view: table
     inline_edit:
-      - status
+    - status
     bulk_actions:
-      - handle: delete
-        label: Delete
-        type: native
-      - handle: export
-        label: Export
-        type: native
-      - handle: complete
-        label: Mark complete
-        type: workflow
+    - handle: delete
+      label: Delete
+      type: native
+    - handle: export
+      label: Export
+      type: native
+    - handle: complete
+      label: Mark complete
+      type: workflow
     row_actions:
       display: hybrid
       items:
-        - handle: view
-          label: View
-          icon: eye
-          placement: inline
-        - handle: edit
-          label: Edit
-          icon: pencil
-          placement: dropdown
-        - handle: delete
-          label: Delete
-          icon: trash-2
-          placement: dropdown
-          danger: true
+      - handle: view
+        label: View
+        icon: eye
+        placement: inline
+      - handle: edit
+        label: Edit
+        icon: pencil
+        placement: dropdown
+      - handle: delete
+        label: Delete
+        icon: trash-2
+        placement: dropdown
+        danger: true
     columns:
-      - key: name
-        label: Project
-        formatter: text
-        sortable: true
-      - key: status
-        label: Status
-        formatter: status_pill
-        sortable: true
-      - key: start_date
-        label: Start
-        formatter: date_time
-      - key: due_date
-        label: Due
-        formatter: date_time
+    - key: name
+      label: Project
+      formatter: text_with_badge
+      sortable: true
+      badge_from: priority
+    - key: status
+      label: Status
+      formatter: status_pill
+      sortable: true
+      inferred_from: name+status_handle
+    - key: start_date
+      label: Start
+      formatter: date_time
+    - key: due_date
+      label: Due
+      formatter: date_overdue
+    - key: completion_percent
+      label: Progress
+      formatter: progress_bar
+      inferred_from: editColumn
   dashboard:
     enabled: true
     widgets:
-      - type: stat
-        handle: total
-        label: Projects
+    - type: stat
+      handle: total
+      label: Projects
 fields:
   name:
     name: name
@@ -87,4 +93,7 @@ fields:
   due_date:
     name: due_date
     type: date
+  completion_percent:
+    name: completion_percent
+    type: integer
 workflow: true
