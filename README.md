@@ -432,3 +432,11 @@ LARASLICE_MFA_ENABLED=false
 ```
 
 Skips MFA enrollment and challenge after password login. **For local development and testing only — never disable in production.** Default is `true`.
+
+After upgrading LaraSlice, either run `php artisan slice:repair` (merges missing config keys such as `auth.mfa_enabled`) or re-publish:
+
+```bash
+php artisan vendor:publish --tag=laraslice-config --force
+```
+
+Published `config/laraslice.php` does not auto-update on composer update.

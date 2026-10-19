@@ -79,7 +79,12 @@ class SecurityPolicyService
     public static function requiresMfa(User|Authenticatable $user): bool
     {
         // Global kill-switch for local development / automated testing only.
-        if (! (bool) config('laraslice.auth.mfa_enabled', true)) {
+        // env() fallback: published config/laraslice.php may predate the mfa_enabled key.
+        $mfaEnabled = config('laraslice.auth.mfa_enabled');
+        if ($mfaEnabled === null) {
+            $mfaEnabled = filter_var(env('LARASLICE_MFA_ENABLED', true), FILTER_VALIDATE_BOOLEAN);
+        }
+        if (! (bool) $mfaEnabled) {
             return false;
         }
 

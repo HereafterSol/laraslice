@@ -1898,8 +1898,24 @@ PHP;
      */
     protected function injectRuntimeDirectoryColumns(string $content, string $manifestAbsolutePath): string
     {
-        if (str_contains($content, 'load formatters from slice.json')) {
+        // Already on absolute-path loader (no __DIR__) — skip.
+        $hasAbsLoader = str_contains($content, 'absolute path baked at repair time')
+            || (str_contains($content, 'load formatters from slice.json') && ! str_contains($content, "__DIR__"));
+        $hasStaleDirLoader = str_contains($content, 'load formatters from slice.json')
+            && str_contains($content, '__DIR__');
+
+        if ($hasAbsLoader && ! $hasStaleDirLoader) {
             return $content;
+        }
+
+        // Strip any previous runtime loader block (old __DIR__ or prior inject)
+        if (str_contains($content, 'load formatters from slice.json') || str_contains($content, '$__mf')) {
+            $content = preg_replace(
+                '/\n\s*\/\/ Runtime: load formatters from slice\.json.*?(?=\n\s*\$rows\s*=)/s',
+                "\n",
+                $content,
+                1
+            ) ?? $content;
         }
 
         // Compiled Blade views live under storage/framework/views — __DIR__ cannot
