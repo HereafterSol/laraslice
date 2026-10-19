@@ -1936,33 +1936,24 @@ PHP;
 
 BLADE;
 
-        if (preg_match('/\$rows\s*=\s*\\LaraSlice\\Support\\DataTableRows::from/', $content)) {
-            return preg_replace(
-                '/\$rows\s*=\s*\\LaraSlice\\Support\\DataTableRows::from/',
-                $snippet.'$rows = \\LaraSlice\\Support\\DataTableRows::from',
-                $content,
-                1
-            ) ?? $content;
+        // Prefer plain string match — avoid PCRE \L namespace false escapes
+        $needles = [
+            '$rows = \LaraSlice\Support\DataTableRows::from',
+            '$rows = \\LaraSlice\\Support\\DataTableRows::from',
+        ];
+        foreach ($needles as $needle) {
+            $pos = strpos($content, $needle);
+            if ($pos !== false) {
+                return substr($content, 0, $pos).$snippet.$needle.substr($content, $pos + strlen($needle));
+            }
         }
 
-        if (preg_match('/\$rows\s*=\s*\\LaraSlice\\Support\\DataTableRows::from/', $content)) {
-            return $content;
-        }
+        // Fallback: any DataTableRows::from assignment
+        if (preg_match('/\$rows\s*=\s*\\\\?LaraSlice\\\\Support\\\\DataTableRows::from/', $content, $m, PREG_OFFSET_CAPTURE)) {
+            $pos = $m[0][1];
+            $matched = $m[0][0];
 
-        // Unescaped form in some blades
-        if (str_contains($content, '$rows = \LaraSlice\Support\DataTableRows::from')) {
-            return str_replace(
-                '$rows = \LaraSlice\Support\DataTableRows::from',
-                $snippet.'$rows = \LaraSlice\Support\DataTableRows::from',
-                $content
-            );
-        }
-        if (str_contains($content, '$rows = \LaraSlice\Support\DataTableRows::from')) {
-            return str_replace(
-                '$rows = \LaraSlice\Support\DataTableRows::from',
-                $snippet.'$rows = \LaraSlice\Support\DataTableRows::from',
-                $content
-            );
+            return substr($content, 0, $pos).$snippet.$matched.substr($content, $pos + strlen($matched));
         }
 
         return $content;

@@ -25,13 +25,21 @@
     $searchPlaceholder ??= __('Start typing to search...');
     $actionsLabel ??= __('Action');
 
-    $cols = collect($columns)->map(fn ($c) => [
-        'key' => $c['key'] ?? '',
-        'label' => $c['label'] ?? ucfirst($c['key'] ?? ''),
-        'sortable' => $c['sortable'] ?? true,
-        'class' => $c['class'] ?? '',
-        'html' => (bool) ($c['html'] ?? in_array($c['formatter'] ?? '', ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue'], true)),
-    ])->values();
+    $htmlFormatters = ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue', 'badge'];
+    $cols = collect($columns)->map(function ($c) use ($htmlFormatters) {
+        $fmt = $c['formatter'] ?? $c['type'] ?? null;
+        $html = (bool) ($c['html'] ?? ($fmt && in_array($fmt, $htmlFormatters, true)));
+        return [
+            'key' => $c['key'] ?? $c['handle'] ?? '',
+            'label' => $c['label'] ?? ucfirst($c['key'] ?? $c['handle'] ?? ''),
+            'sortable' => $c['sortable'] ?? true,
+            'class' => $c['class'] ?? '',
+            'formatter' => $fmt,
+            'html' => $html,
+            'badge_from' => $c['badge_from'] ?? null,
+            'breakdown' => $c['breakdown'] ?? null,
+        ];
+    })->values();
     $searchKeys = $searchKey ? [$searchKey] : $cols->pluck('key')->all();
 @endphp
 
