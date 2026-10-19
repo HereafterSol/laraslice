@@ -191,15 +191,32 @@ class SlicePortService
         } elseif (! empty($migTables)) {
             // Migrations available, no live DB — use migrations but check for gaps
             $tables = $migTables;
-            // Mark all as migration-sourced
             foreach ($tables as $name => $t) {
                 $tables[$name]['table_source'] = 'migrations';
             }
         } else {
-            // No migrations, no source DB — fallback to current app DB with warning
-            $tables = $this->extractTablesFromDatabase();
-            foreach ($tables as $name => $t) {
-                $tables[$name]['table_source'] = 'app_database_fallback';
+            // Non-Laravel sources (e.g. Dolibarr): try bundled SQL schema dumps
+            $sqlTables = $this->extractTablesFromSqlDumps($cleanPath);
+            if (! empty($sqlTables)) {
+                $tables = $sqlTables;
+            } elseif ((bool) config('laraslice.porting.allow_app_db_fallback', false)) {
+                // Explicit opt-in only — never silent
+                $tables = $this->extractTablesFromDatabase();
+                foreach ($tables as $name => $t) {
+                    $tables[$name]['table_source'] = 'app_database_fallback';
+                }
+            } else {
+                throw new \InvalidArgumentException(
+                    "No source schema found at [{$cleanPath}].\n".
+                    "LaraSlice did not find Laravel migrations, a configured source DB, or SQL dumps.\n".
+                    "It will NOT silently use the target application database.\n\n".
+                    "Fix one of:\n".
+                    "  1. Point --source-database= / --source-host= / --source-username= at the LEGACY database\n".
+                    "  2. Or --source-connection=name from config/database.php\n".
+                    "  3. Or place MySQL schema dumps (*.sql with CREATE TABLE) under the source tree\n".
+                    "  4. For Laravel sources, ensure database/migrations exists\n".
+                    "  5. Dev only: LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true (discouraged)\n"
+                );
             }
         }
 
@@ -926,7 +943,103 @@ PHP;
         return $tables;
     }
 
+    /**
+     * Parse CREATE TABLE statements from SQL dumps under the source tree
+     * (Dolibarr install/mysql, WordPress schema, generic mysqldump, etc.).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function extractTablesFromSqlDumps(string $sourcePath): array
+    {
+        $tables = [];
+        $roots = [
+            $sourcePath,
+            $sourcePath.DIRECTORY_SEPARATOR.'install',
+            $sourcePath.DIRECTORY_SEPARATOR.'install'.DIRECTORY_SEPARATOR.'mysql',
+            $sourcePath.DIRECTORY_SEPARATOR.'htdocs'.DIRECTORY_SEPARATOR.'install'.DIRECTORY_SEPARATOR.'mysql',
+            $sourcePath.DIRECTORY_SEPARATOR.'sql',
+            $sourcePath.DIRECTORY_SEPARATOR.'database',
+            $sourcePath.DIRECTORY_SEPARATOR.'schema',
+        ];
+
+        $files = [];
+        foreach ($roots as $root) {
+            if (! is_dir($root) && ! is_file($root)) {
+                continue;
+            }
+            if (is_file($root) && str_ends_with(strtolower($root), '.sql')) {
+                $files[] = $root;
+                continue;
+            }
+            if (! is_dir($root)) {
+                continue;
+            }
+            foreach (glob($root.DIRECTORY_SEPARATOR.'*.sql') ?: [] as $f) {
+                $files[] = $f;
+            }
+            // one level deeper
+            foreach (glob($root.DIRECTORY_SEPARATOR.'*'.DIRECTORY_SEPARATOR.'*.sql') ?: [] as $f) {
+                $files[] = $f;
+            }
+        }
+        $files = array_values(array_unique($files));
+        if ($files === []) {
+            return [];
+        }
+
+        foreach ($files as $file) {
+            $content = @file_get_contents($file);
+            if ($content === false || $content === '') {
+                continue;
+            }
+            // CREATE TABLE `llx_societe` or CREATE TABLE IF NOT EXISTS foo
+            if (! preg_match_all(
+                '/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?([a-zA-Z0-9_]+)[`"]?\s*\(/i',
+                $content,
+                $m,
+                PREG_OFFSET_CAPTURE
+            )) {
+                continue;
+            }
+            foreach ($m[1] as $i => $match) {
+                $tableName = $match[0];
+                $start = $match[1];
+                $end = ($i + 1 < count($m[1])) ? $m[1][$i + 1][1] : min(strlen($content), $start + 8000);
+                $block = substr($content, $start, $end - $start);
+                $cols = [];
+                $fks = [];
+                // column lines: `name` type
+                if (preg_match_all('/^\s*[`"]([a-zA-Z0-9_]+)[`"]\s+([a-zA-Z0-9_()]+)/mi', $block, $cm, PREG_SET_ORDER)) {
+                    foreach ($cm as $c) {
+                        $colName = $c[1];
+                        if (in_array(strtoupper($colName), ['PRIMARY', 'KEY', 'UNIQUE', 'CONSTRAINT', 'INDEX', 'FOREIGN'], true)) {
+                            continue;
+                        }
+                        $cols[] = [
+                            'name' => $colName,
+                            'type' => strtolower(preg_replace('/\(.*$/', '', $c[2]) ?: 'string'),
+                            'nullable' => ! preg_match('/\bNOT\s+NULL\b/i', $c[0] ?? ''),
+                        ];
+                        if (str_ends_with($colName, '_id') && ! in_array($colName, ['id', 'uuid'], true)) {
+                            $fks[] = $colName;
+                        }
+                    }
+                }
+                $tables[$tableName] = [
+                    'name' => $tableName,
+                    'columns' => $cols,
+                    'foreign_keys' => array_values(array_unique($fks)),
+                    'migration' => basename($file),
+                    'table_source' => 'sql_dump',
+                ];
+            }
+        }
+
+        return $tables;
+    }
+
     private function extractTablesFromMigrations(string $migDir): array
+
     {
         $tables = [];
         if (! File::isDirectory($migDir)) {

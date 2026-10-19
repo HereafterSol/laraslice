@@ -1332,3 +1332,56 @@ php artisan view:clear
 LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 ```
 `slice:repair` merges missing keys (e.g. `auth.mfa_enabled`) into published `config/laraslice.php`.
+
+---
+
+## Porting non-Laravel sources (e.g. Dolibarr)
+
+`slice:port` / Porting Studio accept **any project tree**, not only Laravel.
+
+### What is analyzed
+
+| Source signal | Used when |
+|---------------|-----------|
+| Live DB via `--source-*` | **Preferred** — real tables + row counts |
+| `database/migrations` | Laravel projects |
+| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | Dolibarr, WordPress dumps, mysqldump |
+| Target app DB | **Never by default** (was a bug). Opt-in: `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` |
+
+### Required for non-Laravel (Dolibarr)
+
+Point at the **legacy database** (or ship SQL schema files in the tree):
+
+```bash
+# Clone or path to Dolibarr code
+php artisan slice:port /path/to/dolibarr \
+  --domain=ERP \
+  --source-host=127.0.0.1 \
+  --source-port=3306 \
+  --source-database=dolibarr \
+  --source-username=root \
+  --source-password=secret \
+  --dry-run
+
+# Or named connection in config/database.php
+php artisan slice:port /path/to/dolibarr \
+  --source-connection=dolibarr_legacy \
+  --dry-run
+```
+
+If you only have the code tree and **no** DB and **no** `CREATE TABLE` SQL dumps, the command **fails with a clear error** instead of reading LaraSlice’s own SQLite/MySQL.
+
+### GitHub URL (Porting Studio)
+
+1. Shallow clone (`git clone --depth 1`)
+2. Static analysis (migrations / SQL dumps / optional live DB)
+3. Draft `slice.yaml` via Phase 1+2 inference
+
+No LLM required for the draft. AI helps later in Studio refinement.
+
+### Env
+
+```env
+LARASLICE_PORT_SOURCE_CONNECTION=   # optional default connection name
+LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=false  # keep false in real ports
+```

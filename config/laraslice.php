@@ -190,4 +190,9 @@ return [
         'enabled' => (bool) env('LARASLICE_TENANCY_ENABLED', false),
         'tenant_key' => env('LARASLICE_TENANT_KEY', 'company_id'),
     ],
+
+    'porting' => [
+        'allow_app_db_fallback' => (bool) env('LARASLICE_PORT_ALLOW_APP_DB_FALLBACK', false),
+        'source_connection' => env('LARASLICE_PORT_SOURCE_CONNECTION'),
+    ],
 ];

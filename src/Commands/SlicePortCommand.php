@@ -15,7 +15,7 @@ use LaraSlice\Porting\SlicePortService;
 class SlicePortCommand extends Command
 {
     protected $signature = 'slice:port
-                            {source? : Path to legacy Laravel project root or database}
+                            {source? : Path to source project root (Laravel or other PHP e.g. Dolibarr) or leave empty and use --source-database}
                             {--plan= : Path to JSON architecture plan (e.g. docs/porting-architecture-plan.json)}
                             {--import-data : Stream and import operational data via ETL}
                             {--import-auth : Also import legacy roles/permissions via normalized merge (framework auth tables stay protected by default)}
