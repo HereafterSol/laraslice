@@ -160,4 +160,40 @@ class SliceRepairTest extends TestCase
             app('files')->deleteDirectory($testPath);
         }
     }
+
+    public function test_re_infer_ui_writes_nested_directory_columns(): void
+    {
+        // Regression: buildUiFromInspectedFields returns ui.directory.columns, not ui.columns.
+        // --re-infer-ui must merge the nested structure or formatters stay empty.
+        $path = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'InferDemo';
+        @mkdir($path.'/Resources/views', 0755, true);
+        $manifest = [
+            'name' => 'InferDemo',
+            'active' => true,
+            'fields' => [
+                ['handle' => 'title', 'type' => 'string'],
+                ['handle' => 'status', 'type' => 'string'],
+                ['handle' => 'due_date', 'type' => 'date'],
+                ['handle' => 'progress', 'type' => 'integer'],
+            ],
+            'ui' => ['directory' => ['columns' => [['handle' => 'title', 'formatter' => 'text']]]],
+        ];
+        file_put_contents($path.'/slice.json', json_encode($manifest, JSON_PRETTY_PRINT));
+
+        $this->artisan('slice:repair', ['slice' => 'InferDemo', '--re-infer-ui' => true])
+            ->assertSuccessful();
+
+        $updated = json_decode((string) file_get_contents($path.'/slice.json'), true);
+        $cols = $updated['ui']['directory']['columns'] ?? [];
+        $byHandle = [];
+        foreach ($cols as $c) {
+            $byHandle[$c['handle'] ?? ''] = $c['formatter'] ?? '';
+        }
+        $this->assertSame('status_pill', $byHandle['status'] ?? null, 'status should be re-inferred');
+        $this->assertSame('date_overdue', $byHandle['due_date'] ?? null, 'due_date should be date_overdue');
+        $this->assertSame('progress_bar', $byHandle['progress'] ?? null, 'progress should be progress_bar');
+        $this->assertContains('board', $updated['ui']['directory']['views'] ?? []);
+
+        app('files')->deleteDirectory($path);
+    }
 }

@@ -177,16 +177,29 @@ class SliceRepairCommand extends Command
                 is_array($workflow) ? $workflow : null
             );
 
-            // Merge: replace directory columns/filters, preserve everything else
+            // buildUiFromInspectedFields returns { directory: {...}, dashboard, forms, show, ... }
+            // NOT a flat columns list — reading $ui['columns'] left formatters empty (Muse merge bug).
+            $inferredDir = is_array($ui['directory'] ?? null) ? $ui['directory'] : [];
             $old = $manifest['ui']['directory'] ?? [];
+            $manifest['ui'] = $manifest['ui'] ?? [];
             $manifest['ui']['directory'] = array_merge($old, [
-                'columns' => $ui['columns'] ?? $old['columns'] ?? [],
-                'quick_filters' => $ui['quick_filters'] ?? $old['quick_filters'] ?? [],
-                'sidebar_filters' => $ui['sidebar_filters'] ?? $old['sidebar_filters'] ?? [],
-                'searchable' => $ui['searchable'] ?? $old['searchable'] ?? [],
+                'columns' => $inferredDir['columns'] ?? $old['columns'] ?? [],
+                'quick_filters' => $inferredDir['quick_filters'] ?? $old['quick_filters'] ?? [],
+                'sidebar_filters' => $inferredDir['sidebar_filters'] ?? $old['sidebar_filters'] ?? [],
+                'searchable' => $inferredDir['searchable'] ?? $old['searchable'] ?? [],
+                'search_placeholder' => $inferredDir['search_placeholder'] ?? $old['search_placeholder'] ?? null,
+                'views' => $inferredDir['views'] ?? $old['views'] ?? ['table'],
+                'default_view' => $inferredDir['default_view'] ?? $old['default_view'] ?? 'table',
+                'inline_edit' => $inferredDir['inline_edit'] ?? $old['inline_edit'] ?? [],
+                'bulk_actions' => $inferredDir['bulk_actions'] ?? $old['bulk_actions'] ?? [],
+                'row_actions' => $inferredDir['row_actions'] ?? $old['row_actions'] ?? ($old['row_actions'] ?? []),
+                'summary_cards' => $inferredDir['summary_cards'] ?? $old['summary_cards'] ?? [],
             ]);
-            if (! empty($ui['summary_cards'])) {
-                $manifest['ui']['summary_cards'] = $ui['summary_cards'];
+            if (! empty($ui['dashboard'])) {
+                $manifest['ui']['dashboard'] = $ui['dashboard'];
+            }
+            if (! empty($ui['show'])) {
+                $manifest['ui']['show'] = array_replace_recursive($manifest['ui']['show'] ?? [], $ui['show']);
             }
 
             if (! $dryRun) {

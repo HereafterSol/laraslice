@@ -47,6 +47,8 @@ php artisan slice:repair --remap-nav --re-infer-ui --publish-ui
 
 Shipped by Muse (`b72820c`).
 
+**Bugfix:** early `--re-infer-ui` read `$ui['columns']` instead of `$ui['directory']['columns']`, so re-infer wrote empty formatters. Fixed to merge full `directory` (columns, views, inline_edit, bulk_actions) + dashboard.
+
 ---
 
 ## Phase 1 formatters (shipped)
