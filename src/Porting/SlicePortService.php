@@ -537,12 +537,14 @@ class SlicePortService
                         default => 'string',
                     };
 
+                    $nullable = (bool) ($f['nullable'] ?? true);
                     $generatorFields[] = [
                         'name' => $fName,
                         'label' => $f['label'],
                         'type' => $type,
-                        'nullable' => true,
-                        'rules' => ['nullable'],
+                        'nullable' => $nullable,
+                        'required' => ! $nullable,
+                        'rules' => $nullable ? ['nullable'] : ['required'],
                     ];
                 }
 
@@ -1507,13 +1509,18 @@ PHP;
                 $inputType = 'tel';
             }
 
+            // Respect DB nullability; identity fields default required when unknown
+            $isNullable = array_key_exists('nullable', $col) ? (bool) $col['nullable'] : true;
+            if (! array_key_exists('nullable', $col) && in_array($cName, ['title', 'name', 'email', 'code', 'invoice_number', 'project_name', 'heading', 'subject'], true)) {
+                $isNullable = false;
+            }
             $fields[] = [
                 'handle' => $cName,
                 'label' => Str::headline($cName),
                 'type' => $studioType,
                 'input_type' => $inputType,
-                'required' => false,
-                'nullable' => true,
+                'required' => ! $isNullable,
+                'nullable' => $isNullable,
                 'width' => in_array($inputType, ['textarea', 'file']) ? 100 : 50,
                 'optionsText' => '',
             ];

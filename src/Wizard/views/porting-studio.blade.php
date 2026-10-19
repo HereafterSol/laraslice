@@ -901,6 +901,7 @@ function portingStudio() {
         importAuth: false,
         error: '',
         planData: null,
+        selectedSliceIdx: 0,
         planJsonText: '',
         logs: [],
         selectedRole: 'all',

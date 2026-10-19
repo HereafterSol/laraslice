@@ -1297,3 +1297,38 @@ Slice Studio's Field Manager includes a full **Page & UI Architecture** editor �
 - **Create & Edit Form** — Drawer/Page presentation toggle, section editor with 1–4 column layouts
 
 All changes flow into `slice.yaml` on generate. Blueprint Studio remains the reference implementation for the full declarative schema.
+
+---
+
+## Branch notes (`feat/workflow-bulk-actions`) — keep in sync with code
+
+### Slice YAML v0.1
+- Docs: `docs/SLICE_YAML_V0.1.md`, `docs/SLICE_YAML_STRATEGY.md`
+- Machine schema: `schemas/slice-v0.1.json`
+- `php artisan slice:validate {path|path.yaml}` or `--all` (CI exit 1)
+
+**Closed formatters:** text, text_with_badge, status_pill, date_time, date_overdue, money_breakdown, progress_bar, code_badge, composite_user, number
+
+**`type` vs `input`:** `type` = storage; `input` = form widget (`select`, `textarea`, …). Never use `type: select`.
+
+### Phase 2 DataTable parser
+`LaraSlice\Porting\DataTableUiParser` — static classification of source `*DataTable.php` into the formatter vocabulary.
+
+```bash
+php artisan slice:repair --re-infer-ui --source=/path/to/erp
+```
+
+### Runtime directory columns
+`LaraSlice\Support\DirectoryUi::columnsForSlice($name, $fallback)` resolves `slice.json` from the **registered** slice path (Composer path-repo, vendor, or `app/Slices`). Index blades call this at runtime — do not rely on `__DIR__` or paths baked only at repair time.
+
+```bash
+php artisan slice:repair          # re-inject DirectoryUi loader; merge config gaps
+php artisan slice:repair --publish-ui
+php artisan view:clear
+```
+
+### MFA local toggle
+```env
+LARASLICE_MFA_ENABLED=false   # default true — never disable in production
+```
+`slice:repair` merges missing keys (e.g. `auth.mfa_enabled`) into published `config/laraslice.php`.

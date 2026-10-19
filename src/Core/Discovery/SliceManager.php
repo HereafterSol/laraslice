@@ -700,7 +700,7 @@ class SliceManager
             return;
         }
         $content = $original;
-        $content = $this->injectRuntimeDirectoryColumns($content, $slice->path.DIRECTORY_SEPARATOR.'slice.json');
+        $content = $this->injectRuntimeDirectoryColumns($content, $slice->name);
 
         $viewsExport = var_export($views, true);
         $inlineExport = var_export($inlineEdit, true);
@@ -1896,64 +1896,42 @@ PHP;
     /**
      * Ensure index.blade.php loads directory columns (with formatters) from slice.json at runtime.
      */
-    protected function injectRuntimeDirectoryColumns(string $content, string $manifestAbsolutePath): string
+    protected function injectRuntimeDirectoryColumns(string $content, string $sliceName): string
     {
-        // Already on absolute-path loader (no __DIR__) — skip.
-        $hasAbsLoader = str_contains($content, 'absolute path baked at repair time')
-            || (str_contains($content, 'load formatters from slice.json') && ! str_contains($content, "__DIR__"));
-        $hasStaleDirLoader = str_contains($content, 'load formatters from slice.json')
-            && str_contains($content, '__DIR__');
+        $marker = 'DirectoryUi::columnsForSlice';
+        $hasRuntime = str_contains($content, $marker);
+        $hasStale = str_contains($content, '__DIR__')
+            && str_contains($content, 'load formatters from slice.json');
+        $hasBakedAbs = str_contains($content, 'absolute path baked at repair time');
 
-        if ($hasAbsLoader && ! $hasStaleDirLoader) {
+        if ($hasRuntime && ! $hasStale && ! $hasBakedAbs) {
             return $content;
         }
 
-        // Strip any previous runtime loader block (old __DIR__ or prior inject)
-        if (str_contains($content, 'load formatters from slice.json') || str_contains($content, '$__mf')) {
+        // Strip prior loader variants (DIR, absolute, previous DirectoryUi)
+        if (str_contains($content, 'load formatters from slice.json')
+            || str_contains($content, '$__mf')
+            || str_contains($content, $marker)
+            || $hasBakedAbs) {
             $content = preg_replace(
                 '/\n\s*\/\/ Runtime: load formatters from slice\.json.*?(?=\n\s*\$rows\s*=)/s',
                 "\n",
                 $content,
                 1
             ) ?? $content;
+            $content = preg_replace(
+                '/\n\s*\$columns\s*=\s*\\\\LaraSlice\\\\Support\\\\DirectoryUi::columnsForSlice\([^;]+;\s*/s',
+                "\n",
+                $content,
+                1
+            ) ?? $content;
         }
 
-        // Compiled Blade views live under storage/framework/views — __DIR__ cannot
-        // resolve app/Slices/.../slice.json. Hardcode the absolute path at repair time.
-        $abs = str_replace(['\\', "'"], ['/', "\\'"], $manifestAbsolutePath);
-        $yamlAbs = str_replace('slice.json', 'slice.yaml', $abs);
-
+        $nameEsc = addslashes($sliceName);
         $snippet = <<<BLADE
 
-        // Runtime: load formatters from slice.json (absolute path baked at repair time)
-        \$__mf = '{$abs}';
-        if (! is_file(\$__mf)) { \$__mf = '{$yamlAbs}'; }
-        if (is_file(\$__mf)) {
-            try {
-                \$__m = str_ends_with(\$__mf, '.yaml') && class_exists(\\Symfony\\Component\\Yaml\\Yaml::class)
-                    ? \\Symfony\\Component\\Yaml\\Yaml::parseFile(\$__mf)
-                    : json_decode((string) file_get_contents(\$__mf), true);
-                \$__dirCols = \$__m['ui']['directory']['columns'] ?? [];
-                if (is_array(\$__dirCols) && \$__dirCols !== []) {
-                    \$__htmlFmt = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'];
-                    \$columns = [];
-                    foreach (\$__dirCols as \$__c) {
-                        \$__key = \$__c['key'] ?? \$__c['handle'] ?? null;
-                        if (! \$__key) { continue; }
-                        \$__fmt = \$__c['formatter'] ?? \$__c['type'] ?? 'text';
-                        \$columns[] = array_filter([
-                            'key' => \$__key,
-                            'label' => \$__c['label'] ?? \\Illuminate\\Support\\Str::headline((string) \$__key),
-                            'sortable' => \$__c['sortable'] ?? true,
-                            'formatter' => \$__fmt,
-                            'html' => in_array(\$__fmt, \$__htmlFmt, true),
-                            'badge_from' => \$__c['badge_from'] ?? null,
-                            'breakdown' => \$__c['breakdown'] ?? null,
-                        ], fn (\$v) => \$v !== null);
-                    }
-                }
-            } catch (\\Throwable \$e) {}
-        }
+        // Runtime: load formatters from slice.json via registered slice path (works for vendor + path installs)
+        \$columns = \\LaraSlice\\Support\\DirectoryUi::columnsForSlice('{$nameEsc}', \$columns);
 
 BLADE;
 
