@@ -114,6 +114,9 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | F5 | Full calendar drag-drop | LATER | was C8 |
 | F6 | Live 3-persona E2E vs demo screenshots | NEXT | operator on host app |
 | F7 | Phase 1 formatter inference (status/progress/due/assignee) | DONE | handoff UI richness |
+| F11 | `slice:repair --re-infer-ui` for existing slices | DONE | Muse `b72820c` |
+| F12 | Dual-write conflict rule documented (JSON wins runtime) | DONE | |
+| F13 | YAML-only elimination (spec) | LATER | after branch merge |
 | F8 | DataTable.php AST parser (Phase 2) | LATER | |
 | F9 | AI → YAML UI (Phase 3) | LATER | |
 | F10 | Craft-style slice:sync apply/rebuild/check | LATER | 

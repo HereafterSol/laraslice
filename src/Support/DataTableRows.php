@@ -296,6 +296,7 @@ class DataTableRows
 
     /**
      * Date cell with overdue / today / future coloring (ERP Tasks due_date parity).
+     * XSS-safe: label and title always htmlspecialchars; CSS classes are fixed literals.
      */
     public static function dateOverdue(mixed $val): string
     {
