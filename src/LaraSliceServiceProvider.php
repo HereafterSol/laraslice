@@ -35,6 +35,7 @@ use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SlicePortCommand;
 use LaraSlice\Commands\SliceRepairCommand;
+use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceSeedCommand;
 use LaraSlice\Commands\SliceSyncCommand;
 use LaraSlice\Commands\SliceToggleCommand;
@@ -149,6 +150,7 @@ class LaraSliceServiceProvider extends ServiceProvider
             SlicePortCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
+                SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,
                 AuditPruneCommand::class,

@@ -190,7 +190,12 @@ These can come in v0.2+ — but only after v0.1 proves itself on two runtimes.
 
 ## Validation
 
-A JSON Schema will live at `schemas.sliceframework.dev/slice-v0.1.json` (placeholder).
+Machine schema: **`schemas/slice-v0.1.json`** in this repo (published later at `schemas.sliceframework.dev/slice-v0.1.json`).
+
+```bash
+php artisan slice:validate path/to/slice.yaml
+php artisan slice:validate --all   # exit 1 if any fail
+```
 
 **Contract:** if a YAML file validates against the schema, any compliant renderer MUST produce a working slice. No silent drops.
 
