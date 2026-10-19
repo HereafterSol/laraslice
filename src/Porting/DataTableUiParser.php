@@ -290,22 +290,37 @@ class DataTableUiParser
             }
         }
 
-        if (
-            str_contains($lower, 'change-status')
-            || str_contains($lower, 'label_color')
-            || str_contains($lower, 'fa-circle')
-            || str_contains($lower, 'board_column')
-            || str_contains($lower, 'status_name')
-            || (
-                str_contains($h, 'status')
-                && (str_contains($lower, 'badge') || str_contains($lower, 'text-red') || str_contains($lower, 'text-success') || str_contains($lower, 'text-dark-green'))
-            )
-        ) {
-            return $this->hint($handle, 'status_pill', $via, 'high');
+        // Title/heading with badges appended (private, pin, labels, timer) → text_with_badge
+        // Must run BEFORE status_pill: label_color/badge HTML on a title is not a status column.
+        $titleHandles = ['heading', 'title', 'name', 'subject', 'project_name', 'task', 'label'];
+        $isTitleHandle = in_array($h, $titleHandles, true) || str_ends_with($h, '_name') && ! str_contains($h, 'status');
+        if ($isTitleHandle && (str_contains($lower, 'badge') || str_contains($lower, 'priority') || str_contains($lower, 'label_color'))) {
+            $badgeFrom = 'priority';
+            if (str_contains($lower, 'label') && ! str_contains($lower, 'priority')) {
+                $badgeFrom = 'labels';
+            }
+
+            return $this->hint($handle, 'text_with_badge', $via, 'high', ['badge_from' => $badgeFrom]);
         }
 
-        if ((str_contains($h, 'heading') || $h === 'name' || $h === 'title') && (str_contains($lower, 'priority') || str_contains($lower, 'badge'))) {
-            return $this->hint($handle, 'text_with_badge', $via, 'medium', ['badge_from' => 'priority']);
+        // Status column: the cell *is* a state (select, board column, status name) — not title chrome
+        $isStatusHandle = str_contains($h, 'status') || in_array($h, ['board_column', 'state', 'stage'], true);
+        if (
+            str_contains($lower, 'change-status')
+            || str_contains($lower, 'status_name')
+            || ($isStatusHandle && (
+                str_contains($lower, 'fa-circle')
+                || str_contains($lower, 'label_color')
+                || str_contains($lower, 'board_column')
+                || str_contains($lower, 'badge')
+                || str_contains($lower, 'text-red')
+                || str_contains($lower, 'text-success')
+                || str_contains($lower, 'text-dark-green')
+                || str_contains($lower, 'select-picker')
+            ))
+            || (str_contains($lower, 'board_column') && $isStatusHandle)
+        ) {
+            return $this->hint($handle, 'status_pill', $via, 'high');
         }
 
         if (str_contains($h, 'short_code') || str_contains($h, 'invoice_number') || $h === 'code') {
