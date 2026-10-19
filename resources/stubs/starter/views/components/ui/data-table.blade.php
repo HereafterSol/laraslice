@@ -18,6 +18,7 @@
     'statusKey' => 'status',     // column key used for board columns
     'inlineEdit' => [],          // YAML ui.directory.inline_edit e.g. ['status']
     'dateKey' => null,           // preferred date column for calendar view
+    'density' => 'comfortable',  // comfortable | compact (ERP high-density grids)
 ])
 
 @php
@@ -317,7 +318,7 @@
                         @endif
                         @foreach ($cols as $col)
                             @if (($col['key'] ?? '') === ($statusKey ?? 'status') && in_array($statusKey ?? 'status', $inlineEdit ?: [], true))
-                                <td class="px-3 py-2.5 align-middle whitespace-nowrap {{ $col['class'] }}">
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}">
                                     <select
                                         class="h-8 min-w-[7.5rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                                         :value="item.r['{{ $col['key'] }}__raw'] || ''"
@@ -330,9 +331,9 @@
                                     </select>
                                 </td>
                             @elseif (!empty($col['html']))
-                                <td class="px-3 py-2.5 align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
                             @else
-                                <td class="px-3 py-2.5 align-middle whitespace-nowrap text-foreground {{ $col['class'] }}" x-text="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap text-foreground {{ $col['class'] }}" x-text="item.r['{{ $col['key'] }}']"></td>
                             @endif
                         @endforeach
                         @isset($actions)

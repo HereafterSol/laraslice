@@ -1,6 +1,6 @@
 # LaraSlice Foundation Roadmap (YAML-centric porting + DX)
 
-Last updated: 2026-10-18  
+Last updated: 2026-10-19 (Muse f78e1f0 + UI richness F2–F4)  
 Branch: `feat/workflow-bulk-actions`
 
 Goal: ERP-class porting that is **usable for admin / employee / client**, with **demo-aligned IA**, **Slice Studio as daily driver**, and **JSON + YAML + DB** sync.
@@ -100,6 +100,21 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 6. **DONE:** Show-page aggregate tabs from relations (C10).
 7. **NEXT:** Local pilot re-apply + 3-persona checklist vs demo (D2–D5).
 8. **NEXT:** Regression tests for workflow UI build + remap-nav (E2–E3).
+
+---
+
+## Phase F — UI richness (post-Muse handoff)
+
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| F1 | Muse ETL/column map/row-actions/tests | DONE | tip `f78e1f0` |
+| F2 | Sidebar preview noise filter (theme/profile) | DONE | this commit |
+| F3 | Porting Studio persona preview toggle | DONE | admin/employee/client |
+| F4 | Directory density (compact rows) | DONE | data-table density prop |
+| F5 | Full calendar drag-drop | LATER | was C8 |
+| F6 | Live 3-persona E2E vs demo screenshots | NEXT | operator on host app |
+
+Merged Muse work at `f78e1f0`. Handoff doc `GROK-HANDOFF-UI-RICHNESS.md` was local to Muse workspace (not in repo).
 
 ---
 

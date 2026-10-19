@@ -434,9 +434,20 @@
                 </div>
                 <!-- Proposed groups (reorderable) -->
                 <div class="rounded-xl border border-border bg-slate-950 p-4">
-                    <p class="font-bold text-xs text-slate-200 mb-3">Proposed Navigation (tap ▲▼ to reorder)</p>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <p class="font-bold text-xs text-slate-200">Proposed Navigation (tap ▲▼ to reorder)</p>
+                        <div class="inline-flex rounded-lg border border-slate-700 p-0.5 bg-slate-900">
+                            <template x-for="p in ['admin','employee','client']" :key="p">
+                                <button type="button" @click="personaPreview = p"
+                                    class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition"
+                                    :class="personaPreview === p ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
+                                    x-text="p"></button>
+                            </template>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mb-2">Persona preview filters groups using journeys + demo allowlists (no re-analyze).</p>
                     <div class="space-y-3">
-                        <template x-for="(group, gIdx) in (planData?.sidebar_preview?.groups || [])" :key="gIdx">
+                        <template x-for="(group, gIdx) in filteredSidebarGroups()" :key="gIdx">
                             <div class="rounded-lg border border-slate-800 p-2">
                                 <div class="flex items-center justify-between mb-1.5">
                                     <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400" x-text="group.name"></span>
@@ -886,6 +897,7 @@ function portingStudio() {
         dataSource: 'real',
         analyzing: false,
         executing: false,
+        personaPreview: 'admin',
         importAuth: false,
         error: '',
         planData: null,
@@ -1313,6 +1325,45 @@ function portingStudio() {
             } catch (e) {
                 this.error = e.message;
             }
+        },
+
+        
+        filteredSidebarGroups() {
+            const groups = this.planData?.sidebar_preview?.groups || [];
+            const persona = this.personaPreview || 'admin';
+            if (persona === 'admin') return groups;
+            // Use journeys.v2 or slice roles when present on items
+            const allow = new Set();
+            const journeys = this.planData?.journeys || {};
+            Object.values(journeys).forEach(j => {
+                if ((j.persona || j.role || '').toLowerCase().includes(persona) || (j.role === persona)) {
+                    (j.steps || []).forEach(s => {
+                        if (s.slice) allow.add(String(s.slice).toLowerCase());
+                        if (s.label) allow.add(String(s.label).toLowerCase());
+                    });
+                }
+            });
+            // Fallback allowlists (demo parity)
+            const defaults = {
+                employee: ['dashboard','projects','tasks','timelogs','time logs','leaves','attendance','tickets','events','messages','notices','expenses','holidays','appreciations','contracts','calendar','leads'],
+                client: ['dashboard','projects','tasks','contracts','invoices','estimates','payments','credit notes','orders','tickets','events','notices','timesheet','calendar'],
+            };
+            (defaults[persona] || []).forEach(x => allow.add(x));
+            return groups.map(g => {
+                const items = (g.items || []).filter(it => {
+                    const label = String(it.label || '').toLowerCase();
+                    const slice = String(it.slice || '').toLowerCase();
+                    if (allow.size === 0) return true;
+                    for (const a of allow) {
+                        if (label.includes(a) || slice.includes(a) || a.includes(label)) return true;
+                    }
+                    // roles on item
+                    const roles = it.roles || it.personas || [];
+                    if (Array.isArray(roles) && roles.map(r => String(r).toLowerCase()).includes(persona)) return true;
+                    return false;
+                });
+                return { ...g, items };
+            }).filter(g => (g.items || []).length > 0);
         },
 
         async execute() {

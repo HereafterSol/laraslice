@@ -1824,6 +1824,47 @@ PHP;
      * @param  list<array<string, mixed>>  $proposedGroups
      * @return array<string, mixed>
      */
+
+    /**
+     * Remove non-product chrome from sidebar preview (theme toggle, profile invite, etc.).
+     *
+     * @param  list<array<string, mixed>>  $groups
+     * @return list<array<string, mixed>>
+     */
+    protected function filterSidebarPreviewNoise(array $groups): array
+    {
+        $noiseLabels = [
+            'profile', 'dark theme', 'light theme', 'invite member', 'invite team',
+            'theme settings', 'logout', 'sign out', 'change password', 'my profile',
+            'language', 'locale',
+        ];
+        $out = [];
+        foreach ($groups as $g) {
+            $items = [];
+            foreach ($g['items'] ?? [] as $item) {
+                $label = strtolower(trim((string) ($item['label'] ?? '')));
+                $route = strtolower((string) ($item['route'] ?? ''));
+                $skip = false;
+                foreach ($noiseLabels as $n) {
+                    if ($label === $n || str_contains($label, $n) || str_contains($route, 'theme') || str_contains($route, 'profile/dark')) {
+                        $skip = true;
+                        break;
+                    }
+                }
+                if (! $skip) {
+                    $items[] = $item;
+                }
+            }
+            if ($items === [] && empty($g['route'])) {
+                continue;
+            }
+            $g['items'] = $items;
+            $out[] = $g;
+        }
+
+        return $out;
+    }
+
     protected function buildSidebarPreviewForPlan(string $domain, array $proposedGroups, string $sourcePath): array
     {
         $sourceNav = $this->analyzeSourceNavigation($sourcePath);
@@ -1875,6 +1916,9 @@ PHP;
                 array_unshift($previewGroups, $proposedGroups[0]);
             }
         }
+
+        // Drop profile/theme/invite chrome that is not product navigation
+        $previewGroups = $this->filterSidebarPreviewNoise($previewGroups);
 
         return [
             'title' => "{$domain} Enterprise Navigation",
