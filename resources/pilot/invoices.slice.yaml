@@ -36,19 +36,19 @@ ui:
         label: Invoice
         formatter: code_badge
         sortable: true
-      - key: total
+      - key: amount
         label: Amount
         formatter: money_breakdown
         breakdown:
-          paid: paid_amount
-          unpaid: due_amount
-      - key: status
+          paid: amount
+          unpaid: amount
+      - key: invoice_status_code
         label: Status
         formatter: status_pill
-      - key: issue_date
+      - key: invoiced_at
         label: Issued
         formatter: date_time
-      - key: due_date
+      - key: due_at
         label: Due
         formatter: date_time
   dashboard:
@@ -62,22 +62,16 @@ fields:
     name: invoice_number
     type: string
     searchable: true
-  total:
-    name: total
+  amount:
+    name: amount
     type: decimal
-  paid_amount:
-    name: paid_amount
-    type: decimal
-  due_amount:
-    name: due_amount
-    type: decimal
-  status:
-    name: status
+  invoice_status_code:
+    name: invoice_status_code
     type: string
-  issue_date:
-    name: issue_date
+  invoiced_at:
+    name: invoiced_at
     type: date
-  due_date:
-    name: due_date
+  due_at:
+    name: due_at
     type: date
 workflow: true

@@ -59,4 +59,51 @@ class SliceRepairTest extends TestCase
 
         $this->assertSame([], app(SliceManager::class)->repairSlice($users));
     }
+
+    public function test_remap_nav_does_not_crash_on_undefined_changed(): void
+    {
+        // Regression (a916eef): $changed was used before initialization when
+        // --remap-nav was passed, causing "Undefined variable $changed".
+        // The command must complete without crashing.
+
+        // Create a test slice with an old-style navigation group
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestRemap';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestRemap',
+            'navigation' => ['group' => 'OldGroup', 'label' => 'Test'],
+            'models' => [['table' => 'tasks']],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['--remap-nav' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
+
+    public function test_remap_nav_assigns_demo_aligned_module_groups(): void
+    {
+        // Regression: remap-nav should assign demo-aligned groups (Work, Finance, etc.)
+        // not engineering labels (FinancialAccounting, Operations).
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestTasks';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestTasks',
+            'navigation' => ['group' => 'ERP', 'label' => 'Test Tasks'],
+            'models' => [['table' => 'tasks']],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'TestTasks', '--remap-nav' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+
+            $manifest = json_decode(file_get_contents($testPath.'/slice.json'), true);
+            // Tasks should map to Work, not ERP or FinancialAccounting
+            $this->assertEquals('Work', $manifest['navigation']['group']);
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
 }

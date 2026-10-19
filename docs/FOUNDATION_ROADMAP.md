@@ -31,7 +31,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | A7 | `buildUiFromInspectedFields` + workflow bulk_actions | DONE | `cc644e1` scaffold + studio |
 | A8 | `slice:repair --remap-nav` for existing apps | DONE | fix `$changed` init |
 | A9 | Menu compiler from source `x-menu-item` | DONE | refine vs live demo still NEXT |
-| A10 | Re-Analyze ERP → verify group counts vs demo | NEXT | Validate after pull + remap |
+| A10 | Re-Analyze ERP → verify group counts vs demo | DONE | Validate after pull + remap |
 
 ---
 
@@ -46,7 +46,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | B5 | Bulk / row action editors | DONE | basic toggles |
 | B6 | Workflow transition editor in Studio | DONE | GitOps panel + saveStudioConfig workflow |
 | B7 | Domain group picker (Work/Finance/…) in Studio | DONE | navGroup select + save to YAML |
-| B8 | Slice Studio UX polish (density, empty states) | NEXT | |
+| B8 | Slice Studio UX polish (density, empty states) | DONE | |
 
 ---
 
@@ -72,10 +72,10 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | D1 | Pilot YAML fixtures | DONE | `resources/pilot/*.slice.yaml` |
-| D2 | Apply pilot + migrate + seed | NEXT | local: blueprint apply |
-| D3 | 3-persona login smoke (admin/employee/client) | NEXT | nav + index views |
+| D2 | Apply pilot + migrate + seed | DONE | local: blueprint apply |
+| D3 | 3-persona login smoke (admin/employee/client) | DONE | nav + index views |
 | D4 | Page-by-page vs demo.worksuite.biz | IN PROGRESS | IA fixed; density still open |
-| D5 | Re-scaffold after workflow fix | NEXT | `slice:port --scaffold` |
+| D5 | Re-scaffold after workflow fix | DONE | `slice:port --scaffold` |
 
 ---
 
@@ -84,8 +84,8 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | E1 | Port Execute reports slice counts + errors (UI parity) | DONE | Execute needs plan; logs slices_created |
-| E2 | Regression test: buildUiFromInspectedFields without workflow | NEXT | |
-| E3 | Regression test: slice:repair --remap-nav | NEXT | |
+| E2 | Regression test: buildUiFromInspectedFields without workflow | DONE | |
+| E3 | Regression test: slice:repair --remap-nav | DONE | |
 | E4 | CONTRIBUTING / fork URL | DONE | |
 
 ---

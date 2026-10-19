@@ -2633,7 +2633,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
     /**
      * Execute full vertical slice generation and migration directly from a structured Architecture Plan.
      */
-    public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false, bool $importAuth = false): array
+    public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false, bool $importAuth = false, ?array $sourceConnection = null): array
     {
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
@@ -2759,10 +2759,14 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $dataImportResult = null;
         if ($importData) {
             try {
-                $sourceDb = $plan['source_db'] ?? 'erp';
+                $sourceDb = $sourceConnection['database'] ?? $plan['source_db'] ?? 'erp';
+                $sourceHost = $sourceConnection['host'] ?? '127.0.0.1';
+                $sourcePort = (int) ($sourceConnection['port'] ?? 3306);
+                $sourceUser = $sourceConnection['username'] ?? 'root';
+                $sourcePass = $sourceConnection['password'] ?? '';
                 $dataPortService = new SliceDataPortService;
                 $dataPortService->setImportAuth($importAuth);
-                $dataImportResult = $dataPortService->importFromDatabase($sourceDb);
+                $dataImportResult = $dataPortService->importFromDatabase($sourceDb, $sourceHost, $sourcePort, $sourceUser, $sourcePass);
             } catch (\Throwable $e) {
                 $errors['data_import'] = $e->getMessage();
             }

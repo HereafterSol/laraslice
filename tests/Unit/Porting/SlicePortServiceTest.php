@@ -148,4 +148,41 @@ PHP;
         $this->assertStringNotContainsString("dbname=erp', 'root', ''", $src);
         $this->assertStringNotContainsString('dbname=erp", "root", ""', $src);
     }
+
+    public function test_build_ui_from_inspected_fields_accepts_null_workflow(): void
+    {
+        // Regression (cc644e1): buildUiFromInspectedFields must accept null workflow
+        // without "Undefined variable $workflow" — scaffold path passes null when
+        // no workflow transitions are detected.
+        $service = new SlicePortService();
+        $ui = $service->buildUiFromInspectedFields('Tasks', [
+            ['name' => 'id', 'type' => 'bigint'],
+            ['name' => 'title', 'type' => 'string'],
+            ['name' => 'status', 'type' => 'string'],
+        ], 'company_id', [], null);
+
+        $this->assertIsArray($ui);
+        $this->assertArrayHasKey('directory', $ui);
+        $this->assertArrayHasKey('bulk_actions', $ui['directory']);
+        // Null workflow → native export/delete actions only
+        $handles = array_column($ui['directory']['bulk_actions'], 'handle');
+        $this->assertContains('export', $handles);
+        $this->assertContains('delete', $handles);
+    }
+
+    public function test_build_ui_from_inspected_fields_with_workflow_transitions(): void
+    {
+        // Workflow transitions should seed bulk_actions when provided.
+        $service = new SlicePortService();
+        $ui = $service->buildUiFromInspectedFields('Tasks', [
+            ['name' => 'id', 'type' => 'bigint'],
+            ['name' => 'status', 'type' => 'string'],
+        ], 'company_id', [], [
+            'states' => ['todo', 'done'],
+            'transitions' => [['from' => 'todo', 'to' => 'done', 'label' => 'Complete']],
+        ]);
+
+        $this->assertArrayHasKey('bulk_actions', $ui['directory']);
+        $this->assertNotEmpty($ui['directory']['bulk_actions']);
+    }
 }

@@ -3988,6 +3988,11 @@ function larasliceWizard() {
                                 </div>
                             </div>
                         </template>
+                        <div x-show="groupedSlices().length === 0" class="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                            <p class="text-sm font-semibold text-muted-foreground">No slices match "<span x-text="sliceSearchQuery"></span>"</p>
+                            <p class="text-xs text-muted-foreground mt-1">Try a different search term or clear the filter.</p>
+                            <button type="button" @click="sliceSearchQuery = ''" class="mt-3 text-xs text-primary hover:underline">Clear filter</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4500,7 +4505,7 @@ function larasliceWizard() {
 
 
                     <!-- Slice Studio GitOps: persona roles, views, YAML+JSON sync -->
-                    <div class="rounded-2xl border border-emerald-500/30 bg-card p-5 shadow-sm space-y-4 mt-4" x-show="selectedSlice">
+                    <div class="rounded-2xl border border-emerald-500/30 bg-card p-5 shadow-sm space-y-4 mt-4 max-h-[80vh] overflow-y-auto" x-show="selectedSlice" x-ref="gitopsPanel">
                         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
                             <div>
                                 <h2 class="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
@@ -4531,7 +4536,7 @@ function larasliceWizard() {
                                 <label class="text-[11px] font-bold uppercase text-muted-foreground">Persona roles (navigation.roles)</label>
                                 <div class="flex flex-wrap gap-2">
                                     <template x-for="role in ['admin','employee','client','manager','user']" :key="role">
-                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer hover:border-primary">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer hover:border-primary" :title="['admin','employee','client'].includes(role) ? 'Core ERP persona' : 'Extended role (use for custom personas)'">
                                             <input type="checkbox" class="rounded" :value="role"
                                                 :checked="navRoles.includes(role)"
                                                 @change="navRoles = $event.target.checked ? [...new Set([...navRoles, role])] : navRoles.filter(r => r !== role)">
@@ -4539,6 +4544,7 @@ function larasliceWizard() {
                                         </label>
                                     </template>
                                 </div>
+                                <p class="text-[10px] text-muted-foreground mt-1">Core: admin / employee / client. Manager / user for custom personas.</p>
                                 <label class="flex items-center gap-2 text-xs mt-2">
                                     <input type="checkbox" class="rounded" x-model="navVisible">
                                     <span>Visible in sidebar</span>
@@ -4638,6 +4644,10 @@ function larasliceWizard() {
                                         <div class="flex flex-wrap items-center gap-1 text-[11px]">
                                             <input type="text" x-model="tr.slug" class="h-7 w-24 rounded border border-border bg-background px-1 font-mono" placeholder="slug">
                                             <input type="text" x-model="tr.name" class="h-7 w-28 rounded border border-border bg-background px-1" placeholder="Label">
+                                            <input type="text" class="h-7 w-28 rounded border border-border bg-background px-1 font-mono" placeholder="from (comma-sep)"
+                                                :value="Array.isArray(tr.from) ? tr.from.join(', ') : (tr.from || '')"
+                                                @input="tr.from = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"
+                                                title="Comma-separated source states">
                                             <span class="text-muted-foreground">→</span>
                                             <input type="text" x-model="tr.to" class="h-7 w-24 rounded border border-border bg-background px-1 font-mono" placeholder="to state"
                                                 :value="typeof tr.to === 'string' ? tr.to : (tr.to_state || '')"

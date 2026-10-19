@@ -128,7 +128,7 @@ class SlicePortCommand extends Command
 
             $this->comment("⚙️  Scaffolding vertical slices, migrations, and models from plan...");
             $importAuth = (bool) $this->option('import-auth');
-            $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth);
+            $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth, $sourceConnection ?? null);
 
             if (! empty($result['slices_created'])) {
                 $this->info("✓ Scaffolded " . count($result['slices_created']) . " canonical slices!");
@@ -320,6 +320,28 @@ class SlicePortCommand extends Command
                 $this->warn("Skipped " . count($scaffoldResult['errors']) . " slice(s) due to existing directories or conflicts:");
                 foreach ($scaffoldResult['errors'] as $s => $err) {
                     $this->warn("  [{$s}] {$err}");
+                }
+            }
+
+            // Handle --import-data with --scaffold (executeFromPlan is bypassed)
+            if ($this->option('import-data')) {
+                $this->comment("⚙️  Importing data via ETL...");
+                try {
+                    $dataPortService = new \LaraSlice\Porting\SliceDataPortService;
+                    $dataImport = $dataPortService->importFromDatabase(
+                        $sourceConnection['database'] ?? 'erp',
+                        $sourceConnection['host'] ?? '127.0.0.1',
+                        (int) ($sourceConnection['port'] ?? 3306),
+                        $sourceConnection['username'] ?? 'root',
+                        $sourceConnection['password'] ?? ''
+                    );
+                    if ($dataImport['success'] ?? false) {
+                        $this->info("✓ Imported " . ($dataImport['total_rows'] ?? 0) . " rows across " . ($dataImport['tables_imported'] ?? 0) . " tables.");
+                    } else {
+                        $this->warn("Data import completed with issues.");
+                    }
+                } catch (\Throwable $e) {
+                    $this->error("Data import failed: " . $e->getMessage());
                 }
             }
         }
