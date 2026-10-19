@@ -1385,3 +1385,14 @@ No LLM required for the draft. AI helps later in Studio refinement.
 LARASLICE_PORT_SOURCE_CONNECTION=   # optional default connection name
 LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=false  # keep false in real ports
 ```
+
+### Table prefix stripping
+
+Default prefixes stripped from slice names: `llx_`, `wp_` (config `laraslice.porting.strip_table_prefixes`).
+
+```bash
+php artisan slice:port /path/to/dolibarr --strip-prefix=llx_ --dry-run --no-interaction
+# llx_categorie_warehouse → CategorieWarehouse
+```
+
+`--dry-run` and `--no-interaction` default `--mode=system-base` and do not prompt.

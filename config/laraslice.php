@@ -193,6 +193,8 @@ return [
 
     'porting' => [
         'allow_app_db_fallback' => (bool) env('LARASLICE_PORT_ALLOW_APP_DB_FALLBACK', false),
+        // Comma-separated or array of table prefixes stripped from slice names (Dolibarr llx_, WP wp_)
+        'strip_table_prefixes' => array_values(array_filter(array_map('trim', explode(',', (string) env('LARASLICE_PORT_STRIP_PREFIXES', 'llx_,wp_'))))),
         'source_connection' => env('LARASLICE_PORT_SOURCE_CONNECTION'),
     ],
 ];

@@ -165,21 +165,33 @@ class SlicePortCommand extends Command
 
         $superDomain = $this->option('super-domain');
 
+        // Apply --strip-prefix to config before inspect naming
+        $stripOpt = $this->option('strip-prefix');
+        if (is_string($stripOpt) && $stripOpt !== '') {
+            $list = array_values(array_filter(array_map('trim', explode(',', $stripOpt))));
+            config(['laraslice.porting.strip_table_prefixes' => $list]);
+        }
+
         $mode = $this->option('mode');
         if (! $mode) {
-            $modeChoice = $this->choice(
-                'Select Data Porting Mode:',
-                [
-                    'system-base' => 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)',
-                    'full-data' => 'Full Historical Data Migration (Port all operational records + file attachments)',
-                ],
-                'system-base'
-            );
-            $mode = ($modeChoice === 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)') ? 'system-base' : 'full-data';
+            // --dry-run / --no-interaction must not hang on prompts (CI, Manus)
+            if ($this->option('dry-run') || ! $this->input->isInteractive()) {
+                $mode = 'system-base';
+            } else {
+                $modeChoice = $this->choice(
+                    'Select Data Porting Mode:',
+                    [
+                        'system-base' => 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)',
+                        'full-data' => 'Full Historical Data Migration (Port all operational records + file attachments)',
+                    ],
+                    'system-base'
+                );
+                $mode = ($modeChoice === 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)') ? 'system-base' : 'full-data';
+            }
         }
 
         $withFiles = (bool) $this->option('with-files');
-        if ($mode === 'full-data' && ! $this->option('with-files')) {
+        if ($mode === 'full-data' && ! $this->option('with-files') && $this->input->isInteractive() && ! $this->option('dry-run')) {
             $withFiles = $this->confirm('Do you want to copy physical file attachments from legacy storage/app/public?', true);
         }
 

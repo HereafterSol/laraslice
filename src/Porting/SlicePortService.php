@@ -1137,7 +1137,37 @@ PHP;
         return $tables;
     }
 
-        private function classifyTables(array $tables): array
+    /**
+     * Convert a physical table name to a slice class name, stripping known prefixes.
+     * e.g. llx_categorie_warehouse → CategorieWarehouse (with strip llx_)
+     */
+    public function tableToSliceName(string $tableName): string
+    {
+        $name = $tableName;
+        $prefixes = config('laraslice.porting.strip_table_prefixes', ['llx_', 'wp_', 'wp']);
+        if (! is_array($prefixes)) {
+            $prefixes = array_filter(array_map('trim', explode(',', (string) $prefixes)));
+        }
+        // Longest first so llx_ wins over llx
+        usort($prefixes, fn ($a, $b) => strlen((string) $b) <=> strlen((string) $a));
+        $lower = strtolower($name);
+        foreach ($prefixes as $prefix) {
+            $p = strtolower((string) $prefix);
+            if ($p !== '' && str_starts_with($lower, $p)) {
+                $name = substr($name, strlen((string) $prefix));
+                break;
+            }
+        }
+        $name = trim($name, '_');
+        if ($name === '') {
+            $name = $tableName;
+        }
+
+        return \Illuminate\Support\Str::studly($name);
+    }
+
+    private function classifyTables(array $tables): array
+
     {
         $classified = [
             'roots' => [],
@@ -1275,7 +1305,7 @@ PHP;
 
         // 1. Core Primary Roots
         foreach ($classified['roots'] as $rName => $rInfo) {
-            $sliceName = Str::studly($rName);
+            $sliceName = $this->tableToSliceName($rName);
             $mapping[$sliceName] = [
                 'type' => 'aggregate_root',
                 'primary_table' => $rName,
@@ -1380,7 +1410,7 @@ PHP;
 
             // If still unattached, promote to its own slice rather than force-bundling into unrelated slices
             if (! $attached) {
-                $sliceName = Str::studly($cName);
+                $sliceName = $this->tableToSliceName($cName);
                 $mapping[$sliceName] = [
                     'type' => 'aggregate_root',
                     'primary_table' => $cName,

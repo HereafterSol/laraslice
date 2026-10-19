@@ -27,3 +27,11 @@ php artisan slice:port {source_path} \
 ```env
 LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true
 ```
+
+## Slice names and prefixes
+
+```bash
+php artisan slice:port ... --strip-prefix=llx_
+```
+
+Defaults: `llx_`, `wp_`. Config: `LARASLICE_PORT_STRIP_PREFIXES=llx_,wp_`.
