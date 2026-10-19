@@ -326,17 +326,23 @@
                         @endif
                         @foreach ($cols as $col)
                             @if (($col['key'] ?? '') === ($statusKey ?? 'status') && in_array($statusKey ?? 'status', $inlineEdit ?: [], true))
+                                {{-- Show status_pill HTML; only show transition select when workflow transitions exist --}}
                                 <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}">
-                                    <select
-                                        class="h-8 min-w-[7.5rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                                        :value="item.r['{{ $col['key'] }}__raw'] || ''"
-                                        @change="applyInlineTransition(item.r, $event.target.value)"
-                                    >
-                                        <option value="" x-text="item.r['{{ $col['key'] }}__raw'] || '—'"></option>
-                                        <template x-for="wt in workflowTransitions" :key="wt.slug">
-                                            <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
-                                        </template>
-                                    </select>
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="shrink-0" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
+                                        <select
+                                            x-show="(workflowTransitions || []).length > 0"
+                                            x-cloak
+                                            class="h-8 min-w-[6.5rem] max-w-[9rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                                            :value="item.r['{{ $col['key'] }}__raw'] || ''"
+                                            @change="applyInlineTransition(item.r, $event.target.value)"
+                                        >
+                                            <option value="" x-text="item.r['{{ $col['key'] }}__raw'] || '—'"></option>
+                                            <template x-for="wt in workflowTransitions" :key="wt.slug">
+                                                <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
+                                            </template>
+                                        </select>
+                                    </div>
                                 </td>
                             @elseif (!empty($col['html']))
                                 <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
