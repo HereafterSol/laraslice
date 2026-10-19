@@ -174,6 +174,21 @@ The AI **selects** from this list. It never invents formatters.
 
 `string` `text` `integer` `decimal` `boolean` `date` `datetime` `timestamp`
 
+## Input widgets (optional — form UI only)
+
+**Not** storage types. Use `input` (or `input_type`) alongside `type`:
+
+```yaml
+status:
+  type: string          # data / DB
+  input: select         # form control
+  options_from: distinct:status
+```
+
+Closed list: `text` `textarea` `select` `radio` `checkbox` `switch` `date` `datetime` `date_picker` `file` `email` `tel` `number` `hidden`
+
+Never put `select` in `type` — validators will reject it.
+
 ---
 
 ## What v0.1 deliberately excludes

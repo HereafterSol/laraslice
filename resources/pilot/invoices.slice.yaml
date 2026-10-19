@@ -68,6 +68,8 @@ fields:
   invoice_status_code:
     name: invoice_status_code
     type: string
+    input: select
+    options_from: distinct:invoice_status_code
   invoiced_at:
     name: invoiced_at
     type: date

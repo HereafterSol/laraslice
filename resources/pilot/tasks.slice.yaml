@@ -65,6 +65,8 @@ fields:
   status:
     name: status
     type: string
+    input: select
+    options_from: distinct:status
   priority:
     name: priority
     type: string

@@ -4,53 +4,111 @@
   "title": "Slice YAML v0.1",
   "description": "Intent-only vertical slice manifest. No HTML. Closed formatter and field-type vocabularies.",
   "type": "object",
-  "required": ["name"],
+  "required": [
+    "name"
+  ],
   "properties": {
     "spec_version": {
       "type": "string",
-      "enum": ["0.1", "0.1.0"]
+      "enum": [
+        "0.1",
+        "0.1.0"
+      ]
     },
-    "name": { "type": "string", "minLength": 1 },
-    "handle": { "type": "string", "minLength": 1 },
-    "title": { "type": "string" },
-    "description": { "type": "string" },
-    "version": { "type": "string" },
-    "domain": { "type": "string" },
-    "enabled": { "type": "boolean" },
-    "active": { "type": "boolean" },
-    "multitenant": { "type": "boolean" },
-    "tenant_key": { "type": "string" },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "handle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "active": {
+      "type": "boolean"
+    },
+    "multitenant": {
+      "type": "boolean"
+    },
+    "tenant_key": {
+      "type": "string"
+    },
     "models": {
       "type": "array",
-      "items": { "$ref": "#/$defs/model" }
+      "items": {
+        "$ref": "#/$defs/model"
+      }
     },
     "fields": {
-      "description": "Legacy map form (handle → field). Prefer models[].fields in canonical v0.1.",
+      "description": "Legacy map form (handle \u2192 field). Prefer models[].fields in canonical v0.1.",
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/field" }
+      "additionalProperties": {
+        "$ref": "#/$defs/field"
+      }
     },
-    "navigation": { "$ref": "#/$defs/navigation" },
-    "ui": { "$ref": "#/$defs/ui" },
+    "navigation": {
+      "$ref": "#/$defs/navigation"
+    },
+    "ui": {
+      "$ref": "#/$defs/ui"
+    },
     "workflow": {
       "oneOf": [
-        { "type": "boolean" },
-        { "$ref": "#/$defs/workflow" }
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/workflow"
+        }
       ]
     },
     "roles": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
-    "version_history": { "type": "array" },
-    "table": { "type": "string" },
-    "permissions": { "type": "object" },
-    "relations": { "type": "array" }
+    "version_history": {
+      "type": "array"
+    },
+    "table": {
+      "type": "string"
+    },
+    "permissions": {
+      "type": "object"
+    },
+    "relations": {
+      "type": "array"
+    }
   },
   "additionalProperties": true,
   "$defs": {
     "fieldType": {
       "type": "string",
-      "enum": ["string", "text", "integer", "decimal", "boolean", "date", "datetime", "timestamp"]
+      "enum": [
+        "string",
+        "text",
+        "integer",
+        "decimal",
+        "boolean",
+        "date",
+        "datetime",
+        "timestamp"
+      ]
     },
     "formatter": {
       "type": "string",
@@ -69,43 +127,99 @@
     },
     "field": {
       "type": "object",
-      "required": ["handle"],
+      "required": [
+        "handle"
+      ],
       "properties": {
-        "handle": { "type": "string", "minLength": 1 },
-        "name": { "type": "string" },
-        "label": { "type": "string" },
-        "type": { "$ref": "#/$defs/fieldType" },
-        "required": { "type": "boolean" },
-        "searchable": { "type": "boolean" },
-        "nullable": { "type": "boolean" },
-        "rules": { "type": "array" }
+        "handle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/fieldType"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "searchable": {
+          "type": "boolean"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "rules": {
+          "type": "array"
+        },
+        "input": {
+          "$ref": "#/$defs/inputWidget"
+        },
+        "input_type": {
+          "$ref": "#/$defs/inputWidget"
+        },
+        "options_from": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array"
+        }
       },
       "additionalProperties": true
     },
     "model": {
       "type": "object",
-      "required": ["handle", "table"],
+      "required": [
+        "handle",
+        "table"
+      ],
       "properties": {
-        "handle": { "type": "string" },
-        "table": { "type": "string" },
-        "root": { "type": "boolean" },
+        "handle": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "root": {
+          "type": "boolean"
+        },
         "fields": {
           "type": "array",
-          "items": { "$ref": "#/$defs/field" }
+          "items": {
+            "$ref": "#/$defs/field"
+          }
         },
         "relations": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "type"],
+            "required": [
+              "name",
+              "type"
+            ],
             "properties": {
-              "name": { "type": "string" },
+              "name": {
+                "type": "string"
+              },
               "type": {
                 "type": "string",
-                "enum": ["hasMany", "belongsTo", "belongsToMany", "hasOne"]
+                "enum": [
+                  "hasMany",
+                  "belongsTo",
+                  "belongsToMany",
+                  "hasOne"
+                ]
               },
-              "model": { "type": "string" },
-              "foreign_key": { "type": "string" }
+              "model": {
+                "type": "string"
+              },
+              "foreign_key": {
+                "type": "string"
+              }
             },
             "additionalProperties": true
           }
@@ -116,33 +230,69 @@
     "navigation": {
       "type": "object",
       "properties": {
-        "group": { "type": "string" },
-        "label": { "type": "string" },
-        "icon": { "type": "string" },
-        "order": { "type": "integer" },
-        "visible": { "type": "boolean" },
+        "group": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "visible": {
+          "type": "boolean"
+        },
         "roles": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "hidden": { "type": "boolean" }
+        "hidden": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": true
     },
     "column": {
       "type": "object",
-      "required": ["key"],
+      "required": [
+        "key"
+      ],
       "properties": {
-        "key": { "type": "string" },
-        "handle": { "type": "string" },
-        "label": { "type": "string" },
-        "formatter": { "$ref": "#/$defs/formatter" },
-        "type": { "$ref": "#/$defs/formatter" },
-        "sortable": { "type": "boolean" },
-        "badge_from": { "type": "string" },
-        "breakdown": { "type": "object" },
-        "html": { "type": "boolean" },
-        "inferred_from": { "type": "string" }
+        "key": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "formatter": {
+          "$ref": "#/$defs/formatter"
+        },
+        "type": {
+          "$ref": "#/$defs/formatter"
+        },
+        "sortable": {
+          "type": "boolean"
+        },
+        "badge_from": {
+          "type": "string"
+        },
+        "breakdown": {
+          "type": "object"
+        },
+        "html": {
+          "type": "boolean"
+        },
+        "inferred_from": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
@@ -154,59 +304,115 @@
           "properties": {
             "columns": {
               "type": "array",
-              "items": { "$ref": "#/$defs/column" }
+              "items": {
+                "$ref": "#/$defs/column"
+              }
             },
             "searchable": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
-            "search_placeholder": { "type": "string" },
-            "quick_filters": { "type": "array" },
-            "sidebar_filters": { "type": "array" },
+            "search_placeholder": {
+              "type": "string"
+            },
+            "quick_filters": {
+              "type": "array"
+            },
+            "sidebar_filters": {
+              "type": "array"
+            },
             "views": {
               "type": "array",
               "items": {
                 "type": "string",
-                "enum": ["table", "board", "calendar", "card", "list"]
+                "enum": [
+                  "table",
+                  "board",
+                  "calendar",
+                  "card",
+                  "list"
+                ]
               }
             },
             "default_view": {
               "type": "string",
-              "enum": ["table", "board", "calendar", "card", "list"]
+              "enum": [
+                "table",
+                "board",
+                "calendar",
+                "card",
+                "list"
+              ]
             },
-            "bulk_actions": { "type": "array" },
-            "row_actions": { "type": "object" },
-            "inline_edit": { "type": "array" },
-            "summary_cards": { "type": "array" }
+            "bulk_actions": {
+              "type": "array"
+            },
+            "row_actions": {
+              "type": "object"
+            },
+            "inline_edit": {
+              "type": "array"
+            },
+            "summary_cards": {
+              "type": "array"
+            }
           },
           "additionalProperties": true
         },
-        "forms": { "type": "object" },
-        "show": { "type": "object" },
-        "dashboard": { "type": "object" },
-        "presentation": { "type": "object" }
+        "forms": {
+          "type": "object"
+        },
+        "show": {
+          "type": "object"
+        },
+        "dashboard": {
+          "type": "object"
+        },
+        "presentation": {
+          "type": "object"
+        }
       },
       "additionalProperties": true
     },
     "workflow": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "state_field": { "type": "string" },
-        "state_column": { "type": "string" },
-        "initial_state": { "type": "string" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "state_field": {
+          "type": "string"
+        },
+        "state_column": {
+          "type": "string"
+        },
+        "initial_state": {
+          "type": "string"
+        },
         "states": {
           "type": "array",
           "items": {
             "oneOf": [
-              { "type": "string" },
+              {
+                "type": "string"
+              },
               {
                 "type": "object",
                 "properties": {
-                  "slug": { "type": "string" },
-                  "label": { "type": "string" },
-                  "color": { "type": "string" },
-                  "initial": { "type": "boolean" }
+                  "slug": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "initial": {
+                    "type": "boolean"
+                  }
                 },
                 "additionalProperties": true
               }
@@ -222,6 +428,26 @@
         }
       },
       "additionalProperties": true
+    },
+    "inputWidget": {
+      "type": "string",
+      "enum": [
+        "text",
+        "textarea",
+        "select",
+        "radio",
+        "checkbox",
+        "switch",
+        "date",
+        "datetime",
+        "date_picker",
+        "file",
+        "email",
+        "tel",
+        "number",
+        "hidden"
+      ],
+      "description": "Form control only \u2014 not storage type. Use field.type for data."
     }
   }
 }

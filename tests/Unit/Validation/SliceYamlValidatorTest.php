@@ -121,4 +121,33 @@ final class SliceYamlValidatorTest extends TestCase
         ]);
         $this->assertSame([], $errors);
     }
+
+    public function test_select_as_type_suggests_input_key(): void
+    {
+        $errors = $this->v->validate([
+            'name' => 'X',
+            'fields' => [
+                'status' => ['handle' => 'status', 'type' => 'select'],
+            ],
+        ]);
+        $this->assertNotEmpty($errors);
+        $this->assertStringContainsString('input widget', $errors[0]['message']);
+        $this->assertStringContainsString('input: select', $errors[0]['message']);
+    }
+
+    public function test_string_with_input_select_passes(): void
+    {
+        $errors = $this->v->validate([
+            'name' => 'X',
+            'fields' => [
+                'status' => [
+                    'handle' => 'status',
+                    'type' => 'string',
+                    'input' => 'select',
+                    'options_from' => 'distinct:status',
+                ],
+            ],
+        ]);
+        $this->assertSame([], $errors);
+    }
 }

@@ -31,6 +31,11 @@ class SliceYamlValidator
 
     public const VIEWS = ['table', 'board', 'calendar', 'card', 'list'];
 
+    public const INPUT_WIDGETS = [
+        'text', 'textarea', 'select', 'radio', 'checkbox', 'switch',
+        'date', 'datetime', 'date_picker', 'file', 'email', 'tel', 'number', 'hidden',
+    ];
+
     /**
      * @return list<array{path: string, message: string}>
      */
@@ -192,10 +197,29 @@ class SliceYamlValidator
                 'bigint' => 'integer',
             ];
             $normalized = $aliases[$type] ?? $type;
-            if (! in_array($normalized, self::FIELD_TYPES, true)) {
+            // Common mistake: UI widget used as storage type
+            if (in_array($type, self::INPUT_WIDGETS, true) && ! in_array($type, self::FIELD_TYPES, true)) {
+                $errors[] = [
+                    'path' => "$path.type",
+                    'message' => "\"$type\" is an input widget, not a data type. Use type: string (or other storage type) and input: $type",
+                ];
+            } elseif (! in_array($normalized, self::FIELD_TYPES, true)) {
                 $errors[] = [
                     'path' => "$path.type",
                     'message' => "Invalid field type \"$type\". Allowed: ".implode(', ', self::FIELD_TYPES),
+                ];
+            }
+        }
+
+        foreach (['input', 'input_type'] as $inputKey) {
+            if (! isset($field[$inputKey])) {
+                continue;
+            }
+            $input = (string) $field[$inputKey];
+            if (! in_array($input, self::INPUT_WIDGETS, true)) {
+                $errors[] = [
+                    'path' => "$path.$inputKey",
+                    'message' => "Invalid input widget \"$input\". Allowed: ".implode(', ', self::INPUT_WIDGETS),
                 ];
             }
         }
