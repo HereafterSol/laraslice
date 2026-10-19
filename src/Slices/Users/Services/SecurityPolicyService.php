@@ -78,6 +78,11 @@ class SecurityPolicyService
      */
     public static function requiresMfa(User|Authenticatable $user): bool
     {
+        // Global kill-switch for local development / automated testing only.
+        if (! (bool) config('laraslice.auth.mfa_enabled', true)) {
+            return false;
+        }
+
         $policy = self::get('security.mfa_enforcement', self::MFA_PRIVILEGED);
 
         return match ($policy) {

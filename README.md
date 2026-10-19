@@ -424,3 +424,11 @@ To test changes to the framework live in a host Laravel application before publi
 ## 📄 License
 
 LaraSlice is open-source software licensed under the **[MIT License](LICENSE)**. Free for personal, commercial, and government use.
+
+### Local development: MFA
+
+```env
+LARASLICE_MFA_ENABLED=false
+```
+
+Skips MFA enrollment and challenge after password login. **For local development and testing only — never disable in production.** Default is `true`.

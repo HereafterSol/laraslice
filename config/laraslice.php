@@ -87,6 +87,9 @@ return [
     |
     */
     'auth' => [
+        // Local/dev only: set LARASLICE_MFA_ENABLED=false to skip MFA enroll/challenge after password.
+        // Default true — never disable in production.
+        'mfa_enabled' => (bool) env('LARASLICE_MFA_ENABLED', true),
         'api_registration' => (bool) env('LARASLICE_API_REGISTRATION', false),
         'passkey_user_verification' => env('LARASLICE_PASSKEY_USER_VERIFICATION', 'preferred'),
         'passkey_require_user_verification' => (bool) env('LARASLICE_PASSKEY_REQUIRE_UV', false),

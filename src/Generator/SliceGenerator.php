@@ -1069,7 +1069,10 @@ ACTIONS;
             </x-slot:actions>
 ACTIONS;
             }
-            $bladeIndex = <<<BLADE
+                        $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\') . '/slice.json'));
+            $sliceYamlAbs = str_replace('slice.json', 'slice.yaml', $sliceJsonAbs);
+
+$bladeIndex = <<<BLADE
 @extends('layouts.app')
 
 @section('content')
@@ -1143,9 +1146,9 @@ ACTIONS;
 {$dataTableColumns}
             // @laraslice:columns
         ];
-        // Runtime: load formatters from slice.json so re-infer applies without regenerating this blade
-        \$__mf = __DIR__ . '/../../slice.json';
-        if (! is_file(\$__mf)) { \$__mf = __DIR__ . '/../../slice.yaml'; }
+        // Runtime: load formatters from slice.json (absolute path — compiled views break __DIR__)
+        \$__mf = '{$sliceJsonAbs}';
+        if (! is_file(\$__mf)) { \$__mf = '{$sliceYamlAbs}'; }
         if (is_file(\$__mf)) {
             try {
                 \$__m = str_ends_with(\$__mf, '.yaml') && class_exists(\\Symfony\\Component\\Yaml\\Yaml::class)
@@ -1210,7 +1213,7 @@ ACTIONS;
         @php
             \$dashWidgets = [];
             try {
-                \$_mf = __DIR__ . '/../../slice.json';
+                \$_mf = '{$sliceJsonAbs}';
                 if (is_file(\$_mf)) {
                     \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
                     \$dashWidgets = \$_m['ui']['dashboard']['widgets'] ?? [];
@@ -1258,8 +1261,8 @@ ACTIONS;
             \$wfBulkUrl = null;
             \$bulkFromYaml = [];
             try {
-                \$sliceJson = __DIR__ . '/../../slice.json';
-                \$sliceYaml = __DIR__ . '/../../slice.yaml';
+                \$sliceJson = '{$sliceJsonAbs}';
+                \$sliceYaml = '{$sliceYamlAbs}';
                 \$manifest = [];
                 if (file_exists(\$sliceJson)) {
                     \$manifest = json_decode(file_get_contents(\$sliceJson), true) ?: [];
@@ -1546,7 +1549,7 @@ BLADE;
             \$relatedTabs = \$relatedTabs ?? [];
             if (\$relatedTabs === [] && isset(\$record) && is_object(\$record)) {
                 try {
-                    \$_mf = __DIR__ . '/../../slice.json';
+                    \$_mf = '{$sliceJsonAbs}';
                     if (is_file(\$_mf)) {
                         \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
                         foreach ((\$_m['ui']['show']['tabs'] ?? []) as \$_tab) {

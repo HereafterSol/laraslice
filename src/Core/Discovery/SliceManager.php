@@ -700,7 +700,7 @@ class SliceManager
             return;
         }
         $content = $original;
-        $content = $this->injectRuntimeDirectoryColumns($content);
+        $content = $this->injectRuntimeDirectoryColumns($content, $slice->path.DIRECTORY_SEPARATOR.'slice.json');
 
         $viewsExport = var_export($views, true);
         $inlineExport = var_export($inlineEdit, true);
@@ -1896,47 +1896,51 @@ PHP;
     /**
      * Ensure index.blade.php loads directory columns (with formatters) from slice.json at runtime.
      */
-    protected function injectRuntimeDirectoryColumns(string $content): string
+    protected function injectRuntimeDirectoryColumns(string $content, string $manifestAbsolutePath): string
     {
         if (str_contains($content, 'load formatters from slice.json')) {
             return $content;
         }
 
-        $snippet = <<<'BLADE'
+        // Compiled Blade views live under storage/framework/views — __DIR__ cannot
+        // resolve app/Slices/.../slice.json. Hardcode the absolute path at repair time.
+        $abs = str_replace(['\\', "'"], ['/', "\\'"], $manifestAbsolutePath);
+        $yamlAbs = str_replace('slice.json', 'slice.yaml', $abs);
 
-        // Runtime: load formatters from slice.json
-        $__mf = __DIR__ . '/../../slice.json';
-        if (! is_file($__mf)) { $__mf = __DIR__ . '/../../slice.yaml'; }
-        if (is_file($__mf)) {
+        $snippet = <<<BLADE
+
+        // Runtime: load formatters from slice.json (absolute path baked at repair time)
+        \$__mf = '{$abs}';
+        if (! is_file(\$__mf)) { \$__mf = '{$yamlAbs}'; }
+        if (is_file(\$__mf)) {
             try {
-                $__m = str_ends_with($__mf, '.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)
-                    ? \Symfony\Component\Yaml\Yaml::parseFile($__mf)
-                    : json_decode((string) file_get_contents($__mf), true);
-                $__dirCols = $__m['ui']['directory']['columns'] ?? [];
-                if (is_array($__dirCols) && $__dirCols !== []) {
-                    $__htmlFmt = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'];
-                    $columns = [];
-                    foreach ($__dirCols as $__c) {
-                        $__key = $__c['key'] ?? $__c['handle'] ?? null;
-                        if (! $__key) { continue; }
-                        $__fmt = $__c['formatter'] ?? $__c['type'] ?? 'text';
-                        $columns[] = array_filter([
-                            'key' => $__key,
-                            'label' => $__c['label'] ?? \Illuminate\Support\Str::headline((string) $__key),
-                            'sortable' => $__c['sortable'] ?? true,
-                            'formatter' => $__fmt,
-                            'html' => in_array($__fmt, $__htmlFmt, true),
-                            'badge_from' => $__c['badge_from'] ?? null,
-                            'breakdown' => $__c['breakdown'] ?? null,
-                        ], fn ($v) => $v !== null);
+                \$__m = str_ends_with(\$__mf, '.yaml') && class_exists(\\Symfony\\Component\\Yaml\\Yaml::class)
+                    ? \\Symfony\\Component\\Yaml\\Yaml::parseFile(\$__mf)
+                    : json_decode((string) file_get_contents(\$__mf), true);
+                \$__dirCols = \$__m['ui']['directory']['columns'] ?? [];
+                if (is_array(\$__dirCols) && \$__dirCols !== []) {
+                    \$__htmlFmt = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'];
+                    \$columns = [];
+                    foreach (\$__dirCols as \$__c) {
+                        \$__key = \$__c['key'] ?? \$__c['handle'] ?? null;
+                        if (! \$__key) { continue; }
+                        \$__fmt = \$__c['formatter'] ?? \$__c['type'] ?? 'text';
+                        \$columns[] = array_filter([
+                            'key' => \$__key,
+                            'label' => \$__c['label'] ?? \\Illuminate\\Support\\Str::headline((string) \$__key),
+                            'sortable' => \$__c['sortable'] ?? true,
+                            'formatter' => \$__fmt,
+                            'html' => in_array(\$__fmt, \$__htmlFmt, true),
+                            'badge_from' => \$__c['badge_from'] ?? null,
+                            'breakdown' => \$__c['breakdown'] ?? null,
+                        ], fn (\$v) => \$v !== null);
                     }
                 }
-            } catch (\Throwable $e) {}
+            } catch (\\Throwable \$e) {}
         }
 
 BLADE;
 
-        // Prefer plain string match — avoid PCRE \L namespace false escapes
         $needles = [
             '$rows = \LaraSlice\Support\DataTableRows::from',
             '$rows = \\LaraSlice\\Support\\DataTableRows::from',
@@ -1948,7 +1952,6 @@ BLADE;
             }
         }
 
-        // Fallback: any DataTableRows::from assignment
         if (preg_match('/\$rows\s*=\s*\\\\?LaraSlice\\\\Support\\\\DataTableRows::from/', $content, $m, PREG_OFFSET_CAPTURE)) {
             $pos = $m[0][1];
             $matched = $m[0][0];

@@ -61,6 +61,7 @@ class AuthWebController extends Controller
         $user = $this->attempts->verify($credentials['email'], $credentials['password'], $request);
 
         // 3. Dynamic Database-Backed Multi-Factor Authentication Policy
+        // LARASLICE_MFA_ENABLED=false skips enroll + challenge (dev/test only).
         $requiresMfa = SecurityPolicyService::requiresMfa($user);
 
         // Case: No MFA required -> Immediate sign in
