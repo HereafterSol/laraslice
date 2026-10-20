@@ -60,6 +60,24 @@ HTML;
                 <input type="checkbox" id="{$snakeField}" name="{$snakeField}" value="1" {{ old('{$snakeField}', \$form->{$snakeField} ?? false) ? 'checked' : '' }} class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
             </div>
 HTML;
+                } elseif (! empty($field['options']) && is_array($field['options'])) {
+                    // Declared options (e.g. a ported MySQL enum) render as a
+                    // real select — never a free-text input.
+                    $optionHtml = '<option value="">Select '.$label.'...</option>';
+                    foreach ($field['options'] as $optValue => $optLabel) {
+                        $safeV = htmlspecialchars((string) $optValue, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $safeL = htmlspecialchars((string) $optLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $optionHtml .= "\n                    <option value=\"{$safeV}\" @selected(old('{$snakeField}', \$form->{$snakeField} ?? '') === '{$safeV}')>{$safeL}</option>";
+                    }
+                    $snippet = <<<HTML
+
+            <div class="space-y-1.5">
+                <x-ui.label for="{$snakeField}">{$label}</x-ui.label>
+                <select id="{$snakeField}" name="{$snakeField}" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                    {$optionHtml}
+                </select>
+            </div>
+HTML;
                 } elseif (str_ends_with($snakeField, '_id')) {
                     $relatedTable = Str::plural(str_replace('_id', '', $snakeField));
                     $snippet = <<<HTML
@@ -70,7 +88,13 @@ HTML;
                     \$rawOpts = \Illuminate\Support\Facades\Schema::hasTable(\$relatedTableStr) ? \Illuminate\Support\Facades\DB::table(\$relatedTableStr)->get() : collect();
                     \$optsMap = [];
                     foreach (\$rawOpts as \$o) {
-                        \$optsMap[\$o->id] = \$o->name ?? \$o->title ?? \$o->label ?? ('#' . \$o->id);
+                        \$lbl = \$o->name ?? \$o->title ?? \$o->label ?? null;
+                        if (\$lbl === null) {
+                            foreach (get_object_vars(\$o) as \$k => \$v) {
+                                if (str_ends_with(\$k, '_name') && filled(\$v)) { \$lbl = \$v; break; }
+                            }
+                        }
+                        \$optsMap[\$o->id] = \$lbl ?? ('#' . \$o->id);
                     }
                     \$quickUrl = null;
                     \$baseRel = str_replace('_id', '', '{$snakeField}');

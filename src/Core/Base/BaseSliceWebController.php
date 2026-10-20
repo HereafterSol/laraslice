@@ -126,10 +126,21 @@ abstract class BaseSliceWebController extends Controller
                     if (Schema::hasTable($tbl)) {
                         $columns = Schema::getColumnListing($tbl);
                         $labelCol = 'id';
-                        foreach (['name', 'title', 'team_name', 'company_name', 'full_name', 'label', 'order_number', 'sku'] as $candidate) {
+                        foreach (['name', 'title', 'team_name', 'company_name', 'display_name', 'full_name', 'label', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
                             if (in_array($candidate, $columns, true)) {
                                 $labelCol = $candidate;
                                 break;
+                            }
+                        }
+                        // Convention fallback: *_name columns (leave_types.type_name, ...)
+                        if ($labelCol === 'id') {
+                            $segmentName = Str::afterLast($base, '_') . '_name';
+                            $nameCols = array_values(array_filter($columns, static fn ($cl) => str_ends_with($cl, '_name')));
+                            foreach (array_merge([$segmentName], $nameCols) as $candidate) {
+                                if (in_array($candidate, $columns, true)) {
+                                    $labelCol = $candidate;
+                                    break;
+                                }
                             }
                         }
 

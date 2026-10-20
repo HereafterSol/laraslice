@@ -68,6 +68,74 @@ final class DirectoryUi
 
 
     /**
+     * Build display rows for a record's detail (show) view from the slice
+     * manifest — the detail-page counterpart of columnsForSlice(). Values go
+     * through the same DataTableRows pipeline as listings, so FK labels
+     * resolve, declared option labels replace raw values, and dates render
+     * human-readably instead of dumping raw model attributes (tenant keys,
+     * raw ids, storage timestamps) onto the page.
+     *
+     * @return list<array{label: string, value: string, html: bool}>
+     */
+    public static function detailRows(string $sliceName, mixed $record): array
+    {
+        $manifest = self::readManifest($sliceName);
+        $fields = self::fieldIndex($manifest);
+        $attributes = is_object($record) && method_exists($record, 'getAttributes')
+            ? $record->getAttributes()
+            : (is_array($record) ? $record : []);
+        if ($fields === [] || $attributes === []) {
+            return [];
+        }
+
+        $skip = ['id', 'created_at', 'updated_at', 'deleted_at', 'company_id', 'tenant_id', 'organization_id', 'workflow_state_entered_at'];
+        $columns = [];
+        foreach ($fields as $name => $def) {
+            $name = (string) $name;
+            if (in_array($name, $skip, true) || ! array_key_exists($name, $attributes) || ! empty($def['hidden'])) {
+                continue;
+            }
+            $label = (string) ($def['label'] ?? \Illuminate\Support\Str::headline($name));
+            if (str_ends_with($name, '_id') && $name !== 'id') {
+                $label = (string) preg_replace('/\s+Id$/', '', $label);
+            }
+            $options = self::normalizeOptions($def['options'] ?? null);
+            $isStatus = in_array($name, ['status', 'state', 'stage'], true);
+            $fieldType = isset($def['type']) && is_string($def['type']) ? $def['type'] : null;
+            $formatter = 'text';
+            if ($isStatus) {
+                $formatter = 'status_pill';
+            } elseif (in_array($fieldType, ['boolean', 'bool'], true)) {
+                // Raw storage 0/1 never reaches a detail page.
+                $formatter = static fn ($v) => $v ? 'Yes' : 'No';
+            }
+            $columns[] = array_filter([
+                'key' => $name,
+                'label' => $label,
+                'formatter' => $formatter,
+                'html' => $isStatus,
+                'options' => $options !== [] ? $options : null,
+                'field_type' => $fieldType,
+            ], fn ($v) => $v !== null);
+        }
+        if ($columns === []) {
+            return [];
+        }
+
+        $row = DataTableRows::from([$record], $columns)[0] ?? [];
+        $rows = [];
+        foreach ($columns as $col) {
+            $rows[] = [
+                'label' => $col['label'],
+                'value' => (string) ($row[$col['key']] ?? '—'),
+                'html' => ! empty($col['html']),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Index the manifest's field definitions by field name, from both the
      * top-level `fields` map and each model's `fields` list.
      *
