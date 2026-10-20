@@ -3,7 +3,7 @@
 @section('title', 'Blueprint Studio · Low-Code Slice Modeler')
 
 @section('content')
-<main class="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8" x-data="blueprintStudio({
+<main class="mx-auto max-w-[1600px] w-full max-w-[100vw] overflow-x-hidden space-y-6 px-3 py-4 sm:px-6 lg:px-8" x-data="blueprintStudio({
     initialSource: @js(old('source', $source ?? '')),
     initialFormat: @js(old('format', $format ?? 'yaml')),
     initialBlueprint: @js($blueprintData ?? null),
@@ -38,38 +38,53 @@
                     Declarative YAML & Visual
                 </span>
             </h1>
+        <p class="text-xs text-muted-foreground mt-2 max-w-3xl">Blueprint Studio is for plan/apply of new domains. Day-to-day edits, history, and YAML↔DB sync live in <a href="{{ route('laraslice.wizard.studio') }}" class="text-primary font-semibold underline">Slice Studio</a>.</p>
             <p class="mt-0.5 text-sm text-muted-foreground">
                 Dual Visual Designer & YAML Modeler with October-style DB introspection, Statamic field widths, and durable slice.yaml persistence.
             </p>
         </div>
 
-        <!-- Controls: Template selector, Slice selector, View mode -->
+        <!-- Controls: single Start-from picker + overflow for secondary actions -->
         <div class="flex flex-wrap items-center gap-2.5">
-            <!-- Template Quick Load -->
+            <!-- Unified Start from… picker (Presets + Examples) -->
             <div class="relative">
-                <select @change="loadStudioPreset($event.target.value); $event.target.value = '';" class="h-9 rounded-lg border border-input bg-card px-3 text-xs font-medium text-foreground shadow-sm hover:bg-accent/50 focus:outline-none">
-                    <option value="" disabled selected>Load Example Template / Suite...</option>
-                    <optgroup label="⚖️ Enterprise Judicial & Workflow Suites">
-                        <option value="legal_dispute_adjudication">⚖️ Dispute Adjudication Suite (6 Slices: Complaints, Hearings, Notices, Orders, Inquiries, MasterData)</option>
-                        <option value="grant_subsidy_pipeline">💰 Grant & Capital Disbursement (2 Slices: Grants, Disbursements)</option>
-                        <option value="executive_procurement_approval">📋 Executive Procurement & PO (2 Slices: Requisitions, PurchaseOrders)</option>
-                        <option value="support_service_ticket">🎫 Support Service & Escalation (2 Slices: Tickets, Escalations)</option>
+                <select @change="handleStartFrom($event.target.value); $event.target.value = '';"
+                        class="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 shadow-sm hover:bg-indigo-500/20 focus:outline-none cursor-pointer max-w-[220px] sm:max-w-none">
+                    <option value="" disabled selected>Start from…</option>
+                    <optgroup label="⚡ Presets / Archetypes">
+                        <option value="preset:adjudication">⚖️ Dispute Adjudication (7 Slices)</option>
+                        <option value="preset:legal_dispute_adjudication">⚖️ Dispute Adjudication Standard Suite</option>
+                        <option value="preset:erp">🏢 ERP Enterprise Operations</option>
+                        <option value="preset:healthcare">🏥 Healthcare & Clinical EMR</option>
+                        <option value="preset:ecommerce">🛒 E-Commerce & Retail</option>
+                        <option value="preset:edtech">🎓 EdTech & Learning (LMS)</option>
+                        <option value="preset:fintech">💳 FinTech & Core Banking</option>
                     </optgroup>
-                    <optgroup label="📦 Multi-Slice Domain Suites">
-                        <option value="crm_suite">💼 CRM Suite (3 Slices: Companies, Contacts, Deals)</option>
-                        <option value="ecommerce_suite">🛒 E-Commerce Suite (4 Slices: Products, Orders, Customers, Categories)</option>
-                        <option value="billing_suite">💳 Billing Suite (3 Slices: Invoices, Payments, Subscriptions)</option>
-                        <option value="asset_inventory">📦 Asset & Inventory Suite (2 Slices: Assets, Maintenance)</option>
+                    <template x-if="savedPresets && savedPresets.length > 0">
+                        <optgroup label="💾 Saved Custom Presets">
+                            <template x-for="p in savedPresets" :key="p.slug">
+                                <option :value="'preset:saved:' + p.slug" x-text="'💾 ' + (p.name || p.slug)"></option>
+                            </template>
+                        </optgroup>
+                    </template>
+                    <optgroup label="🧪 Examples (v0.1)">
+                        <option value="example:kitchen-sink">🧪 Kitchen Sink (all formatters)</option>
+                        <option value="example:crm-companies">💼 CRM · Companies</option>
+                        <option value="example:crm-contacts">💼 CRM · Contacts</option>
+                        <option value="example:crm-deals">💼 CRM · Deals</option>
+                        <option value="example:hr-employees">👥 HR · Employees</option>
+                        <option value="example:hr-leave-requests">👥 HR · Leave</option>
+                        <option value="example:shop-products-example">🛒 Shop · Products</option>
+                        <option value="example:shop-orders-example">🛒 Shop · Orders</option>
                     </optgroup>
                     <optgroup label="📄 Single Slice Blueprints">
-                        <option value="service-desk">🎫 Service Desk (Tickets & Replies)</option>
-                        <option value="hr-module">👥 HR & Staff (Departments & Employees)</option>
-                        <option value="blog">📝 Articles & Comments</option>
-                        <option value="shop">🛍️ Products & Variants</option>
-                        <option value="shop-orders">📦 Orders & Items</option>
-                        <option value="shop-categories">🏷️ Shop Categories</option>
-                        <option value="crm">🏢 Companies & Contacts</option>
-                        <option value="helpdesk">🎫 Helpdesk Support Ticket</option>
+                        <option value="example:service-desk">🎫 Service Desk</option>
+                        <option value="example:hr-module">👥 HR & Staff</option>
+                        <option value="example:blog">📝 Articles & Comments</option>
+                        <option value="example:shop">🛍️ Products & Variants</option>
+                        <option value="example:shop-orders">📦 Orders & Items</option>
+                        <option value="example:shop-categories">🏷️ Shop Categories</option>
+                        <option value="example:crm">🏢 Companies & Contacts</option>
                     </optgroup>
                 </select>
             </div>
@@ -101,16 +116,16 @@
                 <span>+ New Slice</span>
             </button>
 
-                        <!-- Port Legacy App Button -->
-            <button type="button" @click="showPortModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Reverse-engineer and port a legacy Laravel application">
+            <!-- Port Legacy App Button -->
+            <a href="/laraslice/wizard/porting" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer" title="Open full Porting Studio workspace">
                 <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
-                <span>🚀 Port Legacy App</span>
-            </button>
+                <span>🚀 Porting Studio</span>
+            </a>
 
             <!-- Load Ported Suite into Blueprint Studio Trigger -->
-            <button type="button" @click="loadPortedToStudio()" x-show="portPlanData || portInspectionData" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer" title="Load entire ported suite directly into Blueprint Studio canvas">
+            <button type="button" @click="loadPortedToStudio()" x-show="portPlanData || portInspectionData || hasStoredPortPlan()" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer" title="Load entire ported suite directly into Blueprint Studio canvas">
                 <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                <span>📥 Load Ported Suite (<span x-text="portPlanData?.studio_slices?.length || portPlanData?.summary?.total_canonical_slices || 28"></span> Slices)</span>
+                <span>📥 Load Ported Suite (<span x-text="(portPlanData?.studio_slices?.length || portPlanData?.summary?.total_canonical_slices || getStoredSliceCount() || 7) + ' Slices: ' + (portPlanData?.domain || getStoredDomain() || 'Suite')"></span>)</span>
             </button>
 
             <!-- Mode Switcher -->
@@ -129,26 +144,41 @@
                 </button>
             </div>
 
-                        <!-- Import YAML Button -->
-            <button type="button" @click="showImportYamlModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs cursor-pointer" title="Import or paste full Domain or Slice YAML">
-                <svg class="size-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                <span>📥 Import YAML</span>
-            </button>
-
-            <!-- Introspect DB Button -->
-            <button type="button" @click="showIntrospectModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/20 transition">
-                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-8 4v6m-3-3h6"/></svg>
-                ✨ Add from DB
-            </button>
-
-            <!-- 1-Click Run Migrations Button -->
-            <form method="POST" action="{{ route('laraslice.wizard.blueprint.migrate') }}" class="inline">
-                @csrf
-                <button type="submit" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 dark:text-amber-400 transition" title="Run php artisan migrate immediately">
-                    <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                    ⚡ Run Migrations
+            <!-- Secondary actions: inline on md+, overflow menu on small screens -->
+            <div class="relative" x-data="{ headerOverflow: false }">
+                <!-- Mobile overflow trigger -->
+                <button type="button" @click="headerOverflow = !headerOverflow" class="md:hidden inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-accent" aria-label="More actions">
+                    ⋯
                 </button>
-            </form>
+                <!-- Mobile menu -->
+                <div x-show="headerOverflow" x-cloak @click.outside="headerOverflow = false"
+                     class="md:hidden absolute right-0 top-full mt-1 z-40 min-w-[180px] rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                    <button type="button" @click="showImportYamlModal = true; headerOverflow = false" class="w-full text-left px-3 py-2 hover:bg-accent">📥 Import YAML</button>
+                    <button type="button" @click="showIntrospectModal = true; headerOverflow = false" class="w-full text-left px-3 py-2 hover:bg-accent">✨ Add from DB</button>
+                    <form method="POST" action="{{ route('laraslice.wizard.blueprint.migrate') }}" class="block">
+                        @csrf
+                        <button type="submit" class="w-full text-left px-3 py-2 hover:bg-accent text-amber-600 dark:text-amber-400">⚡ Run Migrations</button>
+                    </form>
+                </div>
+                <!-- Desktop inline -->
+                <div class="hidden md:flex items-center gap-2.5">
+                    <button type="button" @click="showImportYamlModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs cursor-pointer" title="Import or paste full Domain or Slice YAML">
+                        <svg class="size-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        <span>Import YAML</span>
+                    </button>
+                    <button type="button" @click="showIntrospectModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/20 transition">
+                        <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-8 4v6m-3-3h6"/></svg>
+                        Add from DB
+                    </button>
+                    <form method="POST" action="{{ route('laraslice.wizard.blueprint.migrate') }}" class="inline">
+                        @csrf
+                        <button type="submit" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 dark:text-amber-400 transition" title="Run php artisan migrate immediately">
+                            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            Run Migrations
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -1120,7 +1150,47 @@
                         </div>
 
                         <!-- Step 2: Show Workspace (Multi-Tab Consolidation) -->
-                        <div x-show="activePageStep === 'show'" class="space-y-3.5 pt-1">
+                                                    <!-- Table / Bulk Actions Builder (index multi-select) -->
+                            <div class="rounded-xl border border-emerald-500/30 bg-card p-4 space-y-3" x-init="ensureUiConfig()">
+                                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold text-foreground">📦 Table Bulk Actions</span>
+                                            <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600" x-text="(blueprint.ui?.directory?.bulk_actions || []).length + ' Actions'"></span>
+                                        </div>
+                                        <p class="text-[11px] text-muted-foreground">When rows are selected on the index table: native export/delete or workflow forward (remarks, status).</p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button type="button" @click="addBulkActionPreset('standard')" class="rounded-lg border border-border px-2 py-1 text-[10px] font-semibold hover:bg-muted cursor-pointer">+ Standard</button>
+                                        <button type="button" @click="addBulkActionPreset('workflow')" class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 cursor-pointer">+ Workflow pack</button>
+                                        <button type="button" @click="addBulkAction()" class="rounded-lg bg-primary px-2 py-1 text-[10px] font-bold text-primary-foreground cursor-pointer">+ Custom</button>
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <template x-for="(ba, bIdx) in (blueprint.ui?.directory?.bulk_actions || [])" :key="bIdx">
+                                        <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/10 p-2.5">
+                                            <input type="text" x-model="ba.handle" @change="syncUiToBlueprintAndYaml()" placeholder="handle" class="w-28 rounded border border-border bg-background px-2 py-1 text-[11px] font-mono">
+                                            <input type="text" x-model="ba.label" @change="syncUiToBlueprintAndYaml()" placeholder="Label" class="w-36 rounded border border-border bg-background px-2 py-1 text-[11px]">
+                                            <select x-model="ba.type" @change="if (ba.type === 'workflow') { ba.transition = ba.transition || ba.handle; } syncUiToBlueprintAndYaml()" class="rounded border border-border bg-background px-2 py-1 text-[11px]">
+                                                <option value="native">Native</option>
+                                                <option value="workflow">Workflow</option>
+                                            </select>
+                                            <input type="text" x-show="ba.type === 'workflow'" x-model="ba.transition" @change="syncUiToBlueprintAndYaml()" placeholder="transition slug" class="w-32 rounded border border-border bg-background px-2 py-1 text-[11px] font-mono">
+                                            <label class="flex items-center gap-1 text-[11px] cursor-pointer" x-show="ba.type === 'workflow'">
+                                                <input type="checkbox" x-model="ba.requires_remarks" @change="syncUiToBlueprintAndYaml()" class="rounded border-border">
+                                                Remarks
+                                            </label>
+                                            <label class="flex items-center gap-1 text-[11px] text-rose-500 cursor-pointer">
+                                                <input type="checkbox" x-model="ba.danger" @change="syncUiToBlueprintAndYaml()" class="rounded border-border text-rose-500">
+                                                Danger
+                                            </label>
+                                            <button type="button" @click="blueprint.ui.directory.bulk_actions.splice(bIdx, 1); syncUiToBlueprintAndYaml()" class="ml-auto text-rose-500 text-xs cursor-pointer" title="Remove">✕</button>
+                                        </div>
+                                    </template>
+                                    <p class="text-[10px] text-muted-foreground" x-show="!(blueprint.ui?.directory?.bulk_actions || []).length">No bulk actions — index multi-select will only show defaults if the generator falls back.</p>
+                                </div>
+                            </div>
+<div x-show="activePageStep === 'show'" class="space-y-3.5 pt-1">
                             <div class="rounded-xl border border-border/80 bg-muted/10 p-4 space-y-3">
                                 <div class="flex items-center justify-between">
                                     <div>
@@ -4504,6 +4574,9 @@ const studioPresets = {
 
 window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrfToken, introspectUrl, studioUrl, allSlicesJson, activeSliceIdx, initialPlanScope, initialPortPlan }) => ({
         mode: 'visual', // 'visual', 'preview', 'split', 'yaml'
+        selectedPreset: '',
+        savedPresets: [],
+        presetLoading: false,
         activeModelIndex: 0,
         source: initialSource || '',
         format: initialFormat || 'yaml',
@@ -4575,7 +4648,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             if (val === 'erp') {
                 this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
-            } else if (val === 'fospah') {
+            } else if (val === 'adjudication') {
                 this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
             } else if (val === 'custom') {
@@ -4957,6 +5030,15 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
         loadPortedToStudio() {
+            if (!this.portPlanData || !this.portPlanData.studio_slices) {
+                try {
+                    const raw = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                    if (raw) {
+                        this.portPlanData = JSON.parse(raw);
+                    }
+                } catch(e) {}
+            }
+
             let targetSlices = null;
             if (this.portPlanData && Array.isArray(this.portPlanData.studio_slices) && this.portPlanData.studio_slices.length > 0) {
                 targetSlices = this.portPlanData.studio_slices;
@@ -4964,15 +5046,29 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 targetSlices = this.portInspectionData.studio_slices;
             } else if (this.portPlanData && Array.isArray(this.portPlanData.modules)) {
                 targetSlices = this.convertModulesToStudioSlices(this.portPlanData.modules);
+            } else {
+                try {
+                    const rawSlices = sessionStorage.getItem('laraslice_studio_slices') || localStorage.getItem('laraslice_studio_slices');
+                    if (rawSlices) {
+                        const parsed = JSON.parse(rawSlices);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            targetSlices = parsed;
+                        }
+                    }
+                } catch(e) {}
             }
 
             if (!targetSlices || !targetSlices.length) {
+                if (studioPresets['legal_dispute_adjudication']) {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                    return;
+                }
                 this.portError = 'Please inspect the project schema or load an architecture plan first.';
                 return;
             }
 
             this.slices = JSON.parse(JSON.stringify(targetSlices));
-            this.domainName = this.portPlanData?.domain || this.portInspectionData?.domain || this.portDomain || 'ERP';
+            this.domainName = this.portPlanData?.domain || this.portInspectionData?.domain || this.portDomain || 'Adjudication';
             this.blueprint.domain = this.domainName;
             this.activeSliceIdx = 0;
             if (this.slices.length > 0 && this.slices[0].blueprint) {
@@ -4981,8 +5077,12 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 this.source = this.slices[0].source || '';
                 this.syncToYaml();
             }
-            if (this.portInspectionData?.domain_blueprint_yaml) {
+            if (this.portPlanData?.domain_blueprint_yaml) {
+                this.domainYamlSource = this.portPlanData.domain_blueprint_yaml;
+            } else if (this.portInspectionData?.domain_blueprint_yaml) {
                 this.domainYamlSource = this.portInspectionData.domain_blueprint_yaml;
+            } else {
+                this.generateDomainYaml();
             }
             this.showPortModal = false;
             this.mode = 'visual';
@@ -4990,6 +5090,93 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 sessionStorage.setItem('laraslice_studio_slices', JSON.stringify(this.slices));
                 sessionStorage.setItem('laraslice_active_slice_idx', '0');
             } catch(e) {}
+        },
+
+        async choosePreset(presetKey) {
+            if (!presetKey) return;
+            this.presetLoading = true;
+            try {
+                if (presetKey.startsWith('saved:')) {
+                    const slug = presetKey.replace('saved:', '');
+                    const res = await fetch('/laraslice/wizard/port-saved-presets/' + encodeURIComponent(slug), { headers: { 'Accept': 'application/json' } });
+                    const data = await res.json();
+                    if (data.success && data.preset?.plan) {
+                        this.portPlanData = data.preset.plan;
+                        sessionStorage.setItem('laraslice_port_plan', JSON.stringify(data.preset.plan));
+                        localStorage.setItem('laraslice_port_plan', JSON.stringify(data.preset.plan));
+                        this.loadPortedToStudio();
+                        return;
+                    }
+                }
+
+                if (presetKey === 'legal_dispute_adjudication') {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                    return;
+                }
+
+                // If template preset exists in studioPresets
+                if (studioPresets[presetKey]) {
+                    this.loadStudioPreset(presetKey);
+                    return;
+                }
+
+                // Fetch authentic plan from backend
+                const domain = presetKey === 'adjudication' ? 'Adjudication' : (presetKey === 'erp' ? 'ERP' : presetKey.charAt(0).toUpperCase() + presetKey.slice(1));
+                const res = await fetch('/laraslice/wizard/blueprint/port-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                    body: JSON.stringify({ preset: presetKey, domain: domain, source_type: 'local' })
+                });
+                const data = await res.json();
+                if (data.success && data.plan) {
+                    this.portPlanData = data.plan;
+                    sessionStorage.setItem('laraslice_port_plan', JSON.stringify(data.plan));
+                    localStorage.setItem('laraslice_port_plan', JSON.stringify(data.plan));
+                    this.loadPortedToStudio();
+                    return;
+                }
+
+                // Fallback for adjudication
+                if (presetKey === 'adjudication' && studioPresets['legal_dispute_adjudication']) {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                }
+            } catch (e) {
+                console.error('Error loading preset:', e);
+                if (presetKey === 'adjudication' && studioPresets['legal_dispute_adjudication']) {
+                    this.loadStudioPreset('legal_dispute_adjudication');
+                }
+            } finally {
+                this.presetLoading = false;
+                this.selectedPreset = '';
+            }
+        },
+
+        hasStoredPortPlan() {
+            try {
+                return !!(sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan'));
+            } catch(e) { return false; }
+        },
+
+        getStoredSliceCount() {
+            try {
+                const raw = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    return p.studio_slices?.length || p.summary?.total_canonical_slices || 0;
+                }
+            } catch(e) {}
+            return 0;
+        },
+
+        getStoredDomain() {
+            try {
+                const raw = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    return p.domain || '';
+                }
+            } catch(e) {}
+            return '';
         },
 
         generateDomainYaml() {
@@ -5221,7 +5408,25 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             }
         },
 
+        // Unified Start from… dispatcher (presets + examples)
+        handleStartFrom(value) {
+            if (!value) return;
+            if (value.startsWith('preset:')) {
+                const key = value.slice(7); // drop "preset:"
+                this.choosePreset(key);
+                return;
+            }
+            if (value.startsWith('example:')) {
+                const key = value.slice(8); // drop "example:"
+                this.loadStudioPreset(key);
+                return;
+            }
+            // Fallback: treat as example key
+            this.loadStudioPreset(value);
+        },
+
         loadStudioPreset(presetKey) {
+
             if (!presetKey) return;
             if (studioPresets[presetKey]) {
                 const presetSlices = JSON.parse(JSON.stringify(studioPresets[presetKey]));
@@ -5357,12 +5562,34 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
         init() {
+            // Restore active ported plan from Porting Studio (sessionStorage or localStorage)
+            try {
+                const rawPlan = sessionStorage.getItem('laraslice_port_plan') || localStorage.getItem('laraslice_port_plan');
+                if (rawPlan) {
+                    const parsedPlan = JSON.parse(rawPlan);
+                    if (parsedPlan && (parsedPlan.studio_slices || parsedPlan.modules)) {
+                        this.portPlanData = parsedPlan;
+                    }
+                }
+            } catch(e) {}
+
+            // Load saved presets from backend
+            fetch('/laraslice/wizard/port-saved-presets', { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(d => { if (d.success) this.savedPresets = d.presets || []; })
+                .catch(() => {});
+
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('port') === '1') {
                 this.showPortModal = true;
             }
             if (urlParams.get('load_port') === '1' || urlParams.get('auto_load_port') === '1') {
                 this.loadPortedToStudio();
+                return;
+            }
+            if (urlParams.get('preset')) {
+                this.choosePreset(urlParams.get('preset'));
+                return;
             }
             // NOTE: Porting Analyze is intentionally NOT auto-fired here.
             // The developer opens the Porting Studio dialog and clicks Analyze explicitly.
@@ -5538,22 +5765,26 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
 
                 const rawFields = Array.isArray(m.fields) ? m.fields : [];
                 const seenFields = new Set();
+                const reservedHandles = ['id', 'created_at', 'updated_at', 'deleted_at'];
                 rawFields.forEach(f => {
                     const fHandle = this.toSnakeCase(f.handle || f.name || '');
-                    if (!fHandle || seenFields.has(fHandle)) return;
+                    if (!fHandle || reservedHandles.includes(fHandle) || seenFields.has(fHandle)) return;
                     seenFields.add(fHandle);
 
                     const fType = f.type || 'string';
                     const fOptions = (f.options && typeof f.options === 'object') ? f.options : {};
                     const fOptionsText = Object.entries(fOptions).map(([k, v]) => `${k}: ${v}`).join(', ');
 
+                    const isNullable = f.nullable !== undefined ? !!f.nullable : (f.required !== undefined ? !f.required : true);
+                    const isRequired = !isNullable;
+
                     modelObj.fields.push({
                         handle: fHandle,
                         label: f.label || (fHandle ? (fHandle.charAt(0).toUpperCase() + fHandle.slice(1).replace(/_/g, ' ')) : ''),
                         type: fType,
                         input_type: f.input_type || (fType === 'enum' ? 'select' : (['text', 'json'].includes(fType) ? 'textarea' : (fType === 'boolean' ? 'checkbox' : (fType === 'date' ? 'date' : 'text')))),
-                        required: f.required !== undefined ? !!f.required : true,
-                        nullable: f.nullable !== undefined ? !!f.nullable : false,
+                        required: isRequired,
+                        nullable: isNullable,
                         hidden: !!f.hidden,
                         width: parseInt(f.width) || (['text', 'json'].includes(fType) ? 100 : 50),
                         length: f.length !== undefined && f.length !== null ? String(f.length) : '',
@@ -5724,26 +5955,35 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                     timestamps: m.timestamps !== false,
                     soft_deletes: !!m.soft_deletes,
                     description: m.description || '',
-                    fields: (m.fields || []).map(f => {
-                        const fHandle = this.toSnakeCase(f.handle || 'field');
-                        const fObj = {
-                            handle: fHandle,
-                            label: f.label || (fHandle.charAt(0).toUpperCase() + fHandle.slice(1).replace(/_/g, ' ')),
-                            type: f.type || 'string',
-                            input_type: f.input_type || 'text',
-                            required: !!f.required,
-                            nullable: !!f.nullable,
-                            width: parseInt(f.width) || 50,
-                        };
-                        if (f.hidden) fObj.hidden = true;
-                        if (f.length) fObj.length = f.length;
-                        if (f.default) fObj.default = f.default;
-                        if (f.type === 'enum' && f.options && Object.keys(f.options).length) {
-                            fObj.options = f.options;
-                        }
-                        return fObj;
-                    }),
-                    relations: (m.relations || []).map(r => ({
+                    fields: (m.fields || [])
+                        .filter(f => !['id', 'created_at', 'updated_at', 'deleted_at'].includes(this.toSnakeCase(f.handle || '')))
+                        .map(f => {
+                            const fHandle = this.toSnakeCase(f.handle || 'field');
+                            const isReq = !!f.required;
+                            const isNll = f.nullable !== undefined ? !!f.nullable : !isReq;
+                            const finalReq = isNll ? false : true;
+                            const finalNll = !finalReq;
+                            const fObj = {
+                                handle: fHandle,
+                                label: f.label || (fHandle.charAt(0).toUpperCase() + fHandle.slice(1).replace(/_/g, ' ')),
+                                type: f.type || 'string',
+                                input_type: f.input_type || 'text',
+                                required: finalReq,
+                                nullable: finalNll,
+                                width: parseInt(f.width) || 50,
+                            };
+                            if (f.hidden) fObj.hidden = true;
+                            if (f.length) fObj.length = f.length;
+                            if (f.default) fObj.default = f.default;
+                            if (f.type === 'enum' && f.options && Object.keys(f.options).length) {
+                                fObj.options = f.options;
+                            }
+                            return fObj;
+                        }),
+                    relations: (this.allRelations && this.allRelations.length > 0
+                        ? this.allRelations.filter(r => r.source_model === mHandle)
+                        : (m.relations || [])
+                    ).map(r => ({
                         name: this.toSnakeCase(r.name || 'relation'),
                         type: r.type || 'belongsTo',
                         model: this.toSnakeCase(r.model || ''),
@@ -5752,6 +5992,50 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 };
                 return mObj;
             });
+
+            // Auto-link child models to root aggregate if missing and not a catalog
+            const rootModel = cleanModels.find(m => m.root) || cleanModels[0];
+            const isCatalogSlice = !!this.blueprint.taxonomy || /setting|master|catalog|reference/i.test(this.blueprint.name || '');
+            if (rootModel && cleanModels.length > 1 && !isCatalogSlice) {
+                cleanModels.forEach(cm => {
+                    if (!cm.root) {
+                        const childFields = (cm.fields || []).map(f => f.handle);
+                        let bestFk = childFields.includes(rootModel.handle + '_id') ? (rootModel.handle + '_id') : null;
+                        if (!bestFk) {
+                            bestFk = rootModel.handle + '_id';
+                            if (!childFields.includes(bestFk)) {
+                                cm.fields.push({
+                                    handle: bestFk,
+                                    label: rootModel.name || (rootModel.handle.charAt(0).toUpperCase() + rootModel.handle.slice(1)),
+                                    type: 'foreign_id',
+                                    input_type: 'select',
+                                    required: false,
+                                    nullable: true,
+                                    width: 50
+                                });
+                            }
+                        }
+                        const hasRel = (rootModel.relations || []).some(r => r.model === cm.handle);
+                        if (!hasRel) {
+                            rootModel.relations.push({
+                                name: cm.handle.endsWith('s') ? cm.handle : (cm.handle + 's'),
+                                type: 'hasMany',
+                                model: cm.handle,
+                                foreign_key: bestFk
+                            });
+                        }
+                        const childHasRel = (cm.relations || []).some(r => r.model === rootModel.handle);
+                        if (!childHasRel) {
+                            cm.relations.push({
+                                name: rootModel.handle,
+                                type: 'belongsTo',
+                                model: rootModel.handle,
+                                foreign_key: bestFk
+                            });
+                        }
+                    }
+                });
+            }
 
             const bpObj = {
                 schema_version: 1,
@@ -5968,6 +6252,20 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                     { handle: 'delete', label: 'Delete Record', icon: 'trash-2', placement: 'dropdown', type: 'delete', danger: true }
                 ]
             };
+            // Bulk Actions Default (index table multi-select)
+            if (!Array.isArray(ui.directory.bulk_actions)) {
+                ui.directory.bulk_actions = [
+                    { handle: 'export', label: 'Export Selected', type: 'native', icon: 'download' },
+                    { handle: 'delete', label: 'Delete Selected', type: 'native', icon: 'trash-2', danger: true },
+                ];
+            } else {
+                ui.directory.bulk_actions = ui.directory.bulk_actions.map(ba => {
+                    if (typeof ba === 'string') {
+                        return { handle: ba, label: ba.replace(/_/g, ' '), type: 'native', icon: 'zap' };
+                    }
+                    return ba;
+                });
+            }
             ui.forms = ui.forms || {};
             ui.forms.mode = ui.presentation?.create || ui.forms.mode || 'drawer';
 
@@ -6285,6 +6583,39 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         },
 
 
+        addBulkAction() {
+            this.ensureUiConfig();
+            if (!Array.isArray(this.blueprint.ui.directory.bulk_actions)) {
+                this.blueprint.ui.directory.bulk_actions = [];
+            }
+            this.blueprint.ui.directory.bulk_actions.push({
+                handle: 'custom_' + Date.now(),
+                label: 'Custom action',
+                type: 'native',
+                icon: 'zap',
+            });
+            this.syncUiToBlueprintAndYaml();
+        },
+        addBulkActionPreset(kind) {
+            this.ensureUiConfig();
+            const list = this.blueprint.ui.directory.bulk_actions || [];
+            if (kind === 'standard') {
+                const extras = [
+                    { handle: 'export', label: 'Export Selected', type: 'native', icon: 'download' },
+                    { handle: 'delete', label: 'Delete Selected', type: 'native', icon: 'trash-2', danger: true },
+                ];
+                extras.forEach(e => { if (!list.find(x => x.handle === e.handle)) list.push(e); });
+            } else if (kind === 'workflow') {
+                const extras = [
+                    { handle: 'submit', label: 'Submit', type: 'workflow', transition: 'submit', icon: 'send' },
+                    { handle: 'approve', label: 'Approve', type: 'workflow', transition: 'approve', icon: 'check', requires_remarks: false },
+                    { handle: 'reject', label: 'Reject', type: 'workflow', transition: 'reject', icon: 'x', requires_remarks: true, danger: true },
+                ];
+                extras.forEach(e => { if (!list.find(x => x.handle === e.handle)) list.push(e); });
+            }
+            this.blueprint.ui.directory.bulk_actions = list;
+            this.syncUiToBlueprintAndYaml();
+        },
         setRowActionsPreset(preset) {
             this.ensureUiConfig();
             const ra = this.blueprint.ui.directory.row_actions;

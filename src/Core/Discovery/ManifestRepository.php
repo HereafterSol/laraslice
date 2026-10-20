@@ -63,4 +63,43 @@ final class ManifestRepository
 
         return $map;
     }
+
+    /**
+     * Write GitOps twin slice.yaml next to slice.json (same payload, YAML form).
+     * Keeps file + Studio edits in sync for developers who prefer YAML reviews/PRs.
+     */
+    public static function writeYamlTwin(string $jsonFile, array $manifest): void
+    {
+        $dir = dirname($jsonFile);
+        $yamlPath = $dir.DIRECTORY_SEPARATOR.'slice.yaml';
+        // Prefer symfony/yaml if available via Laravel
+        try {
+            if (class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+                $yaml = \Symfony\Component\Yaml\Yaml::dump(
+                    self::normalize($manifest),
+                    8,
+                    2,
+                    \Symfony\Component\Yaml\Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+                );
+            } elseif (class_exists(\Illuminate\Support\Facades\Yaml::class)) {
+                $yaml = \Illuminate\Support\Facades\Yaml::dump(self::normalize($manifest));
+            } else {
+                // Minimal fallback: JSON-compatible structure as YAML-ish
+                $yaml = "# LaraSlice GitOps twin of slice.json — edit either; slice:sync reconciles\n"
+                    .json_encode(self::normalize($manifest), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            }
+            file_put_contents($yamlPath, $yaml, LOCK_EX);
+        } catch (\Throwable $e) {
+            // Non-fatal: JSON remains source of truth at runtime
+        }
+    }
+
+    /**
+     * Persist both slice.json and slice.yaml.
+     */
+    public static function writeBoth(string $jsonFile, array $manifest): void
+    {
+        self::write($jsonFile, $manifest);
+        self::writeYamlTwin($jsonFile, $manifest);
+    }
 }

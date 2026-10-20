@@ -244,7 +244,7 @@ class SliceGenerator
             foreach ($uiConfig['directory']['columns'] as $c) {
                 $handle = $c['handle'] ?? $c['key'] ?? 'id';
                 $label = $c['label'] ?? \Illuminate\Support\Str::headline($handle);
-                $isHtml = in_array($c['type'] ?? '', ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge'], true);
+                $isHtml = in_array($c['type'] ?? '', ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue'], true);
                 $dtCols[] = "            ['key' => '{$handle}', 'label' => '{$label}', 'sortable' => true" . ($isHtml ? ", 'html' => true" : '') . "],";
             }
             $dataTableColumns = implode("
@@ -1069,11 +1069,17 @@ ACTIONS;
             </x-slot:actions>
 ACTIONS;
             }
-            $bladeIndex = <<<BLADE
+                        $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\') . '/slice.json'));
+            $sliceYamlAbs = str_replace('slice.json', 'slice.yaml', $sliceJsonAbs);
+
+$bladeIndex = <<<BLADE
 @extends('layouts.app')
 
 @section('content')
 <div class="space-y-4">
+    {{-- Bulk workflow forward (shows when table rows checked) --}}
+    <x-workflows::bulk-bar slice="{$studlyName}" />
+
     <!-- Compact Top Bar (Matches Enterprise ERP Standard) -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-border/40">
         <div class="flex items-center gap-3">
@@ -1140,7 +1146,9 @@ ACTIONS;
 {$dataTableColumns}
             // @laraslice:columns
         ];
-        \$rows = \LaraSlice\Support\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
+        // Runtime: load formatters via registered slice path (vendor + path installs)
+        \$columns = \\LaraSlice\\Support\\DirectoryUi::columnsForSlice('{$studlyName}', \$columns);
+        \$rows = \\LaraSlice\\Support\\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
             'show_url'   => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.show') ? route('{$pluralSnake}.show', \$item->id) : null,
             'edit_url'   => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.edit') ? route('{$pluralSnake}.edit', \$item->id) : null,
             'delete_url' => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.destroy') ? route('{$pluralSnake}.destroy', \$item->id) : null,
@@ -1174,15 +1182,35 @@ ACTIONS;
             </div>
         </div>
     @else
-        <!-- Summary Cards (from ui.directory.summary_cards) -->
-        @if(!empty(\$summaryCards))
+        <!-- KPI strip: ui.directory.summary_cards OR ui.dashboard.widgets -->
+        @php
+            \$dashWidgets = [];
+            try {
+                \$_mf = '{$sliceJsonAbs}';
+                if (is_file(\$_mf)) {
+                    \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
+                    \$dashWidgets = \$_m['ui']['dashboard']['widgets'] ?? [];
+                    if (! is_array(\$dashWidgets)) { \$dashWidgets = []; }
+                }
+            } catch (\Throwable \$e) { \$dashWidgets = []; }
+            \$kpiCards = !empty(\$summaryCards) ? \$summaryCards : \$dashWidgets;
+            if (empty(\$summaryData) || ! is_array(\$summaryData)) {
+                \$summaryData = [];
+            }
+            // Default counts when controller did not pass summaryData
+            if (\$kpiCards !== [] && \$summaryData === [] && isset(\$pagedList)) {
+                \$summaryData['total'] = is_countable(\$pagedList->items ?? null)
+                    ? count(\$pagedList->items)
+                    : (isset(\$pagedList->total) ? \$pagedList->total : '—');
+            }
+        @endphp
+        @if(!empty(\$kpiCards))
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            @foreach(\$summaryCards as \$card)
-            <x-ui.stat
-                :label="\$card['label'] ?? ''"
-                :value="\$summaryData[\$card['handle']] ?? '—'"
-                :icon="\$card['icon'] ?? null"
-            />
+            @foreach(\$kpiCards as \$card)
+            <div class="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+                <p class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{{ \$card['label'] ?? (\$card['handle'] ?? 'Stat') }}</p>
+                <p class="text-2xl font-bold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
+            </div>
             @endforeach
         </div>
         @endif
@@ -1200,11 +1228,94 @@ ACTIONS;
         @endif
 
         <!-- High-Density Data Table with Automatic 3-Dots Action Column -->
+        @php
+            // Studio YAML bulk_actions (ui.directory.bulk_actions) + DB workflow engine
+            \$wfTransitions = [];
+            \$wfBulkUrl = null;
+            \$bulkFromYaml = [];
+            try {
+                \$sliceJson = '{$sliceJsonAbs}';
+                \$sliceYaml = '{$sliceYamlAbs}';
+                \$manifest = [];
+                if (file_exists(\$sliceJson)) {
+                    \$manifest = json_decode(file_get_contents(\$sliceJson), true) ?: [];
+                } elseif (file_exists(\$sliceYaml) && class_exists(\\Symfony\\Component\\Yaml\\Yaml::class)) {
+                    \$manifest = \\Symfony\\Component\\Yaml\\Yaml::parseFile(\$sliceYaml) ?: [];
+                }
+                \$bulkFromYaml = \$manifest['ui']['directory']['bulk_actions'] ?? [];
+            } catch (\\Throwable) {}
+            foreach ((array) \$bulkFromYaml as \$ba) {
+                if (! is_array(\$ba)) {
+                    continue;
+                }
+                if ((\$ba['type'] ?? '') === 'workflow') {
+                    \$wfTransitions[] = [
+                        'slug' => \$ba['transition'] ?? \$ba['handle'] ?? 'transition',
+                        'label' => \$ba['label'] ?? \$ba['handle'] ?? 'Transition',
+                        'requires_remarks' => (bool) (\$ba['requires_remarks'] ?? false),
+                    ];
+                }
+            }
+            if (\\Illuminate\\Support\\Facades\\Route::has('workflows.bulk_transition') && class_exists(\\LaraSlice\\Slices\\Workflows\\Services\\WorkflowEngineService::class)) {
+                try {
+                    \$wf = app(\\LaraSlice\\Slices\\Workflows\\Services\\WorkflowEngineService::class)->getWorkflowForSlice('{$studlyName}');
+                    if (\$wf) {
+                        \$wfBulkUrl = route('workflows.bulk_transition', ['slice' => '{$studlyName}'], false);
+                        if (empty(\$wfTransitions)) {
+                            \$wfTransitions = \$wf->transitions->map(fn (\$t) => [
+                                'slug' => \$t->slug,
+                                'label' => \$t->label ?? \$t->slug,
+                                'requires_remarks' => (bool) \$t->requires_remarks,
+                            ])->values()->all();
+                        }
+                    }
+                } catch (\\Throwable) {}
+            }
+        @endphp
+        @php
+            \$dirUi = \$manifest['ui']['directory'] ?? [];
+            \$tableViews = \$dirUi['views'] ?? ['table'];
+            if (! is_array(\$tableViews) || \$tableViews === []) {
+                \$tableViews = ['table'];
+            }
+            \$defaultView = \$dirUi['default_view'] ?? 'table';
+            \$inlineEdit = \$dirUi['inline_edit'] ?? [];
+            if (! is_array(\$inlineEdit)) {
+                \$inlineEdit = [];
+            }
+            \$statusKey = 'status';
+            \$dateKey = null;
+            foreach (\$columns as \$c) {
+                \$ck = \$c['key'] ?? '';
+                if (in_array(\$ck, ['status', 'state', 'stage'], true)) {
+                    \$statusKey = \$ck;
+                }
+                if (\$dateKey === null && (str_contains(\$ck, 'date') || str_ends_with(\$ck, '_at'))) {
+                    \$dateKey = \$ck;
+                }
+            }
+            foreach (['due_date', 'start_date', 'issue_date', 'date'] as \$preferDate) {
+                foreach (\$columns as \$c) {
+                    if ((\$c['key'] ?? '') === \$preferDate) {
+                        \$dateKey = \$preferDate;
+                        break 2;
+                    }
+                }
+            }
+        @endphp
         <x-ui.data-table 
             :columns="\$columns" 
             :rows="\$rows" 
             :page-size="10" 
             search-placeholder="Start typing to search..."
+            :workflow-transitions="\$wfTransitions"
+            :workflow-bulk-url="\$wfBulkUrl"
+            workflow-slice="{$studlyName}"
+            :views="\$tableViews"
+            :default-view="\$defaultView"
+            :status-key="\$statusKey"
+            :inline-edit="\$inlineEdit"
+            :date-key="\$dateKey"
         >
 {$rowActionsSlot}
         </x-ui.data-table>
@@ -1405,6 +1516,51 @@ BLADE;
             <span>Workflow & Audit Trail</span>
         </button>
         @endif
+
+        {{-- Aggregate related records (ERP Project hub parity) --}}
+        @php
+            \$relatedTabs = \$relatedTabs ?? [];
+            if (\$relatedTabs === [] && isset(\$record) && is_object(\$record)) {
+                try {
+                    \$_mf = '{$sliceJsonAbs}';
+                    if (is_file(\$_mf)) {
+                        \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
+                        foreach ((\$_m['ui']['show']['tabs'] ?? []) as \$_tab) {
+                            if ((\$_tab['type'] ?? '') === 'relation') {
+                                \$relatedTabs[] = \$_tab;
+                            }
+                        }
+                        if (\$relatedTabs === []) {
+                            foreach ((\$_m['models'][0]['relations'] ?? []) as \$_rel) {
+                                if ((\$_rel['type'] ?? '') === 'hasMany') {
+                                    \$relatedTabs[] = [
+                                        'handle' => \$_rel['name'] ?? '',
+                                        'label' => \\Illuminate\\Support\\Str::headline(\$_rel['name'] ?? 'Related'),
+                                        'type' => 'relation',
+                                        'relation' => \$_rel['name'] ?? '',
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                } catch (\\Throwable \$e) {
+                    \$relatedTabs = [];
+                }
+            }
+        @endphp
+        @foreach(\$relatedTabs as \$rtab)
+            @if(!empty(\$rtab['handle']))
+            <button
+                type="button"
+                @click="activeTab = '{{ \$rtab['handle'] }}'; window.history.replaceState(null, '', '?tab={{ \$rtab['handle'] }}')"
+                class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
+                :class="activeTab === '{{ \$rtab['handle'] }}' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            >
+                <x-lucide-layers class="size-4" />
+                <span>{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</span>
+            </button>
+            @endif
+        @endforeach
     </div>
 
     <!-- Tab 1: Overview & Parameters -->
@@ -1525,6 +1681,55 @@ BLADE;
             </div>
         </div>
     </div>
+
+    @foreach(\$relatedTabs ?? [] as \$rtab)
+        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? 'relation') === 'relation')
+        <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm font-bold text-foreground">{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</h3>
+            </div>
+            @php
+                \$relName = \$rtab['relation'] ?? \$rtab['handle'];
+                \$relRows = [];
+                try {
+                    if (isset(\$record) && method_exists(\$record, \$relName)) {
+                        \$relRows = \$record->{\$relName}()->limit(50)->get();
+                    } elseif (isset(\$record) && \$record->relationLoaded(\$relName)) {
+                        \$relRows = \$record->getRelation(\$relName);
+                    }
+                } catch (\\Throwable \$e) {
+                    \$relRows = [];
+                }
+            @endphp
+            @if(count(\$relRows) === 0)
+                <div class="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                    No related records yet.
+                </div>
+            @else
+                <div class="rounded-xl border border-border overflow-hidden bg-card">
+                    <table class="w-full text-xs">
+                        <thead class="bg-muted/40 border-b border-border">
+                            <tr>
+                                <th class="px-3 py-2 text-start font-semibold">ID</th>
+                                <th class="px-3 py-2 text-start font-semibold">Summary</th>
+                                <th class="px-3 py-2 text-start font-semibold">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border/50">
+                            @foreach(\$relRows as \$row)
+                            <tr class="hover:bg-muted/30">
+                                <td class="px-3 py-2 font-mono">{{ \$row->id ?? '—' }}</td>
+                                <td class="px-3 py-2 font-medium">{{ \$row->title ?? \$row->name ?? \$row->subject ?? ('#'.(\$row->id ?? '')) }}</td>
+                                <td class="px-3 py-2">{{ \$row->status ?? '—' }}</td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+        @endif
+    @endforeach
 
     @if(\$workflow)
     <!-- Tab 2: Workflow History & Decision Timeline -->

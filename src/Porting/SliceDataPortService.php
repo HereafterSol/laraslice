@@ -237,6 +237,46 @@ class SliceDataPortService
     }
 
     /**
+     * Build target→source column mapping with alias fallback.
+     * Returns [columnMap (target=>source), selectSql].
+     */
+    private function buildColumnMap(array $sourceColumns, array $targetColumns): array
+    {
+        $columnAliases = [
+            'title' => ['heading', 'name', 'subject', 'label', 'project_name'],
+            'name' => ['title', 'heading', 'label', 'project_name'],
+            'description' => ['desc', 'details', 'summary', 'notes', 'project_summary'],
+            'status' => ['state', 'status_code'],
+            'created_at' => ['created_on', 'date_created'],
+            'updated_at' => ['updated_on', 'date_modified', 'modified_at'],
+            'due_date' => ['deadline', 'due_on'],
+            'start_date' => ['started_at', 'begin_date'],
+            'amount' => ['total', 'grand_total', 'price'],
+        ];
+        $columnMap = [];
+        $validColumns = [];
+        foreach ($targetColumns as $tc) {
+            if (in_array($tc, $sourceColumns, true)) {
+                $columnMap[$tc] = $tc;
+                $validColumns[] = $tc;
+                continue;
+            }
+            foreach ($columnAliases[$tc] ?? [] as $alias) {
+                if (in_array($alias, $sourceColumns, true)) {
+                    $columnMap[$tc] = $alias;
+                    $validColumns[] = $tc;
+                    break;
+                }
+            }
+        }
+        $selectParts = [];
+        foreach ($columnMap as $target => $source) {
+            $selectParts[] = $target === $source ? "`{$source}`" : "`{$source}` AS `{$target}`";
+        }
+        return [$columnMap, $validColumns, implode(', ', $selectParts)];
+    }
+
+    /**
      * Import a single table with chunked streaming.
      */
     private function importSingleTable(string $table, $sourcePdo, string $driver, ?callable $progressCallback): array
@@ -280,13 +320,11 @@ class SliceDataPortService
                 $sourceColumns = $targetColumns;
             }
 
-            $validColumns = array_values(array_intersect($sourceColumns, $targetColumns));
+            [$columnMap, $validColumns, $colsSql] = $this->buildColumnMap($sourceColumns, $targetColumns);
 
             if (empty($validColumns)) {
                 return ['status' => 'no_matching_columns', 'rows' => 0];
             }
-
-            $colsSql = implode(', ', array_map(fn($c) => "`{$c}`", $validColumns));
 
             // Clear target table
             \Illuminate\Support\Facades\DB::table($table)->delete();
@@ -312,6 +350,42 @@ class SliceDataPortService
                     }
                     return $row;
                 }, $rows);
+
+                // Fill missing NOT NULL columns with sensible defaults
+                // (source may not have all target columns, e.g. tasks.title)
+                $targetNotNull = [];
+                try {
+                    $columns = \Illuminate\Support\Facades\Schema::getColumns($table);
+                    foreach ($columns as $col) {
+                        $name = $col['name'] ?? null;
+                        if ($name && !in_array($name, $validColumns, true)) {
+                            $nullable = $col['nullable'] ?? true;
+                            $default = $col['default'] ?? null;
+                            if (!$nullable && $default === null) {
+                                $targetNotNull[$name] = $col['type'] ?? 'string';
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // If we can't inspect columns, proceed without defaults
+                }
+                if (!empty($targetNotNull)) {
+                    $sanitized = array_map(function ($row) use ($targetNotNull) {
+                        foreach ($targetNotNull as $col => $type) {
+                            if (!array_key_exists($col, $row) || $row[$col] === null) {
+                                // Sensible defaults by type
+                                if (str_contains($type, 'int') || str_contains($type, 'decimal') || str_contains($type, 'float')) {
+                                    $row[$col] = 0;
+                                } elseif (str_contains($type, 'bool')) {
+                                    $row[$col] = false;
+                                } else {
+                                    $row[$col] = $col === 'title' || $col === 'name' ? 'Imported ' . $col : '';
+                                }
+                            }
+                        }
+                        return $row;
+                    }, $sanitized);
+                }
 
                 \Illuminate\Support\Facades\DB::table($table)->insert($sanitized);
                 $tableImported += count($rows);
@@ -480,6 +554,7 @@ class SliceDataPortService
         $results = [];
         $totalRowsImported = 0;
         $skippedTables = [];
+        $driver = 'mysql';
 
         try {
             // Disable foreign key constraints in a driver-aware way (works on MySQL, SQLite, PgSQL).
@@ -916,7 +991,7 @@ class SliceDataPortService
                 }
 
                 // Repair: legacy rows may exist with the right name but empty slug
-                // (e.g. Worksuite role id=1 name='admin'). Never touch them — the
+                // (e.g. legacy ERP role id=1 name='admin'). Never touch them — the
                 // framework roles above are matched strictly by slug.
             }
 

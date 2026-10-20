@@ -344,7 +344,7 @@ This copies the core slice from the framework into `app/Slices/Users`. Once publ
 ### How Developers Contribute to Core Slices
 
 #### 1. Open Source Contributions to Framework Core
-1. **Fork the Repository**: [github.com/AbdurRehman712/laraslice](https://github.com/AbdurRehman712/laraslice)
+1. **Fork the Repository**: [github.com/HereafterSol/laraslice](https://github.com/HereafterSol/laraslice)
 2. **Edit the Core Slice**: Make enhancements directly in `src/Slices/{SliceName}` (e.g., `src/Slices/Users`, `src/Slices/Roles`, `src/Slices/Settings`).
 3. **Run the Test Suite**:
    ```bash
@@ -522,7 +522,19 @@ When a user asks: `"add [field] in [table]"`, the AI Copilot:
 
 ## 12. Monolith Reverse-Engineering & Legacy System Porting (Step-by-Step AI Architecture Workflow)
 
-When an AI agent or developer is tasked with porting an existing monolithic application (e.g. FOSPAH Complaint Management, BEOEMIS, or any legacy Laravel/PHP application) into LaraSlice, the process must follow a rigorous, deterministic 7-step analysis workflow. 
+When an AI agent or developer is tasked with porting an existing monolithic application (e.g. complaint/adjudication systems, multi-module ERPs, or any legacy Laravel/PHP application) into LaraSlice, the process must follow a rigorous, deterministic 7-step analysis workflow. 
+
+### Porting foundation rules (ERP-class benchmark)
+
+1. **Source of truth order**: DB schema + FKs → **real menu/nav** (`menu.blade.php` / `x-menu-item`) → routes/controllers → status enums → optional journey steps.
+2. **Do not invent BRD essays** as journeys. Journeys must be operational: `persona → steps[{slice, action, route?}]` (`schema: laraslice.journeys.v2`). Admin / Employee / Client match typical multi-tenant ERP roles when an ERP signature is detected.
+3. **Navigation compiler**: Prefer `parseXMenuItemBlade` / blade sidebars; map groups to Porting Studio `sidebar_preview` with modules/permissions hints. Never replace gated menus with generic table lists.
+4. **Aggregates over table explosion**: `*_items` / `*_lines` are children; `*_settings` / `*_types` go to Settings Hub or taxonomy — not sidebar noise.
+5. **Studios after port**: Blueprint/Slice Studio edit YAML (`ui.directory`, workflow, bulk_actions); Porting Studio shows real nav + slim journeys for customization before Apply.
+6. **Every project differs**: Process-core domains differ from multi-module ERP suites. Detect signatures; do not force process-core packs onto ERP or vice versa.
+7. **All domains use `laraslice.journeys.v2`**: ERP → admin/employee/client; process-core/adjudication → admin/complainant/mobile; other → operational nav-derived personas. No mermaid BRD novels in the port plan.
+8. **100% port checklist (ERP benchmark)**: aggregates + settings hub (`type: settings_hub`) + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order (taxonomies → settings → roots → children → pivots). Apply must leave Porting/Blueprint/Slice Studio useful for customization.
+9. **Workflow bulk actions**: Seed `ui.directory.bulk_actions` from detected transitions; Studios remain the place to add/remove bulk and row actions.
 
 Over **50% to 60% of an application's architecture can be accurately reverse-engineered directly from its database schema, foreign keys, and seeders**.
 
@@ -587,7 +599,7 @@ Before or after executing porting commands, developers can inspect the entire re
 When a developer asks to port or reverse-engineer an existing application in chat/CLI without using the Visual Studio (`/laraslice/wizard` or `/laraslice/wizard/blueprint`), the AI agent **MUST proactively prompt the user for input** before executing changes:
 
 1. **Prompt 1: Legacy Source Path**:
-   - Ask for the path or repository location (e.g. `e:/laragon/www/fospha-complaint-managment` or `.`).
+   - Ask for the path or repository location (e.g. `/path/to/legacy-app` or `.`).
 2. **Prompt 2: Target Domain Group**:
    - Ask what high-level Bounded Context / Domain to assign (e.g. `Adjudication`, `LegalCompliance`, `CRM`, `Procurement`).
 3. **Prompt 3: Data Porting Mode**:
@@ -610,7 +622,7 @@ When a developer asks to port or reverse-engineer an existing application in cha
 
 ## 13. Phased Monolith-to-Slice Migration Standard (Best Practices & Developer Experience)
 
-When porting a complex legacy monolithic system (e.g. FOSPAH 51-table complaint management, BEOEMIS, or enterprise ERPs) to LaraSlice, **never attempt a "big-bang" single-pass port of 50 blade views, procedural controllers, and report scripts**. 
+When porting a complex legacy monolithic system (e.g. large complaint/adjudication systems or multi-module enterprise ERPs) to LaraSlice, **never attempt a "big-bang" single-pass port of 50 blade views, procedural controllers, and report scripts**. 
 
 Follow the **LaraSlice Phased Strangler-Fig Migration Methodology**:
 
@@ -622,7 +634,7 @@ Follow the **LaraSlice Phased Strangler-Fig Migration Methodology**:
 ### Phase 2: Visual Studio Blueprint Refinement (Blueprint Studio)
 1. **Load into Studio**: Use the **`📥 Load into Studio`** button or **`📥 Import YAML`** to inspect the entire domain architecture live in Studio memory.
 2. **Review Models & Field Controls**: Verify parent-child aggregates (e.g. `Complaints` with `accused`, `properties`, `approvals`) and input widgets (text, textarea, select, switch, file dropzones).
-3. **Visual Lifecycle Workflow**: Inspect and customize the statutory judicial stages (e.g. all 17 distinct FOSPAH judicial milestones), transition action buttons, and remarks requirements (Note: Statutory judicial ombudsman bodies operate strictly under judicial procedure rules with zero automated SLA hour countdowns).
+3. **Visual Lifecycle Workflow**: Inspect and customize the statutory judicial stages (e.g. multi-stage statutory judicial milestones), transition action buttons, and remarks requirements (Note: Statutory judicial ombudsman bodies operate strictly under judicial procedure rules with zero automated SLA hour countdowns).
 4. **Scoped Operational Roles & RBAC**: Review authentic operational personas (`Super Admin`, `Admin`, `Complainant`, `Assistant Registrar`, `Registrar`, `Ombudsperson`, `Advisor`, `Law Officer`) and capability gates (`complaints.hear`, `complaints.decide`).
 5. **Two-Way Domain YAML**: Edit or paste unified `domain.yaml` with live bi-directional synchronization.
 
@@ -863,7 +875,7 @@ Before generating the Architecture Plan, the AI agent must inspect:
 ### 16.4 Dual Execution Pathways
 1. **Interactive UI Workflow (Blueprint Studio)**:
    - Developer opens `/laraslice/wizard/blueprint` and clicks `🚀 Port Legacy App`.
-   - Selects preset (e.g. `ERP Enterprise Suite`, `FOSPAH`, or `Custom JSON Architecture Plan`).
+   - Selects preset (e.g. `ERP Enterprise Suite`, `Dispute Adjudication`, or `Custom JSON Architecture Plan`).
    - Interactively previews:
      - `🖥️ Sidebar & Navigation Live Preview`: Real-time rendered BlatUI sidebar shell with live database record badges.
      - `🏗️ VSA Domain Architecture`: Visual cards showing modules, slices, roots, and child tables.
@@ -964,20 +976,109 @@ Developers can inspect and edit the entire ported architecture interactively in 
    - The **📄 Page & UI Architecture Plan** card renders the 4-step BlatUI plan for that slice, with full stats ribbons, filter bar definitions, sub-tabs, form sections, and workflow state transitions.
    - Developers can edit any field or state directly in the Visual Designer or YAML editor, click **`Save Changes`**, and then click **`⚡ Run Migrations`** to scaffold and migrate.
 
-### 16.9 User Journey Analysis (Persona-Based Workflows)
+### 16.9 Universal BRD-Grade Role & User Journey Standardization (Flows, State Transitions, Blade Views & Manifest Contracts)
 
-**The most important part of porting is understanding HOW users flow through the system** — not just what tables exist.
+**The core architectural foundation of LaraSlice is understanding HOW human actors and system agents flow through ANY business domain** — not merely what database tables or controller methods exist.
 
-The porter automatically detects four journey types:
+LaraSlice enforces a **100% Domain-Agnostic, Standardized Specification** for Business Requirements Documents (BRD), user journeys, role transitions, and operational step traces. Whether porting or scaffolding an **ERP, Healthcare (EHR/EMR), E-Commerce Marketplace, EdTech LMS, Logistics Fleet, or Fintech Core**: the engine, schema, and UI adapt dynamically with zero hardcoded domain constraints.
 
-1. **Onboarding** (`end_user` persona): Wizard controllers (`Wizard/Companies.php`, `Wizard/Currencies.php`) reveal the first-time setup flow.
-2. **Client Portal** (`client` persona): Portal controllers (`Portal/Invoices.php`, `Portal/Payments.php`) show external user workflows.
-3. **Core Workflows** (`end_user` persona): Business processes like "Invoice to Cash" (create → send → view → pay) and "Bank Reconciliation" (import → match → report).
-4. **Admin** (`admin` persona): System management areas (users, roles, settings, templates).
+#### 1. Universal Standardized BRD Architecture
+The framework classifies any enterprise software into 5 canonical operational tiers plus a master orchestration stream:
 
-**Viewing journeys:** In the Porting Studio dialog, click the **🧭 User Journeys** tab after Analyze. Each journey shows the persona, description, and step-by-step flow with slice mappings.
+| Canonical Tier | Generic Persona Role | E-Commerce Example | Healthcare Example | ERP Operations Example |
+|---|---|---|---|---|
+| **Tier 1: Governance & Setup** | System Administrator (`admin`) | Merchant Storefront Config | Clinic & Provider Setup | Tenant Org & RBAC Setup |
+| **Tier 2: Core Domain Operations** | Operational Lead (`operations`) | Catalog & Inventory Manager | Clinical Records & Triage | Project Charter & Milestones |
+| **Tier 3: Stakeholder Collaboration** | External Stakeholder (`stakeholder` / `client`) | Buyer Checkout & Tracking | Patient Portal Intake | Client Proposal & Contract E-Sign |
+| **Tier 4: Transaction & Settlement** | Financial / Billing (`finance`) | Gateway Order Settlement | Insurance Claim & Copay | Invoicing & Ledger Reconciliation |
+| **Tier 5: Analytics & Intelligence** | Executive Analyst (`analyst`) | GMV & Conversion Telemetry | Patient Outcome Metrics | Cash Flow & Utilization BI |
+| **🌐 Master Value Stream** | Master Orchestrator (`master`) | Complete Quote-to-Fulfillment | Complete Intake-to-Discharge | Complete Lead-to-Ledger |
 
-**Why this matters:** A developer who understands that "Invoice to Cash" spans Invoices → Portal → Payments will build the right integrations. A developer who only sees tables will build disconnected CRUD.
+#### 2. Canonical JSON / YAML Schema Contract
+
+Every user journey in LaraSlice conforms to a strict, standardized specification at both the **Domain Suite Level** and **Slice Level**.
+
+##### A. Domain Level Contract (`porting-architecture-plan.json` & `domain.slice.yaml`):
+```yaml
+user_journeys:
+  - id: core_operations               # Canonical journey identifier
+    name: "Clinical Patient Care Flow" # Human-readable lifecycle title
+    title: "Clinical Patient Care Flow"
+    persona: "Attending Physician"     # Specific business actor
+    role: "physician"                  # RBAC role identifier
+    icon: "🩺"                         # Contextual UI icon
+    entry_point: "/emr/encounters"     # Entry URI route
+    auth_flow: "Physician authenticates via MFA ➔ Redirects to Today Ward Round."
+    blade_views:                       # Discovered or targeted Blade templates
+      - resources/views/encounters/index.blade.php
+      - resources/views/prescriptions/create.blade.php
+    database_tables:                   # Mutated persistence tables
+      - patient_encounters
+      - clinical_notes
+      - prescriptions
+    mermaid_flow: |                    # Valid Mermaid flowchart sequence
+      flowchart TD
+          A["Encounter Intake<br/>(encounters/index.blade.php)"] -->|Triage Vitals| B["Clinical Notes<br/>(notes/create.blade.php)"]
+          B -->|Order Diagnostics| C["Lab Orders<br/>(labs/ajax/create.blade.php)"]
+          C -->|Formulate Rx| D["Prescription Dispatch<br/>(prescriptions/create.blade.php)"]
+    legacy_friction: "Monolithic EncounterController executes 35 raw SQL queries with scattered patient data across 6 unindexed tables."
+    modernization_gain: "Encounter Aggregate Root governing clinical notes and prescriptions with discrete BlatUI Action classes and async lab dispatch."
+    steps:
+      - title: "Encounter Intake & Vitals Recording"
+        step: "Encounter Intake & Vitals Recording"
+        blade_view: "resources/views/encounters/index.blade.php"
+        trigger_ui: "<x-ui.button>Start Clinical Encounter</x-ui.button>"
+        controller: "EncounterController"
+        controller_action: "EncounterController@store"
+        slice: "Encounters"
+        persona: "Attending Physician"
+        legacy_behavior: "Synchronous controller mutation saving vitals, history, and notes without atomic transactions."
+        vsa_improvement: "StartEncounterAction with strict domain invariants and event-driven notifications."
+```
+
+##### B. Slice Level Contract (`app/Slices/{Domain}/{Module}/{Slice}/slice.yaml`):
+Each slice manifest includes a localized `user_journeys:` block linking its specific models and UI triggers directly into the parent business workflow:
+```yaml
+name: Encounters
+domain: Healthcare
+module: Clinical
+user_journeys:
+  - journey: core_operations
+    persona: Attending Physician
+    role: physician
+    entry_point: /healthcare/clinical/encounters/create
+    blade_source: resources/views/encounters/index.blade.php
+    triggers:
+      - action: start_encounter
+        ui: "<x-ui.button>Start Clinical Encounter</x-ui.button>"
+        mutation: "INSERT INTO patient_encounters (patient_id, physician_id, chief_complaint, status)"
+        emits_event: "EncounterStarted"
+      - action: finalize_diagnosis
+        ui: "Diagnosis Sheet -> Save Diagnosis Button"
+        mutation: "UPDATE patient_encounters SET status = 'finalized', icd10_code = ?"
+        emits_event: "EncounterFinalized"
+    state_machine:
+      field: status
+      states: [scheduled, in_triage, in_consultation, lab_pending, finalized, discharged]
+      transitions:
+        - from: in_consultation
+          to: lab_pending
+          trigger: order_lab_tests
+        - from: in_consultation
+          to: finalized
+          trigger: record_prescription
+    modernization_gain: "Replaces monolithic god-controller with Encounter Aggregate Root, discrete BlatUI Action classes, and strict ICD-10 validation rules."
+```
+
+#### 3. Automatic Heuristic Discovery for Any Legacy Project
+When running `slice:port` or analyzing an unknown legacy application in Porting Studio:
+1. **Dynamic Scanner**: Introspects routes (`routes/web.php`, `routes/api.php`), controller directories, route middleware (`role:*`, `can:*`, `guard:*`), and Blade files.
+2. **Dynamic Clustering**: If a domain preset is specified (`erp`, `crm`, `lms`), it utilizes verified domain blueprints; for ANY bespoke project, it dynamically clusters controllers into the 5 universal tiers and generates valid Mermaid `flowchart TD` sequences.
+3. **Master Value Stream Synthesis**: Automatically generates `master_value_stream` connecting Tier 1 through Tier 5 to provide the comprehensive "Big Picture" process diagram required for enterprise BRD signoff.
+4. **Interactive Porting Studio**:
+   - Persona Filter Bar dynamically discovers all roles (`availableRoles()`) with zero hardcoded role names.
+   - Flowcharts are rendered in-browser via Mermaid.js with Zoom In (`+`), Zoom Out (`-`), and Reset (`⟲`) controls.
+   - Interactive Node Clicking (`onNodeClick`): Clicking any node highlights the corresponding operational step card below and displays the active Blade view, UI trigger element, controller endpoint, and VSA improvement.
 
 ### 16.10 AI-First Porting Intelligence (Dead Tables, Business Logic, Workflows)
 
@@ -1095,9 +1196,35 @@ $seeders = $dataService->analyzeSeeders('/path/to/source', $sliceMapping);
 - Protected from deletion in the Roles UI and from ETL wipes
 - Sync via `SliceManager::syncPermissions()` assigns all permissions to both super-admin and super-dev
 
----
+### 16.14 The Code-First Ground Truth Principle & Zero-Infrastructure Clutter Standard
+
+In enterprise modernization and reverse-engineering, **the codebase is the single indisputable source of ground truth**.
+
+#### 1. The Code-First Principle ("Code is Reality, BRD is Contextual Reference")
+- **BRDs Drift; Code Runs**: Business Requirements Documents (BRDs), architecture PDFs, and planning specs represent the initial aspirational vision. Over years of active production operation, features are refactored, edge cases are patched, approval chains change, and real routes diverge from the original documentation.
+- **Verification Workflow**: When porting any legacy application to LaraSlice Vertical Slice Architecture (VSA), AI assistants and developers must prioritize **live code analysis** (routes in `routes/web.php`, middleware guards, controller actions, Blade navigation templates, and active database tables) over static documentation.
+- **Discrepancy Resolution**: When a discrepancy arises between the BRD and the code (e.g. BRD mentions a role or stage not present in the code, or the code introduces role-gated menus like `Hearing Order Processing` for Advisors), **the code wins**. The BRD provides semantic context and user intentions; the code dictates operational realities.
+
+#### 2. The Zero-Infrastructure Clutter Standard
+- Framework plumbing and internal queuing/caching tables (`password_reset_tokens`, `job_batches`, `failed_jobs`, `jobs`, `cache`, `cache_locks`, `sessions`, `migrations`, `personal_access_tokens`, `telescope_*`, `pulse_*`, `horizon_*`) must **never** be treated as business slices, nor dumped onto the proposed sidebar or navigation!
+- These tables are automatically intercepted and quarantined by `SlicePortService::FRAMEWORK_INFRASTRUCTURE_TABLES`. They are excluded from table analysis and vertical slice generation.
+
+#### 3. Authentic Navigation Discovery from Blade Components
+- The porting engine inspects source Blade navigation components (`resources/views/components/**/sidebar*.blade.php`, `layouts/navigation*.blade.php`, `partials/sidebar*.blade.php`).
+- Rather than guessing labels from raw route slugs (`system.complaints.received` -> "System complaints received"), the parser extracts:
+  - **Real Human Anchor Text**: Inside `<span>...</span>` or anchor body (`"Received Complaints"`).
+  - **Authentic Role Gates**: Preceding `@if(in_array($role, [...]))`, `@role(...)`, or `@can(...)` directives.
+  - **Icon Telemetry**: Image assets or SVG tags mapped directly to standardized BlatUI / Lucide icons (`inbox`, `folder-open`, `file-signature`, `calendar-check`, `bell`, `users`).
+  - **Context Separation**: Distinguishing administrative back-office portals (e.g. `Judicial Secretariat`) from public stakeholder portals (e.g. `Citizen / Complainant Portal`).
+
+#### 4. Domain Bounded Aggregates vs. Reference Taxonomies
+- In relational databases, lookup/taxonomy tables (e.g., `provinces`, `districts`, `regions`, `tehsils`, `genders`, `statuses`, `types`, `organizations`) naturally have high incoming reference counts (in-degrees) because almost every business entity points to them.
+- High in-degree must **never** promote a lookup table into an independent top-level root slice.
+- All lookup and taxonomy tables are consolidated into a unified `MasterData` (for Adjudication/Legal) or `ReferenceData` (for ERP/Commerce) slice, preventing sidebar pollution.
+- Core operational entities with dates, notes, and lifecycle events (e.g. `Hearings`, `Notices`, `Representations`, `Complaints`) are first-class aggregate roots, never misclassified as many-to-many pivots.
 
 ---
+
 
 ## 17. Declarative UI Schema, TypeSafe Jev UI Synthesis & Modular YAML Standards
 
@@ -1170,3 +1297,115 @@ Slice Studio's Field Manager includes a full **Page & UI Architecture** editor �
 - **Create & Edit Form** — Drawer/Page presentation toggle, section editor with 1–4 column layouts
 
 All changes flow into `slice.yaml` on generate. Blueprint Studio remains the reference implementation for the full declarative schema.
+
+---
+
+## Branch notes (`feat/workflow-bulk-actions`) — keep in sync with code
+
+### Slice YAML v0.1
+- Docs: `docs/SLICE_YAML_V0.1.md`, `docs/SLICE_YAML_STRATEGY.md`
+- Machine schema: `schemas/slice-v0.1.json`
+- `php artisan slice:validate {path|path.yaml}` or `--all` (CI exit 1)
+
+**Closed formatters:** text, text_with_badge, status_pill, date_time, date_overdue, money_breakdown, progress_bar, code_badge, composite_user, number
+
+**`type` vs `input`:** `type` = storage; `input` = form widget (`select`, `textarea`, …). Never use `type: select`.
+
+### Phase 2 DataTable parser
+`LaraSlice\Porting\DataTableUiParser` — static classification of source `*DataTable.php` into the formatter vocabulary.
+
+```bash
+php artisan slice:repair --re-infer-ui --source=/path/to/erp
+```
+
+### Runtime directory columns
+`LaraSlice\Support\DirectoryUi::columnsForSlice($name, $fallback)` resolves `slice.json` from the **registered** slice path (Composer path-repo, vendor, or `app/Slices`). Index blades call this at runtime — do not rely on `__DIR__` or paths baked only at repair time.
+
+```bash
+php artisan slice:repair          # re-inject DirectoryUi loader; merge config gaps
+php artisan slice:repair --publish-ui
+php artisan view:clear
+```
+
+### MFA local toggle
+```env
+LARASLICE_MFA_ENABLED=false   # default true — never disable in production
+```
+`slice:repair` merges missing keys (e.g. `auth.mfa_enabled`) into published `config/laraslice.php`.
+
+---
+
+## Porting non-Laravel sources (e.g. Dolibarr)
+
+`slice:port` / Porting Studio accept **any project tree**, not only Laravel.
+
+### What is analyzed
+
+| Source signal | Used when |
+|---------------|-----------|
+| Live DB via `--source-*` | **Preferred** — real tables + row counts |
+| `database/migrations` | Laravel projects |
+| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | Dolibarr, WordPress dumps, mysqldump |
+| Target app DB | **Never by default** (was a bug). Opt-in: `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` |
+
+### Required for non-Laravel (Dolibarr)
+
+Point at the **legacy database** (or ship SQL schema files in the tree):
+
+```bash
+# Clone or path to Dolibarr code
+php artisan slice:port /path/to/dolibarr \
+  --domain=ERP \
+  --source-host=127.0.0.1 \
+  --source-port=3306 \
+  --source-database=dolibarr \
+  --source-username=root \
+  --source-password=secret \
+  --dry-run
+
+# Or named connection in config/database.php
+php artisan slice:port /path/to/dolibarr \
+  --source-connection=dolibarr_legacy \
+  --dry-run
+```
+
+If you only have the code tree and **no** DB and **no** `CREATE TABLE` SQL dumps, the command **fails with a clear error** instead of reading LaraSlice’s own SQLite/MySQL.
+
+### GitHub URL (Porting Studio)
+
+1. Shallow clone (`git clone --depth 1`)
+2. Static analysis (migrations / SQL dumps / optional live DB)
+3. Draft `slice.yaml` via Phase 1+2 inference
+
+No LLM required for the draft. AI helps later in Studio refinement.
+
+### Env
+
+```env
+LARASLICE_PORT_SOURCE_CONNECTION=   # optional default connection name
+LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=false  # keep false in real ports
+```
+
+### Table prefix stripping
+
+Default prefixes stripped from slice names: `llx_`, `wp_` (config `laraslice.porting.strip_table_prefixes`).
+
+```bash
+php artisan slice:port /path/to/dolibarr --strip-prefix=llx_ --dry-run --no-interaction
+# llx_categorie_warehouse → CategorieWarehouse
+```
+
+`--dry-run` and `--no-interaction` default `--mode=system-base` and do not prompt.
+
+### Product examples (this branch)
+
+| File | Use |
+|------|-----|
+| `blueprints/examples/kitchen-sink.slice.yaml` | All v0.1 formatters — primary UI QA |
+| `blueprints/examples/suites/crm-*.slice.yaml` | CRM suite |
+| `blueprints/examples/suites/hr-*.slice.yaml` | HR suite |
+| `blueprints/examples/suites/shop-*.slice.yaml` | E-commerce suite |
+
+```bash
+php artisan slice:validate blueprints/examples/kitchen-sink.slice.yaml
+```

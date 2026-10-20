@@ -58,9 +58,20 @@ class DataTableRows
                         'code_badge' => static::codeBadge($val),
                         'composite_user' => static::resolveCompositeUser($item, $key, $val, $column),
                         'status_pill' => static::statusPill((string) ($val ?: data_get($item, 'user.status') ?: 'active')),
-                        'money_breakdown' => static::moneyBreakdown($val, data_get($item, 'paid_amount', 0), data_get($item, 'currency', 'PKR')),
+                        'money_breakdown' => static::moneyBreakdown(
+                            $val,
+                            data_get($item, $column['breakdown']['paid'] ?? 'paid_amount', data_get($item, 'paid', 0)),
+                            data_get($item, 'currency', data_get($item, 'currency_id', 'PKR')),
+                            data_get($item, $column['breakdown']['unpaid'] ?? 'due_amount', null)
+                        ),
+                        'text_with_badge' => static::textWithBadge(
+                            $val,
+                            data_get($item, $column['badge_from'] ?? 'priority'),
+                            (string) ($column['badge_from'] ?? 'priority')
+                        ),
                         'progress_bar' => static::progressBar((float) $val),
                         'date_time' => static::display($val),
+                        'date_overdue' => static::dateOverdue($val),
                         default => static::display($val),
                     };
                     continue;
@@ -235,11 +246,14 @@ class DataTableRows
     /**
      * Render formatted financial total with paid and due breakdown.
      */
-    public static function moneyBreakdown(float|int|string $total, float|int|string $paid = 0, ?string $currency = 'PKR'): string
+    public static function moneyBreakdown(float|int|string $total, float|int|string $paid = 0, float|int|string|null $currency = 'PKR', float|int|string|null $due = null): string
     {
         $numTotal = (float) $total;
         $numPaid = (float) $paid;
-        $numDue = max(0, $numTotal - $numPaid);
+        $numDue = $due !== null && $due !== '' ? (float) $due : max(0, $numTotal - $numPaid);
+        if (is_numeric($currency)) {
+            $currency = 'PKR'; // currency_id — display code fallback
+        }
         $curr = htmlspecialchars($currency ?: '', ENT_QUOTES, 'UTF-8');
 
         $totalFormatted = $curr . number_format($numTotal, 2);
@@ -258,7 +272,65 @@ class DataTableRows
     /**
      * Render an enterprise progress bar with percentage indicator.
      */
-    public static function progressBar(float|int $percent, ?string $label = null): string
+    /**
+     * Title/name cell with priority (or other) badge — ERP Tasks parity.
+     */
+    public static function textWithBadge(mixed $text, mixed $badgeVal = null, string $kind = 'priority'): string
+    {
+        $label = htmlspecialchars((string) ($text ?? '—'), ENT_QUOTES, 'UTF-8');
+        $badge = strtolower(trim((string) ($badgeVal ?? '')));
+        if ($badge === '') {
+            return '<span class="text-sm font-medium text-foreground">'.$label.'</span>';
+        }
+        $colors = match ($badge) {
+            'high', 'urgent', 'critical' => 'bg-rose-500/15 text-rose-600 border-rose-500/30',
+            'medium', 'normal' => 'bg-amber-500/15 text-amber-700 border-amber-500/30',
+            'low' => 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30',
+            default => 'bg-muted text-muted-foreground border-border',
+        };
+        $badgeLabel = htmlspecialchars(ucfirst($badge), ENT_QUOTES, 'UTF-8');
+
+        return '<div class="flex flex-col gap-0.5 min-w-0"><span class="text-sm font-medium text-foreground truncate">'.$label
+            .'</span><span class="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[10px] font-bold border '.$colors.'">'.$badgeLabel.'</span></div>';
+    }
+
+    /**
+     * Date cell with overdue / today / future coloring (ERP Tasks due_date parity).
+     * XSS-safe: label and title always htmlspecialchars; CSS classes are fixed literals.
+     */
+    public static function dateOverdue(mixed $val): string
+    {
+        if ($val === null || $val === '') {
+            return '<span class="text-muted-foreground">—</span>';
+        }
+        try {
+            if ($val instanceof \DateTimeInterface) {
+                $dt = \Illuminate\Support\Carbon::instance(\DateTimeImmutable::createFromInterface($val));
+            } else {
+                $dt = \Illuminate\Support\Carbon::parse((string) $val);
+            }
+        } catch (\Throwable $e) {
+            return htmlspecialchars((string) $val, ENT_QUOTES, 'UTF-8');
+        }
+        $label = $dt->format('M j, Y');
+        $end = $dt->copy()->endOfDay();
+        if ($end->isPast()) {
+            $cls = 'text-rose-600 dark:text-rose-400 font-semibold';
+            $hint = 'Overdue';
+        } elseif ($dt->isToday()) {
+            $cls = 'text-amber-600 dark:text-amber-400 font-semibold';
+            $hint = 'Due today';
+        } else {
+            $cls = 'text-foreground';
+            $hint = '';
+        }
+        $safe = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+        $title = $hint !== '' ? ' title="'.htmlspecialchars($hint, ENT_QUOTES, 'UTF-8').'"' : '';
+
+        return '<span class="text-xs '.$cls.'"'.$title.'>'.$safe.'</span>';
+    }
+
+        public static function progressBar(float|int $percent, ?string $label = null): string
     {
         $pct = max(0, min(100, (int) round($percent)));
         $lbl = $label !== null ? htmlspecialchars($label, ENT_QUOTES, 'UTF-8') : ($pct . '%');

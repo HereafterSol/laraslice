@@ -65,6 +65,71 @@ class WorkflowActionController extends Controller
         }
     }
 
+    /**
+     * Apply the same workflow transition to many records (index bulk action).
+     * Body: transition, ids[] (or ids comma-separated), optional remarks / assignment.
+     */
+    public function bulkTransition(Request $request, string $slice)
+    {
+        $validated = $request->validate([
+            'transition' => ['required', 'string'],
+            'ids' => ['required'],
+            'remarks' => ['nullable', 'string'],
+            'assigned_to_role' => ['nullable', 'string'],
+            'assigned_to_department' => ['nullable', 'string'],
+        ]);
+
+        $ids = $validated['ids'];
+        if (is_string($ids)) {
+            $ids = array_filter(array_map('trim', explode(',', $ids)));
+        }
+        if (! is_array($ids) || $ids === []) {
+            return $request->wantsJson()
+                ? response()->json(['success' => false, 'message' => 'No record ids provided.'], 422)
+                : back()->withErrors(['workflow' => 'Select at least one record.']);
+        }
+
+        $engine = app(WorkflowEngineService::class);
+        $payload = [
+            'remarks' => $validated['remarks'] ?? null,
+            'assigned_to_role' => $validated['assigned_to_role'] ?? null,
+            'assigned_to_department' => $validated['assigned_to_department'] ?? null,
+            'attachments' => [],
+        ];
+
+        $ok = 0;
+        $fail = [];
+        foreach ($ids as $id) {
+            $model = $this->resolveModelInstance($slice, $id);
+            if (! $model) {
+                $fail[] = "{$id}: not found";
+                continue;
+            }
+            try {
+                $engine->applyTransition($model, $validated['transition'], $payload, $request->user());
+                $ok++;
+            } catch (\Throwable $e) {
+                $fail[] = "{$id}: ".$e->getMessage();
+            }
+        }
+
+        $message = "Bulk transition: {$ok} succeeded".($fail !== [] ? ', '.count($fail).' failed' : '');
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => $fail === [],
+                'message' => $message,
+                'succeeded' => $ok,
+                'failures' => $fail,
+            ], $fail === [] ? 200 : 422);
+        }
+
+        if ($fail !== []) {
+            return back()->with('warning', $message)->withErrors(['workflow' => implode('; ', array_slice($fail, 0, 5))]);
+        }
+
+        return back()->with('success', $message);
+    }
+
     protected function resolveModelInstance(string $slice, int|string $id)
     {
         $manager = app(SliceManager::class);

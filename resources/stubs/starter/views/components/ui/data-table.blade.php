@@ -10,19 +10,36 @@
     'actionsLabel' => null,        // header label for the row-actions column (kept sr-only)
     'stickyActions' => false,      // freeze the actions column to the right edge on horizontal scroll
     'exportFilename' => 'export',
+    'workflowTransitions' => [], // [['slug'=>'approve','label'=>'Approve','requires_remarks'=>true], ...]
+    'workflowBulkUrl' => null,   // route for POST bulk transition
+    'workflowSlice' => null,
+    'views' => ['table'],        // YAML ui.directory.views: table | board | calendar
+    'defaultView' => 'table',    // YAML ui.directory.default_view
+    'statusKey' => 'status',     // column key used for board columns
+    'inlineEdit' => [],          // YAML ui.directory.inline_edit e.g. ['status']
+    'dateKey' => null,           // preferred date column for calendar view
+    'density' => 'comfortable',  // comfortable | compact (ERP high-density grids)
 ])
 
 @php
     $searchPlaceholder ??= __('Start typing to search...');
     $actionsLabel ??= __('Action');
 
-    $cols = collect($columns)->map(fn ($c) => [
-        'key' => $c['key'] ?? '',
-        'label' => $c['label'] ?? ucfirst($c['key'] ?? ''),
-        'sortable' => $c['sortable'] ?? true,
-        'class' => $c['class'] ?? '',
-        'html' => (bool) ($c['html'] ?? in_array($c['formatter'] ?? '', ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar'], true)),
-    ])->values();
+    $htmlFormatters = ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue', 'badge'];
+    $cols = collect($columns)->map(function ($c) use ($htmlFormatters) {
+        $fmt = $c['formatter'] ?? $c['type'] ?? null;
+        $html = (bool) ($c['html'] ?? ($fmt && in_array($fmt, $htmlFormatters, true)));
+        return [
+            'key' => $c['key'] ?? $c['handle'] ?? '',
+            'label' => $c['label'] ?? ucfirst($c['key'] ?? $c['handle'] ?? ''),
+            'sortable' => $c['sortable'] ?? true,
+            'class' => $c['class'] ?? '',
+            'formatter' => $fmt,
+            'html' => $html,
+            'badge_from' => $c['badge_from'] ?? null,
+            'breakdown' => $c['breakdown'] ?? null,
+        ];
+    })->values();
     $searchKeys = $searchKey ? [$searchKey] : $cols->pluck('key')->all();
 @endphp
 
@@ -33,7 +50,21 @@
         rows: @js(array_values($rows)),
         cols: @js($cols),
         searchKeys: @js($searchKeys),
-        exportFilename: @js($exportFilename)
+        exportFilename: @js($exportFilename),
+        workflowTransitions: @js($workflowTransitions ?? []),
+        workflowBulkUrl: @js($workflowBulkUrl),
+        workflowSlice: @js($workflowSlice),
+        csrf: @js(csrf_token()),
+        views: @js(array_values($views ?: ['table'])),
+        defaultView: @js($defaultView ?: 'table'),
+        statusKey: @js($statusKey ?: 'status'),
+        inlineEdit: @js(array_values($inlineEdit ?: [])),
+        dateKey: @js($dateKey),
+        workflowTransitionUrlTemplate: @js(
+            \Illuminate\Support\Facades\Route::has('workflows.transition')
+                ? url('/admin/workflows/transition/'.($workflowSlice ?: '__SLICE__').'/__ID__')
+                : null
+        ),
     })"
     x-init="$watch('q', () => page = 1)"
     @export-table.window="exportCsv()"
@@ -96,6 +127,9 @@
                         <option value="none">No Action</option>
                         <option value="delete">Delete Selected</option>
                         <option value="export">Export Selected</option>
+                        <template x-for="wt in workflowTransitions" :key="wt.slug">
+                            <option :value="'wf:' + wt.slug" x-text="(wt.label || wt.slug)"></option>
+                        </template>
                     </select>
                     <button 
                         type="button" 
@@ -133,10 +167,71 @@
                 </button>
             @endisset
 
+
+            <!-- YAML-driven view switcher (table / board / calendar) -->
+            <template x-if="views && views.length > 1">
+                <div class="inline-flex items-center rounded-xl border border-border bg-card p-0.5 shadow-2xs">
+                    <template x-for="v in views" :key="v">
+                        <button type="button" @click="viewMode = v"
+                            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold capitalize transition-colors cursor-pointer"
+                            :class="viewMode === v ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'"
+                            x-text="v"></button>
+                    </template>
+                </div>
+            </template>
+
             @isset($tableActions)
                 {{ $tableActions }}
             @endisset
         </div>
+    </div>
+
+    <!-- Board view (YAML ui.directory.views includes board) -->
+    <div x-show="viewMode === 'board'" x-cloak class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pt-2">
+        <template x-for="col in boardColumns" :key="col.key">
+            <div class="rounded-2xl border border-border bg-card/80 min-h-[200px] flex flex-col">
+                <div class="px-3 py-2 border-b border-border flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wide text-foreground" x-text="col.label"></span>
+                    <span class="text-[10px] font-mono text-muted-foreground" x-text="col.rows.length"></span>
+                </div>
+                <div class="p-2 space-y-2 flex-1 overflow-y-auto max-h-[28rem]">
+                    <template x-for="row in col.rows" :key="row[rowKey] || JSON.stringify(row)">
+                        <div class="rounded-xl border border-border/80 bg-background p-2.5 shadow-2xs text-xs space-y-1">
+                            <template x-for="c in cols.slice(0, 3)" :key="c.key">
+                                <div class="truncate" x-html="(c.html && row[c.key]) ? row[c.key] : (row[c.key] ?? '—')"></div>
+                            </template>
+                        </div>
+                    </template>
+                    <p x-show="col.rows.length === 0" class="text-[11px] text-muted-foreground text-center py-6">Empty</p>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Calendar placeholder (hook for full calendar component) -->
+    <div x-show="viewMode === 'calendar'" x-cloak class="space-y-3 pt-2">
+        <div class="flex items-center justify-between gap-2">
+            <button type="button" @click="calPrevMonth()" class="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted cursor-pointer">←</button>
+            <span class="text-sm font-bold text-foreground" x-text="calMonthLabel"></span>
+            <button type="button" @click="calNextMonth()" class="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted cursor-pointer">→</button>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">
+            <template x-for="d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="d"><div class="py-1" x-text="d"></div></template>
+        </div>
+        <div class="grid grid-cols-7 gap-1">
+            <template x-for="cell in calCells" :key="cell.key">
+                <div class="min-h-[5.5rem] rounded-xl border border-border/70 bg-card p-1.5 flex flex-col gap-1"
+                     :class="cell.inMonth ? '' : 'opacity-40'">
+                    <span class="text-[11px] font-bold text-muted-foreground" x-text="cell.day"></span>
+                    <template x-for="row in cell.rows.slice(0, 3)" :key="row[rowKey] || JSON.stringify(row)">
+                        <div class="rounded-md bg-primary/10 text-primary text-[10px] px-1 py-0.5 truncate font-medium"
+                             x-text="calendarLabel(row)"></div>
+                    </template>
+                    <span x-show="cell.rows.length > 3" class="text-[10px] text-muted-foreground" x-text="'+' + (cell.rows.length - 3) + ' more'"></span>
+                </div>
+            </template>
+        </div>
+        <p class="text-[11px] text-muted-foreground" x-show="!resolvedDateKey">No date column detected — set a date field in Slice Studio (due_date, start_date, …).</p>
     </div>
 
     <!-- Off-Canvas Right Filter Sidebar Drawer (Matches ERP Screenshot 3 & 4) -->
@@ -177,6 +272,7 @@
     @endisset
 
     <!-- High-Density Data Grid -->
+    <div x-show="viewMode === 'table' || !views || views.length <= 1" x-cloak>
     <div class="relative w-full overflow-x-auto rounded-xl border border-border bg-card shadow-2xs">
         <table data-slot="table" class="w-full caption-bottom text-xs">
             <thead data-slot="table-header" class="bg-muted/30 border-b border-border">
@@ -229,10 +325,29 @@
                             </td>
                         @endif
                         @foreach ($cols as $col)
-                            @if (!empty($col['html']))
-                                <td class="px-3 py-2.5 align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
+                            @if (($col['key'] ?? '') === ($statusKey ?? 'status') && in_array($statusKey ?? 'status', $inlineEdit ?: [], true))
+                                {{-- Show status_pill HTML; only show transition select when workflow transitions exist --}}
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="shrink-0" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
+                                        <select
+                                            x-show="(workflowTransitions || []).length > 0"
+                                            x-cloak
+                                            class="h-8 min-w-[6.5rem] max-w-[9rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                                            :value="item.r['{{ $col['key'] }}__raw'] || ''"
+                                            @change="applyInlineTransition(item.r, $event.target.value)"
+                                        >
+                                            <option value="" x-text="item.r['{{ $col['key'] }}__raw'] || '—'"></option>
+                                            <template x-for="wt in workflowTransitions" :key="wt.slug">
+                                                <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </td>
+                            @elseif (!empty($col['html']))
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
                             @else
-                                <td class="px-3 py-2.5 align-middle whitespace-nowrap text-foreground {{ $col['class'] }}" x-text="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap text-foreground {{ $col['class'] }}" x-text="item.r['{{ $col['key'] }}']"></td>
                             @endif
                         @endforeach
                         @isset($actions)
@@ -270,6 +385,7 @@
             </div>
         </div>
     </div>
+    </div><!-- /table viewMode -->
 </div>
 
 <script>
@@ -289,6 +405,130 @@ if (typeof window.blatDataTable === 'undefined') {
             bulkAction: 'none',
             filterDrawerOpen: false,
             filters: {},
+            workflowTransitions: cfg.workflowTransitions || [],
+            workflowBulkUrl: cfg.workflowBulkUrl || null,
+            workflowSlice: cfg.workflowSlice || null,
+            csrf: cfg.csrf || '',
+            rowKey: cfg.rowKey || 'id',
+            views: (cfg.views && cfg.views.length) ? cfg.views : ['table'],
+            viewMode: cfg.defaultView || (cfg.views && cfg.views[0]) || 'table',
+            statusKey: cfg.statusKey || 'status',
+            get boardColumns() {
+                const key = this.statusKey;
+                const filtered = this.filtered.map(({ r }) => r);
+                const groups = {};
+                for (const row of filtered) {
+                    const raw = String(row[key + '__raw'] ?? row[key] ?? 'unknown').replace(/<[^>]*>/g, '').trim() || 'unknown';
+                    if (!groups[raw]) groups[raw] = [];
+                    groups[raw].push(row);
+                }
+                return Object.keys(groups).sort().map(k => ({
+                    key: k,
+                    label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                    rows: groups[k],
+                }));
+            },
+            inlineEdit: cfg.inlineEdit || [],
+            dateKey: cfg.dateKey || null,
+            workflowTransitionUrlTemplate: cfg.workflowTransitionUrlTemplate || null,
+            calCursor: new Date(),
+            get resolvedDateKey() {
+                if (this.dateKey) return this.dateKey;
+                const candidates = ['due_date', 'start_date', 'date', 'scheduled_at', 'created_at', 'issue_date'];
+                for (const c of candidates) {
+                    if (this.cols.some(col => col.key === c)) return c;
+                }
+                for (const col of this.cols) {
+                    if ((col.key || '').includes('date') || (col.key || '').endsWith('_at')) return col.key;
+                }
+                return null;
+            },
+            get calMonthLabel() {
+                return this.calCursor.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+            },
+            calPrevMonth() { this.calCursor = new Date(this.calCursor.getFullYear(), this.calCursor.getMonth() - 1, 1); },
+            calNextMonth() { this.calCursor = new Date(this.calCursor.getFullYear(), this.calCursor.getMonth() + 1, 1); },
+            calendarLabel(row) {
+                const keys = this.cols.map(c => c.key);
+                for (const k of ['title', 'name', 'heading', 'invoice_number', 'subject']) {
+                    if (keys.includes(k) && row[k]) return String(row[k]).replace(/<[^>]*>/g, '').slice(0, 40);
+                }
+                return String(row[keys[0]] || 'Item').replace(/<[^>]*>/g, '').slice(0, 40);
+            },
+            get calCells() {
+                const y = this.calCursor.getFullYear();
+                const m = this.calCursor.getMonth();
+                const first = new Date(y, m, 1);
+                const startPad = first.getDay();
+                const daysInMonth = new Date(y, m + 1, 0).getDate();
+                const key = this.resolvedDateKey;
+                const filtered = this.filtered.map(({ r }) => r);
+                const byDay = {};
+                if (key) {
+                    for (const row of filtered) {
+                        const raw = String(row[key + '__raw'] ?? row[key] ?? '').replace(/<[^>]*>/g, '').trim();
+                        if (!raw) continue;
+                        const d = new Date(raw);
+                        if (isNaN(d.getTime())) continue;
+                        if (d.getFullYear() !== y || d.getMonth() !== m) continue;
+                        const day = d.getDate();
+                        if (!byDay[day]) byDay[day] = [];
+                        byDay[day].push(row);
+                    }
+                }
+                const cells = [];
+                const total = Math.ceil((startPad + daysInMonth) / 7) * 7;
+                for (let i = 0; i < total; i++) {
+                    const dayNum = i - startPad + 1;
+                    const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
+                    cells.push({
+                        key: y + '-' + m + '-' + i,
+                        day: inMonth ? dayNum : '',
+                        inMonth,
+                        rows: inMonth ? (byDay[dayNum] || []) : [],
+                    });
+                }
+                return cells;
+            },
+            async applyInlineTransition(row, transitionSlug) {
+                if (!transitionSlug || !this.workflowSlice) return;
+                const id = row[this.rowKey] ?? row.id;
+                if (!id) { alert('Missing record id'); return; }
+                let url = this.workflowTransitionUrlTemplate;
+                if (!url && this.workflowBulkUrl) {
+                    // fallback: single via bulk endpoint
+                }
+                if (!url) {
+                    url = '/admin/workflows/transition/' + encodeURIComponent(this.workflowSlice) + '/' + encodeURIComponent(id);
+                } else {
+                    url = url.replace('__SLICE__', encodeURIComponent(this.workflowSlice)).replace('__ID__', encodeURIComponent(id));
+                }
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': this.csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({ transition: transitionSlug }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.success === false) {
+                        alert(data.message || 'Transition failed');
+                        return;
+                    }
+                    // optimistic: update raw status from transition label if present
+                    const wt = (this.workflowTransitions || []).find(t => t.slug === transitionSlug);
+                    if (wt && this.statusKey) {
+                        row[this.statusKey + '__raw'] = wt.label || transitionSlug;
+                    }
+                    window.location.reload();
+                } catch (e) {
+                    alert(e.message || String(e));
+                }
+            },
             get sidebarFilterCount() {
                 let count = 0;
                 for (const [k, v] of Object.entries(this.filters)) {
@@ -342,8 +582,20 @@ if (typeof window.blatDataTable === 'undefined') {
             get pageIndices() { return this.paged.map(p => p.i) },
             get allPageSelected() { const idx = this.pageIndices; return idx.length > 0 && idx.every(i => this.selected.includes(i)) },
             toggleSort(key) { this.sortKey === key ? (this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc') : (this.sortKey = key, this.sortDir = 'asc'); this.page = 1 },
-            toggleRow(i) { this.selected.includes(i) ? this.selected = this.selected.filter(x => x !== i) : this.selected.push(i) },
-            toggleAll() { const idx = this.pageIndices; this.allPageSelected ? this.selected = this.selected.filter(i => !idx.includes(i)) : idx.forEach(i => this.selected.includes(i) || this.selected.push(i)) },
+            toggleRow(i) { this.selected.includes(i) ? this.selected = this.selected.filter(x => x !== i) : this.selected.push(i); this.emitSelection(); },
+            toggleAll() { const idx = this.pageIndices; this.allPageSelected ? this.selected = this.selected.filter(i => !idx.includes(i)) : idx.forEach(i => this.selected.includes(i) || this.selected.push(i)); this.emitSelection(); },
+            selectedRecordIds() {
+                const key = this.rowKey || 'id';
+                return this.selected.map(i => {
+                    const row = this.rows.find(r => r.i === i);
+                    if (!row) return null;
+                    return (row.r && (row.r[key] ?? row.r.id)) ?? row[key] ?? row.id ?? null;
+                }).filter(id => id !== null && id !== undefined && id !== '');
+            },
+            emitSelection() {
+                const ids = this.selectedRecordIds();
+                window.dispatchEvent(new CustomEvent('laraslice-selection-changed', { detail: { count: ids.length, ids } }));
+            },
             next() { if (this.page < this.pageCount) this.page++ },
             prev() { if (this.page > 1) this.page-- },
             clearFilters() {
@@ -367,13 +619,46 @@ if (typeof window.blatDataTable === 'undefined') {
                 }
                 if (this.bulkAction === 'delete') {
                     if (confirm('Are you sure you want to delete ' + this.selected.length + ' selected record(s)?')) {
-                        this.$dispatch('bulk-delete', { indices: this.selected });
+                        this.$dispatch('bulk-delete', { indices: this.selected, ids: this.selectedRecordIds() });
                         alert('Bulk deletion applied for ' + this.selected.length + ' record(s).');
                         this.selected = [];
+                        this.emitSelection();
                     }
                 } else if (this.bulkAction === 'export') {
                     this.exportCsv('selected_' + this.exportFilename);
                     this.selected = [];
+                    this.emitSelection();
+                } else if (String(this.bulkAction).startsWith('wf:')) {
+                    const slug = String(this.bulkAction).slice(3);
+                    const meta = (this.workflowTransitions || []).find(t => t.slug === slug) || { slug, label: slug };
+                    this.runWorkflowBulk(meta);
+                }
+            },
+            async runWorkflowBulk(meta) {
+                const ids = this.selectedRecordIds();
+                if (!ids.length) { alert('Could not resolve record ids.'); return; }
+                let remarks = '';
+                if (meta.requires_remarks) {
+                    remarks = prompt((meta.label || meta.slug) + ' — remarks (required):', '') || '';
+                    if (!remarks.trim()) { alert('Remarks are required for this transition.'); return; }
+                }
+                const url = this.workflowBulkUrl || (this.workflowSlice ? ('/admin/workflows/bulk-transition/' + this.workflowSlice) : null);
+                if (!url) { alert('Workflow bulk URL not configured.'); return; }
+                const body = new FormData();
+                body.append('_token', this.csrf);
+                body.append('transition', meta.slug);
+                body.append('remarks', remarks);
+                ids.forEach(id => body.append('ids[]', id));
+                try {
+                    const res = await fetch(url, { method: 'POST', body, headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.success === false) {
+                        alert(data.message || 'Bulk workflow transition failed');
+                        return;
+                    }
+                    window.location.reload();
+                } catch (e) {
+                    alert(e.message || 'Network error');
                 }
             },
             exportCsv(customName) {

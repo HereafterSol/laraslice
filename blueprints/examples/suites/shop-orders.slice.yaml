@@ -1,0 +1,74 @@
+spec_version: "0.1"
+name: Orders
+handle: orders
+domain: Shop
+description: "Customer orders"
+version: 1.0.0
+navigation:
+  label: Orders
+  icon: shopping-cart
+  group: Orders
+  order: 20
+models:
+  - handle: order
+    table: orders
+    root: true
+    fields:
+      - handle: order_number
+        label: Order #
+        type: string
+        required: true
+      - handle: customer_name
+        label: Customer
+        type: string
+        required: true
+      - handle: total
+        label: Total
+        type: decimal
+        required: true
+      - handle: status
+        label: Status
+        type: string
+        required: true
+        input: select
+      - handle: ordered_at
+        label: Ordered
+        type: datetime
+        required: false
+fields:
+  order_number:
+    name: order_number
+    type: string
+    searchable: true
+  customer_name:
+    name: customer_name
+    type: string
+    searchable: true
+  total:
+    name: total
+    type: decimal
+  status:
+    name: status
+    type: string
+    input: select
+  ordered_at:
+    name: ordered_at
+    type: datetime
+ui:
+  directory:
+    columns:
+      - key: order_number
+        label: Order
+        formatter: code_badge
+      - key: customer_name
+        label: Customer
+        formatter: text
+      - key: total
+        label: Total
+        formatter: money_breakdown
+      - key: status
+        label: Status
+        formatter: status_pill
+      - key: ordered_at
+        label: Ordered
+        formatter: date_time

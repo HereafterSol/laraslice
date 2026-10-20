@@ -59,4 +59,141 @@ class SliceRepairTest extends TestCase
 
         $this->assertSame([], app(SliceManager::class)->repairSlice($users));
     }
+
+    public function test_remap_nav_does_not_crash_on_undefined_changed(): void
+    {
+        // Regression (a916eef): $changed was used before initialization when
+        // --remap-nav was passed, causing "Undefined variable $changed".
+        // The command must complete without crashing.
+
+        // Create a test slice with an old-style navigation group
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestRemap';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestRemap',
+            'navigation' => ['group' => 'OldGroup', 'label' => 'Test'],
+            'models' => [['table' => 'tasks']],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['--remap-nav' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
+
+    public function test_remap_nav_assigns_demo_aligned_module_groups(): void
+    {
+        // Regression: remap-nav should assign demo-aligned groups (Work, Finance, etc.)
+        // not engineering labels (FinancialAccounting, Operations).
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestTasks';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestTasks',
+            'navigation' => ['group' => 'ERP', 'label' => 'Test Tasks'],
+            'models' => [['table' => 'tasks']],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'TestTasks', '--remap-nav' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+
+            $manifest = json_decode(file_get_contents($testPath.'/slice.json'), true);
+            // Tasks should map to Work, not ERP or FinancialAccounting
+            $this->assertEquals('Work', $manifest['navigation']['group']);
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
+
+    public function test_re_infer_ui_skips_slices_with_studio_history(): void
+    {
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestReInfer';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestReInfer',
+            'fields' => [
+                'title' => ['name' => 'title', 'label' => 'Title', 'type' => 'string'],
+                'status' => ['name' => 'status', 'label' => 'Status', 'type' => 'string'],
+            ],
+            'ui' => ['directory' => ['columns' => [['key' => 'title', 'formatter' => 'text']]]],
+            // Simulate user customization in Studio
+            'version_history' => [['at' => now()->toIso8601String(), 'actor' => 'test', 'note' => 'customized']],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'TestReInfer', '--re-infer-ui' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+
+            $manifest = json_decode(file_get_contents($testPath.'/slice.json'), true);
+            // Should NOT have been overwritten — user customization preserved
+            $this->assertEquals('text', $manifest['ui']['directory']['columns'][0]['formatter']);
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
+
+    public function test_re_infer_ui_updates_columns_without_history(): void
+    {
+        $testPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'TestReInfer2';
+        @mkdir($testPath, 0755, true);
+        file_put_contents($testPath.'/slice.json', json_encode([
+            'name' => 'TestReInfer2',
+            'fields' => [
+                'title' => ['name' => 'title', 'label' => 'Title', 'type' => 'string'],
+                'status' => ['name' => 'status', 'label' => 'Status', 'type' => 'string'],
+            ],
+            'ui' => ['directory' => ['columns' => []]],
+        ]));
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'TestReInfer2', '--re-infer-ui' => true, '--no-interaction' => true])
+                ->assertSuccessful();
+
+            $manifest = json_decode(file_get_contents($testPath.'/slice.json'), true);
+            // Should have inferred columns with rich formatters
+            $this->assertNotEmpty($manifest['ui']['directory']['columns']);
+            $formatters = array_column($manifest['ui']['directory']['columns'], 'formatter');
+            $this->assertContains('status_pill', $formatters);
+        } finally {
+            app('files')->deleteDirectory($testPath);
+        }
+    }
+
+    public function test_re_infer_ui_writes_nested_directory_columns(): void
+    {
+        // Regression: buildUiFromInspectedFields returns ui.directory.columns, not ui.columns.
+        // --re-infer-ui must merge the nested structure or formatters stay empty.
+        $path = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'InferDemo';
+        @mkdir($path.'/Resources/views', 0755, true);
+        $manifest = [
+            'name' => 'InferDemo',
+            'active' => true,
+            'fields' => [
+                ['handle' => 'title', 'type' => 'string'],
+                ['handle' => 'status', 'type' => 'string'],
+                ['handle' => 'due_date', 'type' => 'date'],
+                ['handle' => 'progress', 'type' => 'integer'],
+            ],
+            'ui' => ['directory' => ['columns' => [['handle' => 'title', 'formatter' => 'text']]]],
+        ];
+        file_put_contents($path.'/slice.json', json_encode($manifest, JSON_PRETTY_PRINT));
+
+        $this->artisan('slice:repair', ['slice' => 'InferDemo', '--re-infer-ui' => true])
+            ->assertSuccessful();
+
+        $updated = json_decode((string) file_get_contents($path.'/slice.json'), true);
+        $cols = $updated['ui']['directory']['columns'] ?? [];
+        $byHandle = [];
+        foreach ($cols as $c) {
+            $byHandle[$c['handle'] ?? ''] = $c['formatter'] ?? '';
+        }
+        $this->assertSame('status_pill', $byHandle['status'] ?? null, 'status should be re-inferred');
+        $this->assertSame('date_overdue', $byHandle['due_date'] ?? null, 'due_date should be date_overdue');
+        $this->assertSame('progress_bar', $byHandle['progress'] ?? null, 'progress should be progress_bar');
+        $this->assertContains('board', $updated['ui']['directory']['views'] ?? []);
+
+        app('files')->deleteDirectory($path);
+    }
 }

@@ -87,6 +87,9 @@ return [
     |
     */
     'auth' => [
+        // Local/dev only: set LARASLICE_MFA_ENABLED=false to skip MFA enroll/challenge after password.
+        // Default true — never disable in production.
+        'mfa_enabled' => (bool) env('LARASLICE_MFA_ENABLED', true),
         'api_registration' => (bool) env('LARASLICE_API_REGISTRATION', false),
         'passkey_user_verification' => env('LARASLICE_PASSKEY_USER_VERIFICATION', 'preferred'),
         'passkey_require_user_verification' => (bool) env('LARASLICE_PASSKEY_REQUIRE_UV', false),
@@ -186,5 +189,12 @@ return [
     'tenancy' => [
         'enabled' => (bool) env('LARASLICE_TENANCY_ENABLED', false),
         'tenant_key' => env('LARASLICE_TENANT_KEY', 'company_id'),
+    ],
+
+    'porting' => [
+        'allow_app_db_fallback' => (bool) env('LARASLICE_PORT_ALLOW_APP_DB_FALLBACK', false),
+        // Comma-separated or array of table prefixes stripped from slice names (Dolibarr llx_, WP wp_)
+        'strip_table_prefixes' => array_values(array_filter(array_map('trim', explode(',', (string) env('LARASLICE_PORT_STRIP_PREFIXES', 'llx_,wp_'))))),
+        'source_connection' => env('LARASLICE_PORT_SOURCE_CONNECTION'),
     ],
 ];

@@ -38,23 +38,27 @@ final class BlueprintApplier
         if (! $isCatalog) {
             $rootClass = SliceName::canonical($blueprint['name']);
             $rootTable = Str::plural(Str::snake($rootClass));
-            if ($root['table'] !== $rootTable) {
-                throw new RuntimeException("Blueprint apply v1 requires the root model table to match the slice name ({$rootTable}).");
+            if (! empty($root['table']) && ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $root['table'])) {
+                throw new RuntimeException("Blueprint apply requires a valid table name for the root model ({$root['table']}).");
             }
 
+            $blueprintModelHandles = array_flip(array_column($blueprint['models'], 'handle'));
             foreach ($blueprint['models'] as $model) {
                 if (($model['root'] ?? false) === true) {
                     continue;
                 }
-                $hasRootBelongsTo = false;
+                $hasValidBelongsTo = false;
                 foreach ($model['relations'] ?? [] as $relation) {
-                    if ($relation['type'] === 'belongsTo' && $relation['model'] === $root['handle']) {
-                        $hasRootBelongsTo = true;
+                    if ($relation['type'] === 'belongsTo' && (
+                        $relation['model'] === $root['handle'] ||
+                        isset($blueprintModelHandles[$relation['model'] ?? ''])
+                    )) {
+                        $hasValidBelongsTo = true;
                         break;
                     }
                 }
-                if (! $hasRootBelongsTo) {
-                    throw new RuntimeException("Child model [{$model['handle']}] must have an inverse belongsTo relation to the root model [{$root['handle']}].");
+                if (! $hasValidBelongsTo) {
+                    throw new RuntimeException("Child model [{$model['handle']}] must have an inverse belongsTo relation to an aggregate model.");
                 }
             }
 
@@ -84,10 +88,19 @@ final class BlueprintApplier
                     continue;
                 }
                 if (! isset($childHandles[$model['handle']])) {
-                    throw new RuntimeException('Blueprint apply supports only direct child models related to the root.');
-                }
-                if (($model['soft_deletes'] ?? false) === true) {
-                    throw new RuntimeException("Blueprint apply does not support soft_deletes on child model [{$model['handle']}].");
+                    $isNestedChild = false;
+                    foreach ($blueprint['models'] as $pm) {
+                        foreach ($pm['relations'] ?? [] as $pr) {
+                            if ($pr['type'] === 'hasMany' && $pr['model'] === $model['handle']) {
+                                $isNestedChild = true;
+                                $childHandles[$model['handle']] = $pr['foreign_key'];
+                                break 2;
+                            }
+                        }
+                    }
+                    if (! $isNestedChild) {
+                        throw new RuntimeException("Child model [{$model['handle']}] must be related within the aggregate root.");
+                    }
                 }
                 foreach ($model['fields'] ?? [] as $field) {
                     if ($field['handle'] === $childHandles[$model['handle']]) {
@@ -273,6 +286,17 @@ final class BlueprintApplier
         if (! empty($blueprint['navigation']) && is_array($blueprint['navigation'])) {
             $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $blueprint['navigation']);
         }
+        // Persona gates from blueprint root (YAML-centric)
+        if (! empty($blueprint['roles_gate']) && is_array($blueprint['roles_gate'])) {
+            $manifest['navigation']['roles'] = $blueprint['roles_gate'];
+        }
+        if (! empty($blueprint['personas']) && is_array($blueprint['personas']) && empty($manifest['navigation']['roles'])) {
+            $manifest['navigation']['roles'] = $blueprint['personas'];
+        }
+        // Settings / taxonomy never pollute main sidebar
+        if (in_array(($blueprint['type'] ?? ''), ['settings_hub', 'settings', 'taxonomy'], true)) {
+            $manifest['navigation']['visible'] = false;
+        }
         if (! empty($blueprint['permissions']) && is_array($blueprint['permissions'])) {
             $manifest['permissions'] = $blueprint['permissions'];
         }
@@ -282,6 +306,22 @@ final class BlueprintApplier
         if (! empty($blueprint['roles'])) {
             $manifest['roles'] = $blueprint['roles'];
         }
+        // UI directory (columns, filters, row_actions, bulk_actions) — Studio source of truth
+        if (! empty($blueprint['ui']) && is_array($blueprint['ui'])) {
+            $manifest['ui'] = $blueprint['ui'];
+        }
+        // Manifest version + append-only version_history (GitOps ledger in the file)
+        $manifest['version'] = $blueprint['version'] ?? ($manifest['version'] ?? '1.0.0');
+        $manifest['schema_version'] = $blueprint['schema_version'] ?? ($manifest['schema_version'] ?? 1);
+        $history = is_array($manifest['version_history'] ?? null) ? $manifest['version_history'] : [];
+        $history[] = [
+            'version' => $manifest['version'],
+            'at' => date('c'),
+            'description' => 'Blueprint apply: models/workflow/ui synchronized to code + DB',
+            'source' => 'blueprint_applier',
+        ];
+        // Keep last 50 entries
+        $manifest['version_history'] = array_slice($history, -50);
         $manifest['tables'] = array_values(array_map(static fn (array $model): string => $model['table'], $models));
         $manifest['fields'] = ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
             'name' => $field['handle'],

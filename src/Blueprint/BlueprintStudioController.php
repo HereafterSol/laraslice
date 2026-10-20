@@ -240,15 +240,7 @@ final class BlueprintStudioController extends Controller
                     }
 
                     $sliceParsed = $loader->parse($sliceSource, 'yaml');
-                    if (isset($sliceParsed['models']) && is_array($sliceParsed['models'])) {
-                        foreach ($sliceParsed['models'] as &$m) {
-                            if (isset($m['handle']) && is_string($m['handle'])) {
-                                $m['handle'] = Str::snake($m['handle']);
-                            }
-                        }
-                        unset($m);
-                    }
-
+                    $sliceParsed = $this->sanitizeBlueprint($sliceParsed);
                     $validBp = $validator->validate($sliceParsed);
                     if (! $domainName && ! empty($validBp['domain'])) {
                         $domainName = $validBp['domain'];
@@ -364,14 +356,7 @@ final class BlueprintStudioController extends Controller
 
             // Single Slice Plan
             $parsed = $loader->parse($input['source'], $input['format']);
-            if (isset($parsed['models']) && is_array($parsed['models'])) {
-                foreach ($parsed['models'] as &$m) {
-                    if (isset($m['handle']) && is_string($m['handle'])) {
-                        $m['handle'] = Str::snake($m['handle']);
-                    }
-                }
-                unset($m);
-            }
+            $parsed = $this->sanitizeBlueprint($parsed);
             $blueprint = $validator->validate($parsed);
             $plan = $planner->plan($blueprint, $slicesPath);
             $plan['is_domain_plan'] = false;
@@ -472,14 +457,7 @@ final class BlueprintStudioController extends Controller
                         $sliceSource = Yaml::dump($sl['blueprint'], 4, 2);
                     }
                     $sliceParsed = $loader->parse($sliceSource, 'yaml');
-                    if (isset($sliceParsed['models']) && is_array($sliceParsed['models'])) {
-                        foreach ($sliceParsed['models'] as &$m) {
-                            if (isset($m['handle']) && is_string($m['handle'])) {
-                                $m['handle'] = Str::snake($m['handle']);
-                            }
-                        }
-                        unset($m);
-                    }
+                    $sliceParsed = $this->sanitizeBlueprint($sliceParsed);
                     $validBp = $validator->validate($sliceParsed);
                     $sPlan = $planner->plan($validBp, $slicesPath);
                     $target = $applier->apply($validBp, $sPlan, $slicesPath, $namespace, $overwriteExisting);
@@ -530,14 +508,7 @@ final class BlueprintStudioController extends Controller
             }
 
             $parsed = $loader->parse($input['source'], $input['format']);
-            if (isset($parsed['models']) && is_array($parsed['models'])) {
-                foreach ($parsed['models'] as &$m) {
-                    if (isset($m['handle']) && is_string($m['handle'])) {
-                        $m['handle'] = Str::snake($m['handle']);
-                    }
-                }
-                unset($m);
-            }
+            $parsed = $this->sanitizeBlueprint($parsed);
             $blueprint = $validator->validate($parsed);
             $plan = $planner->plan($blueprint, $slicesPath);
 
@@ -827,12 +798,35 @@ final class BlueprintStudioController extends Controller
         'articles' => 'blog',
     ];
 
+    /** Example blueprints under blueprints/examples (and suites/). */
+    private const EXAMPLE_FILES = [
+        'kitchen-sink' => 'kitchen-sink.slice.yaml',
+        'kitchen_sink' => 'kitchen-sink.slice.yaml',
+        'service-desk' => 'service-desk.slice.yaml',
+        'project-portfolio' => 'project-portfolio.slice.yaml',
+        'crm-companies' => 'suites/crm-companies.slice.yaml',
+        'crm-contacts' => 'suites/crm-contacts.slice.yaml',
+        'crm-deals' => 'suites/crm-deals.slice.yaml',
+        'hr-employees' => 'suites/hr-employees.slice.yaml',
+        'hr-leave-requests' => 'suites/hr-leave-requests.slice.yaml',
+        'shop-products-example' => 'suites/shop-products.slice.yaml',
+        'shop-orders-example' => 'suites/shop-orders.slice.yaml',
+    ];
+
     /**
-     * The YAML of a built-in template; unknown names fall back to the service-desk example.
+     * The YAML of a built-in template or example; unknown names fall back to service-desk.
      */
     private function getTemplateContent(string $template): string
     {
         $root = dirname(__DIR__, 2).'/blueprints';
+
+        if (isset(self::EXAMPLE_FILES[$template])) {
+            $path = $root.'/examples/'.self::EXAMPLE_FILES[$template];
+            if (is_file($path)) {
+                return (string) file_get_contents($path);
+            }
+        }
+
         $path = isset(self::TEMPLATES[$template])
             ? $root.'/templates/'.self::TEMPLATES[$template].'.slice.yaml'
             : $root.'/examples/service-desk.slice.yaml';
@@ -1017,20 +1011,52 @@ final class BlueprintStudioController extends Controller
             'success' => true,
             'presets' => [
                 [
+                    'id' => 'adjudication',
+                    'name' => '⚖️ Dispute Adjudication',
+                    'badge' => '7 Slices: Complaints, Hearings, Notices, etc.',
+                    'domain' => 'Adjudication',
+                    'source_path' => '',
+                    'description' => 'Statutory dispute adjudication: Citizen Intake, Scrutiny, Hearings, Notices, and Speaking Orders',
+                ],
+                [
                     'id' => 'erp',
-                    'name' => 'ERP Enterprise Suite',
+                    'name' => '🏢 ERP Enterprise Suite',
                     'badge' => '358 tables → 23 Slices (15k records)',
                     'domain' => 'ERP',
-                    'source_path' => 'e:/laragon/www/erp',
+                    'source_path' => '',
                     'description' => 'Comprehensive enterprise suite with Projects, Tasks, Invoices, HR, CRM, Tickets and Unified Settings Hub',
                 ],
                 [
-                    'id' => 'fospah',
-                    'name' => 'FOSPAH Judicial Case Management',
-                    'badge' => 'Petitions, Scrutiny & Cause Lists',
-                    'domain' => 'Legal',
-                    'source_path' => 'e:/laragon/www/wwf-old',
-                    'description' => 'Statutory judicial case workflow: Citizen Intake, Scrutiny, Hearings and Speaking Orders',
+                    'id' => 'healthcare',
+                    'name' => '🏥 Healthcare & Clinical EMR',
+                    'badge' => 'Patients, Encounters, Prescriptions',
+                    'domain' => 'Healthcare',
+                    'source_path' => '',
+                    'description' => 'Clinical practice & patient management: Patient Registry, Consultations, Clinical Notes, Labs, Pharmacy',
+                ],
+                [
+                    'id' => 'ecommerce',
+                    'name' => '🛒 E-Commerce & Retail',
+                    'badge' => 'Products, Orders, Customers, Inventory',
+                    'domain' => 'Ecommerce',
+                    'source_path' => '',
+                    'description' => 'Multi-channel commerce: Catalog, Inventory, Cart, Checkout, Orders, Shipping, Subscriptions',
+                ],
+                [
+                    'id' => 'edtech',
+                    'name' => '🎓 EdTech & Learning (LMS)',
+                    'badge' => 'Courses, Lessons, Enrollments',
+                    'domain' => 'EdTech',
+                    'source_path' => '',
+                    'description' => 'Educational delivery: Curricula, Course Modules, Quizzes, Grading, Student Progress, Certifications',
+                ],
+                [
+                    'id' => 'fintech',
+                    'name' => '💳 FinTech & Core Banking',
+                    'badge' => 'Accounts, Transactions, Ledger',
+                    'domain' => 'FinTech',
+                    'source_path' => '',
+                    'description' => 'Financial operations: Double-entry ledger, Wallets, Escrow, Transfers, AML screening, Statements',
                 ],
             ],
         ]);
@@ -1055,8 +1081,25 @@ final class BlueprintStudioController extends Controller
 
         $preset = (string) $request->input('preset', '');
         $source = (string) $request->input('source', '');
-        $domain = (string) $request->input('domain', 'ERP');
+        $domain = (string) $request->input('domain', '');
         $planJson = (string) $request->input('plan_json', '');
+
+        // Resolve preset defaults if source/domain are empty
+        if ($preset === 'adjudication' || strtolower($domain) === 'adjudication') {
+            if (empty($domain)) {
+                $domain = 'Adjudication';
+            }
+        } elseif ($preset === 'erp' || strtolower($domain) === 'erp') {
+            if (empty($domain)) {
+                $domain = 'ERP';
+            }
+        } elseif (! empty($preset) && empty($domain)) {
+            $domain = ucfirst($preset);
+        }
+
+        if (empty($domain)) {
+            $domain = 'Core';
+        }
 
         // Git repository source: clone first, then analyze the local clone
         $sourceType = (string) $request->input('source_type', 'local');
@@ -1075,20 +1118,12 @@ final class BlueprintStudioController extends Controller
                 return response()->json(['success' => true, 'plan' => $plan]);
             }
 
-            // 2. Load ERP preset example plan if requested
-            if ($preset === 'erp' || (empty($source) && strtolower($domain) === 'erp')) {
+            // 2. Load ERP preset example plan if requested and installed
+            if ($preset === 'erp' && empty($source)) {
                 $examplePlan = base_path('docs/porting-architecture-plan.json');
                 if (\Illuminate\Support\Facades\File::exists($examplePlan)) {
                     $plan = json_decode(\Illuminate\Support\Facades\File::get($examplePlan), true);
                     return response()->json(['success' => true, 'plan' => $plan, 'example' => true]);
-                }
-                // The preset was chosen explicitly but no example plan is installed:
-                // return a clear error instead of falling through to inspect() with a bogus path.
-                if ($preset === 'erp') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'The ERP example plan is not installed in this project (docs/porting-architecture-plan.json not found). Choose "Inspect Custom Local Project" and enter a valid Source Application Path instead.',
-                    ], 422);
                 }
             }
 
@@ -1106,8 +1141,15 @@ final class BlueprintStudioController extends Controller
                 $clonedFrom = $request->input('source'); // original URL, token never included
             }
 
+            if (empty($source) || ! \Illuminate\Support\Facades\File::isDirectory($source)) {
+                throw new \InvalidArgumentException("Source application directory not found: [{$source}]. Please provide a valid local project path or Git URL.");
+            }
+
             $inspection = $portService->inspect($source, $domain);
             $plan = $portService->generateArchitecturePlan($inspection, $domain);
+            if (empty($plan['domain_blueprint_yaml'])) {
+                $plan['domain_blueprint_yaml'] = $inspection['domain_blueprint_yaml'] ?? $portService->generateDomainBlueprintYaml($inspection['studio_slices'] ?? [], $domain, $inspection);
+            }
 
             return response()->json([
                 'success' => true,
@@ -1363,15 +1405,34 @@ final class BlueprintStudioController extends Controller
         try {
             if (! empty($planInput)) {
                 $plan = is_array($planInput) ? $planInput : json_decode($planInput, true);
+                if (! is_array($plan)) {
+                    return response()->json(['success' => false, 'message' => 'Invalid plan payload (expected JSON object).'], 422);
+                }
                 $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth);
             } else {
+                if ($source === '') {
+                    return response()->json(['success' => false, 'message' => 'Provide a plan from Analyze or a source path.'], 422);
+                }
                 $result = $portService->execute($source, $domain, $mode, $withFiles, $importData, null, $importAuth);
             }
 
+            $created = $result['slices_created'] ?? $result['slices_generated'] ?? [];
+            $createdCount = is_array($created) ? count($created) : 0;
+            $errors = $result['errors'] ?? [];
+            $errorCount = is_array($errors) ? count($errors) : 0;
+            $ok = ($result['success'] ?? true) && $errorCount === 0;
+
+            $message = $ok
+                ? "Porting finished: {$createdCount} slice(s) written to disk."
+                : "Porting finished with {$errorCount} error(s); {$createdCount} slice(s) written.";
+
             return response()->json([
-                'success' => true,
+                'success' => $ok,
+                'message' => $message,
                 'result' => $result,
-            ]);
+                'slices_created_count' => $createdCount,
+                'errors_count' => $errorCount,
+            ], $ok ? 200 : 422);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
@@ -1380,4 +1441,256 @@ final class BlueprintStudioController extends Controller
         }
     }
 
+    /**
+     * Sanitize and auto-repair blueprint data before validation.
+     * Ensures reserved columns are stripped from fields, required/nullable booleans are consistent,
+     * child models are connected to the root aggregate model, and catalog/settings slices are recognized.
+     *
+     * @param  array<string, mixed>  $blueprint
+     * @return array<string, mixed>
+     */
+    public function sanitizeBlueprint(array $blueprint): array
+    {
+        if (! isset($blueprint['models']) || ! is_array($blueprint['models'])) {
+            return $blueprint;
+        }
+
+        $sliceName = $blueprint['name'] ?? '';
+        if (preg_match('/(setting|master|catalog|reference)/i', $sliceName)) {
+            $blueprint['taxonomy'] = true;
+        }
+
+        $reserved = ['id', 'created_at', 'updated_at', 'deleted_at'];
+        $rootHandle = null;
+        $modelHandles = [];
+
+        // 1. First pass: normalize handles, sanitize fields
+        foreach ($blueprint['models'] as $idx => &$model) {
+            if (! is_array($model)) {
+                continue;
+            }
+
+            if (isset($model['handle']) && is_string($model['handle'])) {
+                $model['handle'] = Str::snake($model['handle']);
+            } else {
+                $model['handle'] = 'model_'.$idx;
+            }
+
+            $mHandle = $model['handle'];
+            $modelHandles[$mHandle] = $idx;
+
+            if (($model['root'] ?? false) === true) {
+                if ($rootHandle === null) {
+                    $rootHandle = $mHandle;
+                } else {
+                    $model['root'] = false;
+                }
+            }
+
+            // Sanitize fields
+            if (isset($model['fields']) && is_array($model['fields'])) {
+                $cleanFields = [];
+                $seenHandles = [];
+
+                foreach ($model['fields'] as $f) {
+                    if (! is_array($f)) {
+                        continue;
+                    }
+
+                    $fHandle = isset($f['handle']) && is_string($f['handle']) ? Str::snake($f['handle']) : null;
+                    if (! $fHandle || in_array($fHandle, $reserved, true) || isset($seenHandles[$fHandle])) {
+                        continue;
+                    }
+                    $seenHandles[$fHandle] = true;
+                    $f['handle'] = $fHandle;
+
+                    $rawType = strtolower((string) ($f['type'] ?? 'string'));
+                    if (str_ends_with($fHandle, '_id')) {
+                        $canonicalType = 'foreign_id';
+                    } else {
+                        $canonicalType = match ($rawType) {
+                            'string', 'varchar', 'char', 'tinytext' => 'string',
+                            'text', 'mediumtext', 'longtext' => 'text',
+                            'integer', 'int', 'mediumint', 'smallint', 'tinyint' => 'integer',
+                            'biginteger', 'bigint' => 'bigInteger',
+                            'foreign_id', 'foreignid' => 'foreign_id',
+                            'decimal', 'numeric' => 'decimal',
+                            'float', 'double', 'real' => 'float',
+                            'boolean', 'bool' => 'boolean',
+                            'date' => 'date',
+                            'datetime' => 'datetime',
+                            'timestamp' => 'timestamp',
+                            'enum' => (! empty($f['options']) && is_array($f['options']) ? 'enum' : 'string'),
+                            'email' => 'email',
+                            'url' => 'url',
+                            'json' => 'json',
+                            default => 'string',
+                        };
+                    }
+                    $f['type'] = $canonicalType;
+
+                    if ($f['type'] === 'enum' && (empty($f['options']) || ! is_array($f['options']))) {
+                        $f['type'] = 'string';
+                        unset($f['options']);
+                    }
+
+                    $req = $f['required'] ?? null;
+                    $nll = $f['nullable'] ?? null;
+
+                    if ($req === null && $nll === null) {
+                        $f['required'] = false;
+                        $f['nullable'] = true;
+                    } elseif ($req !== null && $nll !== null && (bool) $req === (bool) $nll) {
+                        if ((bool) $req) {
+                            $f['required'] = true;
+                            $f['nullable'] = false;
+                        } else {
+                            $f['required'] = false;
+                            $f['nullable'] = true;
+                        }
+                    } elseif ($req !== null) {
+                        $f['required'] = (bool) $req;
+                        $f['nullable'] = ! (bool) $req;
+                    } else {
+                        $f['nullable'] = (bool) $nll;
+                        $f['required'] = ! (bool) $nll;
+                    }
+
+                    $cleanFields[] = $f;
+                }
+                $model['fields'] = $cleanFields;
+            }
+
+            // Normalize existing relations
+            if (isset($model['relations']) && is_array($model['relations'])) {
+                $cleanRelations = [];
+                foreach ($model['relations'] as $rel) {
+                    if (! is_array($rel)) {
+                        continue;
+                    }
+                    if (isset($rel['model']) && is_string($rel['model'])) {
+                        $rel['model'] = Str::snake($rel['model']);
+                    }
+                    if (isset($rel['name']) && is_string($rel['name'])) {
+                        $rel['name'] = Str::snake($rel['name']);
+                    }
+                    $cleanRelations[] = $rel;
+                }
+                $model['relations'] = $cleanRelations;
+            } else {
+                $model['relations'] = [];
+            }
+        }
+        unset($model);
+
+        // Ensure exactly one root model
+        if ($rootHandle === null && count($blueprint['models']) > 0) {
+            $blueprint['models'][0]['root'] = true;
+            $rootHandle = $blueprint['models'][0]['handle'];
+        }
+
+        // 2. Second pass: ensure child model reachability & valid foreign keys
+        $isCatalog = ($blueprint['taxonomy'] ?? false) === true;
+        if ($rootHandle !== null && count($blueprint['models']) > 1 && ! $isCatalog) {
+            $rootIndex = $modelHandles[$rootHandle] ?? 0;
+            $rootModel = &$blueprint['models'][$rootIndex];
+            $rootTable = $rootModel['table'] ?? $rootHandle.'s';
+            $rootTableSingular = Str::singular($rootTable);
+
+            foreach ($blueprint['models'] as $idx => &$childModel) {
+                if (! is_array($childModel) || $idx === $rootIndex) {
+                    continue;
+                }
+
+                $childHandle = $childModel['handle'];
+                $childFields = array_column($childModel['fields'] ?? [], 'handle');
+
+                // Find best foreign key pointing to root or another parent model
+                $bestFk = null;
+                $parentModelHandle = $rootHandle;
+
+                if (in_array($rootHandle.'_id', $childFields, true)) {
+                    $bestFk = $rootHandle.'_id';
+                } elseif (in_array($rootTableSingular.'_id', $childFields, true)) {
+                    $bestFk = $rootTableSingular.'_id';
+                } else {
+                    foreach ($modelHandles as $otherHandle => $otherIdx) {
+                        if ($otherIdx === $idx) {
+                            continue;
+                        }
+                        if (in_array($otherHandle.'_id', $childFields, true)) {
+                            $bestFk = $otherHandle.'_id';
+                            $parentModelHandle = $otherHandle;
+                            break;
+                        }
+                    }
+                }
+
+                // If still no foreign key found, inject rootHandle_id into child model fields
+                if (! $bestFk) {
+                    $bestFk = $rootHandle.'_id';
+                    $childModel['fields'][] = [
+                        'handle' => $bestFk,
+                        'label' => Str::headline($rootHandle),
+                        'type' => 'foreign_id',
+                        'required' => false,
+                        'nullable' => true,
+                        'width' => 50,
+                    ];
+                } else {
+                    foreach ($childModel['fields'] as &$cf) {
+                        if (($cf['handle'] ?? '') === $bestFk) {
+                            $cf['type'] = 'foreign_id';
+                            break;
+                        }
+                    }
+                    unset($cf);
+                }
+
+                // Add hasMany on the parent model
+                $pIdx = $modelHandles[$parentModelHandle] ?? $rootIndex;
+                $parentModel = &$blueprint['models'][$pIdx];
+                $parentRelations = $parentModel['relations'] ?? [];
+                $alreadyHas = false;
+                foreach ($parentRelations as $pr) {
+                    if (($pr['model'] ?? '') === $childHandle) {
+                        $alreadyHas = true;
+                        break;
+                    }
+                }
+                if (! $alreadyHas) {
+                    $relName = Str::plural($childHandle);
+                    $parentRelations[] = [
+                        'name' => $relName,
+                        'type' => 'hasMany',
+                        'model' => $childHandle,
+                        'foreign_key' => $bestFk,
+                    ];
+                    $parentModel['relations'] = $parentRelations;
+                }
+
+                // Add belongsTo on child model
+                $childRelations = $childModel['relations'] ?? [];
+                $alreadyHasBelongsTo = false;
+                foreach ($childRelations as $cr) {
+                    if (($cr['model'] ?? '') === $parentModelHandle) {
+                        $alreadyHasBelongsTo = true;
+                        break;
+                    }
+                }
+                if (! $alreadyHasBelongsTo) {
+                    $childRelations[] = [
+                        'name' => $parentModelHandle,
+                        'type' => 'belongsTo',
+                        'model' => $parentModelHandle,
+                        'foreign_key' => $bestFk,
+                    ];
+                    $childModel['relations'] = $childRelations;
+                }
+            }
+            unset($childModel);
+        }
+
+        return $blueprint;
+    }
 }

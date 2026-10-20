@@ -2,6 +2,8 @@
 
 namespace LaraSlice\Core\Discovery;
 
+// ManifestRepository is same namespace
+
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
@@ -636,7 +638,126 @@ class SliceManager
             }
         }
 
+
+        // Ensure index data-table reflects YAML ui.directory (views, inline_edit, date-key)
+        $this->repairIndexDirectoryUi($slice);
+
         return $this->repairedFiles;
+    }
+
+    /**
+     * Patch index.blade.php so <x-ui.data-table> receives views / inline_edit / date-key from slice.json.
+     */
+    protected function repairIndexDirectoryUi(SliceManifest $slice): void
+    {
+        $viewsPath = $slice->getViewsPath();
+        if (! $viewsPath) {
+            return;
+        }
+        $index = $viewsPath.'/index.blade.php';
+        if (! is_file($index)) {
+            return;
+        }
+        $manifestFile = $slice->path.'/slice.json';
+        if (! is_file($manifestFile)) {
+            return;
+        }
+        try {
+            $manifest = ManifestRepository::read($manifestFile);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $dir = is_array($manifest['ui']['directory'] ?? null) ? $manifest['ui']['directory'] : [];
+        $views = is_array($dir['views'] ?? null) && $dir['views'] !== [] ? array_values($dir['views']) : ['table'];
+        $defaultView = is_string($dir['default_view'] ?? null) ? $dir['default_view'] : 'table';
+        $inlineEdit = is_array($dir['inline_edit'] ?? null) ? array_values($dir['inline_edit']) : [];
+        $statusKey = 'status';
+        $dateKey = null;
+        foreach ($dir['columns'] ?? [] as $c) {
+            if (! is_array($c)) {
+                continue;
+            }
+            $ck = (string) ($c['key'] ?? $c['handle'] ?? '');
+            if (in_array($ck, ['status', 'state', 'stage'], true)) {
+                $statusKey = $ck;
+            }
+            if ($dateKey === null && (str_contains($ck, 'date') || str_ends_with($ck, '_at'))) {
+                $dateKey = $ck;
+            }
+        }
+        foreach (['due_date', 'start_date', 'issue_date', 'date'] as $prefer) {
+            foreach ($dir['columns'] ?? [] as $c) {
+                if (is_array($c) && (($c['key'] ?? $c['handle'] ?? '') === $prefer)) {
+                    $dateKey = $prefer;
+                    break 2;
+                }
+            }
+        }
+
+        $original = file_get_contents($index);
+        if ($original === false || ! str_contains($original, 'x-ui.data-table')) {
+            return;
+        }
+        $content = $original;
+        $content = $this->injectRuntimeDirectoryColumns($content, $slice->name);
+
+        $viewsExport = var_export($views, true);
+        $inlineExport = var_export($inlineEdit, true);
+        $dateExport = $dateKey === null ? 'null' : var_export($dateKey, true);
+        $defaultViewEsc = addslashes($defaultView);
+        $statusKeyEsc = addslashes($statusKey);
+
+        if (! str_contains($content, '$tableViews')) {
+            $sliceJsonPath = str_replace('\\', '/', $slice->path.'/slice.json');
+            $bootstrap = <<<PHP
+@php
+    if (! isset(\$manifest) || ! is_array(\$manifest)) {
+        \$manifest = [];
+        try {
+            \$_mf = '{$sliceJsonPath}';
+            if (is_file(\$_mf)) {
+                \$manifest = json_decode((string) file_get_contents(\$_mf), true) ?: [];
+            }
+        } catch (\\Throwable \$e) {
+            \$manifest = [];
+        }
+    }
+    \$dirUi = \$manifest['ui']['directory'] ?? [];
+    \$tableViews = is_array(\$dirUi['views'] ?? null) && \$dirUi['views'] !== [] ? \$dirUi['views'] : {$viewsExport};
+    \$defaultView = \$dirUi['default_view'] ?? '{$defaultViewEsc}';
+    \$inlineEdit = is_array(\$dirUi['inline_edit'] ?? null) ? \$dirUi['inline_edit'] : {$inlineExport};
+    \$statusKey = '{$statusKeyEsc}';
+    \$dateKey = {$dateExport};
+@endphp
+
+PHP;
+            $content = preg_replace('/(<x-ui\.data-table\b)/', $bootstrap.'$1', $content, 1) ?? $content;
+        }
+
+        $requiredAttrs = [
+            ':views' => '$tableViews',
+            ':default-view' => '$defaultView',
+            ':status-key' => '$statusKey',
+            ':inline-edit' => '$inlineEdit',
+            ':date-key' => '$dateKey',
+        ];
+        if (preg_match('/<x-ui\.data-table\b[^>]*>/s', $content, $m)) {
+            $tag = $m[0];
+            $newTag = $tag;
+            foreach ($requiredAttrs as $attr => $var) {
+                if (! str_contains($newTag, $attr.'=') && ! str_contains($newTag, $attr.' =')) {
+                    $newTag = rtrim(substr($newTag, 0, -1))."\n            {$attr}=\"{$var}\">";
+                }
+            }
+            if ($newTag !== $tag) {
+                $content = preg_replace('/<x-ui\.data-table\b[^>]*>/s', $newTag, $content, 1) ?? $content;
+            }
+        }
+
+        if ($content !== $original) {
+            $this->writeRepair($index, $content);
+        }
     }
 
     /** Record (and unless dry-running, write) one repaired file. */
@@ -761,6 +882,42 @@ class SliceManager
     /**
      * Get list of active slices formatted for navigation bars / sidebars
      */
+
+    /**
+     * Whether the user has any of the given role slugs (YAML navigation.roles).
+     * Works with HasSlicePermissions or direct role_user table.
+     *
+     * @param  list<string>  $roleSlugs
+     */
+    protected function userHasAnyRole(object $user, array $roleSlugs): bool
+    {
+        if ($roleSlugs === []) {
+            return true;
+        }
+        if (method_exists($user, 'hasRole')) {
+            return (bool) $user->hasRole($roleSlugs);
+        }
+        if (method_exists($user, 'roleSlugs')) {
+            return array_intersect($roleSlugs, $user->roleSlugs()) !== [];
+        }
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('role_user') || ! \Illuminate\Support\Facades\Schema::hasTable('roles')) {
+                return false;
+            }
+            $uid = $user->id ?? $user->getAuthIdentifier();
+            if (! $uid) {
+                return false;
+            }
+            return \Illuminate\Support\Facades\DB::table('role_user')
+                ->join('roles', 'role_user.role_id', '=', 'roles.id')
+                ->where('role_user.user_id', $uid)
+                ->whereIn('roles.slug', $roleSlugs)
+                ->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function getNavigableSlices(): array
     {
         $currentUser = auth()->check() ? auth()->user() : null;
@@ -807,14 +964,37 @@ class SliceManager
                 }
             }
 
-            // If user is authenticated and slice requires permission, verify authorization (Super Admin bypasses checks)
-            if ($requiredPermission && $currentUser && ! $isSuperAdmin) {
+            // Permission check (Super Admin bypasses). When navigation.roles is set, role gate below is the ERP persona source of truth.
+            $allowedRolesEarly = $slice->navigation['roles'] ?? $slice->navigation['personas'] ?? null;
+            $hasPersonaRoles = is_array($allowedRolesEarly) && $allowedRolesEarly !== [];
+            if ($requiredPermission && $currentUser && ! $isSuperAdmin && ! $hasPersonaRoles) {
                 if (method_exists($currentUser, 'hasPermission')) {
                     if (! $currentUser->hasPermission($requiredPermission)) {
                         continue;
                     }
                 } elseif (method_exists($currentUser, 'can')) {
                     if (! $currentUser->can($requiredPermission)) {
+                        continue;
+                    }
+                }
+            }
+
+            // YAML-centric persona / role gates (ERP-class: admin | employee | client)
+            // navigation.roles: list of role slugs; user must match at least one (unless super-admin)
+            // navigation.personas: alias for roles for Studio readability
+            $allowedRoles = $slice->navigation['roles']
+                ?? $slice->navigation['personas']
+                ?? $slice->raw['navigation']['roles']
+                ?? null;
+            if (is_array($allowedRoles) && $allowedRoles !== [] && $currentUser && ! $isSuperAdmin) {
+                $normalized = array_values(array_filter(array_map(static function ($r) {
+                    $r = strtolower(trim((string) $r));
+                    // accept "role:employee" from journeys.v2 gates
+                    return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
+                }, $allowedRoles)));
+                if ($normalized !== []) {
+                    $ok = $this->userHasAnyRole($currentUser, $normalized);
+                    if (! $ok) {
                         continue;
                     }
                 }
@@ -874,6 +1054,16 @@ class SliceManager
                         if (method_exists($currentUser, 'hasPermission') && ! $currentUser->hasPermission($childPerm)) {
                             continue;
                         } elseif (method_exists($currentUser, 'can') && ! $currentUser->can($childPerm)) {
+                            continue;
+                        }
+                    }
+                    $childRoles = $child['roles'] ?? $child['personas'] ?? null;
+                    if (is_array($childRoles) && $childRoles !== [] && $currentUser && ! $isSuperAdmin) {
+                        $cn = array_values(array_filter(array_map(static function ($r) {
+                            $r = strtolower(trim((string) $r));
+                            return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
+                        }, $childRoles)));
+                        if ($cn !== [] && ! $this->userHasAnyRole($currentUser, $cn)) {
                             continue;
                         }
                     }
@@ -1702,4 +1892,68 @@ class SliceManager
 
         return @rmdir($dir);
     }
+
+    /**
+     * Ensure index.blade.php loads directory columns (with formatters) from slice.json at runtime.
+     */
+    protected function injectRuntimeDirectoryColumns(string $content, string $sliceName): string
+    {
+        $marker = 'DirectoryUi::columnsForSlice';
+        $hasRuntime = str_contains($content, $marker);
+        $hasStale = str_contains($content, '__DIR__')
+            && str_contains($content, 'load formatters from slice.json');
+        $hasBakedAbs = str_contains($content, 'absolute path baked at repair time');
+
+        if ($hasRuntime && ! $hasStale && ! $hasBakedAbs) {
+            return $content;
+        }
+
+        // Strip prior loader variants (DIR, absolute, previous DirectoryUi)
+        if (str_contains($content, 'load formatters from slice.json')
+            || str_contains($content, '$__mf')
+            || str_contains($content, $marker)
+            || $hasBakedAbs) {
+            $content = preg_replace(
+                '/\n\s*\/\/ Runtime: load formatters from slice\.json.*?(?=\n\s*\$rows\s*=)/s',
+                "\n",
+                $content,
+                1
+            ) ?? $content;
+            $content = preg_replace(
+                '/\n\s*\$columns\s*=\s*\\\\LaraSlice\\\\Support\\\\DirectoryUi::columnsForSlice\([^;]+;\s*/s',
+                "\n",
+                $content,
+                1
+            ) ?? $content;
+        }
+
+        $nameEsc = addslashes($sliceName);
+        $snippet = <<<BLADE
+
+        // Runtime: load formatters from slice.json via registered slice path (works for vendor + path installs)
+        \$columns = \\LaraSlice\\Support\\DirectoryUi::columnsForSlice('{$nameEsc}', \$columns);
+
+BLADE;
+
+        $needles = [
+            '$rows = \LaraSlice\Support\DataTableRows::from',
+            '$rows = \\LaraSlice\\Support\\DataTableRows::from',
+        ];
+        foreach ($needles as $needle) {
+            $pos = strpos($content, $needle);
+            if ($pos !== false) {
+                return substr($content, 0, $pos).$snippet.$needle.substr($content, $pos + strlen($needle));
+            }
+        }
+
+        if (preg_match('/\$rows\s*=\s*\\\\?LaraSlice\\\\Support\\\\DataTableRows::from/', $content, $m, PREG_OFFSET_CAPTURE)) {
+            $pos = $m[0][1];
+            $matched = $m[0][0];
+
+            return substr($content, 0, $pos).$snippet.$matched.substr($content, $pos + strlen($matched));
+        }
+
+        return $content;
+    }
+
 }

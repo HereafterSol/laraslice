@@ -1,0 +1,73 @@
+spec_version: "0.1"
+name: Companies
+handle: companies
+domain: CRM
+description: "B2B account companies"
+version: 1.0.0
+navigation:
+  label: Companies
+  icon: building-2
+  group: CRM
+  order: 10
+models:
+  - handle: company
+    table: companies
+    root: true
+    fields:
+      - handle: name
+        label: Company Name
+        type: string
+        required: true
+      - handle: industry
+        label: Industry
+        type: string
+        required: false
+      - handle: website
+        label: Website
+        type: string
+        required: false
+      - handle: annual_revenue
+        label: Revenue
+        type: decimal
+        required: false
+      - handle: status
+        label: Status
+        type: string
+        required: true
+        input: select
+fields:
+  name:
+    name: name
+    type: string
+    searchable: true
+  industry:
+    name: industry
+    type: string
+  website:
+    name: website
+    type: string
+  annual_revenue:
+    name: annual_revenue
+    type: decimal
+  status:
+    name: status
+    type: string
+    input: select
+ui:
+  directory:
+    columns:
+      - key: name
+        label: Company
+        formatter: text
+        sortable: true
+      - key: industry
+        label: Industry
+        formatter: text
+      - key: annual_revenue
+        label: Revenue
+        formatter: money_breakdown
+      - key: status
+        label: Status
+        formatter: status_pill
+    views: [table]
+    default_view: table

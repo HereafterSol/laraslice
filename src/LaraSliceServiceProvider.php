@@ -35,6 +35,7 @@ use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SlicePortCommand;
 use LaraSlice\Commands\SliceRepairCommand;
+use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceSeedCommand;
 use LaraSlice\Commands\SliceSyncCommand;
 use LaraSlice\Commands\SliceToggleCommand;
@@ -55,7 +56,7 @@ use TailwindMerge\TailwindMerge;
 class LaraSliceServiceProvider extends ServiceProvider
 {
     /** Package version reported to MCP clients and the AI copilot. Bump with each release. */
-    public const VERSION = '1.6.4';
+    public const VERSION = '1.7.0';
 
     public function register(): void
     {
@@ -149,6 +150,7 @@ class LaraSliceServiceProvider extends ServiceProvider
             SlicePortCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
+                SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,
                 AuditPruneCommand::class,
@@ -214,6 +216,8 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/update-navigation', [WizardController::class, 'updateNavigation'])->name('laraslice.wizard.update_nav');
                     Route::post('/rollback-version', [WizardController::class, 'rollbackVersion'])->name('laraslice.wizard.rollback_version');
                     Route::post('/sync-fields', [WizardController::class, 'syncFields'])->name('laraslice.wizard.sync_fields');
+                    Route::post('/save-studio-config', [WizardController::class, 'saveStudioConfig'])->name('laraslice.wizard.save_studio_config');
+                    Route::post('/sync-manifest', [WizardController::class, 'syncManifest'])->name('laraslice.wizard.sync_manifest');
                     Route::post('/save-relationships', [WizardController::class, 'saveRelationships'])->name('laraslice.wizard.save_relationships');
                     Route::post('/batch-generate', [WizardController::class, 'batchGenerate'])->name('laraslice.wizard.batch_generate');
                     Route::post('/domain-suite', [WizardController::class, 'generateDomainSuite'])->name('laraslice.wizard.domain_suite');

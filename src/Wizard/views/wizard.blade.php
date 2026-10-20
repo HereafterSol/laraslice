@@ -1,7 +1,7 @@
 @extends(view()->exists('layouts.app') ? 'layouts.app' : 'laraslice::layout')
 
 @section('content')
-<style>[x-cloak] { display: none !important; }</style>
+<style>[x-cloak] { display: none !important; } .laraslice-studio-root { max-width: 100vw; overflow-x: hidden; } .laraslice-studio-root table { display: block; max-width: 100%; overflow-x: auto; }</style>
 <script>
 function larasliceWizard() {
     return {
@@ -929,6 +929,15 @@ function larasliceWizard() {
         uiSummaryCards: [],
         uiSidebarFilters: [],
         uiBulkActions: ['delete', 'export'],
+        uiViews: ['table'],
+        uiDefaultView: 'table',
+        uiInlineEdit: [],
+        uiDashboardWidgets: [],
+        navRoles: [],
+        navGroup: 'Work',
+        navVisible: true,
+        studioConfigSaving: false,
+        studioConfigMessage: '',
         // Form sections (Step 3: Create & Edit Form)
         uiFormSections: [],
         uiFormMode: 'drawer',
@@ -1610,6 +1619,32 @@ function larasliceWizard() {
         },
         selectSlice(slice) {
             this.selectedSlice = slice;
+            this.navRoles = Array.isArray(slice.navigation?.roles) ? [...slice.navigation.roles] : [];
+            this.navGroup = slice.navigation?.group || slice.domain || 'General';
+            this.navVisible = slice.navigation?.visible !== false;
+            this.uiViews = Array.isArray(slice.ui?.directory?.views) ? [...slice.ui.directory.views] : ['table'];
+            this.uiDefaultView = slice.ui?.directory?.default_view || 'table';
+            this.uiInlineEdit = Array.isArray(slice.ui?.directory?.inline_edit) ? [...slice.ui.directory.inline_edit] : [];
+            this.uiDashboardWidgets = Array.isArray(slice.ui?.dashboard?.widgets) ? [...slice.ui.dashboard.widgets] : [];
+            // Hydrate workflow editor from manifest (Slice Studio GitOps)
+            if (slice.workflow && typeof slice.workflow === 'object') {
+                this.workflowConfig = JSON.parse(JSON.stringify(slice.workflow));
+                if (!Array.isArray(this.workflowConfig.states)) this.workflowConfig.states = [];
+                if (!Array.isArray(this.workflowConfig.transitions)) this.workflowConfig.transitions = [];
+                this.includeWorkflow = this.workflowConfig.enabled !== false;
+            } else if (slice.workflow === true) {
+                this.initDefaultWorkflow();
+                this.includeWorkflow = true;
+            } else {
+                this.workflowConfig = this.workflowConfig || null;
+            }
+            const bas = slice.ui?.directory?.bulk_actions;
+            if (Array.isArray(bas) && bas.length) {
+                this.uiBulkActions = bas.map(b => typeof b === 'string' ? b : (b.handle || b.slug || 'action'));
+            }
+            if (slice.ui?.directory?.row_actions) {
+                this.uiRowActions = JSON.parse(JSON.stringify(slice.ui.directory.row_actions));
+            }
             this.loadAuditLogs(slice.name);
             const primary = (slice.tables_data || []).find(t => t.is_primary) || (slice.tables_data || [])[0] || null;
             this.selectedTable = primary;
@@ -1764,6 +1799,86 @@ function larasliceWizard() {
                     this.loadSlices();
                 }
             });
+        },
+        async saveStudioConfig() {
+            if (!this.selectedSlice) return;
+            this.studioConfigSaving = true;
+            this.studioConfigMessage = '';
+            try {
+                const ui = this.buildUiConfig();
+                ui.dashboard = { enabled: true, widgets: this.uiDashboardWidgets || [] };
+                const navigation = {
+                    roles: this.navRoles || [],
+                    visible: this.navVisible !== false,
+                    label: this.navConfig?.title || this.selectedSlice.navigation?.label || this.selectedSlice.title || this.selectedSlice.name,
+                    icon: this.navConfig?.icon || this.selectedSlice.navigation?.icon || 'package',
+                    group: this.navGroup || this.navConfig?.group || this.selectedSlice.navigation?.group || 'General',
+                    order: this.navConfig?.order || 50,
+                    hidden: !!this.navConfig?.hidden,
+                };
+                const workflowPayload = this.includeWorkflow && this.workflowConfig
+                    ? {
+                        enabled: true,
+                        state_field: this.workflowConfig.state_field || this.workflowConfig.state_column || 'status',
+                        initial_state: this.workflowConfig.initial_state || (this.workflowConfig.states?.[0]?.slug || 'draft'),
+                        states: this.workflowConfig.states || [],
+                        transitions: this.workflowConfig.transitions || [],
+                    }
+                    : (this.includeWorkflow === false ? { enabled: false, states: [], transitions: [] } : null);
+                const res = await fetch('{{ route('laraslice.wizard.save_studio_config') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        slice: this.selectedSlice.name,
+                        ui,
+                        navigation,
+                        ...(workflowPayload !== null ? { workflow: workflowPayload } : {}),
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.success === false) throw new Error(data.message || 'Save failed');
+                this.studioConfigMessage = data.message || 'Saved';
+                if (data.version) this.selectedSlice.version = data.version;
+                if (data.version_history) this.selectedSlice.version_history = data.version_history;
+                if (data.ui) this.selectedSlice.ui = data.ui;
+                if (data.navigation) this.selectedSlice.navigation = data.navigation;
+                if (data.workflow !== undefined) this.selectedSlice.workflow = data.workflow;
+                if (this.navGroup) {
+                    this.selectedSlice.navigation = this.selectedSlice.navigation || {};
+                    this.selectedSlice.navigation.group = this.navGroup;
+                }
+            } catch (e) {
+                this.studioConfigMessage = e.message || String(e);
+            } finally {
+                this.studioConfigSaving = false;
+            }
+        },
+        async syncManifestPrefer(prefer = 'json') {
+            if (!this.selectedSlice) return;
+            this.studioConfigSaving = true;
+            try {
+                const res = await fetch('{{ route('laraslice.wizard.sync_manifest') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ slice: this.selectedSlice.name, prefer }),
+                });
+                const data = await res.json();
+                this.studioConfigMessage = data.message || (data.success ? 'Synced' : 'Sync failed');
+                if (data.ui) this.selectedSlice.ui = data.ui;
+                if (data.navigation) this.selectedSlice.navigation = data.navigation;
+            } catch (e) {
+                this.studioConfigMessage = e.message || String(e);
+            } finally {
+                this.studioConfigSaving = false;
+            }
         },
         generateDomainSuite(domain, slicesList) {
             const domainName = (domain || this.domain || 'General').trim();
@@ -1965,8 +2080,18 @@ function larasliceWizard() {
                     quick_filters: quickFilters,
                     sidebar_filters: this.uiSidebarFilters,
                     summary_cards: this.uiSummaryCards,
-                    bulk_actions: this.uiBulkActions,
-                    row_actions: this.uiRowActions,
+                    bulk_actions: (this.uiBulkActions || []).map(ba => {
+                        if (typeof ba === 'object') return ba;
+                        return { handle: ba, label: ba.charAt(0).toUpperCase() + ba.slice(1), type: ba === 'delete' ? 'native' : (ba === 'export' ? 'native' : 'workflow') };
+                    }),
+                    row_actions: this.uiRowActions || { display: 'dropdown', items: [
+                        { handle: 'view', label: 'View', icon: 'eye', placement: 'inline' },
+                        { handle: 'edit', label: 'Edit', icon: 'pencil', placement: 'dropdown' },
+                        { handle: 'delete', label: 'Delete', icon: 'trash-2', placement: 'dropdown', danger: true },
+                    ]},
+                    views: this.uiViews || ['table'],
+                    default_view: this.uiDefaultView || 'table',
+                    inline_edit: this.uiInlineEdit || [],
                 },
                 forms: {
                     mode: this.uiFormMode,
@@ -2221,7 +2346,7 @@ function larasliceWizard() {
             if (val === 'erp') {
                 this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
-            } else if (val === 'fospah') {
+            } else if (val === 'adjudication') {
                 this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
             } else if (val === 'custom') {
@@ -3863,6 +3988,11 @@ function larasliceWizard() {
                                 </div>
                             </div>
                         </template>
+                        <div x-show="groupedSlices().length === 0" class="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                            <p class="text-sm font-semibold text-muted-foreground">No slices match "<span x-text="sliceSearchQuery"></span>"</p>
+                            <p class="text-xs text-muted-foreground mt-1">Try a different search term or clear the filter.</p>
+                            <button type="button" @click="sliceSearchQuery = ''" class="mt-3 text-xs text-primary hover:underline">Clear filter</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4370,6 +4500,185 @@ function larasliceWizard() {
                             </template>
                             <button type="button" @click="uiFormSections.push({title: 'New Section', description: '', columns: 2, fields: []})"
                                 class="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary">+ Add Section Card</button>
+                        </div>
+                    </div>
+
+
+                    <!-- Slice Studio GitOps: persona roles, views, YAML+JSON sync -->
+                    <div class="rounded-2xl border border-emerald-500/30 bg-card p-5 shadow-sm space-y-4 mt-4 max-h-[80vh] overflow-y-auto" x-show="selectedSlice" x-ref="gitopsPanel">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                    <span class="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-sm">⚙</span>
+                                    <span>Studio Config & GitOps</span>
+                                    <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">JSON + YAML</span>
+                                    <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">History</span>
+                                </h2>
+                                <p class="text-xs text-muted-foreground mt-0.5">Primary DX surface — persona nav, directory views, dashboard widgets. Saves <code class="font-mono bg-muted px-1 rounded">slice.json</code> + <code class="font-mono bg-muted px-1 rounded">slice.yaml</code> with version ledger; optional DB workflow sync.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Sidebar module group</label>
+                                <select x-model="navGroup" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-xs mb-2">
+                                    <option value="CRM">CRM</option>
+                                    <option value="Work">Work</option>
+                                    <option value="HR">HR</option>
+                                    <option value="Finance">Finance</option>
+                                    <option value="Orders">Orders</option>
+                                    <option value="Tickets">Tickets</option>
+                                    <option value="Events">Events</option>
+                                    <option value="Messages">Messages</option>
+                                    <option value="Settings">Settings</option>
+                                    <option value="General">General</option>
+                                </select>
+                                <p class="text-[10px] text-muted-foreground mb-2">Demo-aligned section in the app sidebar (not the ERP domain folder name).</p>
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Persona roles (navigation.roles)</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="role in ['admin','employee','client','manager','user']" :key="role">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer hover:border-primary" :title="['admin','employee','client'].includes(role) ? 'Core ERP persona' : 'Extended role (use for custom personas)'">
+                                            <input type="checkbox" class="rounded" :value="role"
+                                                :checked="navRoles.includes(role)"
+                                                @change="navRoles = $event.target.checked ? [...new Set([...navRoles, role])] : navRoles.filter(r => r !== role)">
+                                            <span x-text="role"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <p class="text-[10px] text-muted-foreground mt-1">Core: admin / employee / client. Manager / user for custom personas.</p>
+                                <label class="flex items-center gap-2 text-xs mt-2">
+                                    <input type="checkbox" class="rounded" x-model="navVisible">
+                                    <span>Visible in sidebar</span>
+                                </label>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Directory views</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="v in ['table','board','calendar']" :key="v">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer">
+                                            <input type="checkbox" class="rounded"
+                                                :checked="uiViews.includes(v)"
+                                                @change="uiViews = $event.target.checked ? [...new Set([...uiViews, v])] : uiViews.filter(x => x !== v)">
+                                            <span x-text="v"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground block mt-2">Default view</label>
+                                <select x-model="uiDefaultView" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-xs">
+                                    <option value="table">table</option>
+                                    <option value="board">board</option>
+                                    <option value="calendar">calendar</option>
+                                </select>
+                                <label class="flex items-center gap-2 text-xs mt-2">
+                                    <input type="checkbox" class="rounded" :checked="uiInlineEdit.includes('status')"
+                                        @change="uiInlineEdit = $event.target.checked ? [...new Set([...uiInlineEdit, 'status'])] : uiInlineEdit.filter(x => x !== 'status')">
+                                    <span>Inline edit status (workflow)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Bulk actions</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="ba in ['delete','export','approve','reject','complete']" :key="ba">
+                                        <label class="flex items-center gap-1.5 text-xs border border-border rounded-lg px-2 py-1 cursor-pointer">
+                                            <input type="checkbox" class="rounded"
+                                                :checked="uiBulkActions.includes(ba)"
+                                                @change="uiBulkActions = $event.target.checked ? [...new Set([...uiBulkActions, ba])] : uiBulkActions.filter(x => x !== ba)">
+                                            <span x-text="ba"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <p class="text-[10px] text-muted-foreground">Native delete/export + workflow transition handles (approve/reject/complete).</p>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Row actions display</label>
+                                <select x-model="uiRowActions.display" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-xs">
+                                    <option value="dropdown">Dropdown</option>
+                                    <option value="hybrid">Hybrid (view inline + menu)</option>
+                                    <option value="inline">Inline icons</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 pt-2 border-t border-border">
+                            <label class="text-[11px] font-bold uppercase text-muted-foreground">Dashboard widgets (index KPI strip)</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="(w, wi) in uiDashboardWidgets" :key="wi">
+                                    <div class="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs">
+                                        <input type="text" x-model="w.label" class="h-7 w-24 rounded border border-border bg-background px-1 text-[11px]" placeholder="Label">
+                                        <input type="text" x-model="w.handle" class="h-7 w-20 rounded border border-border bg-background px-1 text-[11px] font-mono" placeholder="handle">
+                                        <select x-model="w.query" class="h-7 rounded border border-border bg-background px-1 text-[11px]">
+                                            <option value="count">count</option>
+                                            <option value="sum">sum</option>
+                                        </select>
+                                        <button type="button" @click="uiDashboardWidgets.splice(wi, 1)" class="text-rose-500 text-[10px]">✕</button>
+                                    </div>
+                                </template>
+                                <button type="button" @click="uiDashboardWidgets.push({ type: 'stat', handle: 'total', label: 'Total', query: 'count' })"
+                                    class="rounded-lg border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">+ Widget</button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 pt-2 border-t border-border" x-show="selectedSlice">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <label class="text-[11px] font-bold uppercase text-muted-foreground">Workflow (states & transitions)</label>
+                                <label class="flex items-center gap-1.5 text-xs">
+                                    <input type="checkbox" class="rounded" x-model="includeWorkflow" @change="if (includeWorkflow && !workflowConfig) initDefaultWorkflow()">
+                                    <span>Enabled</span>
+                                </label>
+                            </div>
+                            <div x-show="includeWorkflow" class="space-y-2">
+                                <div class="flex flex-wrap gap-1.5">
+                                    <template x-for="(st, sIdx) in (workflowConfig?.states || [])" :key="sIdx">
+                                        <span class="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-semibold">
+                                            <span class="font-mono" x-text="st.slug || st.name"></span>
+                                            <button type="button" class="text-rose-500" @click="workflowConfig.states.splice(sIdx, 1)">✕</button>
+                                        </span>
+                                    </template>
+                                    <button type="button" @click="if (!workflowConfig) initDefaultWorkflow(); workflowConfig.states.push({ slug: 'state_' + (workflowConfig.states.length+1), label: 'New state', color: 'slate' })"
+                                        class="rounded-lg border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">+ State</button>
+                                </div>
+                                <div class="space-y-1">
+                                    <p class="text-[10px] text-muted-foreground font-semibold uppercase">Transitions</p>
+                                    <template x-for="(tr, tIdx) in (workflowConfig?.transitions || [])" :key="tIdx">
+                                        <div class="flex flex-wrap items-center gap-1 text-[11px]">
+                                            <input type="text" x-model="tr.slug" class="h-7 w-24 rounded border border-border bg-background px-1 font-mono" placeholder="slug">
+                                            <input type="text" x-model="tr.name" class="h-7 w-28 rounded border border-border bg-background px-1" placeholder="Label">
+                                            <input type="text" class="h-7 w-28 rounded border border-border bg-background px-1 font-mono" placeholder="from (comma-sep)"
+                                                :value="Array.isArray(tr.from) ? tr.from.join(', ') : (tr.from || '')"
+                                                @input="tr.from = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"
+                                                title="Comma-separated source states">
+                                            <span class="text-muted-foreground">→</span>
+                                            <input type="text" x-model="tr.to" class="h-7 w-24 rounded border border-border bg-background px-1 font-mono" placeholder="to state"
+                                                :value="typeof tr.to === 'string' ? tr.to : (tr.to_state || '')"
+                                                @input="tr.to = $event.target.value; tr.to_state = $event.target.value">
+                                            <button type="button" class="text-rose-500" @click="workflowConfig.transitions.splice(tIdx, 1)">✕</button>
+                                        </div>
+                                    </template>
+                                    <button type="button" @click="if (!workflowConfig) initDefaultWorkflow(); workflowConfig.transitions = workflowConfig.transitions || []; workflowConfig.transitions.push({ slug: 'go', name: 'Go', from: ['draft'], to: 'pending' })"
+                                        class="rounded-lg border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">+ Transition</button>
+                                </div>
+                                <p class="text-[10px] text-muted-foreground">Saved into <code class="font-mono">slice.yaml</code> workflow + synced to DB on Save.</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
+                            <button type="button" @click="saveStudioConfig()" :disabled="studioConfigSaving"
+                                class="rounded-xl bg-primary text-primary-foreground px-4 py-2 text-xs font-bold shadow-sm hover:opacity-90 disabled:opacity-50">
+                                <span x-text="studioConfigSaving ? 'Saving…' : 'Save config (JSON + YAML)'"></span>
+                            </button>
+                            <button type="button" @click="syncManifestPrefer('json')" :disabled="studioConfigSaving"
+                                class="rounded-xl border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">
+                                Sync → DB (prefer JSON)
+                            </button>
+                            <button type="button" @click="syncManifestPrefer('yaml')" :disabled="studioConfigSaving"
+                                class="rounded-xl border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">
+                                Sync from YAML
+                            </button>
+                            <span class="text-xs text-emerald-500" x-text="studioConfigMessage" x-show="studioConfigMessage"></span>
+                        </div>
+                        <div class="text-[11px] text-muted-foreground" x-show="selectedSlice?.version_history?.length">
+                            History entries: <span class="font-mono font-semibold text-foreground" x-text="selectedSlice?.version_history?.length || 0"></span>
+                            · Version <span class="font-mono" x-text="selectedSlice?.version || '1.0.0'"></span>
                         </div>
                     </div>
 

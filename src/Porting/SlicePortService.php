@@ -11,6 +11,30 @@ use Throwable;
 class SlicePortService
 {
     /**
+     * Framework infrastructure and queue/cache plumbing tables that must NEVER
+     * be treated as domain slices or clutter the navigation/sidebar.
+     */
+    public const FRAMEWORK_INFRASTRUCTURE_TABLES = [
+        'migrations',
+        'password_reset_tokens',
+        'password_resets',
+        'job_batches',
+        'jobs',
+        'failed_jobs',
+        'cache',
+        'cache_locks',
+        'sessions',
+        'personal_access_tokens',
+        'telescope_entries',
+        'telescope_entries_tags',
+        'telescope_monitoring',
+        'pulse_entries',
+        'pulse_aggregates',
+        'pulse_values',
+        'horizon_jobs',
+    ];
+
+    /**
      * Clone a Git repository (GitHub, GitLab, or any Git host) into a local
      * cache directory so it can be analyzed like a local source path.
      *
@@ -167,15 +191,32 @@ class SlicePortService
         } elseif (! empty($migTables)) {
             // Migrations available, no live DB — use migrations but check for gaps
             $tables = $migTables;
-            // Mark all as migration-sourced
             foreach ($tables as $name => $t) {
                 $tables[$name]['table_source'] = 'migrations';
             }
         } else {
-            // No migrations, no source DB — fallback to current app DB with warning
-            $tables = $this->extractTablesFromDatabase();
-            foreach ($tables as $name => $t) {
-                $tables[$name]['table_source'] = 'app_database_fallback';
+            // Non-Laravel sources (e.g. Dolibarr): try bundled SQL schema dumps
+            $sqlTables = $this->extractTablesFromSqlDumps($cleanPath);
+            if (! empty($sqlTables)) {
+                $tables = $sqlTables;
+            } elseif ((bool) config('laraslice.porting.allow_app_db_fallback', false)) {
+                // Explicit opt-in only — never silent
+                $tables = $this->extractTablesFromDatabase();
+                foreach ($tables as $name => $t) {
+                    $tables[$name]['table_source'] = 'app_database_fallback';
+                }
+            } else {
+                throw new \InvalidArgumentException(
+                    "No source schema found at [{$cleanPath}].\n".
+                    "LaraSlice did not find Laravel migrations, a configured source DB, or SQL dumps.\n".
+                    "It will NOT silently use the target application database.\n\n".
+                    "Fix one of:\n".
+                    "  1. Point --source-database= / --source-host= / --source-username= at the LEGACY database\n".
+                    "  2. Or --source-connection=name from config/database.php\n".
+                    "  3. Or place MySQL schema dumps (*.sql with CREATE TABLE) under the source tree\n".
+                    "  4. For Laravel sources, ensure database/migrations exists\n".
+                    "  5. Dev only: LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true (discouraged)\n"
+                );
             }
         }
 
@@ -184,6 +225,7 @@ class SlicePortService
         $mappingResult = $this->buildSliceMapping($classified, $domain);
         $sliceMapping = $mappingResult['mapping'];
         $unmappedPivots = $mappingResult['unmapped_pivots'];
+        $sliceMapping = $this->applyPersonaNavigationToMapping($sliceMapping);
 
         $studioSlices = $this->buildStudioSlices($sliceMapping, $tables, $domain, [
             'multitenant' => $tenancy['enabled'],
@@ -338,50 +380,72 @@ class SlicePortService
      */
     public function detectModuleForSlice(string $sliceName, string $primaryTable): string
     {
+        // Demo-aligned short module labels (Worksuite-class sidebar: Work, Finance, HR, …)
+        // Domain namespace stays ERP; navigation.group is the collapsible sidebar section.
         $directMap = [
             'Projects' => 'Work',
             'Tasks' => 'Work',
             'Contracts' => 'Work',
             'ProjectTimeLogs' => 'Work',
             'TimeLogs' => 'Work',
+            'Timelogs' => 'Work',
+            'Milestones' => 'Work',
+            'SubTasks' => 'Work',
+            'Taskboards' => 'Work',
 
-            'Leads' => 'SalesCRM',
-            'Deals' => 'SalesCRM',
-            'ClientDetails' => 'SalesCRM',
-            'Clients' => 'SalesCRM',
+            'Leads' => 'CRM',
+            'Deals' => 'CRM',
+            'ClientDetails' => 'CRM',
+            'Clients' => 'CRM',
+            'ClientContacts' => 'CRM',
+            'Contacts' => 'CRM',
+            'Companies' => 'CRM',
 
-            'Invoices' => 'FinancialAccounting',
-            'Payments' => 'FinancialAccounting',
-            'Estimates' => 'FinancialAccounting',
-            'Proposals' => 'FinancialAccounting',
-            'CreditNotes' => 'FinancialAccounting',
-            'Expenses' => 'FinancialAccounting',
-            'BankAccounts' => 'FinancialAccounting',
+            'Invoices' => 'Finance',
+            'Payments' => 'Finance',
+            'Estimates' => 'Finance',
+            'Proposals' => 'Finance',
+            'CreditNotes' => 'Finance',
+            'Creditnotes' => 'Finance',
+            'Expenses' => 'Finance',
+            'BankAccounts' => 'Finance',
+            'Recurrings' => 'Finance',
+            'Taxes' => 'Finance',
+            'ItemTaxes' => 'Finance',
+            'TransactionTaxes' => 'Finance',
 
-            'EmployeeDetails' => 'HumanCapital',
-            'Employees' => 'HumanCapital',
-            'Attendances' => 'HumanCapital',
-            'Attendance' => 'HumanCapital',
-            'Leaves' => 'HumanCapital',
-            'EmployeeShiftSchedules' => 'HumanCapital',
-            'ShiftRoster' => 'HumanCapital',
-            'Teams' => 'HumanCapital',
-            'Departments' => 'HumanCapital',
-            'Designations' => 'HumanCapital',
-            'Appreciations' => 'HumanCapital',
+            'EmployeeDetails' => 'HR',
+            'Employees' => 'HR',
+            'Attendances' => 'HR',
+            'Attendance' => 'HR',
+            'Leaves' => 'HR',
+            'EmployeeShiftSchedules' => 'HR',
+            'ShiftRoster' => 'HR',
+            'Teams' => 'HR',
+            'Departments' => 'HR',
+            'Designations' => 'HR',
+            'Appreciations' => 'HR',
+            'Holidays' => 'HR',
 
-            'Products' => 'SupplyChain',
-            'Orders' => 'SupplyChain',
+            'Products' => 'Orders',
+            'Orders' => 'Orders',
+            'OrderItems' => 'Orders',
 
-            'Tickets' => 'ServiceDesk',
-            'Events' => 'ServiceDesk',
-            'Notices' => 'ServiceDesk',
-            'KnowledgeBases' => 'ServiceDesk',
+            'Tickets' => 'Tickets',
+            'Events' => 'Events',
+            'Notices' => 'HR',
+            'NoticeTitles' => 'Settings',
+            'KnowledgeBases' => 'Tickets',
 
-            'UsersChat' => 'Operations',
-            'Messages' => 'Operations',
-            'StickyNotes' => 'Operations',
+            'UsersChat' => 'Messages',
+            'Messages' => 'Messages',
+            'StickyNotes' => 'Messages',
 
+            'Categories' => 'Settings',
+            'Accounts' => 'Finance',
+            'BillHistories' => 'Finance',
+            'Dashboards' => 'Settings',
+            'Documents' => 'Settings',
             'GlobalSettings' => 'Settings',
             'Settings' => 'Settings',
         ];
@@ -391,14 +455,15 @@ class SlicePortService
         }
 
         $clusters = [
-            'FinancialAccounting' => ['invoice', 'payment', 'expense', 'estimate', 'credit_note', 'tax', 'bank', 'currency', 'transaction', 'recurring', 'quotation', 'subscription'],
-            'HumanCapital' => ['employee', 'attendance', 'leave', 'holiday', 'shift', 'designation', 'department', 'appreciation', 'award', 'emergency_contact', 'passport', 'visa'],
-            'SalesCRM' => ['lead', 'deal', 'proposal', 'pipeline', 'client', 'contract', 'leadboard'],
-            'Work' => ['project', 'task', 'timelog', 'time_log', 'milestone', 'sub_task', 'taskboard'],
-            'SupplyChain' => ['product', 'order', 'cart', 'item', 'inventory', 'warehouse', 'vendor'],
-            'ServiceDesk' => ['ticket', 'discussion', 'knowledge', 'faq', 'event', 'notice'],
-            'Settings' => ['company', 'setting', 'theme', 'role', 'permission', 'custom_field', 'custom_link', 'log', 'backup', 'translate', 'language', 'social_auth', 'pusher', 'slack'],
-            'ReferenceData' => ['countries', 'currencies', 'master_data', 'reference_data'],
+            'Work' => ['project', 'task', 'timelog', 'time_log', 'milestone', 'sub_task', 'taskboard', 'contract'],
+            'CRM' => ['lead', 'deal', 'client', 'contact', 'company', 'prospect'],
+            'Finance' => ['invoice', 'payment', 'expense', 'estimate', 'credit_note', 'tax', 'bank', 'currency', 'transaction', 'recurring', 'quotation', 'subscription', 'bill', 'account'],
+            'HR' => ['employee', 'attendance', 'leave', 'shift', 'department', 'designation', 'holiday', 'appreciation', 'team', 'notice'],
+            'Orders' => ['product', 'order', 'sku', 'cart'],
+            'Tickets' => ['ticket', 'knowledge'],
+            'Events' => ['event', 'calendar'],
+            'Messages' => ['message', 'chat', 'sticky'],
+            'Settings' => ['setting', 'config', 'dashboard', 'document', 'category', 'custom_field'],
         ];
 
         $lower = strtolower($sliceName . '_' . $primaryTable);
@@ -489,12 +554,14 @@ class SlicePortService
                         default => 'string',
                     };
 
+                    $nullable = (bool) ($f['nullable'] ?? true);
                     $generatorFields[] = [
                         'name' => $fName,
                         'label' => $f['label'],
                         'type' => $type,
-                        'nullable' => true,
-                        'rules' => ['nullable'],
+                        'nullable' => $nullable,
+                        'required' => ! $nullable,
+                        'rules' => $nullable ? ['nullable'] : ['required'],
                     ];
                 }
 
@@ -506,8 +573,15 @@ class SlicePortService
                     'multitenant' => $multitenant,
                     'tenant_key' => $tenantKey,
                     'description' => $info['description'] ?? "Vertical slice for {$sliceName}",
-                    // v1.6.2: Generate canonical ui: block from real inspected fields
-                    'ui' => $this->buildUiFromInspectedFields($sliceName, $fields, $tenantKey),
+                    // v1.6.2: Generate canonical ui: block from real inspected fields + workflow bulk_actions
+                    'ui' => $this->buildUiFromInspectedFields(
+                        $sliceName,
+                        $fields,
+                        $tenantKey,
+                        [],
+                        $workflowConfigs[$sliceName] ?? null,
+                        $sourcePath ?: null
+                    ),
                     // Workflow: pass detected state machine to generator
                     'workflowConfig' => $workflowConfigs[$sliceName] ?? null,
                 ];
@@ -793,7 +867,7 @@ PHP;
             }
 
             foreach ($tableNames as $t) {
-                if (in_array($t, ['migrations', 'failed_jobs', 'personal_access_tokens', 'jobs', 'cache', 'sessions'], true)) {
+                if (in_array(strtolower($t), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                     continue;
                 }
 
@@ -869,7 +943,103 @@ PHP;
         return $tables;
     }
 
+    /**
+     * Parse CREATE TABLE statements from SQL dumps under the source tree
+     * (Dolibarr install/mysql, WordPress schema, generic mysqldump, etc.).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function extractTablesFromSqlDumps(string $sourcePath): array
+    {
+        $tables = [];
+        $roots = [
+            $sourcePath,
+            $sourcePath.DIRECTORY_SEPARATOR.'install',
+            $sourcePath.DIRECTORY_SEPARATOR.'install'.DIRECTORY_SEPARATOR.'mysql',
+            $sourcePath.DIRECTORY_SEPARATOR.'htdocs'.DIRECTORY_SEPARATOR.'install'.DIRECTORY_SEPARATOR.'mysql',
+            $sourcePath.DIRECTORY_SEPARATOR.'sql',
+            $sourcePath.DIRECTORY_SEPARATOR.'database',
+            $sourcePath.DIRECTORY_SEPARATOR.'schema',
+        ];
+
+        $files = [];
+        foreach ($roots as $root) {
+            if (! is_dir($root) && ! is_file($root)) {
+                continue;
+            }
+            if (is_file($root) && str_ends_with(strtolower($root), '.sql')) {
+                $files[] = $root;
+                continue;
+            }
+            if (! is_dir($root)) {
+                continue;
+            }
+            foreach (glob($root.DIRECTORY_SEPARATOR.'*.sql') ?: [] as $f) {
+                $files[] = $f;
+            }
+            // one level deeper
+            foreach (glob($root.DIRECTORY_SEPARATOR.'*'.DIRECTORY_SEPARATOR.'*.sql') ?: [] as $f) {
+                $files[] = $f;
+            }
+        }
+        $files = array_values(array_unique($files));
+        if ($files === []) {
+            return [];
+        }
+
+        foreach ($files as $file) {
+            $content = @file_get_contents($file);
+            if ($content === false || $content === '') {
+                continue;
+            }
+            // CREATE TABLE `llx_societe` or CREATE TABLE IF NOT EXISTS foo
+            if (! preg_match_all(
+                '/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?([a-zA-Z0-9_]+)[`"]?\s*\(/i',
+                $content,
+                $m,
+                PREG_OFFSET_CAPTURE
+            )) {
+                continue;
+            }
+            foreach ($m[1] as $i => $match) {
+                $tableName = $match[0];
+                $start = $match[1];
+                $end = ($i + 1 < count($m[1])) ? $m[1][$i + 1][1] : min(strlen($content), $start + 8000);
+                $block = substr($content, $start, $end - $start);
+                $cols = [];
+                $fks = [];
+                // column lines: `name` type
+                if (preg_match_all('/^\s*[`"]([a-zA-Z0-9_]+)[`"]\s+([a-zA-Z0-9_()]+)/mi', $block, $cm, PREG_SET_ORDER)) {
+                    foreach ($cm as $c) {
+                        $colName = $c[1];
+                        if (in_array(strtoupper($colName), ['PRIMARY', 'KEY', 'UNIQUE', 'CONSTRAINT', 'INDEX', 'FOREIGN'], true)) {
+                            continue;
+                        }
+                        $cols[] = [
+                            'name' => $colName,
+                            'type' => strtolower(preg_replace('/\(.*$/', '', $c[2]) ?: 'string'),
+                            'nullable' => ! preg_match('/\bNOT\s+NULL\b/i', $c[0] ?? ''),
+                        ];
+                        if (str_ends_with($colName, '_id') && ! in_array($colName, ['id', 'uuid'], true)) {
+                            $fks[] = $colName;
+                        }
+                    }
+                }
+                $tables[$tableName] = [
+                    'name' => $tableName,
+                    'columns' => $cols,
+                    'foreign_keys' => array_values(array_unique($fks)),
+                    'migration' => basename($file),
+                    'table_source' => 'sql_dump',
+                ];
+            }
+        }
+
+        return $tables;
+    }
+
     private function extractTablesFromMigrations(string $migDir): array
+
     {
         $tables = [];
         if (! File::isDirectory($migDir)) {
@@ -891,6 +1061,9 @@ PHP;
             $count = count($createMatches[0]);
             for ($i = 0; $i < $count; $i++) {
                 $tableName = $createMatches[1][$i][0];
+                if (in_array(strtolower($tableName), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
+                    continue;
+                }
                 $startPos = $createMatches[0][$i][1];
                 $endPos = ($i + 1 < $count) ? $createMatches[0][$i + 1][1] : strlen($content);
                 $blockContent = substr($content, $startPos, $endPos - $startPos);
@@ -938,7 +1111,7 @@ PHP;
         try {
             $dbTables = Schema::getTableListing();
             foreach ($dbTables as $t) {
-                if (in_array($t, ['migrations', 'failed_jobs', 'personal_access_tokens'], true)) {
+                if (in_array(strtolower($t), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                     continue;
                 }
                 $cols = [];
@@ -964,18 +1137,49 @@ PHP;
         return $tables;
     }
 
+    /**
+     * Convert a physical table name to a slice class name, stripping known prefixes.
+     * e.g. llx_categorie_warehouse → CategorieWarehouse (with strip llx_)
+     */
+    public function tableToSliceName(string $tableName): string
+    {
+        $name = $tableName;
+        $prefixes = config('laraslice.porting.strip_table_prefixes', ['llx_', 'wp_', 'wp']);
+        if (! is_array($prefixes)) {
+            $prefixes = array_filter(array_map('trim', explode(',', (string) $prefixes)));
+        }
+        // Longest first so llx_ wins over llx
+        usort($prefixes, fn ($a, $b) => strlen((string) $b) <=> strlen((string) $a));
+        $lower = strtolower($name);
+        foreach ($prefixes as $prefix) {
+            $p = strtolower((string) $prefix);
+            if ($p !== '' && str_starts_with($lower, $p)) {
+                $name = substr($name, strlen((string) $prefix));
+                break;
+            }
+        }
+        $name = trim($name, '_');
+        if ($name === '') {
+            $name = $tableName;
+        }
+
+        return \Illuminate\Support\Str::studly($name);
+    }
+
     private function classifyTables(array $tables): array
+
     {
         $classified = [
             'roots' => [],
             'children' => [],
             'taxonomies' => [],
+            'settings' => [],
             'pivots' => [],
             'system' => [],
         ];
 
-        $taxonomyPattern = '/(types?|natures?|statuse?s?|modes?|regions?|genders?|provinces?|districts?|tehsils?|categories?|faqs?|priorities?|currencies?|departments?|designations?|grades?|units?|sources?|stages?|channels?)$/i';
-        $systemPattern = '/^(users|user_profiles|roles|permissions|otps|sms_logs|activity_logs|api_logs|api_users|jobs|cache|notifications|personal_access_tokens|failed_jobs|sessions|password_resets|telescope_|pulse_)/i';
+        $taxonomyPattern = '/(types?|natures?|statuse?s?|modes?|regions?|genders?|provinces?|districts?|tehsils?|categories?|faqs?|priorities?|currencies?|departments?|designations?|grades?|units?|sources?|stages?|channels?|concerned_organizations?)$/i';
+        $systemPattern = '/^(users|user_profiles|roles|permissions|otps|sms_logs|activity_logs|api_logs|api_users|jobs|job_batches|failed_jobs|cache|cache_locks|sessions|notifications|personal_access_tokens|password_resets?(_tokens)?|telescope_|pulse_|horizon_)/i';
 
         // 1. Calculate in-degrees (foreign key references from other tables)
         $inDegrees = [];
@@ -985,7 +1189,7 @@ PHP;
             $knownTableSingulars[Str::singular($tName)] = $tName;
         }
 
-        $ignoredInDegreeKeys = ['company', 'tenant', 'organization', 'account', 'user', 'created_by', 'updated_by', 'deleted_by', 'status', 'type', 'currency'];
+        $ignoredInDegreeKeys = ['company', 'tenant', 'organization', 'account', 'user', 'created_by', 'updated_by', 'deleted_by', 'status', 'type', 'currency', 'from_user', 'to_user'];
 
         foreach ($tables as $tName => $tInfo) {
             foreach ($tInfo['foreign_keys'] as $fk) {
@@ -1000,56 +1204,81 @@ PHP;
             }
         }
 
+        // Canonical enterprise business entities are NEVER demoted to child or taxonomy tables
+        $canonicalRoots = [
+            'complaints', 'hearings', 'notices', 'representations', 'report_soughts', 'notice_titles',
+            'projects', 'tasks', 'contracts', 'project_time_logs',
+            'leads', 'deals', 'client_details', 'clients',
+            'invoices', 'payments', 'estimates', 'proposals', 'credit_notes', 'expenses', 'bank_accounts',
+            'employee_details', 'employees', 'attendances', 'leaves', 'employee_shift_schedules', 'teams', 'designations', 'appreciations',
+            'products', 'orders',
+            'tickets', 'events', 'knowledge_bases',
+            'users_chat', 'sticky_notes',
+        ];
+
         // 2. Classify each table
         foreach ($tables as $tName => $tInfo) {
-            if (preg_match($systemPattern, $tName)) {
+            if (preg_match($systemPattern, $tName) || in_array(strtolower($tName), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                 $classified['system'][$tName] = $tInfo;
                 continue;
             }
 
-            // Pivot table detection: tenant/audit keys are not relationship FKs,
-            // so a line-item table like invoice_items (invoice_id + company_id)
-            // must not be misclassified as a pivot.
-            $tenantFkPattern = '/^(company_id|tenant_id|organization_id|created_by|updated_by)$/';
+            // Settings hub: configuration tables must never become sidebar roots
+            $settingsExact = [
+                'global_settings', 'company_settings', 'theme_settings', 'language_settings',
+                'social_auth_settings', 'file_storage_settings', 'company_addresses',
+                'log_time_for', 'custom_fields', 'custom_field_groups', 'custom_links',
+            ];
+            if (
+                str_ends_with($tName, '_settings')
+                || str_contains($tName, 'custom_field')
+                || (str_contains($tName, 'backup') && ! str_contains($tName, 'employee'))
+                || in_array($tName, $settingsExact, true)
+            ) {
+                $classified['settings'][$tName] = $tInfo;
+                continue;
+            }
+
+            // Pivot table detection: tenant, audit, and actor keys are not relationship FKs.
+            // Furthermore, a table is only a pure pivot if it has NO domain/operational columns.
+            $actorOrTenantFkPattern = '/^(company_id|tenant_id|organization_id|account_id|created_by|updated_by|user_id|from_user_id|to_user_id|assigned_to|assigned_by|actor_id)$/';
             $relationshipFks = array_values(array_filter(
                 $tInfo['foreign_keys'],
-                fn ($fk) => ! preg_match($tenantFkPattern, $fk)
+                fn ($fk) => ! preg_match($actorOrTenantFkPattern, $fk)
             ));
-            if (str_contains($tName, '__') || (count($relationshipFks) >= 2 && count($tInfo['columns']) <= 5)) {
+
+            $nonFkColumns = array_filter($tInfo['columns'] ?? [], function($c) {
+                $cn = is_array($c) ? ($c['name'] ?? '') : ($c->name ?? '');
+                return !in_array($cn, ['id', 'created_at', 'updated_at', 'deleted_at'], true) && !str_ends_with($cn, '_id');
+            });
+
+            $pivotExact = ['role_user', 'permission_role', 'model_has_roles', 'model_has_permissions', 'role_has_permissions', 'user_role', 'role_permission'];
+            if (
+                str_contains($tName, '__')
+                || in_array($tName, $pivotExact, true)
+                || (count($relationshipFks) >= 2 && count($nonFkColumns) === 0)
+            ) {
                 $classified['pivots'][$tName] = $tInfo;
                 continue;
             }
 
-            // High incoming reference roots should never be taxonomies even if named categories/types
-            $hasHighInbound = ($inDegrees[$tName] ?? 0) >= 3;
+            $isCanonicalRoot = in_array($tName, $canonicalRoots, true);
 
-            // Taxonomy detection
-            if (! $hasHighInbound && preg_match($taxonomyPattern, $tName)) {
+            // Taxonomy detection: lookup tables match taxonomy pattern
+            if (! $isCanonicalRoot && preg_match($taxonomyPattern, $tName)) {
                 $classified['taxonomies'][$tName] = $tInfo;
                 continue;
             }
 
-            // Canonical enterprise business entities are NEVER demoted to child tables
-            $canonicalRoots = [
-                'projects', 'tasks', 'contracts', 'project_time_logs',
-                'leads', 'deals', 'client_details',
-                'invoices', 'payments', 'estimates', 'proposals', 'credit_notes', 'expenses', 'bank_accounts',
-                'employee_details', 'attendances', 'leaves', 'employee_shift_schedules', 'teams', 'designations', 'appreciations',
-                'products', 'orders',
-                'tickets', 'events', 'notices', 'knowledge_bases',
-                'users_chat', 'sticky_notes',
-                'global_settings',
-            ];
-
             // Determine if table is a child entity of an existing root
             $isChild = false;
-            if (! in_array($tName, $canonicalRoots, true)) {
+            if (! $isCanonicalRoot) {
                 foreach ($tInfo['foreign_keys'] as $fk) {
                     $base = preg_replace('/_id$/', '', $fk);
                     if (in_array($base, $ignoredInDegreeKeys, true)) {
                         continue;
                     }
-                    if (isset($knownTableSingulars[$base]) && $knownTableSingulars[$base] !== $tName) {
+                    if (isset($knownTableSingulars[$base])) {
                         $parentTable = $knownTableSingulars[$base];
                         if (($inDegrees[$parentTable] ?? 0) > ($inDegrees[$tName] ?? 0)) {
                             $isChild = true;
@@ -1076,12 +1305,30 @@ PHP;
 
         // 1. Core Primary Roots
         foreach ($classified['roots'] as $rName => $rInfo) {
-            $sliceName = Str::studly($rName);
+            $sliceName = $this->tableToSliceName($rName);
             $mapping[$sliceName] = [
                 'type' => 'aggregate_root',
                 'primary_table' => $rName,
                 'child_tables' => [],
                 'description' => "Manages {$rName} records and associated child items",
+            ];
+        }
+
+        // 1b. Settings hub — single slice, never N sidebar entries for *_settings tables
+        if (! empty($classified['settings'])) {
+            $settingsNames = array_keys($classified['settings']);
+            sort($settingsNames);
+            $primarySettings = in_array('global_settings', $settingsNames, true)
+                ? 'global_settings'
+                : $settingsNames[0];
+            $childrenSettings = array_values(array_filter($settingsNames, fn ($n) => $n !== $primarySettings));
+            $mapping['Settings'] = [
+                'type' => 'settings_hub',
+                'primary_table' => $primarySettings,
+                'child_tables' => $childrenSettings,
+                'description' => 'Unified Settings Hub — configuration, themes, integrations, custom fields',
+                'nav_group' => 'Settings',
+                'nav_order' => 90,
             ];
         }
 
@@ -1144,23 +1391,26 @@ PHP;
             // Fallback 2: Bundle auxiliary settings into the Settings hub instead of polluting the sidebar
             if (! $attached) {
                 if (str_ends_with($cName, '_settings') || str_contains($cName, 'backup') || str_contains($cName, 'custom_field') || in_array($cName, ['log_time_for', 'language_settings', 'company_addresses', 'social_auth_settings', 'file_storage_settings', 'theme_settings'], true)) {
-                    $settingsSlice = 'GlobalSettings';
+                    $settingsSlice = 'Settings';
                     if (! isset($mapping[$settingsSlice])) {
                         $mapping[$settingsSlice] = [
-                            'type' => 'aggregate_root',
-                            'primary_table' => 'global_settings',
+                            'type' => 'settings_hub',
+                            'primary_table' => $cName,
                             'child_tables' => [],
-                            'description' => 'Unified Enterprise Settings Hub',
+                            'description' => 'Unified Settings Hub — configuration, themes, integrations',
+                            'nav_group' => 'Settings',
+                            'nav_order' => 90,
                         ];
+                    } else {
+                        $mapping[$settingsSlice]['child_tables'][] = $cName;
                     }
-                    $mapping[$settingsSlice]['child_tables'][] = $cName;
                     $attached = true;
                 }
             }
 
             // If still unattached, promote to its own slice rather than force-bundling into unrelated slices
             if (! $attached) {
-                $sliceName = Str::studly($cName);
+                $sliceName = $this->tableToSliceName($cName);
                 $mapping[$sliceName] = [
                     'type' => 'aggregate_root',
                     'primary_table' => $cName,
@@ -1402,13 +1652,18 @@ PHP;
                 $inputType = 'tel';
             }
 
+            // Respect DB nullability; identity fields default required when unknown
+            $isNullable = array_key_exists('nullable', $col) ? (bool) $col['nullable'] : true;
+            if (! array_key_exists('nullable', $col) && in_array($cName, ['title', 'name', 'email', 'code', 'invoice_number', 'project_name', 'heading', 'subject'], true)) {
+                $isNullable = false;
+            }
             $fields[] = [
                 'handle' => $cName,
                 'label' => Str::headline($cName),
                 'type' => $studioType,
                 'input_type' => $inputType,
-                'required' => false,
-                'nullable' => true,
+                'required' => ! $isNullable,
+                'nullable' => $isNullable,
                 'width' => in_array($inputType, ['textarea', 'file']) ? 100 : 50,
                 'optionsText' => '',
             ];
@@ -1545,7 +1800,7 @@ PHP;
                         ['slug' => 'submit', 'name' => 'Submit', 'from' => ['draft'], 'to' => 'pending', 'target_role' => 'manager'],
                         ['slug' => 'start', 'name' => 'Start', 'from' => ['pending'], 'to' => 'in_progress', 'target_role' => 'manager'],
                         ['slug' => 'complete', 'name' => 'Complete', 'from' => ['in_progress'], 'to' => 'completed', 'target_role' => 'admin'],
-                        ['slug' => 'cancel', 'name' => 'Cancel', 'from' => ['draft', 'pending', 'in_progress'], 'to' => 'cancelled', 'target_role' => 'admin'],
+                        ['slug' => 'cancel', 'name' => 'Cancel', 'from' => ['draft', 'pending', 'in_progress'], 'to' => 'cancelled', 'target_role' => 'admin', 'requires_remarks' => true],
                     ],
                 ];
             }
@@ -1631,16 +1886,39 @@ PHP;
                 'models' => $models,
                 'workflow' => $workflow,
                 'roles' => $roles,
-                'navigation' => [
+                'navigation' => array_merge([
                     'label' => $sliceName,
                     'icon' => $icon,
-                    'group' => $domain,
+                    // Module group (Work/Finance/HR) — not the ERP domain namespace
+                    'group' => $info['module'] ?? $info['navigation']['group'] ?? $this->detectModuleForSlice($sliceName, $primaryTable),
                     'route' => Str::slug($domain) . '/' . Str::slug($sliceHandle),
                     // Akaunting-style: numeric ordering for easy insertion, permission-gated
                     'order' => $info['nav_order'] ?? 50,
                     'permission' => Str::snake(Str::singular($sliceName)).'.view',
-                ],
+                    'visible' => true,
+                ], is_array($info['navigation'] ?? null) ? $info['navigation'] : []),
             ];
+
+            // Prefer module group from persona mapping when present
+            if (! empty($info['navigation']['group'])) {
+                $blueprintObj['navigation']['group'] = $info['navigation']['group'];
+            }
+            if (! empty($info['navigation']['roles'])) {
+                $blueprintObj['navigation']['roles'] = $info['navigation']['roles'];
+            }
+            if (isset($info['navigation']['visible'])) {
+                $blueprintObj['navigation']['visible'] = (bool) $info['navigation']['visible'];
+            }
+
+            // Attach real UI from inspected fields (views, dashboard, money_breakdown)
+            $blueprintObj['ui'] = $this->buildUiFromInspectedFields(
+                $sliceName,
+                $primaryFields,
+                $tenantKey,
+                $rootRelations,
+                is_array($workflow) ? $workflow : null,
+                $inspection['source_path'] ?? ($sourcePath ?? null)
+            );
 
             // 7. Generate Slice YAML representation
             $sourceYaml = Yaml::dump($blueprintObj, 8, 2);
@@ -1661,7 +1939,7 @@ PHP;
     /**
      * Generate complete unified domain blueprint YAML.
      */
-    public function generateDomainBlueprintYaml(array $studioSlices, string $domain, array $inspection): string
+    public function generateDomainBlueprintYaml(array $studioSlices, string $domain, array $inspection = []): string
     {
         $domainData = [
             // NOTE: This is a PORT ANALYSIS REPORT, not an appliable blueprint.
@@ -1671,13 +1949,13 @@ PHP;
             'kind' => 'laraslice-port-analysis-report',
             'schema_version' => 1,
             'domain' => $domain,
-            'source_application' => basename($inspection['source_path']),
-            'total_tables' => $inspection['total_tables'],
+            'source_application' => basename($inspection['source_path'] ?? 'legacy-app'),
+            'total_tables' => $inspection['total_tables'] ?? count($studioSlices),
             'total_slices' => count($studioSlices),
             'tenancy' => $inspection['tenancy'] ?? ['enabled' => false],
             'generated_at' => date('Y-m-d H:i:s'),
             'slices' => array_map(function($s) {
-                return $s['blueprint'];
+                return $s['blueprint'] ?? $s;
             }, $studioSlices),
         ];
 
@@ -1691,10 +1969,125 @@ PHP;
      * Analyze source system's navigation structure.
      * Detects how the source groups menu items (dropdowns, order, icons, permissions).
      */
-    public function analyzeSourceNavigation(string $sourcePath): array
+    
+    /**
+     * Merge proposed module sidebar with authentic source navigation (legacy menu.blade / x-menu-item sidebars).
+     *
+     * @param  list<array<string, mixed>>  $proposedGroups
+     * @return array<string, mixed>
+     */
+
+    /**
+     * Remove non-product chrome from sidebar preview (theme toggle, profile invite, etc.).
+     *
+     * @param  list<array<string, mixed>>  $groups
+     * @return list<array<string, mixed>>
+     */
+    protected function filterSidebarPreviewNoise(array $groups): array
+    {
+        $noiseLabels = [
+            'profile', 'dark theme', 'light theme', 'invite member', 'invite team',
+            'theme settings', 'logout', 'sign out', 'change password', 'my profile',
+            'language', 'locale',
+        ];
+        $out = [];
+        foreach ($groups as $g) {
+            $items = [];
+            foreach ($g['items'] ?? [] as $item) {
+                $label = strtolower(trim((string) ($item['label'] ?? '')));
+                $route = strtolower((string) ($item['route'] ?? ''));
+                $skip = false;
+                foreach ($noiseLabels as $n) {
+                    if ($label === $n || str_contains($label, $n) || str_contains($route, 'theme') || str_contains($route, 'profile/dark')) {
+                        $skip = true;
+                        break;
+                    }
+                }
+                if (! $skip) {
+                    $items[] = $item;
+                }
+            }
+            if ($items === [] && empty($g['route'])) {
+                continue;
+            }
+            $g['items'] = $items;
+            $out[] = $g;
+        }
+
+        return $out;
+    }
+
+    protected function buildSidebarPreviewForPlan(string $domain, array $proposedGroups, string $sourcePath): array
+    {
+        $sourceNav = $this->analyzeSourceNavigation($sourcePath);
+        $sourceGroups = $sourceNav['groups'] ?? [];
+
+        $previewGroups = $proposedGroups;
+        if (! empty($sourceGroups)) {
+            $previewGroups = [];
+            foreach ($sourceGroups as $g) {
+                $items = [];
+                foreach ($g['children'] ?? [] as $c) {
+                    $items[] = [
+                        'label' => $c['label'] ?? 'Item',
+                        'icon' => $c['icon'] ?? 'circle',
+                        'route' => $c['route'] ?? '#',
+                        'slice' => $c['slice'] ?? null,
+                        'badge' => null,
+                        'description' => null,
+                    ];
+                }
+                if ($items === [] && ! empty($g['route'])) {
+                    $items[] = [
+                        'label' => $g['label'] ?? $g['name'] ?? 'Item',
+                        'icon' => $g['icon'] ?? 'circle',
+                        'route' => $g['route'],
+                        'slice' => $g['slice'] ?? null,
+                    ];
+                }
+                $previewGroups[] = [
+                    'name' => $g['label'] ?? $g['name'] ?? 'Group',
+                    'icon' => $g['icon'] ?? 'folder',
+                    'collapsible' => ($g['type'] ?? '') === 'dropdown',
+                    'default_open' => true,
+                    'modules' => $g['modules'] ?? [],
+                    'permissions' => $g['permissions'] ?? [],
+                    'items' => $items,
+                ];
+            }
+            $hasDash = false;
+            foreach ($previewGroups as $pg) {
+                foreach ($pg['items'] ?? [] as $it) {
+                    if (str_contains(strtolower((string) ($it['route'] ?? '')), 'dashboard')) {
+                        $hasDash = true;
+                        break 2;
+                    }
+                }
+            }
+            if (! $hasDash && isset($proposedGroups[0])) {
+                array_unshift($previewGroups, $proposedGroups[0]);
+            }
+        }
+
+        // Drop profile/theme/invite chrome that is not product navigation
+        $previewGroups = $this->filterSidebarPreviewNoise($previewGroups);
+
+        return [
+            'title' => "{$domain} Enterprise Navigation",
+            'theme' => 'BlatUI Dashboard-01',
+            'groups' => $previewGroups,
+            'source_navigation' => $sourceNav,
+            'navigation_note' => ! empty($sourceGroups)
+                ? 'Sidebar compiled from source menu (x-menu-item / blade). Module gates and permissions preserved for Studio customization.'
+                : 'Source menu not detected — sidebar derived from slice modules. Point --source-path at the legacy app root for 1:1 nav.',
+        ];
+    }
+
+public function analyzeSourceNavigation(string $sourcePath): array
     {
         $navigation = [
             'groups' => [],
+            'contexts' => [],
             'source' => 'not_detected',
         ];
 
@@ -1732,12 +2125,13 @@ PHP;
             }
         }
 
-        // Strategy 3: Blade sidebar with hardcoded links
+        // Strategy 3: Blade sidebar with hardcoded links & role-based items
         if (empty($navigation['groups'])) {
-            $groups = $this->parseBladeNavigation($sourcePath);
-            if (! empty($groups)) {
+            $bladeNav = $this->parseBladeNavigation($sourcePath);
+            if (! empty($bladeNav['items'])) {
                 $navigation['source'] = 'blade_templates';
-                $navigation['groups'] = $groups;
+                $navigation['groups'] = $bladeNav['items'];
+                $navigation['contexts'] = $bladeNav['contexts'];
             }
         }
 
@@ -1751,54 +2145,25 @@ PHP;
     {
         $groups = [];
 
-        // Match: $menu->route('route.name', $title, [], ORDER, ['icon' => 'xxx'])
-        // Match: $menu->dropdown($title, function..., ORDER, ['icon' => 'xxx'])
-        // Titles are often trans() calls, so we extract the variable assignment above
-
-        // First, extract title assignments: $title = trim(trans_choice('general.xxx', 2));
-        $titles = [];
-        if (preg_match_all("/\\\$title\s*=\s*trim\(\s*trans_choice?\(\s*['\"]([^'\"]+)['\"]/", $content, $tm)) {
-            foreach ($tm[1] as $idx => $transKey) {
-                // Extract the last part: 'general.invoices' -> 'invoices'
-                $parts = explode('.', $transKey);
-                $titles[$idx] = ucfirst(end($parts));
-            }
-        }
-
         // Match menu items with order and icon
-        // Pattern: $menu->route('xxx', $title, [], ORDER, ['icon' => 'yyy'])
-        if (preg_match_all("/\\\$menu->(route|dropdown)\(\s*['\"]([^'\"]+)['\"]\s*,\s*\\\$title\s*,\s*\[\]\s*,\s*(\d+)\s*,\s*\[[^\]]*'icon'\s*=>\s*['\"]([^'\"]+)['\"]/", $content, $matches, PREG_SET_ORDER)) {
-            $titleIdx = 0;
+        if (preg_match_all('/\$menu->(route|dropdown)\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*\$title\s*,\s*\[\]\s*,\s*(\d+)\s*,\s*\[[^\]]*\'icon\'\s*=>\s*[\'"]([^\'"]+)[\'"]/', $content, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $m) {
-                $type = $m[1]; // route or dropdown
+                $type = $m[1];
                 $route = $m[2];
                 $order = (int) $m[3];
                 $icon = $m[4];
-                $label = $titles[$titleIdx] ?? ucfirst($route);
-                $titleIdx++;
-
-                // Check if it's a dropdown (has sub-items)
-                $children = [];
-                if ($type === 'dropdown') {
-                    // Extract sub-items: $sub->route('xxx', $title, [], ORDER, $attr)
-                    // This is simplified — full parsing would need AST
-                    $children = ['_has_children' => true];
-                }
-
                 $groups[] = [
-                    'label' => $label,
+                    'label' => ucfirst($route),
                     'route' => $route,
                     'order' => $order,
                     'icon' => $icon,
                     'type' => $type,
-                    'children' => $children,
+                    'children' => [],
                 ];
             }
         }
 
-        // Sort by order
         usort($groups, fn($a, $b) => $a['order'] <=> $b['order']);
-
         return $groups;
     }
 
@@ -1810,7 +2175,6 @@ PHP;
         $groups = [];
         try {
             $config = include $configFile;
-            // Config format varies — try common patterns
             if (isset($config['items']) && is_array($config['items'])) {
                 foreach ($config['items'] as $idx => $item) {
                     $groups[] = [
@@ -1829,48 +2193,328 @@ PHP;
     }
 
     /**
-     * Parse Blade templates for hardcoded navigation.
+     * Parse Blade component menus (x-menu-item / x-sub-menu-item) (x-menu-item / x-sub-menu-item).
+     * Gated by user_modules() and $sidebarUserPermissions.
+     *
+     * @return array{groups: list<array>, contexts: list<string>}
      */
-    private function parseBladeNavigation(string $sourcePath): array
+    private function parseXMenuItemBlade(string $rawContent, string $context, string $filePath): array
     {
         $groups = [];
-        $sidebarFiles = [];
+        $contexts = [$context];
 
-        // Find sidebar/nav Blade files
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($sourcePath.'/resources/views', FilesystemIterator::SKIP_DOTS)
-        );
+        // Parent menu blocks: <x-menu-item icon="..." :text="__('app.menu.xxx')"> ... </x-menu-item>
+        // Non-greedy body until closing tag (approximate; nested components are sub-items only)
+        $parentPattern = '/<x-menu-item\b([^>]*)>(.*?)<\/x-menu-item>/is';
+        if (! preg_match_all($parentPattern, $rawContent, $parents, PREG_SET_ORDER)) {
+            // Single-level links only
+            $parents = [];
+        }
 
-        foreach ($iterator as $file) {
-            $filename = strtolower($file->getFilename());
-            if (str_contains($filename, 'sidebar') || str_contains($filename, 'nav') || str_contains($filename, 'menu')) {
-                $sidebarFiles[] = $file->getPathname();
-                if (count($sidebarFiles) >= 5) break;
+        $routeToSlice = function (string $route): string {
+            return $this->routeBaseToSliceName($route);
+        };
+
+        $labelFromTextAttr = static function (string $attrs): string {
+            if (preg_match('/:text\s*=\s*"__\(\s*[\'"]([^\'"]+)[\'"]\s*\)"/', $attrs, $m)) {
+                $key = $m[1];
+                $parts = explode('.', $key);
+
+                return \Illuminate\Support\Str::headline(str_replace(['_', '-'], ' ', end($parts)));
+            }
+            if (preg_match('/:text\s*=\s*"([^"]+)"/', $attrs, $m)) {
+                return trim($m[1]);
+            }
+            if (preg_match('/text\s*=\s*"([^"]+)"/', $attrs, $m)) {
+                return trim($m[1]);
+            }
+
+            return 'Menu';
+        };
+
+        $iconFromAttrs = static function (string $attrs): string {
+            if (preg_match('/\bicon\s*=\s*"([^"]+)"/', $attrs, $m)) {
+                return $m[1];
+            }
+
+            return 'circle';
+        };
+
+        foreach ($parents as $p) {
+            $attrs = $p[1];
+            $body = $p[2];
+            $label = $labelFromTextAttr($attrs);
+            $icon = $iconFromAttrs($attrs);
+            $children = [];
+
+            // Sub items
+            if (preg_match_all('/<x-sub-menu-item\b([^>]*)\s*\/?>/i', $body, $subs, PREG_SET_ORDER)) {
+                foreach ($subs as $s) {
+                    $sa = $s[1];
+                    $route = null;
+                    if (preg_match('/:link\s*=\s*"route\(\s*[\'"]([^\'"]+)[\'"]/', $sa, $rm)) {
+                        $route = $rm[1];
+                    } elseif (preg_match('/route\(\s*[\'"]([^\'"]+)[\'"]/', $sa, $rm)) {
+                        $route = $rm[1];
+                    }
+                    if (! $route || $route === 'logout') {
+                        continue;
+                    }
+                    $childLabel = $labelFromTextAttr($sa);
+                    $children[] = [
+                        'label' => $childLabel,
+                        'route' => $route,
+                        'slice' => $routeToSlice($route),
+                        'icon' => 'circle',
+                        'type' => 'route',
+                    ];
+                }
+            }
+
+            // Direct link on parent (no children)
+            $parentRoute = null;
+            if (preg_match('/:link\s*=\s*"route\(\s*[\'"]([^\'"]+)[\'"]/', $attrs, $rm)) {
+                $parentRoute = $rm[1];
+            }
+
+            // Module / permission hints from preceding 500 chars
+            $pos = strpos($rawContent, $p[0]);
+            $window = $pos !== false ? substr($rawContent, max(0, $pos - 600), 600) : '';
+            $modules = [];
+            if (preg_match_all('/in_array\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*user_modules\(\)/', $window, $mm)) {
+                $modules = array_values(array_unique($mm[1]));
+            }
+            $permissions = [];
+            if (preg_match_all('/\$sidebarUserPermissions\[[\'"]([^\'"]+)[\'"]\]/', $window, $pm)) {
+                $permissions = array_values(array_unique($pm[1]));
+            }
+            $roles = [];
+            if (preg_match('/in_array\(\s*[\'"]client[\'"]\s*,\s*user_roles\(\)/', $window)) {
+                // often negated for HR — mark exclude_client when !in_array('client'
+                if (preg_match('/!\s*in_array\(\s*[\'"]client[\'"]\s*,\s*user_roles\(\)/', $window)) {
+                    $roles[] = 'exclude:client';
+                }
+            }
+
+            $groups[] = [
+                'label' => $label,
+                'name' => $label,
+                'icon' => $icon,
+                'type' => ! empty($children) ? 'dropdown' : 'route',
+                'route' => $parentRoute,
+                'slice' => $parentRoute ? $routeToSlice($parentRoute) : null,
+                'children' => $children,
+                'modules' => $modules,
+                'permissions' => $permissions,
+                'roles' => $roles,
+                'context' => $context,
+                'source_file' => basename($filePath),
+            ];
+        }
+
+        // Orphan sub-menu items (if any outside parents)
+        if (empty($groups) && preg_match_all('/<x-sub-menu-item\b([^>]*)\s*\/?>/i', $rawContent, $subs, PREG_SET_ORDER)) {
+            $children = [];
+            foreach ($subs as $s) {
+                $sa = $s[1];
+                if (preg_match('/:link\s*=\s*"route\(\s*[\'"]([^\'"]+)[\'"]/', $sa, $rm)) {
+                    $route = $rm[1];
+                    $children[] = [
+                        'label' => $labelFromTextAttr($sa),
+                        'route' => $route,
+                        'slice' => $routeToSlice($route),
+                        'type' => 'route',
+                    ];
+                }
+            }
+            if ($children) {
+                $groups[] = [
+                    'label' => 'Main',
+                    'name' => 'Main',
+                    'type' => 'dropdown',
+                    'children' => $children,
+                    'context' => $context,
+                ];
             }
         }
 
-        foreach ($sidebarFiles as $file) {
-            $content = file_get_contents($file);
-            // Extract route() calls with surrounding text for labels
-            if (preg_match_all("/route\(\s*['\"]([^'\"]+)['\"]\s*\)/", $content, $m)) {
-                foreach (array_unique($m[1]) as $route) {
-                    // Skip non-navigation routes
-                    if (str_contains($route, 'create') || str_contains($route, 'edit') || str_contains($route, 'destroy')) {
-                        continue;
+        return ['groups' => $groups, 'contexts' => $contexts];
+    }
+
+    /**
+     * Parse Blade templates for authentic navigation components, human labels, and role constraints.
+     */
+    private function parseBladeNavigation(string $sourcePath): array
+    {
+        $sidebarFiles = [];
+        $viewsDir = $sourcePath . '/resources/views';
+        if (! is_dir($viewsDir)) {
+            return ['items' => [], 'contexts' => []];
+        }
+
+        // 1. Canonical sidebars + ERP-class menu.blade.php (benchmark for gated nav)
+        $candidatePatterns = [
+            $viewsDir.'/sections/menu.blade.php',
+            $viewsDir.'/sections/sidebar.blade.php',
+            $viewsDir.'/components/admin/sidebar.blade.php',
+            $viewsDir.'/components/complainant/sidebar.blade.php',
+            $viewsDir.'/components/sidebar.blade.php',
+            $viewsDir.'/layouts/sidebar.blade.php',
+            $viewsDir.'/partials/sidebar.blade.php',
+            $viewsDir.'/menu.blade.php',
+        ];
+        foreach ($candidatePatterns as $p) {
+            if (file_exists($p)) {
+                $sidebarFiles[] = $p;
+            }
+        }
+
+        if (empty($sidebarFiles)) {
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($viewsDir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $f) {
+                $fn = strtolower($f->getFilename());
+                if ((str_contains($fn, 'sidebar') || $fn === 'menu.blade.php') && str_ends_with($fn, '.blade.php')) {
+                    $sidebarFiles[] = $f->getPathname();
+                    if (count($sidebarFiles) >= 8) {
+                        break;
                     }
-                    $groups[] = [
-                        'label' => ucfirst(str_replace(['.', '_', '-'], ' ', $route)),
-                        'route' => $route,
-                        'order' => count($groups) * 10,
-                        'icon' => 'circle',
-                        'type' => 'route',
-                        'children' => [],
-                    ];
                 }
             }
         }
 
-        return array_slice($groups, 0, 20);
+        $iconMap = [
+            'dashboard' => 'layout-dashboard',
+            'complain' => 'inbox',
+            'opencomplains' => 'folder-open',
+            'order&casefiles' => 'file-signature',
+            'hearingorderprocessing' => 'file-text',
+            'hearingmanagment' => 'calendar-check',
+            'causelist' => 'calendar',
+            'decided-cases' => 'archive',
+            'notices' => 'bell',
+            'faq' => 'help-circle',
+            'usermanagment' => 'users',
+            'api' => 'cpu',
+            'activity' => 'activity',
+            'profile' => 'user',
+            'logout' => 'log-out',
+        ];
+
+        $items = [];
+        $contexts = [];
+
+        foreach ($sidebarFiles as $filePath) {
+            $rawContent = file_get_contents($filePath);
+            $context = 'admin';
+            if (str_contains(strtolower($filePath), 'complainant')) {
+                $context = 'complainant';
+            } elseif (str_contains(strtolower($filePath), 'portal') || str_contains(strtolower($filePath), 'client')) {
+                $context = 'portal';
+            }
+
+            // x-menu-item / Blat-style component menus (ERP-class benchmark)
+            if (str_contains($rawContent, 'x-menu-item') || str_contains($rawContent, 'x-sub-menu-item')) {
+                $ws = $this->parseXMenuItemBlade($rawContent, $context, $filePath);
+                foreach ($ws['groups'] as $g) {
+                    $items[] = $g;
+                }
+                if (! empty($ws['contexts'])) {
+                    $contexts = array_values(array_unique(array_merge($contexts, $ws['contexts'])));
+                }
+                if (! empty($ws['groups'])) {
+                    continue; // prefer component parse over generic <li> for this file
+                }
+            }
+
+            // Split into <li> elements with optional @if wrap
+            $liPattern = chr(47) . '(?:@if\s*\((.*?)\)\s*)?<li>\s*<a\s+[^>]*href=["\x27]{{\s*route\(\s*["\x27]([^"\x27]+)["\x27](?:\s*,\s*[^)]+)?\s*\)\s*}}["\x27][^>]*>(.*?)<\/a>\s*<\/li>(?:\s*@endif)?' . chr(47) . 's';
+            if (preg_match_all($liPattern, $rawContent, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $cond = trim($m[1] ?? '');
+                    $route = trim($m[2]);
+                    $innerHtml = $m[3];
+
+                    // Skip non-nav routes
+                    if (in_array($route, ['logout'], true)) continue;
+
+                    // Extract roles from condition: in_array($role, ['Assistant Registrar', ...])
+                    $roles = [];
+                    if ($cond) {
+                        if (preg_match('/in_array\s*\(\s*\$role\s*,\s*\[(.*?)\]\s*\)/', $cond, $rm)) {
+                            preg_match_all('/["\x27]([^"\x27]+)["\x27]/', $rm[1], $roleMatches);
+                            $roles = $roleMatches[1] ?? [];
+                        } elseif (preg_match('/\$role\s*===?\s*["\x27]([^"\x27]+)["\x27]/', $cond, $rm)) {
+                            $roles = [$rm[1]];
+                        }
+                    }
+
+                    // Extract label from <span ...>Label</span>
+                    $label = '';
+                    if (preg_match('/<span[^>]*>(.*?)<\/span>/s', $innerHtml, $sm)) {
+                        $label = trim(strip_tags($sm[1]));
+                    }
+                    if (empty($label)) {
+                        if (preg_match('/alt=["\x27]([^"\x27]+)["\x27]/', $innerHtml, $am)) {
+                            $label = trim($am[1]);
+                        }
+                    }
+                    if (empty($label)) {
+                        $label = ucfirst(str_replace(['.', '_', '-'], ' ', $route));
+                    }
+
+                    // Extract icon from image or Lucide tag
+                    $icon = 'circle';
+                    if (preg_match('/(?:assets\/|\/)([a-zA-Z0-9_\-&]+)\.(?:svg|png|webp|jpg)/i', $innerHtml, $im)) {
+                        $rawIcon = strtolower($im[1]);
+                        foreach ($iconMap as $key => $targetIcon) {
+                            if (str_contains($rawIcon, $key)) {
+                                $icon = $targetIcon;
+                                break;
+                            }
+                        }
+                    } elseif (preg_match('/<x-lucide-([a-z0-9-]+)/i', $innerHtml, $lm)) {
+                        $icon = strtolower($lm[1]);
+                    }
+
+                    $navEntry = [
+                        'label' => $label,
+                        'route' => $route,
+                        'icon' => $icon,
+                        'context' => $context,
+                        'roles' => $roles,
+                        'order' => count($items) * 10,
+                        'type' => 'route',
+                        'children' => [],
+                    ];
+
+                    $items[] = $navEntry;
+                    $contexts[$context][] = $navEntry;
+                }
+            } else {
+                // Fallback for simple blade routes
+                if (preg_match_all('/route\(\s*[\'"]([^\'"]+)[\'"]\s*\)/', $rawContent, $m)) {
+                    foreach (array_unique($m[1]) as $route) {
+                        if (str_contains($route, 'create') || str_contains($route, 'edit') || str_contains($route, 'destroy') || in_array($route, ['logout'], true)) {
+                            continue;
+                        }
+                        $navEntry = [
+                            'label' => ucfirst(str_replace(['.', '_', '-'], ' ', $route)),
+                            'route' => $route,
+                            'order' => count($items) * 10,
+                            'icon' => 'circle',
+                            'type' => 'route',
+                            'context' => $context,
+                            'roles' => [],
+                            'children' => [],
+                        ];
+                        $items[] = $navEntry;
+                        $contexts[$context][] = $navEntry;
+                    }
+                }
+            }
+        }
+
+        return ['items' => $items, 'contexts' => $contexts];
     }
 
     /**
@@ -1944,7 +2588,7 @@ PHP;
         return $sources;
     }
 
-    public function generateArchitecturePlan(array $inspection, string $domain = 'ERP'): array
+    public function generateArchitecturePlan(array $inspection, string $domain = 'Core'): array
     {
         // NOTE: The static ERP example plan is intentionally NOT auto-loaded here.
         // The web controller serves example plans explicitly per preset; this method
@@ -1952,6 +2596,8 @@ PHP;
 
         // 2. Dynamic generation for arbitrary legacy projects
         $sliceMapping = $inspection['slice_mapping'] ?? [];
+        $sliceMapping = $this->applyPersonaNavigationToMapping($sliceMapping);
+        $inspection['slice_mapping'] = $sliceMapping;
         $tables = $inspection['tables'] ?? [];
         $totalTables = $inspection['total_tables'] ?? count($tables);
         $tenancy = $inspection['tenancy'] ?? ['enabled' => false, 'tenant_key' => null];
@@ -2026,6 +2672,9 @@ PHP;
                 'operations' => 'message-square',
                 'settings', 'administration' => 'settings',
                 'referencedata', 'masterdata' => 'database',
+                'casemanagement' => 'inbox',
+                'judicialhearings' => 'gavel',
+                'legalregistry' => 'file-signature',
                 default => 'layers',
             };
 
@@ -2056,6 +2705,13 @@ PHP;
                         'leads' => 'target',
                         'tickets' => 'life-buoy',
                         'settings' => 'settings',
+                        'complaints' => 'inbox',
+                        'hearings' => 'calendar-check',
+                        'notices' => 'bell',
+                        'representations' => 'shield-alert',
+                        'reportsoughts' => 'file-search',
+                        'faqs' => 'help-circle',
+                        'masterdata', 'referencedata' => 'database',
                         default => 'circle',
                     },
                     'route' => '/' . Str::slug($domain) . '/' . $mSlug . '/' . $s['handle'],
@@ -2070,10 +2726,40 @@ PHP;
                 'name' => Str::headline($mName),
                 'icon' => $icon,
                 'collapsible' => true,
-                'default_open' => in_array(strtolower($mName), ['work', 'salescrm', 'finance'], true),
+                'default_open' => in_array(strtolower($mName), ['work', 'salescrm', 'finance', 'casemanagement', 'judicialhearings'], true),
                 'items' => $sidebarItems,
             ];
         }
+
+        // Dedupe sidebar groups by name (ERP menu often emits duplicate Dashboard groups)
+        $deduped = [];
+        foreach ($sidebarGroups as $g) {
+            $key = strtolower((string) ($g['name'] ?? $g['label'] ?? ''));
+            if ($key === '') {
+                $deduped[] = $g;
+                continue;
+            }
+            if (! isset($deduped[$key])) {
+                $deduped[$key] = $g;
+                continue;
+            }
+            // merge items
+            $existing = $deduped[$key]['items'] ?? [];
+            $incoming = $g['items'] ?? [];
+            $seen = [];
+            foreach ($existing as $it) {
+                $seen[strtolower(($it['label'] ?? '').'|'.($it['route'] ?? ''))] = true;
+            }
+            foreach ($incoming as $it) {
+                $ik = strtolower(($it['label'] ?? '').'|'.($it['route'] ?? ''));
+                if (! isset($seen[$ik])) {
+                    $existing[] = $it;
+                    $seen[$ik] = true;
+                }
+            }
+            $deduped[$key]['items'] = $existing;
+        }
+        $sidebarGroups = array_values($deduped);
 
         $topMigrations = [];
         arsort($rowCounts);
@@ -2096,21 +2782,44 @@ PHP;
                 'multi_tenancy' => $tenancy,
                 'eliminated_sidebar_clutter' => 'Consolidated auxiliary configuration tables into a single Unified Settings Hub.',
             ],
-            'sidebar_preview' => [
-                'title' => "{$domain} Enterprise Navigation",
-                'theme' => 'BlatUI Dashboard-01',
-                'groups' => $sidebarGroups,
-                'source_navigation' => $this->analyzeSourceNavigation($inspection['source_path'] ?? ''),
-                'navigation_note' => 'Source navigation analyzed from menu listeners/config. Compare source grouping with proposed grouping below. Developers can reorder in the porting dialog.',
-            ],
+            'sidebar_preview' => (function () use ($domain, $sidebarGroups, $inspection) {
+                $preview = $this->buildSidebarPreviewForPlan($domain, $sidebarGroups, $inspection['source_path'] ?? '');
+                $groups = $preview['groups'] ?? [];
+                $deduped = [];
+                foreach ($groups as $g) {
+                    $key = strtolower((string) ($g['name'] ?? $g['label'] ?? ''));
+                    if ($key === '' || ! isset($deduped[$key])) {
+                        $deduped[$key === '' ? (count($deduped)) : $key] = $g;
+                        continue;
+                    }
+                    $existing = $deduped[$key]['items'] ?? [];
+                    $seen = [];
+                    foreach ($existing as $it) {
+                        $seen[strtolower(($it['label'] ?? '').'|'.($it['route'] ?? ''))] = true;
+                    }
+                    foreach ($g['items'] ?? [] as $it) {
+                        $ik = strtolower(($it['label'] ?? '').'|'.($it['route'] ?? ''));
+                        if (! isset($seen[$ik])) {
+                            $existing[] = $it;
+                            $seen[$ik] = true;
+                        }
+                    }
+                    $deduped[$key]['items'] = $existing;
+                }
+                $preview['groups'] = array_values($deduped);
+                return $preview;
+            })(),
             'modules' => $formattedModules,
             'studio_slices' => $inspection['studio_slices'] ?? [],
-            'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? ''),
+            'domain_blueprint_yaml' => $inspection['domain_blueprint_yaml'] ?? $this->generateDomainBlueprintYaml($inspection['studio_slices'] ?? [], $domain, $inspection),
+            'journeys' => $this->analyzeUserJourneys($inspection['source_path'] ?? '', $domain),
             'data_sources' => $this->analyzeDataSources($inspection['source_path'] ?? '', $sliceMapping),
+            'etl_order' => $this->buildEtlOrder($sliceMapping, $tables, $inspection['classified'] ?? []),
             'etl_data_pipeline' => [
                 'source_connection' => 'mysql (legacy database)',
                 'target_connection' => 'mysql (current database)',
-                'execution_strategy' => 'Foreign key checks disabled during streaming; records imported in dependency-aware batches with auto-id preservation.',
+                'execution_strategy' => 'Foreign key checks disabled during streaming; import phases: taxonomies → settings → aggregate roots → children → pivots (id-preserving).',
+                'phases' => $this->buildEtlOrder($sliceMapping, $tables, $inspection['classified'] ?? []),
                 'top_tables_to_migrate' => $topMigrations,
             ],
             'page_architecture_guide' => $this->getPageArchitectureGuide(),
@@ -2120,12 +2829,12 @@ PHP;
     /**
      * Execute full vertical slice generation and migration directly from a structured Architecture Plan.
      */
-    public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false, bool $importAuth = false): array
+    public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false, bool $importAuth = false, ?array $sourceConnection = null): array
     {
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
 
-        $domain = $plan['domain'] ?? 'ERP';
+        $domain = $plan['domain'] ?? 'Core';
         $modules = $plan['modules'] ?? [];
         $multitenant = $plan['summary']['multi_tenancy']['enabled'] ?? false;
         $tenantKey = $plan['summary']['multi_tenancy']['tenant_key'] ?? 'company_id';
@@ -2148,6 +2857,36 @@ PHP;
                     $fields = $this->getFieldsForTable($rootTable, $tenantKey);
 
                     $uiConfig = $this->buildCanonicalUiFromSlice($slice, $sliceName, $rootTable);
+                    $wf = $slice['workflow'] ?? null;
+                    if (empty($wf) || empty($wf['states'])) {
+                        $statusCol = null;
+                        foreach ($fields as $f) {
+                            $h = is_array($f) ? ($f['handle'] ?? '') : ($f->handle ?? '');
+                            if ($h === 'status' || str_ends_with($h, '_status') || str_ends_with($h, '_status_id')) {
+                                $statusCol = $h;
+                                break;
+                            }
+                        }
+                        if ($statusCol) {
+                            $wf = [
+                                'enabled' => true,
+                                'state_column' => $statusCol,
+                                'states' => [
+                                    ['slug' => 'draft', 'label' => 'Draft', 'color' => 'slate'],
+                                    ['slug' => 'pending', 'label' => 'Pending', 'color' => 'amber'],
+                                    ['slug' => 'in_progress', 'label' => 'In Progress', 'color' => 'blue'],
+                                    ['slug' => 'completed', 'label' => 'Completed', 'color' => 'emerald'],
+                                    ['slug' => 'cancelled', 'label' => 'Cancelled', 'color' => 'rose'],
+                                ],
+                                'transitions' => [
+                                    ['slug' => 'submit', 'name' => 'Submit', 'from' => ['draft'], 'to' => 'pending', 'target_role' => 'manager'],
+                                    ['slug' => 'start', 'name' => 'Start', 'from' => ['pending'], 'to' => 'in_progress', 'target_role' => 'manager'],
+                                    ['slug' => 'complete', 'name' => 'Complete', 'from' => ['in_progress'], 'to' => 'completed', 'target_role' => 'admin'],
+                                    ['slug' => 'cancel', 'name' => 'Cancel', 'from' => ['draft', 'pending', 'in_progress'], 'to' => 'cancelled', 'target_role' => 'admin', 'requires_remarks' => true],
+                                ],
+                            ];
+                        }
+                    }
                     $options = [
                         'app' => $domain,
                         'domain' => $moduleName,
@@ -2157,9 +2896,25 @@ PHP;
                         'description' => $slice['description'] ?? "Vertical slice for {$sliceName}",
                         'force' => true,
                         'ui' => $uiConfig,
+                        'workflowConfig' => $wf,
                     ];
 
-                    $sliceDir = $generator->generate($sliceName, $fields, ! empty($options['ui']), $options);
+                    $sliceDir = $generator->generate($sliceName, $fields, ! empty($wf) || ! empty($options['ui']), $options);
+
+                    // Materialize workflow into DB engine so /admin/workflows lists ported machines
+                    if (! empty($wf) && is_array($wf)) {
+                        try {
+                            $engine = app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class);
+                            $studly = \LaraSlice\Generator\SliceName::canonical($sliceName);
+                            $plural = Str::plural($studly);
+                            $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
+                            $moduleFolder = \LaraSlice\Generator\SliceName::domainSegment($moduleName);
+                            $modelClass = "App\\Slices\\{$appFolder}\\{$moduleFolder}\\{$plural}\\Models\\{$studly}";
+                            $engine->syncWorkflowFromManifest($wf, $sliceName, class_exists($modelClass) ? $modelClass : null);
+                        } catch (\Throwable $syncEx) {
+                            $errors[$sliceName.'_workflow'] = $syncEx->getMessage();
+                        }
+                    }
                     $studlyName = \LaraSlice\Generator\SliceName::canonical($sliceName);
                     $pluralName = Str::plural($studlyName);
                     $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
@@ -2200,10 +2955,14 @@ PHP;
         $dataImportResult = null;
         if ($importData) {
             try {
-                $sourceDb = $plan['source_db'] ?? 'erp';
+                $sourceDb = $sourceConnection['database'] ?? $plan['source_db'] ?? 'erp';
+                $sourceHost = $sourceConnection['host'] ?? '127.0.0.1';
+                $sourcePort = (int) ($sourceConnection['port'] ?? 3306);
+                $sourceUser = $sourceConnection['username'] ?? 'root';
+                $sourcePass = $sourceConnection['password'] ?? '';
                 $dataPortService = new SliceDataPortService;
                 $dataPortService->setImportAuth($importAuth);
-                $dataImportResult = $dataPortService->importFromDatabase($sourceDb);
+                $dataImportResult = $dataPortService->importFromDatabase($sourceDb, $sourceHost, $sourcePort, $sourceUser, $sourcePass);
             } catch (\Throwable $e) {
                 $errors['data_import'] = $e->getMessage();
             }
@@ -2635,7 +3394,7 @@ PHP;
      * - email → text (with mailto in UI)
      * - *_id (FK) → text (resolves to related name in UI)
      */
-    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = []): array
+    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = [], ?array $workflow = null, ?string $sourcePath = null): array
     {
         $columns = [];
         $formFields = [];
@@ -2654,38 +3413,57 @@ PHP;
             $type = $f['type'] ?? 'string';
             $lower = strtolower($handle);
 
-            // Infer formatter from field name/type
+            // Infer formatter from field name/type (Phase 1 UI richness — handoff)
             $formatter = 'text';
-            $isMoney = str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || $type === 'decimal';
-            $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state';
+            $isMoney = str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || str_contains($lower, 'grand_total') || $type === 'decimal';
+            $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state' || $lower === 'stage';
             $isDate = str_ends_with($lower, '_at') || str_starts_with($lower, 'date') || in_array($type, ['datetime', 'date', 'timestamp'], true);
+            $isDue = in_array($lower, ['due_date', 'deadline', 'due_on'], true) || str_ends_with($lower, '_due');
+            $isProgress = str_contains($lower, 'progress') || str_contains($lower, 'percent') || str_contains($lower, 'completion') || $lower === 'completion_percent';
+            $isAssignee = in_array($lower, ['user_id', 'assignee_id', 'assigned_to', 'employee_id', 'owner_id'], true)
+                || str_ends_with($lower, '_by') && str_contains($lower, 'assign');
+            $isPriority = $lower === 'priority' || $lower === 'urgency';
+            $isCode = $lower === 'code' || str_ends_with($lower, '_code') || in_array($lower, ['invoice_number', 'order_number', 'task_short_code', 'project_short_code'], true);
 
-            if ($isMoney) {
+            if ($isProgress) {
+                $formatter = 'progress_bar';
+            } elseif ($isMoney) {
+                // Prefer plain currency until paid/total pair is detected below
                 $formatter = 'money_breakdown';
             } elseif ($isStatus) {
                 $formatter = 'status_pill';
+            } elseif ($isDue) {
+                $formatter = 'date_overdue';
             } elseif ($isDate) {
                 $formatter = 'date_time';
-            } elseif ($lower === 'code' || str_ends_with($lower, '_code') || $lower === 'invoice_number' || $lower === 'order_number') {
+            } elseif ($isCode) {
                 $formatter = 'code_badge';
+            } elseif ($isAssignee) {
+                $formatter = 'composite_user';
+            } elseif ($isPriority) {
+                $formatter = 'status_pill';
             } elseif (str_contains($lower, 'email')) {
-                $formatter = 'text'; // UI renders mailto link
-            } elseif (str_contains($lower, 'progress') || str_contains($lower, 'percent')) {
-                $formatter = 'progress_bar';
+                $formatter = 'text';
             }
 
-            // Directory columns: first 6 meaningful fields
-            if (count($columns) < 6) {
-                $columns[] = [
+            // Directory columns: up to 8 meaningful fields (ERP density)
+            if (count($columns) < 8) {
+                $col = [
                     'handle' => $handle,
+                    'key' => $handle,
                     'label' => $label,
                     'formatter' => $formatter,
+                    'type' => $formatter,
                     'sortable' => true,
                 ];
+                if ($isAssignee) {
+                    $col['relation'] = \Illuminate\Support\Str::camel(str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle);
+                }
+                $columns[] = $col;
             }
 
-            // Quick filters: status/enum fields become tab-style quick filters
-            if ($isStatus && count($quickFilters) < 4) {
+            // Quick filters: status / priority / enum-ish
+            if (($isStatus || $isPriority) && count($quickFilters) < 5) {
                 $quickFilters[] = [
                     'handle' => $handle,
                     'label' => $label,
@@ -2788,7 +3566,116 @@ PHP;
             }
         }
 
-        return [
+        // Composite money column (ERP invoice: Total / Paid / Unpaid in one cell)
+        $handles = array_column($columns, 'handle');
+        $hasTotal = in_array('total', $handles, true) || in_array('amount', $handles, true);
+        $hasPaid = in_array('paid', $handles, true) || in_array('paid_amount', $handles, true) || in_array('amount_paid', $handles, true);
+        if ($hasTotal && $hasPaid) {
+            $columns = array_values(array_filter($columns, static function ($c) {
+                return ! in_array($c['handle'] ?? '', ['paid', 'paid_amount', 'amount_paid', 'due_amount', 'unpaid'], true);
+            }));
+            foreach ($columns as &$col) {
+                if (in_array($col['handle'] ?? '', ['total', 'amount'], true)) {
+                    $col['formatter'] = 'money_breakdown';
+                    $col['breakdown'] = [
+                        'total' => $col['handle'],
+                        'paid' => in_array('paid_amount', $handles, true) ? 'paid_amount' : (in_array('amount_paid', $handles, true) ? 'amount_paid' : 'paid'),
+                        'unpaid' => in_array('due_amount', $handles, true) ? 'due_amount' : null,
+                    ];
+                }
+            }
+            unset($col);
+        }
+
+        // Due dates → overdue coloring
+        foreach ($columns as &$col) {
+            $h = strtolower((string) ($col['handle'] ?? ''));
+            if (in_array($h, ['due_date', 'deadline', 'due_on'], true) || str_ends_with($h, '_due')) {
+                $col['formatter'] = 'date_overdue';
+                $col['type'] = 'date_overdue';
+            }
+            if (str_contains($h, 'progress') || str_contains($h, 'completion') || $h === 'completion_percent') {
+                $col['formatter'] = 'progress_bar';
+                $col['type'] = 'progress_bar';
+            }
+            if (in_array($h, ['user_id', 'assignee_id', 'assigned_to', 'employee_id'], true)) {
+                $col['formatter'] = 'composite_user';
+                $col['type'] = 'composite_user';
+            }
+        }
+        unset($col);
+
+        // Priority badge in title (ERP tasks)
+        $hasPriority = in_array('priority', $handles, true);
+        if ($hasPriority) {
+            foreach ($columns as &$col) {
+                if (in_array($col['handle'] ?? '', ['title', 'name', 'subject', 'task'], true)) {
+                    $col['badge_from'] = 'priority';
+                    $col['formatter'] = $col['formatter'] ?? 'text_with_badge';
+                }
+            }
+            unset($col);
+        }
+
+        // Multi-view directory (ERP Tasks parity: table / board / calendar when status exists)
+        $hasStatus = false;
+        foreach ($columns as $c) {
+            $h = strtolower((string) ($c['handle'] ?? $c['field'] ?? ''));
+            if (in_array($h, ['status', 'state', 'stage'], true) || ($c['type'] ?? '') === 'badge') {
+                $hasStatus = true;
+                break;
+            }
+        }
+        if (! $hasStatus && is_array($workflow) && ! empty($workflow['states'])) {
+            $hasStatus = true;
+        }
+        $views = ['table'];
+        if ($hasStatus) {
+            $views[] = 'board';
+        }
+        $dateish = false;
+        foreach ($columns as $c) {
+            if (in_array(($c['type'] ?? ''), ['date', 'datetime'], true) || str_contains(strtolower((string) ($c['handle'] ?? '')), 'date')) {
+                $dateish = true;
+                break;
+            }
+        }
+        if ($dateish || in_array(strtolower($sliceName), ['events', 'attendances', 'leaves', 'timelogs', 'holidays'], true)) {
+            $views[] = 'calendar';
+        }
+
+        // Dashboard widgets (YAML-centric) — KPI + list patterns from ERP demo
+        $dashboard = [
+            'enabled' => true,
+            'widgets' => [
+                [
+                    'type' => 'stat',
+                    'handle' => 'total',
+                    'label' => 'Total',
+                    'query' => 'count',
+                    'roles' => ['admin', 'employee', 'client'],
+                ],
+            ],
+        ];
+        if ($hasStatus) {
+            $dashboard['widgets'][] = [
+                'type' => 'stat',
+                'handle' => 'open',
+                'label' => 'Open',
+                'query' => 'count',
+                'filter' => ['status' => ['draft', 'pending', 'open', 'to_do', 'todo', 'doing', 'in_progress']],
+                'roles' => ['admin', 'employee', 'client'],
+            ];
+            $dashboard['widgets'][] = [
+                'type' => 'board_preview',
+                'handle' => 'by_status',
+                'label' => 'By status',
+                'group_by' => 'status',
+                'roles' => ['admin', 'employee'],
+            ];
+        }
+
+        $ui = [
             'presentation' => [
                 'create' => 'drawer',
                 'edit' => 'drawer',
@@ -2800,7 +3687,10 @@ PHP;
                 'quick_filters' => $quickFilters,
                 'sidebar_filters' => $sidebarFilters,
                 'summary_cards' => $summaryCards,
-                'bulk_actions' => ['delete', 'export'],
+                'views' => $views,
+                'default_view' => 'table',
+                'inline_edit' => $hasStatus ? ['status'] : [],
+                'bulk_actions' => $this->buildBulkActionsForWorkflow($workflow ?? null),
                 'row_actions' => [
                     'display' => 'dropdown',
                     'items' => [
@@ -2810,10 +3700,60 @@ PHP;
                     ],
                 ],
             ],
+            'dashboard' => $dashboard,
             'forms' => [
                 'sections' => $sections,
             ],
+            'show' => [
+                'tabs' => $this->buildShowTabsFromRelations($relations ?? []),
+            ],
         ];
+
+        // Phase 2: DataTable.php static extraction overrides Phase 1 name guesses
+        if (is_string($sourcePath) && $sourcePath !== '') {
+            try {
+                $parser = new DataTableUiParser;
+                $hints = $parser->parseForSlice($sourcePath, $sliceName);
+                if (! empty($hints['columns'])) {
+                    $ui = $parser->mergeIntoUi($ui, $hints);
+                }
+            } catch (\Throwable $e) {
+                // Never fail scaffold/port on parser issues
+            }
+        }
+
+        return $ui;
+    }
+
+    /**
+     * Aggregate show tabs from hasMany children (ERP Project hub parity).
+     *
+     * @param  list<array<string, mixed>>  $relations
+     * @return list<array<string, mixed>>
+     */
+    protected function buildShowTabsFromRelations(array $relations): array
+    {
+        $tabs = [
+            ['handle' => 'overview', 'label' => 'Overview', 'type' => 'fields'],
+        ];
+        foreach ($relations as $rel) {
+            if (($rel['type'] ?? '') !== 'hasMany') {
+                continue;
+            }
+            $name = (string) ($rel['name'] ?? '');
+            if ($name === '') {
+                continue;
+            }
+            $tabs[] = [
+                'handle' => $name,
+                'label' => \Illuminate\Support\Str::headline($name),
+                'type' => 'relation',
+                'relation' => $name,
+            ];
+        }
+        $tabs[] = ['handle' => 'activity', 'label' => 'Activity', 'type' => 'audit'];
+
+        return $tabs;
     }
 
     /**
@@ -2825,6 +3765,224 @@ PHP;
      *
      * @return array List of dead table names
      */
+
+    /**
+     * Deterministic ETL / apply order for a port plan.
+     *
+     * Phase 1 taxonomies & lookups, Phase 2 settings hub, Phase 3 aggregate roots,
+     * Phase 4 child line-items, Phase 5 pivots — so FKs resolve without circular loaders.
+     *
+     * @param  array<string, array<string, mixed>>  $sliceMapping
+     * @param  array<string, array<string, mixed>>  $tables
+     * @param  array<string, array<string, mixed>>  $classified
+     * @return list<array{phase: int, name: string, tables: list<string>, slices: list<string>}>
+     */
+
+    /**
+     * ERP-class persona → slice visibility (YAML navigation.roles).
+     * Matches live multi-role ERP demo: admin sees all; employee/client see scoped modules.
+     *
+     * @return array{admin: list<string>, employee: list<string>, client: list<string>}
+     */
+    protected function erpPersonaSliceAllowlist(): array
+    {
+        return [
+            'admin' => ['*'],
+            'employee' => [
+                'Dashboard', 'Tasks', 'Projects', 'TimeLogs', 'Timelogs', 'Attendances', 'Attendance',
+                'Leaves', 'Tickets', 'Notices', 'Events', 'Messages', 'Expenses', 'Employees',
+                'Holidays', 'Appreciations', 'Contracts',
+            ],
+            'client' => [
+                'Dashboard', 'Projects', 'Contracts', 'Tasks', 'TimeLogs', 'Timelogs',
+                'Invoices', 'Estimates', 'Payments', 'CreditNotes', 'Creditnotes',
+                'Orders', 'Tickets', 'Events', 'Notices',
+            ],
+        ];
+    }
+
+    /**
+     * Attach navigation.roles + settings visibility onto each slice mapping entry.
+     *
+     * @param  array<string, array<string, mixed>>  $sliceMapping
+     * @return array<string, array<string, mixed>>
+     */
+    protected function applyPersonaNavigationToMapping(array $sliceMapping): array
+    {
+        $allow = $this->erpPersonaSliceAllowlist();
+        // Tables that are real data but must NOT pollute the top-level sidebar (Settings or parent-only).
+        $sidebarNoise = [
+            'ItemTaxes', 'TransactionTaxes', 'BillHistories', 'Categories', 'Dashboards',
+            'Documents', 'Accounts', 'Taxes', 'Recurrings', 'CustomFields', 'CustomFieldGroups',
+            'CustomLinks', 'NoticeTitles', 'GlobalSettings', 'StickyNotes', 'ProjectMilestones',
+            'TaskUsers', 'ProjectMembers', 'InvoiceItems', 'EstimateItems', 'OrderItems',
+            'SubTasks', 'TaskComments', 'ProjectFiles', 'TicketReplies',
+        ];
+        // Preferred sidebar order matching ERP demo module sequence
+        $moduleOrder = [
+            'CRM' => 10,
+            'Work' => 20,
+            'HR' => 30,
+            'Finance' => 40,
+            'Orders' => 50,
+            'Tickets' => 60,
+            'Events' => 70,
+            'Messages' => 80,
+            'Settings' => 90,
+        ];
+
+        foreach ($sliceMapping as $name => &$info) {
+            $type = $info['type'] ?? 'aggregate_root';
+            $nav = $info['navigation'] ?? [];
+            $primary = $info['primary_table'] ?? \Illuminate\Support\Str::snake($name);
+            $module = $this->detectModuleForSlice($name, $primary);
+
+            if ($type === 'settings_hub' || $type === 'settings' || $type === 'taxonomy'
+                || in_array($name, $sidebarNoise, true)
+                || str_ends_with($name, 'Items')
+                || str_ends_with($name, 'Members')
+                || str_ends_with($name, 'Replies')
+                || str_ends_with($name, 'Files')
+                || str_ends_with($name, 'Comments')
+            ) {
+                $nav['visible'] = false;
+                $nav['roles'] = ['admin'];
+            } else {
+                $roles = [];
+                foreach (['admin', 'employee', 'client'] as $persona) {
+                    $list = $allow[$persona];
+                    if ($list === ['*'] || in_array($name, $list, true)) {
+                        $roles[] = $persona;
+                    }
+                }
+                if (! in_array('admin', $roles, true)) {
+                    $roles[] = 'admin';
+                }
+                $nav['roles'] = array_values(array_unique($roles));
+                // Primary operational roots only (Projects, Tasks, Invoices, …)
+                $nav['visible'] = $nav['visible'] ?? true;
+            }
+
+            $info['module'] = $module;
+            $info['navigation'] = array_merge($nav, [
+                // Always stamp demo-aligned short group (never long FinancialAccounting)
+                'group' => $module,
+                'icon' => $nav['icon'] ?? ($info['icon'] ?? 'package'),
+                'order' => $moduleOrder[$module] ?? ($nav['order'] ?? 50),
+            ]);
+        }
+        unset($info);
+
+        return $sliceMapping;
+    }
+
+    protected function buildEtlOrder(array $sliceMapping, array $tables, array $classified): array
+    {
+        $tax = array_keys($classified['taxonomies'] ?? []);
+        $settings = array_keys($classified['settings'] ?? []);
+        $pivots = array_keys($classified['pivots'] ?? []);
+        $children = array_keys($classified['children'] ?? []);
+
+        $rootTables = [];
+        $rootSlices = [];
+        $settingsSlices = [];
+        $childBySlice = [];
+
+        foreach ($sliceMapping as $sliceName => $info) {
+            $type = $info['type'] ?? 'aggregate_root';
+            $primary = $info['primary_table'] ?? null;
+            if ($type === 'settings_hub') {
+                $settingsSlices[] = $sliceName;
+                if ($primary && ! in_array($primary, $settings, true)) {
+                    $settings[] = $primary;
+                }
+                foreach ($info['child_tables'] ?? [] as $ct) {
+                    if (! in_array($ct, $settings, true)) {
+                        $settings[] = $ct;
+                    }
+                }
+                continue;
+            }
+            if ($type === 'taxonomy_catalog') {
+                if ($primary && ! in_array($primary, $tax, true)) {
+                    $tax[] = $primary;
+                }
+                continue;
+            }
+            if ($primary) {
+                $rootTables[] = $primary;
+                $rootSlices[] = $sliceName;
+            }
+            foreach ($info['child_tables'] ?? [] as $ct) {
+                $childBySlice[$sliceName][] = $ct;
+                if (! in_array($ct, $children, true) && ! in_array($ct, $tax, true) && ! in_array($ct, $settings, true)) {
+                    $children[] = $ct;
+                }
+            }
+        }
+
+        $rootTables = array_values(array_unique($rootTables));
+        $children = array_values(array_unique(array_filter($children, fn ($c) => ! in_array($c, $rootTables, true) && ! in_array($c, $tax, true) && ! in_array($c, $settings, true))));
+        $settings = array_values(array_unique($settings));
+        $tax = array_values(array_unique($tax));
+        $pivots = array_values(array_unique($pivots));
+
+        return [
+            ['phase' => 1, 'name' => 'taxonomies', 'tables' => $tax, 'slices' => array_values(array_filter(array_keys($sliceMapping), fn ($s) => ($sliceMapping[$s]['type'] ?? '') === 'taxonomy_catalog'))],
+            ['phase' => 2, 'name' => 'settings_hub', 'tables' => $settings, 'slices' => array_values(array_unique($settingsSlices))],
+            ['phase' => 3, 'name' => 'aggregate_roots', 'tables' => $rootTables, 'slices' => array_values(array_unique($rootSlices))],
+            ['phase' => 4, 'name' => 'children', 'tables' => $children, 'slices' => array_keys($childBySlice)],
+            ['phase' => 5, 'name' => 'pivots', 'tables' => $pivots, 'slices' => []],
+        ];
+    }
+
+
+    /**
+     * Native + workflow bulk actions for index multi-select bar (Studio-editable).
+     *
+     * @param  array<string, mixed>|null  $workflow
+     * @return list<array<string, mixed>>
+     */
+    protected function buildBulkActionsForWorkflow(?array $workflow): array
+    {
+        $actions = [
+            ['handle' => 'export', 'label' => 'Export Selected', 'type' => 'native', 'icon' => 'download'],
+            ['handle' => 'delete', 'label' => 'Delete Selected', 'type' => 'native', 'icon' => 'trash-2', 'danger' => true],
+        ];
+
+        if (! is_array($workflow) || empty($workflow['enabled'])) {
+            return $actions;
+        }
+
+        $iconMap = [
+            'submit' => 'send',
+            'start' => 'play',
+            'complete' => 'check-circle',
+            'approve' => 'check',
+            'reject' => 'x',
+            'cancel' => 'ban',
+            'reopen' => 'rotate-ccw',
+        ];
+
+        foreach ($workflow['transitions'] ?? [] as $tr) {
+            $slug = (string) ($tr['slug'] ?? $tr['handle'] ?? '');
+            if ($slug === '') {
+                continue;
+            }
+            $actions[] = [
+                'handle' => $slug,
+                'label' => (string) ($tr['name'] ?? $tr['label'] ?? str_replace('_', ' ', ucfirst($slug))),
+                'type' => 'workflow',
+                'transition' => $slug,
+                'icon' => $iconMap[$slug] ?? 'git-branch',
+                'requires_remarks' => (bool) ($tr['requires_remarks'] ?? false),
+                'danger' => in_array($slug, ['reject', 'cancel', 'delete'], true),
+            ];
+        }
+
+        return $actions;
+    }
+
     public function detectDeadTables(array $tables, string $sourcePath): array
     {
         $dead = [];
@@ -3120,99 +4278,429 @@ PHP;
      *
      * @return array Map of journey name → steps with slice mapping
      */
-    public function analyzeUserJourneys(string $sourcePath): array
+    public function analyzeUserJourneys(string $sourcePath, string $domain = 'Core'): array
     {
         $journeys = [];
+        $controllerDir = $sourcePath.'/app/Http/Controllers';
 
-        // 1. Onboarding journey - look for Wizard controllers
-        $wizardDir = $sourcePath.'/app/Http/Controllers/Wizard';
-        if (is_dir($wizardDir)) {
-            $steps = [];
-            foreach (glob($wizardDir.'/*.php') as $file) {
-                $base = basename($file, '.php');
-                $steps[] = [
-                    'step' => \Illuminate\Support\Str::headline($base),
-                    'controller' => $base,
-                ];
+        $availableControllers = [];
+        if (is_dir($controllerDir)) {
+            $rii = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($controllerDir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($rii as $file) {
+                if ($file->isFile() && $file->getExtension() === 'php') {
+                    $base = $file->getBasename('.php');
+                    $availableControllers[strtolower($base)] = $base;
+                }
             }
-            if (! empty($steps)) {
-                $journeys['onboarding'] = [
-                    'name' => 'New User Onboarding',
-                    'persona' => 'end_user',
-                    'description' => 'First-time setup wizard for new companies',
-                    'steps' => $steps,
+        }
+
+        // Helper to find controller if exists
+        $findCtrl = function (array $names) use ($availableControllers): ?string {
+            foreach ($names as $n) {
+                $lower = strtolower($n);
+                if (isset($availableControllers[$lower])) {
+                    return $availableControllers[$lower];
+                }
+            }
+            return null;
+        };
+
+        // If process-core / complaint-adjudication domain signature, build operational process journeys
+        $isProcessCoreExplicit = strtolower($domain) === 'adjudication' || strtolower($domain) === 'processcore' || strtolower($domain) === 'complaintmanagement' || strtolower($domain) === 'legal' || strtolower($domain) === 'dispute';
+        $isProcessCoreSignature = $findCtrl(['ComplaintController']) && ($findCtrl(['CauseListController']) || $findCtrl(['NoticeController']));
+        if (($isProcessCoreExplicit || $isProcessCoreSignature) && ! empty($availableControllers)) {
+            return $this->buildProcessCoreJourneys($sourcePath, $availableControllers, $domain);
+        }
+
+        // If not ERP domain and does not contain all ERP multi-pillar signatures, dynamically discover generic journeys
+        // ERP-class benchmark: operational journeys from real nav — not BRD essays
+        $isErpExplicit = strtolower($domain) === 'erp';
+        $isErpSignature = $findCtrl(['ProjectController', 'ProjectsController']) && $findCtrl(['EmployeeController', 'EmployeeDetailsController']) && $findCtrl(['InvoiceController', 'PaymentController']);
+        $isErp = $isErpExplicit || ($domain === 'Core' && $isErpSignature);
+        if (! $isErp && ! empty($availableControllers)) {
+            return $this->discoverGenericUserJourneys($sourcePath, $availableControllers, $domain);
+        }
+
+        return $this->buildOperationalJourneysFromSource($sourcePath, $domain, $availableControllers);
+
+    }
+
+    /**
+     * Slim, executable user journeys for studios (persona → steps → slice/action).
+     * Driven by source navigation when present; ERP personas (typical multi-tenant suite):
+     * admin / employee / client.
+     *
+     * @param  array<string, string>  $availableControllers
+     * @return array<string, array<string, mixed>>
+     */
+
+    /**
+     * Canonical slice name from a route base or menu label (ERP menu uses leaves, not leaf).
+     */
+    protected function routeBaseToSliceName(string $routeOrLabel): string
+    {
+        $base = explode('.', trim($routeOrLabel))[0];
+        $base = str_replace(['-', '_'], ' ', $base);
+        $slug = strtolower(str_replace(' ', '_', $base));
+
+        $canonical = [
+            'leave' => 'Leaves',
+            'leaves' => 'Leaves',
+            'attendance' => 'Attendances',
+            'attendances' => 'Attendances',
+            'timelog' => 'TimeLogs',
+            'timelogs' => 'TimeLogs',
+            'time_log' => 'TimeLogs',
+            'time_logs' => 'TimeLogs',
+            'project_time_log' => 'TimeLogs',
+            'project_time_logs' => 'TimeLogs',
+            'task' => 'Tasks',
+            'tasks' => 'Tasks',
+            'ticket' => 'Tickets',
+            'tickets' => 'Tickets',
+            'invoice' => 'Invoices',
+            'invoices' => 'Invoices',
+            'employee' => 'Employees',
+            'employees' => 'Employees',
+            'client' => 'Clients',
+            'clients' => 'Clients',
+            'deal' => 'Deals',
+            'deals' => 'Deals',
+            'lead' => 'Leads',
+            'leads' => 'Leads',
+            'lead_contact' => 'LeadContacts',
+            'lead-contact' => 'LeadContacts',
+            'contract' => 'Contracts',
+            'contracts' => 'Contracts',
+            'estimate' => 'Estimates',
+            'estimates' => 'Estimates',
+            'proposal' => 'Proposals',
+            'proposals' => 'Proposals',
+            'payment' => 'Payments',
+            'payments' => 'Payments',
+            'product' => 'Products',
+            'products' => 'Products',
+            'order' => 'Orders',
+            'orders' => 'Orders',
+            'event' => 'Events',
+            'events' => 'Events',
+            'notice' => 'Notices',
+            'notices' => 'Notices',
+            'dashboard' => 'Dashboard',
+            'message' => 'Messages',
+            'messages' => 'Messages',
+            'knowledge_base' => 'KnowledgeBases',
+            'knowledgebase' => 'KnowledgeBases',
+        ];
+
+        if (isset($canonical[$slug])) {
+            return $canonical[$slug];
+        }
+
+        return \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural(\Illuminate\Support\Str::singular($base)));
+    }
+
+    protected function buildOperationalJourneysFromSource(string $sourcePath, string $domain, array $availableControllers): array
+    {
+        $nav = $this->analyzeSourceNavigation($sourcePath);
+        $groups = $nav['groups'] ?? [];
+
+        $stepsFromNav = [];
+        foreach ($groups as $g) {
+            $children = $g['children'] ?? [];
+            if ($children === [] && ! empty($g['route'])) {
+                $children = [['label' => $g['label'] ?? $g['name'] ?? 'Item', 'route' => $g['route'], 'slice' => $g['slice'] ?? null]];
+            }
+            foreach ($children as $c) {
+                $slice = $c['slice'] ?? null;
+                if (! $slice && ! empty($c['route'])) {
+                    $slice = $this->routeBaseToSliceName((string) $c['route']);
+                } elseif (! $slice && ! empty($c['label'])) {
+                    $slice = $this->routeBaseToSliceName((string) $c['label']);
+                }
+                if (! $slice) {
+                    continue;
+                }
+                $stepsFromNav[] = [
+                    'slice' => $slice,
+                    'action' => 'index',
+                    'label' => $c['label'] ?? $slice,
+                    'route' => $c['route'] ?? null,
+                    'group' => $g['label'] ?? $g['name'] ?? null,
                 ];
             }
         }
 
-        // 2. Client/Portal journey - external users
-        $portalDir = $sourcePath.'/app/Http/Controllers/Portal';
-        if (is_dir($portalDir)) {
-            $steps = [];
-            foreach (glob($portalDir.'/*.php') as $file) {
-                $base = basename($file, '.php');
-                $steps[] = [
-                    'step' => \Illuminate\Support\Str::headline($base),
-                    'controller' => 'Portal\\'.$base,
-                ];
-            }
-            if (! empty($steps)) {
-                $journeys['client_portal'] = [
-                    'name' => 'Client Portal Journey',
-                    'persona' => 'client',
-                    'description' => 'External client workflow: view invoices, make payments',
-                    'steps' => $steps,
-                ];
-            }
-        }
-
-        // 3. End user core workflows - from main controllers
-        $coreFlows = [];
-        $salesDir = $sourcePath.'/app/Http/Controllers/Sales';
-        if (is_dir($salesDir)) {
-            // Invoice lifecycle: create → send → paid
-            $coreFlows[] = [
-                'name' => 'Invoice to Cash',
-                'steps' => [
-                    ['step' => 'Create Invoice', 'slice' => 'Invoices', 'action' => 'create'],
-                    ['step' => 'Send to Client', 'slice' => 'Invoices', 'action' => 'email'],
-                    ['step' => 'Client Views', 'slice' => 'Portal', 'action' => 'view'],
-                    ['step' => 'Record Payment', 'slice' => 'Invoices', 'action' => 'add_payment'],
-                ],
+        // Fallback steps if nav empty — ERP pillars from controllers
+        if ($stepsFromNav === []) {
+            $fallback = [
+                'ProjectController' => 'Projects',
+                'TaskController' => 'Tasks',
+                'InvoiceController' => 'Invoices',
+                'ClientController' => 'Clients',
+                'EmployeeController' => 'Employees',
+                'LeadController' => 'Leads',
+                'TicketController' => 'Tickets',
+                'ContractController' => 'Contracts',
+                'PaymentController' => 'Payments',
+                'EstimateController' => 'Estimates',
             ];
-        }
-        $bankingDir = $sourcePath.'/app/Http/Controllers/Banking';
-        if (is_dir($bankingDir)) {
-            $coreFlows[] = [
-                'name' => 'Bank Reconciliation',
-                'steps' => [
-                    ['step' => 'Import Transactions', 'slice' => 'Accounts', 'action' => 'import'],
-                    ['step' => 'Match & Reconcile', 'slice' => 'Reconciliations', 'action' => 'reconcile'],
-                    ['step' => 'Review Reports', 'slice' => 'Reports', 'action' => 'view'],
-                ],
-            ];
-        }
-        if (! empty($coreFlows)) {
-            $journeys['core_workflows'] = [
-                'name' => 'Core Business Workflows',
-                'persona' => 'end_user',
-                'description' => 'Daily operational workflows',
-                'flows' => $coreFlows,
-            ];
+            foreach ($fallback as $ctrl => $slice) {
+                if (isset($availableControllers[strtolower($ctrl)])) {
+                    $stepsFromNav[] = ['slice' => $slice, 'action' => 'index', 'label' => $slice];
+                }
+            }
         }
 
-        // 4. Admin journey
-        $settingsDir = $sourcePath.'/app/Http/Controllers/Settings';
-        if (is_dir($settingsDir)) {
-            $journeys['admin'] = [
-                'name' => 'System Administration',
+        // Persona filters: match slice name OR nav group (case-insensitive substring)
+        $filterSteps = static function (array $steps, array $sliceNames, array $groupHints = [], array $excludeSlices = []) {
+            $set = array_map('strtolower', $sliceNames);
+            $groups = array_map('strtolower', $groupHints);
+            $exclude = array_map('strtolower', $excludeSlices);
+            $out = [];
+            $seen = [];
+            foreach ($steps as $s) {
+                $slice = strtolower((string) ($s['slice'] ?? ''));
+                $group = strtolower((string) ($s['group'] ?? ''));
+                $label = strtolower((string) ($s['label'] ?? ''));
+                if ($slice !== '' && in_array($slice, $exclude, true)) {
+                    continue;
+                }
+                $hit = in_array($slice, $set, true);
+                if (! $hit) {
+                    foreach ($set as $name) {
+                        if ($name !== '' && (str_contains($slice, $name) || str_contains($label, $name))) {
+                            $hit = true;
+                            break;
+                        }
+                    }
+                }
+                if (! $hit && $groups !== []) {
+                    foreach ($groups as $gh) {
+                        if ($gh !== '' && (str_contains($group, $gh) || str_contains($label, $gh))) {
+                            $hit = true;
+                            break;
+                        }
+                    }
+                }
+                if (! $hit) {
+                    continue;
+                }
+                $key = $slice.'|'.strtolower((string) ($s['route'] ?? ''));
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $out[] = $s;
+            }
+
+            return $out;
+        };
+
+        $adminSteps = $filterSteps($stepsFromNav, [], [], []); // all unique nav steps
+        // de-dupe admin
+        // Normalize slice names from nav (Leaves not Leaf, TimeLogs not Timelog)
+        $stepsFromNav = array_map(function (array $s) {
+            if (! empty($s['route'])) {
+                $s['slice'] = $this->routeBaseToSliceName((string) $s['route']);
+            } elseif (! empty($s['slice'])) {
+                $s['slice'] = $this->routeBaseToSliceName((string) $s['slice']);
+            }
+            return $s;
+        }, $stepsFromNav);
+
+        $adminSteps = $filterSteps($stepsFromNav, array_values(array_unique(array_map(fn ($s) => $s['slice'], $stepsFromNav))), [], []);
+
+        $employeeSteps = $filterSteps(
+            $stepsFromNav,
+            ['Tasks', 'Projects', 'TimeLogs', 'Timelogs', 'Attendances', 'Attendance', 'Tickets', 'Leaves', 'Leave', 'Employees', 'Notices', 'Events', 'Messages'],
+            ['hr', 'work', 'task', 'time', 'ticket'],
+            ['LeadContacts', 'Leads', 'Deals', 'Clients', 'Invoices', 'Estimates', 'Payments', 'Settings']
+        );
+        // Ensure core employee pillars even if nav labels differ
+        // Prioritize operational work over HR setup catalogs for employee persona
+        $employeePriority = ['Tasks', 'Projects', 'TimeLogs', 'Attendances', 'Tickets', 'Leaves', 'Notices', 'Events', 'Messages', 'Employees'];
+        foreach ($employeePriority as $pillar) {
+            $has = false;
+            foreach ($employeeSteps as $s) {
+                if (strcasecmp($s['slice'], $pillar) === 0) {
+                    $has = true;
+                    break;
+                }
+            }
+            if (! $has) {
+                $employeeSteps[] = ['slice' => $pillar, 'action' => 'index', 'label' => $pillar, 'route' => null, 'group' => 'Work'];
+            }
+        }
+        usort($employeeSteps, function ($a, $b) use ($employeePriority) {
+            $pa = array_search($a['slice'], $employeePriority, true);
+            $pb = array_search($b['slice'], $employeePriority, true);
+            $pa = $pa === false ? 100 : $pa;
+            $pb = $pb === false ? 100 : $pb;
+            return $pa <=> $pb;
+        });
+        // Drop pure admin HR catalogs from employee journey
+        $employeeSteps = array_values(array_filter($employeeSteps, function ($s) {
+            return ! in_array($s['slice'], ['Designations', 'Departments', 'Appreciations', 'Awards', 'Holidays', 'Shifts'], true);
+        }));
+
+        $clientSteps = $filterSteps(
+            $stepsFromNav,
+            ['Invoices', 'Estimates', 'Contracts', 'Projects', 'Tickets', 'Payments', 'Orders', 'Proposals', 'Notices', 'Events'],
+            ['finance', 'project', 'ticket', 'portal', 'client'],
+            ['LeadContacts', 'Leads', 'Deals', 'Employees', 'Attendances', 'Leaves', 'TimeLogs', 'Settings', 'Clients']
+        );
+        $clientPriority = ['Projects', 'Invoices', 'Contracts', 'Tickets', 'Payments', 'Estimates', 'Orders', 'Notices', 'Events'];
+        foreach ($clientPriority as $pillar) {
+            $has = false;
+            foreach ($clientSteps as $s) {
+                if (strcasecmp($s['slice'], $pillar) === 0) {
+                    $has = true;
+                    break;
+                }
+            }
+            if (! $has) {
+                $clientSteps[] = ['slice' => $pillar, 'action' => 'index', 'label' => $pillar, 'route' => null, 'group' => 'Portal'];
+            }
+        }
+        usort($clientSteps, function ($a, $b) use ($clientPriority) {
+            $pa = array_search($a['slice'], $clientPriority, true);
+            $pb = array_search($b['slice'], $clientPriority, true);
+            $pa = $pa === false ? 100 : $pa;
+            $pb = $pb === false ? 100 : $pb;
+            return $pa <=> $pb;
+        });
+        $clientSteps = array_values(array_filter($clientSteps, function ($s) {
+            return ! in_array($s['slice'], ['Expenses', 'Bankaccounts', 'Creditnotes', 'Clients', 'Employees', 'Leads', 'Deals'], true);
+        }));
+
+        return [
+            'schema' => 'laraslice.journeys.v2',
+            'domain' => $domain,
+            'source' => $nav['source'] ?? 'derived',
+            'admin' => [
                 'persona' => 'admin',
-                'description' => 'Manage users, roles, settings, and system configuration',
-                'areas' => ['User Management', 'Role & Permissions', 'System Settings', 'Email Templates', 'Tax Configuration'],
+                'label' => 'Admin',
+                'entry' => 'dashboard',
+                'description' => 'Full module access — company settings, HR, CRM, finance, work',
+                'gates' => ['role:admin', 'role:super-admin'],
+                'steps' => array_slice($adminSteps, 0, 24),
+            ],
+            'employee' => [
+                'persona' => 'employee',
+                'label' => 'Employee',
+                'entry' => 'dashboard',
+                'description' => 'Work execution — tasks, time logs, attendance, tickets, leaves',
+                'gates' => ['role:employee', 'role:manager'],
+                'steps' => array_slice($employeeSteps, 0, 12),
+            ],
+            'client' => [
+                'persona' => 'client',
+                'label' => 'Client',
+                'entry' => 'portal',
+                'description' => 'Client portal — own projects, invoices, contracts, tickets, payments',
+                'gates' => ['role:client'],
+                'steps' => array_slice($clientSteps, 0, 12),
+            ],
+        ];
+    }
+
+
+/**
+     * Build process-core operational journeys for complaint/adjudication domains.
+     * Persona steps derived from source nav and controllers — not BRD essays.
+     */
+    /**
+     * Process-core / complaint-adjudication: slim operational journeys (not BRD essays).
+     * Personas: admin (case officers), complainant (portal), mobile API surface noted as entry.
+     *
+     * @param  array<string, string>  $availableControllers
+     * @return array<string, array<string, mixed>>
+     */
+    protected function buildProcessCoreJourneys(string $sourcePath, array $availableControllers, string $domain = 'Adjudication'): array
+    {
+        $nav = $this->analyzeSourceNavigation($sourcePath);
+        $steps = [];
+        foreach ($nav['groups'] ?? [] as $g) {
+            foreach ($g['children'] ?? [] as $c) {
+                $slice = $c['slice'] ?? null;
+                if (! $slice && ! empty($c['route'])) {
+                    $base = explode('.', (string) $c['route'])[0];
+                    $slice = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular(str_replace(['-', '_'], ' ', $base)));
+                }
+                if ($slice) {
+                    $steps[] = [
+                        'slice' => $slice,
+                        'action' => 'index',
+                        'label' => $c['label'] ?? $slice,
+                        'route' => $c['route'] ?? null,
+                    ];
+                }
+            }
+        }
+
+        $ctrlMap = [
+            'complaintcontroller' => ['slice' => 'Complaints', 'action' => 'index'],
+            'causelistcontroller' => ['slice' => 'CauseLists', 'action' => 'index'],
+            'noticecontroller' => ['slice' => 'Notices', 'action' => 'index'],
+            'usercontroller' => ['slice' => 'Users', 'action' => 'index'],
+            'dashboardcontroller' => ['slice' => 'Dashboard', 'action' => 'index'],
+        ];
+        if ($steps === []) {
+            foreach ($availableControllers as $lower => $base) {
+                if (isset($ctrlMap[$lower])) {
+                    $steps[] = array_merge($ctrlMap[$lower], ['label' => $ctrlMap[$lower]['slice']]);
+                }
+            }
+            if ($steps === []) {
+                $steps[] = ['slice' => 'Complaints', 'action' => 'index', 'label' => 'Complaints'];
+            }
+        }
+
+        $complaintSteps = array_values(array_filter($steps, fn ($s) => str_contains(strtolower($s['slice']), 'complaint') || str_contains(strtolower($s['slice']), 'cause') || str_contains(strtolower($s['slice']), 'hearing') || str_contains(strtolower($s['slice']), 'notice')));
+        if ($complaintSteps === []) {
+            $complaintSteps = [
+                ['slice' => 'Complaints', 'action' => 'index', 'label' => 'Complaints'],
+                ['slice' => 'Complaints', 'action' => 'show', 'label' => 'Case detail'],
+                ['slice' => 'Complaints', 'action' => 'transition', 'label' => 'Status forward', 'transition' => null],
             ];
         }
 
-        return $journeys;
+        return [
+            'schema' => 'laraslice.journeys.v2',
+            'domain' => $domain,
+            'source' => $nav['source'] ?? 'controllers',
+            'admin' => [
+                'persona' => 'admin',
+                'label' => 'Admin / Case Officer',
+                'entry' => 'admin',
+                'description' => 'Case processing — complaints, cause list, notices',
+                'steps' => array_slice($steps ?: $complaintSteps, 0, 20),
+            ],
+            'complainant' => [
+                'persona' => 'complainant',
+                'label' => 'Complainant',
+                'entry' => 'portal',
+                'description' => 'Citizen portal — submit and track complaints',
+                'steps' => array_slice($complaintSteps, 0, 8),
+            ],
+            'mobile' => [
+                'persona' => 'mobile',
+                'label' => 'Mobile / API',
+                'entry' => 'api',
+                'description' => 'Mobile app and third-party API surfaces',
+                'steps' => [
+                    ['slice' => 'Complaints', 'action' => 'index', 'label' => 'My complaints'],
+                    ['slice' => 'Complaints', 'action' => 'store', 'label' => 'File complaint'],
+                ],
+            ],
+        ];
+    }
+
+    protected function discoverGenericUserJourneys(string $sourcePath, array $availableControllers, string $domain): array
+    {
+        // Same executable contract as ERP — nav-driven when possible, controller fallback
+        return $this->buildOperationalJourneysFromSource($sourcePath, $domain, $availableControllers);
     }
 
 }

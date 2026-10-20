@@ -1,0 +1,65 @@
+spec_version: "0.1"
+name: Contacts
+handle: contacts
+domain: CRM
+description: "People contacts linked to companies"
+version: 1.0.0
+navigation:
+  label: Contacts
+  icon: users
+  group: CRM
+  order: 20
+models:
+  - handle: contact
+    table: contacts
+    root: true
+    fields:
+      - handle: company_id
+        label: Company
+        type: integer
+        required: true
+        input: select
+      - handle: full_name
+        label: Full Name
+        type: string
+        required: true
+      - handle: email
+        label: Email
+        type: string
+        required: true
+        input: email
+      - handle: phone
+        label: Phone
+        type: string
+        required: false
+        input: tel
+fields:
+  full_name:
+    name: full_name
+    type: string
+    searchable: true
+  email:
+    name: email
+    type: string
+    searchable: true
+  phone:
+    name: phone
+    type: string
+  company_id:
+    name: company_id
+    type: integer
+    input: select
+ui:
+  directory:
+    columns:
+      - key: full_name
+        label: Name
+        formatter: text
+        sortable: true
+      - key: email
+        label: Email
+        formatter: text
+      - key: company_id
+        label: Company
+        formatter: text
+    views: [table]

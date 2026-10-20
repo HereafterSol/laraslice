@@ -15,7 +15,7 @@ use LaraSlice\Porting\SlicePortService;
 class SlicePortCommand extends Command
 {
     protected $signature = 'slice:port
-                            {source? : Path to legacy Laravel project root or database}
+                            {source? : Path to source project root (Laravel or other PHP e.g. Dolibarr) or leave empty and use --source-database}
                             {--plan= : Path to JSON architecture plan (e.g. docs/porting-architecture-plan.json)}
                             {--import-data : Stream and import operational data via ETL}
                             {--import-auth : Also import legacy roles/permissions via normalized merge (framework auth tables stay protected by default)}
@@ -25,6 +25,7 @@ class SlicePortCommand extends Command
                             {--with-files : Copy physical file attachments from storage/app/public}
                             {--scaffold : Automatically scaffold physical vertical slices into app/Slices}
                             {--dry-run : Preview table-to-slice mapping without writing files}
+                            {--strip-prefix= : Comma-separated table prefixes to strip from slice names (e.g. llx_,wp_). Defaults from config LARASLICE_PORT_STRIP_PREFIXES}
                             {--source-connection= : Legacy DB connection name from config/database.php (overrides --source-* options)}
                             {--source-host= : Legacy database host (default: 127.0.0.1)}
                             {--source-port= : Legacy database port (default: 3306)}
@@ -128,7 +129,7 @@ class SlicePortCommand extends Command
 
             $this->comment("⚙️  Scaffolding vertical slices, migrations, and models from plan...");
             $importAuth = (bool) $this->option('import-auth');
-            $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth);
+            $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth, $sourceConnection ?? null);
 
             if (! empty($result['slices_created'])) {
                 $this->info("✓ Scaffolded " . count($result['slices_created']) . " canonical slices!");
@@ -165,21 +166,33 @@ class SlicePortCommand extends Command
 
         $superDomain = $this->option('super-domain');
 
+        // Apply --strip-prefix to config before inspect naming
+        $stripOpt = $this->option('strip-prefix');
+        if (is_string($stripOpt) && $stripOpt !== '') {
+            $list = array_values(array_filter(array_map('trim', explode(',', $stripOpt))));
+            config(['laraslice.porting.strip_table_prefixes' => $list]);
+        }
+
         $mode = $this->option('mode');
         if (! $mode) {
-            $modeChoice = $this->choice(
-                'Select Data Porting Mode:',
-                [
-                    'system-base' => 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)',
-                    'full-data' => 'Full Historical Data Migration (Port all operational records + file attachments)',
-                ],
-                'system-base'
-            );
-            $mode = ($modeChoice === 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)') ? 'system-base' : 'full-data';
+            // --dry-run / --no-interaction must not hang on prompts (CI, Manus)
+            if ($this->option('dry-run') || ! $this->input->isInteractive()) {
+                $mode = 'system-base';
+            } else {
+                $modeChoice = $this->choice(
+                    'Select Data Porting Mode:',
+                    [
+                        'system-base' => 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)',
+                        'full-data' => 'Full Historical Data Migration (Port all operational records + file attachments)',
+                    ],
+                    'system-base'
+                );
+                $mode = ($modeChoice === 'System Base Only (Extract master taxonomies, statuses, categories & seeders - 0 blank dropdowns)') ? 'system-base' : 'full-data';
+            }
         }
 
         $withFiles = (bool) $this->option('with-files');
-        if ($mode === 'full-data' && ! $this->option('with-files')) {
+        if ($mode === 'full-data' && ! $this->option('with-files') && $this->input->isInteractive() && ! $this->option('dry-run')) {
             $withFiles = $this->confirm('Do you want to copy physical file attachments from legacy storage/app/public?', true);
         }
 
@@ -320,6 +333,28 @@ class SlicePortCommand extends Command
                 $this->warn("Skipped " . count($scaffoldResult['errors']) . " slice(s) due to existing directories or conflicts:");
                 foreach ($scaffoldResult['errors'] as $s => $err) {
                     $this->warn("  [{$s}] {$err}");
+                }
+            }
+
+            // Handle --import-data with --scaffold (executeFromPlan is bypassed)
+            if ($this->option('import-data')) {
+                $this->comment("⚙️  Importing data via ETL...");
+                try {
+                    $dataPortService = new \LaraSlice\Porting\SliceDataPortService;
+                    $dataImport = $dataPortService->importFromDatabase(
+                        $sourceConnection['database'] ?? 'erp',
+                        $sourceConnection['host'] ?? '127.0.0.1',
+                        (int) ($sourceConnection['port'] ?? 3306),
+                        $sourceConnection['username'] ?? 'root',
+                        $sourceConnection['password'] ?? ''
+                    );
+                    if ($dataImport['success'] ?? false) {
+                        $this->info("✓ Imported " . ($dataImport['total_rows'] ?? 0) . " rows across " . ($dataImport['tables_imported'] ?? 0) . " tables.");
+                    } else {
+                        $this->warn("Data import completed with issues.");
+                    }
+                } catch (\Throwable $e) {
+                    $this->error("Data import failed: " . $e->getMessage());
                 }
             }
         }

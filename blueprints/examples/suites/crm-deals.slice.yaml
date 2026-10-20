@@ -1,0 +1,71 @@
+spec_version: "0.1"
+name: Deals
+handle: deals
+domain: CRM
+description: "Sales pipeline deals"
+version: 1.0.0
+navigation:
+  label: Deals
+  icon: handshake
+  group: CRM
+  order: 30
+models:
+  - handle: deal
+    table: deals
+    root: true
+    fields:
+      - handle: title
+        label: Deal
+        type: string
+        required: true
+      - handle: company_id
+        label: Company
+        type: integer
+        required: false
+        input: select
+      - handle: amount
+        label: Amount
+        type: decimal
+        required: false
+      - handle: stage
+        label: Stage
+        type: string
+        required: true
+        input: select
+      - handle: close_date
+        label: Close
+        type: date
+        required: false
+fields:
+  title:
+    name: title
+    type: string
+    searchable: true
+  amount:
+    name: amount
+    type: decimal
+  stage:
+    name: stage
+    type: string
+    input: select
+  close_date:
+    name: close_date
+    type: date
+ui:
+  directory:
+    views: [table, board]
+    default_view: board
+    columns:
+      - key: title
+        label: Deal
+        formatter: text
+        sortable: true
+      - key: stage
+        label: Stage
+        formatter: status_pill
+      - key: amount
+        label: Amount
+        formatter: money_breakdown
+      - key: close_date
+        label: Close
+        formatter: date_overdue
