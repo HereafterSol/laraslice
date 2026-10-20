@@ -320,6 +320,7 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 
 Every vertical slice maintains a version-controlled `app/Slices/{SliceName}/slice.yaml` single source of truth.
 - **Blueprint Studio UI**: Available at `/laraslice/wizard/blueprint`.
+- **ONE Studio (canonical developer surface)**: All studios live in ONE shell at `/laraslice/studio` with modes `?mode=port|design|create|manage` (Schema Studio is the Design sub-view `&view=schema`). Legacy URLs (`/laraslice/wizard`, `/wizard/studio`, `/wizard/blueprint`, `/wizard/porting`, `/wizard/schema-studio`) redirect into the shell. The Studio Home (no `?mode`) is the front door: BRD/AI brief, port a legacy app, design a domain, or manage existing slices. Panels are lazy-mounted; POST endpoints are unchanged.
 - **Modes**:
   - `🎨 Visual`: Interactive entity modeler with Statamic field widths (`33%`, `50%`, `100%`).
   - `👁️ Preview`: Real-time interactive BlatUI component and data table mockup.

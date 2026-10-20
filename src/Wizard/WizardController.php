@@ -43,6 +43,15 @@ class WizardController extends Controller
 
     public function schemaStudio()
     {
+        // ONE Studio: canonical surface is the shell, Design > Schema sub-view.
+        return redirect(route('laraslice.studio').'?mode=design&view=schema');
+    }
+
+    /**
+     * Build the Schema Studio view (standalone wrapper + Dev Studio panel).
+     */
+    public function schemaStudioView()
+    {
         $manager = app(SliceManager::class);
         $slicesList = [];
         foreach ($manager->getAllSlices() as $slice) {

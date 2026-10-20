@@ -71,6 +71,20 @@ Phase 2 Design panel → Phase 3 Create/Manage as native modes → Phase 4
 redirects + docs/skill updates. Each phase ships independently; old pages
 keep working until their phase lands.
 
+**Implementation status (LaraSlice, 20 Oct 2026): COMPLETE.** All four
+phases are implemented and browser-verified: shell + Port (Phase 1), Design
+panel + Studio Home intent picker + BRD brief handoff (Phase 2), Create +
+Manage native modes sharing the wizard panel (Phase 3), Schema Studio as a
+Design sub-view (`?mode=design&view=schema`) + legacy redirects (Phase 4).
+Refinements beyond the original sketch, kept as standard: modes are
+**destinations, not steps** (no numbering — real journeys start from a BRD,
+a legacy app, a blank slate, or an existing install), the shell owns ALL
+chrome (panels ship no titles/breadcrumbs of their own), and the Studio
+Home intent picker is the front door for new work. A follow-up **Studio
+Polish** program (type scale, toolbar grouping, Manage rail/header rework,
+Port tab overflow, YAML validation chip in Design) applies §2–§9 of this
+standard to the unified shell.
+
 **Acceptance:** one URL loads the shell, all modes reachable without reload;
 deep link `?mode=design` works; initial payload measured (§9); each handoff
 demonstrated; legacy URLs redirect; 390px clean; CLI parity unchanged;
