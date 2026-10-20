@@ -938,6 +938,9 @@ function larasliceWizard() {
         navGroup: 'Work',
         navVisible: true,
         studioConfigSaving: false,
+        showDiffModal: false,
+        pendingDiff: '',
+        pendingSavePayload: null,
         studioConfigMessage: '',
         // Form sections (Step 3: Create & Edit Form)
         uiFormSections: [],
@@ -1802,6 +1805,97 @@ function larasliceWizard() {
             });
         },
         async saveStudioConfig() {
+            if (!this.selectedSlice) return;
+            this.studioConfigSaving = true;
+            this.studioConfigMessage = '';
+            try {
+                const payload = this.buildStudioConfigPayload();
+                // Preview diff before overwrite — no silent writes
+                const previewRes = await fetch('{{ route('laraslice.wizard.preview_studio_config') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const preview = await previewRes.json();
+                if (!preview.success) {
+                    this.studioConfigMessage = preview.message || 'Could not build diff';
+                    return;
+                }
+                if (!preview.changed) {
+                    this.studioConfigMessage = 'No changes to save.';
+                    return;
+                }
+                this.pendingDiff = preview.diff;
+                this.pendingSavePayload = payload;
+                this.showDiffModal = true;
+                return;
+            } catch (e) {
+                this.studioConfigMessage = e.message || String(e);
+            } finally {
+                this.studioConfigSaving = false;
+            }
+        },
+        buildStudioConfigPayload() {
+                const ui = this.buildUiConfig();
+                ui.dashboard = { enabled: true, widgets: this.uiDashboardWidgets || [] };
+                const navigation = {
+                    roles: this.navRoles || [],
+                    visible: this.navVisible !== false,
+                    label: this.navConfig?.title || this.selectedSlice.navigation?.label || this.selectedSlice.title || this.selectedSlice.name,
+                    icon: this.navConfig?.icon || this.selectedSlice.navigation?.icon || 'package',
+                    group: this.navGroup || this.navConfig?.group || this.selectedSlice.navigation?.group || 'General',
+                    order: this.navConfig?.order || 50,
+                    hidden: !!this.navConfig?.hidden,
+                };
+                const workflowPayload = this.includeWorkflow && this.workflowConfig
+                    ? {
+                        enabled: true,
+                        state_field: this.workflowConfig.state_field || this.workflowConfig.state_column || 'status',
+                        initial_state: this.workflowConfig.initial_state || (this.workflowConfig.states?.[0]?.slug || 'draft'),
+                        states: this.workflowConfig.states || [],
+                        transitions: this.workflowConfig.transitions || [],
+                    }
+                    : (this.includeWorkflow === false ? { enabled: false, states: [], transitions: [] } : null);
+                return {
+                    slice: this.selectedSlice.name,
+                    ui,
+                    navigation,
+                    ...(workflowPayload !== null ? { workflow: workflowPayload } : {}),
+                };
+        },
+        async confirmStudioSave() {
+            if (!this.pendingSavePayload) return;
+            this.showDiffModal = false;
+            this.studioConfigSaving = true;
+            try {
+                const res = await fetch('{{ route('laraslice.wizard.save_studio_config') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(this.pendingSavePayload),
+                });
+                const data = await res.json();
+                this.studioConfigMessage = data.message || (data.success ? 'Saved' : 'Save failed');
+                if (data.version_history) this.selectedSlice.version_history = data.version_history;
+                if (data.ui) this.selectedSlice.ui = data.ui;
+                if (data.navigation) this.selectedSlice.navigation = data.navigation;
+                if (data.workflow !== undefined) this.selectedSlice.workflow = data.workflow;
+            } catch (e) {
+                this.studioConfigMessage = e.message || String(e);
+            } finally {
+                this.studioConfigSaving = false;
+                this.pendingSavePayload = null;
+                this.pendingDiff = '';
+            }
+        },
+        async saveStudioConfigLegacy() {
             if (!this.selectedSlice) return;
             this.studioConfigSaving = true;
             this.studioConfigMessage = '';
@@ -5531,4 +5625,23 @@ function larasliceWizard() {
         @include('laraslice::partials.porting-modal')
 
     </div>
+
+    <!-- YAML diff confirm modal (no silent overwrite) -->
+    <div x-show="showDiffModal" x-cloak class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+         @keydown.escape.window="showDiffModal = false">
+        <div class="w-full max-w-3xl rounded-2xl border border-border bg-card shadow-2xl flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between border-b border-border px-5 py-3">
+                <h3 class="text-sm font-bold text-foreground">Review YAML changes before save</h3>
+                <button type="button" @click="showDiffModal = false" class="text-muted-foreground hover:text-foreground text-xs">Close</button>
+            </div>
+            <pre class="flex-1 overflow-auto p-4 text-[11px] font-mono leading-relaxed text-foreground bg-muted/30" x-text="pendingDiff || '(no changes)'"></pre>
+            <div class="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+                <button type="button" @click="showDiffModal = false; pendingSavePayload = null"
+                        class="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent">Cancel</button>
+                <button type="button" @click="confirmStudioSave()"
+                        class="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">Save & write history</button>
+            </div>
+        </div>
+    </div>
+
 @endsection
