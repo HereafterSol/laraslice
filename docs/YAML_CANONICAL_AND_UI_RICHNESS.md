@@ -83,4 +83,18 @@ See `YAML-ELIMINATION-SPEC.md` — 4 phases. **Do not implement on this branch.*
 ## Phase 2 / 3 (backlog)
 
 - Parse source `*DataTable.php` `editColumn` closures  
-- AI screenshot + code → YAML diffs approved in Studio  
+- AI screenshot + code → YAML diffs approved in Studio
+
+## Phase 1 dual-read (YAML elimination) — shipped
+
+`ManifestRepository::readFromSliceDir()`:
+
+| Situation | Behavior |
+|-----------|----------|
+| YAML only | Load YAML |
+| JSON only | Load JSON, write YAML twin, **keep JSON** |
+| Both present | **YAML wins** |
+| Malformed YAML + JSON | Warn, fall back to JSON (never fatal) |
+| Malformed YAML, no JSON | Throw |
+
+JSON is not deleted in Phase 1. Write-YAML-only and JSON removal are later phases.
