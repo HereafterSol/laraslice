@@ -376,6 +376,16 @@ class SlicePortService
     }
 
     /**
+     * Supporting/child entities belong inside their parent slice's UI, not
+     * the top-level navigation. Name-based heuristic matched against the
+     * ported slice name; explicit navigation.visible always wins.
+     */
+    protected function isSupportingSlice(string $sliceName): bool
+    {
+        return (bool) preg_match('/(Details|Docs|Files|Schedules|Items|Histories|Attachments|Templates)$/', $sliceName);
+    }
+
+    /**
      * Detect Bounded Domain (Module) for an aggregate slice based on enterprise clustering rules.
      */
     public function detectModuleForSlice(string $sliceName, string $primaryTable): string
@@ -1895,7 +1905,7 @@ PHP;
                     // Akaunting-style: numeric ordering for easy insertion, permission-gated
                     'order' => $info['nav_order'] ?? 50,
                     'permission' => Str::snake(Str::singular($sliceName)).'.view',
-                    'visible' => true,
+                    'visible' => ! $this->isSupportingSlice($sliceName),
                 ], is_array($info['navigation'] ?? null) ? $info['navigation'] : []),
             ];
 
@@ -3844,6 +3854,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 || str_ends_with($name, 'Replies')
                 || str_ends_with($name, 'Files')
                 || str_ends_with($name, 'Comments')
+                || $this->isSupportingSlice($name)
             ) {
                 $nav['visible'] = false;
                 $nav['roles'] = ['admin'];
