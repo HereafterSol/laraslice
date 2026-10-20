@@ -62,23 +62,21 @@ final class ManifestRepository
                 self::assertRoundTrip($manifest, $yaml);
                 return $manifest;
             } catch (\Throwable $e) {
-                self::warn("Malformed YAML at {$yaml}: ".$e->getMessage().' — falling back to slice.json');
-                if ($hasJson) {
-                    return self::read($json);
-                }
-                throw $e;
+                throw new \RuntimeException(
+                    "Malformed YAML at {$yaml}: ".$e->getMessage()
+                    ." — fix the YAML or restore from git. JSON fallback was removed in Phase 4."
+                );
             }
         }
 
         if ($hasJson) {
-            self::warnOnce($dir, 'Slice at '.$dir.' is JSON-only. Run: php artisan slice:migrate-json-to-yaml');
-            $manifest = self::read($json);
-            // Auto-migrate-on-read: write YAML twin, keep JSON
-            self::writeYamlTwin($json, $manifest);
-            return $manifest;
+            throw new \RuntimeException(
+                "Slice at {$dir} is JSON-only. YAML is required. "
+                ."Run: php artisan slice:migrate-json-to-yaml"
+            );
         }
 
-        throw new \RuntimeException("No slice.yaml or slice.json in {$dir}");
+        throw new \RuntimeException("No slice.yaml in {$dir}. Run: php artisan slice:migrate-json-to-yaml");
     }
 
     private static function isYamlPath(string $file): bool
