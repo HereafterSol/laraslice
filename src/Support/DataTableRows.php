@@ -70,15 +70,19 @@ class DataTableRows
                             (string) ($column['badge_from'] ?? 'priority')
                         ),
                         'progress_bar' => static::progressBar((float) $val),
-                        'date_time' => static::display($val),
+                        'date_time' => static::formatDateValue($val, 'datetime'),
                         'date_overdue' => static::dateOverdue($val),
                         default => static::display($val),
                     };
                     continue;
                 }
 
-                // 3. Foreign key lookup batch mapping
-                if (isset($fkMaps[$key]) && is_scalar($val) && isset($fkMaps[$key][$val])) {
+                // 3a. Declared option labels (enum-style fields) beat raw values
+                if (! empty($column['options']) && is_array($column['options']) && is_scalar($val)
+                    && isset($column['options'][(string) $val])) {
+                    $row[$key] = $column['options'][(string) $val];
+                // 3b. Foreign key lookup batch mapping
+                } elseif (isset($fkMaps[$key]) && is_scalar($val) && isset($fkMaps[$key][$val])) {
                     $row[$key] = (string) $fkMaps[$key][$val];
                 } elseif (str_ends_with($key, '_id') && $key !== 'id' && $item instanceof Model) {
                     $relName = Str::camel(substr($key, 0, -3));
@@ -89,6 +93,9 @@ class DataTableRows
                     }
                 } elseif ($val instanceof Model) {
                     $row[$key] = static::modelDisplayName($val);
+                } elseif (in_array($column['field_type'] ?? null, ['date', 'datetime', 'timestamp'], true)
+                    && (is_string($val) || $val instanceof \DateTimeInterface)) {
+                    $row[$key] = static::formatDateValue($val, (string) $column['field_type']);
                 } else {
                     $row[$key] = static::display($val);
                 }
@@ -296,7 +303,6 @@ class DataTableRows
 
     /**
      * Date cell with overdue / today / future coloring (ERP Tasks due_date parity).
-     * XSS-safe: label and title always htmlspecialchars; CSS classes are fixed literals.
      */
     public static function dateOverdue(mixed $val): string
     {
@@ -441,6 +447,29 @@ class DataTableRows
         }
 
         return (string) ($model->getKey() ?? '—');
+    }
+
+    /**
+     * Human date display for date/datetime-typed fields shown without an
+     * explicit formatter (raw storage format never reaches the listing).
+     */
+    public static function formatDateValue(mixed $value, string $fieldType): string
+    {
+        try {
+            $dt = $value instanceof \DateTimeInterface
+                ? $value
+                : new \DateTimeImmutable((string) $value);
+        } catch (\Throwable) {
+            return (string) static::display($value);
+        }
+
+        // A datetime sitting exactly at midnight is a date in disguise
+        // (the common case for ported date columns) — never show ", 00:00".
+        if ($fieldType === 'date' || $dt->format('H:i:s') === '00:00:00') {
+            return $dt->format('d M Y');
+        }
+
+        return $dt->format('d M Y, H:i');
     }
 
     public static function display(mixed $value): string|int|float

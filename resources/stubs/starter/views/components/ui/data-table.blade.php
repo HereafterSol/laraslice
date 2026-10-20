@@ -43,6 +43,8 @@
             'html' => $html,
             'badge_from' => $c['badge_from'] ?? null,
             'breakdown' => $c['breakdown'] ?? null,
+            'options' => $c['options'] ?? null,
+            'field_type' => $c['field_type'] ?? null,
         ];
     })->values();
     $searchKeys = $searchKey ? [$searchKey] : $cols->pluck('key')->all();
@@ -185,6 +187,24 @@
                 </div>
             </template>
 
+            <!-- Column visibility: sensible defaults, user-adjustable, persisted per page -->
+            <div class="relative" @click.outside="colMenuOpen = false">
+                <button type="button" @click="colMenuOpen = !colMenuOpen"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-border bg-card text-[11px] font-semibold text-muted-foreground hover:text-foreground shadow-2xs transition-colors cursor-pointer">
+                    <x-lucide-sliders-horizontal class="size-3.5" />
+                    <span>Columns</span>
+                    <span x-show="hiddenCols.length" x-cloak class="size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center" x-text="hiddenCols.length"></span>
+                </button>
+                <div x-show="colMenuOpen" x-cloak class="absolute right-0 mt-1.5 w-52 rounded-xl border border-border bg-card shadow-lg p-1.5 z-30 max-h-72 overflow-y-auto">
+                    <template x-for="c in cols" :key="c.key">
+                        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/60 cursor-pointer text-xs">
+                            <input type="checkbox" class="rounded border-border" :checked="colVisible(c.key)" @change="toggleCol(c.key)" />
+                            <span x-text="c.label"></span>
+                        </label>
+                    </template>
+                </div>
+            </div>
+
             @isset($tableActions)
                 {{ $tableActions }}
             @endisset
@@ -292,7 +312,7 @@
                         </th>
                     @endif
                     @foreach ($cols as $col)
-                        <th scope="col" @if ($col['sortable']) :aria-sort="sortKey === '{{ $col['key'] }}' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'" @endif
+                        <th scope="col" x-show="colVisible('{{ $col['key'] }}')" @if ($col['sortable']) :aria-sort="sortKey === '{{ $col['key'] }}' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'" @endif
                             class="text-muted-foreground h-9 px-3 text-start align-middle font-semibold whitespace-nowrap uppercase text-[11px] tracking-wider {{ $col['class'] }}">
                             @if ($col['sortable'])
                                 <button type="button" @click="toggleSort('{{ $col['key'] }}')" class="hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 -ms-1 inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors outline-none cursor-pointer">
@@ -332,7 +352,7 @@
                         @foreach ($cols as $col)
                             @if (($col['key'] ?? '') === ($statusKey ?? 'status') && in_array($statusKey ?? 'status', $inlineEdit ?: [], true))
                                 {{-- Show status_pill HTML; only show transition select when workflow transitions exist --}}
-                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}">
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')">
                                     <div class="flex items-center gap-2 min-w-0">
                                         <span class="shrink-0" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
                                         <select
@@ -350,9 +370,9 @@
                                     </div>
                                 </td>
                             @elseif (!empty($col['html']))
-                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle max-w-[340px] whitespace-normal {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle max-w-[340px] whitespace-normal {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')" x-html="item.r['{{ $col['key'] }}']"></td>
                             @else
-                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle text-foreground {{ $col['class'] }}"><span class="ls-cell-clamp" :title="item.r['{{ $col['key'] }}']" x-text="item.r['{{ $col['key'] }}']"></span></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle text-foreground {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')"><span class="ls-cell-clamp" :title="item.r['{{ $col['key'] }}']" x-text="item.r['{{ $col['key'] }}']"></span></td>
                             @endif
                         @endforeach
                         @isset($actions)
@@ -433,6 +453,42 @@ if (typeof window.blatDataTable === 'undefined') {
                     rows: groups[k],
                 }));
             },
+            hiddenCols: [],
+            colMenuOpen: false,
+            init() { this.initColumnVisibility(); },
+            colStorageKey() { return 'ls-cols:' + window.location.pathname; },
+            initColumnVisibility() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(this.colStorageKey()) || 'null');
+                    if (Array.isArray(saved)) {
+                        this.hiddenCols = saved.filter(k => this.cols.some(c => c.key === k));
+                        return;
+                    }
+                } catch (e) {}
+                // Default discipline: with more than 8 declared columns, show the
+                // identity/status columns plus the first ones up to 7 — the rest
+                // stay one click away in the Columns menu instead of squeezing
+                // the table off-screen.
+                if (this.cols.length > 8) {
+                    const keep = new Set();
+                    if (this.cols[0]) keep.add(this.cols[0].key);
+                    for (const c of this.cols) {
+                        if (c.key === this.statusKey || /(^|_)(name|title|subject|code|number|amount|total|price)$/.test(c.key)) keep.add(c.key);
+                    }
+                    for (const c of this.cols) {
+                        if (keep.size >= 7) break;
+                        keep.add(c.key);
+                    }
+                    this.hiddenCols = this.cols.map(c => c.key).filter(k => !keep.has(k));
+                }
+            },
+            toggleCol(key) {
+                this.hiddenCols = this.hiddenCols.includes(key)
+                    ? this.hiddenCols.filter(k => k !== key)
+                    : [...this.hiddenCols, key];
+                try { localStorage.setItem(this.colStorageKey(), JSON.stringify(this.hiddenCols)); } catch (e) {}
+            },
+            colVisible(key) { return !this.hiddenCols.includes(key); },
             inlineEdit: cfg.inlineEdit || [],
             dateKey: cfg.dateKey || null,
             workflowTransitionUrlTemplate: cfg.workflowTransitionUrlTemplate || null,
