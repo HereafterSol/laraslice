@@ -778,7 +778,7 @@ PHP;
      */
     protected function resolveStudioSliceDir(string $sliceName): string
     {
-        $studly = \LaraSlice\Support\SliceName::canonical($sliceName);
+        $studly = SliceName::canonical($sliceName);
         $plural = \Illuminate\Support\Str::plural($studly);
         $dir = $this->resolveSliceDir($plural);
         if (! is_dir($dir)) {
