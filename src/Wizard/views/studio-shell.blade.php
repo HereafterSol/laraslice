@@ -114,15 +114,10 @@
             <div x-show="!designLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Design…</div>
             <div id="one-studio-design" x-show="designLoaded"></div>
         </div>
-        <div x-show="mode === 'create'" x-cloak class="rounded-2xl border border-border bg-card p-8 text-center">
-            <p class="text-sm font-semibold text-foreground">Create</p>
-            <p class="mt-1 text-xs text-muted-foreground">Scaffold Wizard moves here in Phase 3.</p>
-            <a href="{{ route('laraslice.wizard') }}" class="mt-3 inline-flex text-xs font-semibold text-primary underline">Open Scaffold Wizard</a>
-        </div>
-        <div x-show="mode === 'manage'" x-cloak class="rounded-2xl border border-border bg-card p-8 text-center">
-            <p class="text-sm font-semibold text-foreground">Manage</p>
-            <p class="mt-1 text-xs text-muted-foreground">Slice Studio moves here in Phase 3.</p>
-            <a href="{{ route('laraslice.wizard.studio') }}" class="mt-3 inline-flex text-xs font-semibold text-primary underline">Open Slice Studio</a>
+        {{-- CREATE + MANAGE share one mounted wizard panel; the shell mode drives its tab. --}}
+        <div x-show="mode === 'create' || mode === 'manage'" x-cloak>
+            <div x-show="!wizardLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Studio…</div>
+            <div id="one-studio-wizard" x-show="wizardLoaded"></div>
         </div>
     </main>
 </div>
@@ -137,6 +132,7 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
         sliceCount: sliceCount || 0,
         portLoaded: false,
         designLoaded: false,
+        wizardLoaded: false,
         kickoffText: '',
         kickoffBrief: '',
         modes: [
@@ -152,6 +148,9 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
             }
             if (this.mode === 'design') {
                 this.mountDesign();
+            }
+            if (this.mode === 'create' || this.mode === 'manage') {
+                this.mountWizard(this.mode);
             }
             document.addEventListener('keydown', (e) => {
                 if (!(e.metaKey || e.ctrlKey)) return;
@@ -173,6 +172,9 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
             }
             if (id === 'design') {
                 this.mountDesign();
+            }
+            if (id === 'create' || id === 'manage') {
+                this.mountWizard(id);
             }
         },
         startFromText() {
@@ -255,6 +257,77 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
                 window.Alpine.initTree(el);
             }
             window.dispatchEvent(new CustomEvent('laraslice:design-mounted'));
+        },
+        async mountWizard(firstMode) {
+            if (this.wizardLoaded) {
+                this.syncWizardTab();
+                return;
+            }
+            const el = document.getElementById('one-studio-wizard');
+            if (!el) return;
+            const src = new URLSearchParams(window.location.search);
+            const fwd = new URLSearchParams();
+            ['slice', 'tab'].forEach(k => { if (src.get(k)) fwd.set(k, src.get(k)); });
+            const base = @js(route('laraslice.studio.panel', ['mode' => '__MODE__']));
+            const url = base.replace('__MODE__', firstMode) + (fwd.toString() ? '?' + fwd.toString() : '');
+            const res = await fetch(url, {
+                headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) {
+                el.innerHTML = '<p class="text-sm text-destructive">Could not load Studio panel.</p>';
+                this.wizardLoaded = true;
+                return;
+            }
+            const html = await res.text();
+            // Parse as a full document: the wizard markup's tag balance was authored
+            // for document parsing; fragment (innerHTML) parsing mis-nests it.
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            el.innerHTML = '';
+            // The wizard panel leads with <style>/<script>, which a document
+            // parse places in <head> — import those too, in order.
+            [...doc.head.childNodes].forEach(n => el.appendChild(document.importNode(n, true)));
+            [...doc.body.childNodes].forEach(n => el.appendChild(document.importNode(n, true)));
+            // The wizard markup nests the Studio section inside the Wizard grid
+            // (unbalanced tags upstream), where x-show would hide it with its
+            // parent. Hoist mode sections to the component root before Alpine runs.
+            const wroot = el.querySelector('#laraslice-wizard-root');
+            if (wroot) {
+                el.querySelectorAll('div[x-show^="mainTab ==="]').forEach(sec => {
+                    if (sec.parentElement !== wroot) wroot.appendChild(sec);
+                });
+            }
+            el.querySelectorAll('script').forEach((oldScript) => {
+                const s = document.createElement('script');
+                if (oldScript.src) {
+                    s.src = oldScript.src;
+                } else {
+                    s.textContent = oldScript.textContent;
+                }
+                document.body.appendChild(s);
+                oldScript.remove();
+            });
+            this.wizardLoaded = true;
+            if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                window.Alpine.initTree(el);
+            }
+            // Sync once the component has settled (its init + first render);
+            // syncing earlier races Alpine's effect creation.
+            setTimeout(() => this.syncWizardTab(), 600);
+        },
+        syncWizardTab() {
+            const root = document.getElementById('laraslice-wizard-root');
+            if (!root || !window.Alpine || typeof window.Alpine.$data !== 'function') return;
+            try {
+                const data = window.Alpine.$data(root);
+                if (!data) return;
+                const target = this.mode === 'manage' ? 'studio' : 'wizard';
+                // Force the x-show effects to re-evaluate: after the fetch-mount,
+                // the panel's first effect pass can run before its component data
+                // settles, leaving the active section hidden. Toggling through
+                // the other tab and back reliably re-runs them.
+                data.mainTab = target === 'studio' ? 'wizard' : 'studio';
+                data.mainTab = target;
+            } catch (e) {}
         },
     };
 }
