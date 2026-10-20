@@ -59,7 +59,7 @@ The wizard has five steps. Enforce them:
 
 Do not show the full field/UI editors until the user is on the Studio tab. Target: five simple screens, not hundreds of controls at once.
 
-*(Deferred to first post-merge PR — wizard works today; density reduction follows.)*
+*(Landed: wizard summary deferred until step ≥ 3, steps locked until project name, mobile progress bar, Studio UI architecture collapsed by default.)*
 
 ---
 
@@ -124,7 +124,7 @@ Studio lists, dropdowns, and slice pickers must be paginated or virtualized abov
 | Single Start from… picker | ✅ Blueprint Studio |
 | Header overflow on small screens | ✅ Blueprint Studio |
 | AI Copilot collapse on mobile | ✅ icon-only + restore chip |
-| Progressive disclosure (Slice Studio) | 📋 post-merge |
+| Progressive disclosure (Slice Studio) | ✅ wizard + Studio toggle |
 | Diff / version history | 📋 standard (this doc) |
 | Journey breadcrumb | 📋 standard (this doc) |
 | Visual language unification | 📋 standard (this doc) |

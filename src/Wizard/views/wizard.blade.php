@@ -6,6 +6,7 @@
 function larasliceWizard() {
     return {
         mainTab: @js(old('tab', $initialTab ?? (request()->query('tab') ?: (request()->routeIs('*studio*') ? 'studio' : 'wizard')))),
+        showAdvancedUi: false,
         step: 1,
         projectName: '',
         domain: '',
@@ -2731,7 +2732,18 @@ function larasliceWizard() {
         </div>
         <!-- Wizard Mode Grid -->
         <div class="grid grid-cols-1 md:grid-cols-12 gap-6" x-show="mainTab === 'wizard'">
-            <!-- Left Steps Sidebar -->
+            <!-- Mobile progress (compact) -->
+            <div class="col-span-12 md:hidden flex items-center gap-2 px-1">
+                <template x-for="n in [1,2,3,4,5]" :key="n">
+                    <button type="button" @click="(n === 1 || projectName) && (step = n)"
+                            class="flex-1 h-1.5 rounded-full transition"
+                            :class="step >= n ? 'bg-primary' : 'bg-muted'"
+                            :aria-label="'Step ' + n"></button>
+                </template>
+                <span class="text-[10px] font-mono text-muted-foreground shrink-0" x-text="step + '/5'"></span>
+            </div>
+            <!-- Left Steps Sidebar (hidden on small screens — progress bar replaces it) -->
+            <div class="hidden md:block col-span-12 md:col-span-5 lg:col-span-4 space-y-6">
             <div class="col-span-12 md:col-span-5 lg:col-span-4 space-y-6">
                 <div class="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-xl">
                     <!-- Step 1 Indicator -->
@@ -2747,7 +2759,7 @@ function larasliceWizard() {
                     </div>
 
                     <!-- Step 2 Indicator -->
-                    <div class="flex items-center space-x-4 cursor-pointer" @click="step = 2">
+                    <div class="flex items-center space-x-4" :class="projectName ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'" @click="projectName && (step = 2)">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition"
                              :class="step >= 2 ? 'bg-primary text-white shadow-lg shadow-amber-500/30' : 'bg-gray-800 text-muted-foreground'">
                             2
@@ -2759,7 +2771,7 @@ function larasliceWizard() {
                     </div>
 
                     <!-- Step 3 Indicator -->
-                    <div class="flex items-center space-x-4 cursor-pointer" @click="step = 3">
+                    <div class="flex items-center space-x-4" :class="projectName ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'" @click="projectName && (step = 3)">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition"
                              :class="step >= 3 ? 'bg-primary text-white shadow-lg shadow-amber-500/30' : 'bg-gray-800 text-muted-foreground'">
                             3
@@ -2771,7 +2783,7 @@ function larasliceWizard() {
                     </div>
 
                     <!-- Step 4 Indicator -->
-                    <div class="flex items-center space-x-4 cursor-pointer" @click="step = 4">
+                    <div class="flex items-center space-x-4" :class="projectName ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'" @click="projectName && (step = 4)">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition"
                              :class="step >= 4 ? 'bg-primary text-white shadow-lg shadow-amber-500/30' : 'bg-gray-800 text-muted-foreground'">
                             4
@@ -2783,7 +2795,7 @@ function larasliceWizard() {
                     </div>
 
                     <!-- Step 5 Indicator -->
-                    <div class="flex items-center space-x-4 cursor-pointer" @click="step = 5">
+                    <div class="flex items-center space-x-4" :class="projectName ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'" @click="projectName && (step = 5)">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition"
                              :class="step >= 5 ? 'bg-primary text-white shadow-lg shadow-amber-500/30' : 'bg-gray-800 text-muted-foreground'">
                             5
@@ -2795,8 +2807,8 @@ function larasliceWizard() {
                     </div>
                 </div>
 
-                <!-- Quick Summary Card -->
-                <div class="bg-card border border-border rounded-2xl p-6 space-y-3 shadow-xl text-xs">
+                <!-- Quick Summary Card (shown from step 3 — progressive disclosure) -->
+                <div x-show="step >= 3" x-cloak class="bg-card border border-border rounded-2xl p-6 space-y-3 shadow-xl text-xs">
                     <p class="font-bold text-muted-foreground uppercase tracking-wider text-[10px]">Your Project Summary</p>
                     <div class="flex justify-between py-1 border-b border-border/60">
                         <span class="text-muted-foreground">Name:</span>
@@ -4819,8 +4831,15 @@ function larasliceWizard() {
                 </div>
 
                 
-                <!-- Declarative UI Architecture: Directory Columns, Multi-Dimensional Filters & Form Layout -->
-                <div class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4" x-data="{ uiTab: 'directory' }">
+                <!-- Progressive disclosure: UI architecture collapsed until requested -->
+                <div class="flex items-center justify-between">
+                    <button type="button" @click="showAdvancedUi = !showAdvancedUi"
+                            class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent">
+                        <span x-text="showAdvancedUi ? '▾ Hide UI customization' : '▸ Customize directory & forms'"></span>
+                    </button>
+                </div>
+                <div x-show="showAdvancedUi" x-cloak class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4" x-data="{ uiTab: 'directory' }">
+
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
                         <div class="flex items-center gap-2.5">
                             <div class="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
