@@ -69,15 +69,20 @@ final class FieldDefinitionNormalizer
                 throw new SliceFieldDefinitionException($problem);
             }
 
+            // Declared options make ANY field a select in the form and a
+            // labeled value in listings — the storage type stays as declared
+            // (e.g. a MySQL enum ported as string + options). Previously only
+            // the literal 'select' type kept its options; string+options
+            // fields silently lost them and rendered as free text.
             $options = [];
-            if ($type === 'select' && ! empty($definition['options'])) {
+            if (! empty($definition['options'])) {
                 $options = $definition['options'] ?? [];
                 if (! is_array($options) || count($options) > 50) {
-                    throw new SliceFieldDefinitionException("Select field '{$name}' requires between 1 and 50 options.");
+                    throw new SliceFieldDefinitionException("Field '{$name}' requires between 1 and 50 options when options are declared.");
                 }
                 foreach ($options as $value => $optionLabel) {
                     if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($optionLabel) || ! BladeSafeText::isSafe($optionLabel)) {
-                        throw new SliceFieldDefinitionException("Select field '{$name}' has an invalid option.");
+                        throw new SliceFieldDefinitionException("Field '{$name}' has an invalid option.");
                     }
                 }
             }
@@ -106,7 +111,7 @@ final class FieldDefinitionNormalizer
             if (! FieldType::defaultMatches($type, $default)) {
                 throw new SliceFieldDefinitionException("Field '{$name}' has a default value that does not match its {$type} type.");
             }
-            if ($type === 'select' && $default !== null && ! empty($options) && ! array_key_exists($default, $options)) {
+            if ($default !== null && ! empty($options) && ! str_ends_with($name, '_id') && ! array_key_exists($default, $options)) {
                 throw new SliceFieldDefinitionException("Field '{$name}' default must match one of its select option values.");
             }
 
@@ -168,7 +173,7 @@ final class FieldDefinitionNormalizer
                 $nullable ? 'nullable' : 'required',
                 $types[$type]['validation'],
                 in_array($type, ['string', 'email', 'select', 'url'], true) ? 'max:'.$maxLength : null,
-                $type === 'select' && ! empty($options) ? 'in:'.implode(',', array_keys($options)) : null,
+                ! empty($options) && ! str_ends_with($name, '_id') ? 'in:'.implode(',', array_keys($options)) : null,
             ]));
 
             $schema = "Field::make('{$name}', '{$types[$type]['input']}')->label(".var_export($label, true).')';
@@ -188,7 +193,7 @@ final class FieldDefinitionNormalizer
                 'rules' => $rules,
                 'type' => $type,
                 'schema' => $schema,
-                'form' => $this->renderFormField($name, $label, $types[$type]['input'], $required, $default, $options),
+                'form' => $this->renderFormField($name, $label, ! empty($options) ? 'select' : $types[$type]['input'], $required, $default, $options),
                 'migration' => $columnExpression.';',
                 'default' => $default,
                 'nullable' => $nullable,

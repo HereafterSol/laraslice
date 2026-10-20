@@ -1531,6 +1531,15 @@ BLADE;
 
                     <x-ui.card-content class="p-6">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-6">
+                            @php \$detailRows = \LaraSlice\Support\DirectoryUi::detailRows('{$studlyName}', \$record); @endphp
+                            @if(! empty(\$detailRows))
+                                @foreach(\$detailRows as \$detailRow)
+                                    <div>
+                                        <dt class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ \$detailRow['label'] }}</dt>
+                                        <dd class="mt-1 text-sm font-medium text-foreground whitespace-pre-wrap break-words">@if(\$detailRow['html']){!! \$detailRow['value'] !!}@else{{ \$detailRow['value'] }}@endif</dd>
+                                    </div>
+                                @endforeach
+                            @else
                             @foreach((\$record->getAttributes() ?? []) as \$k => \$v)
                                 @if(! in_array(\$k, ['id', 'created_at', 'updated_at', 'deleted_at', 'workflow_state_entered_at']) && ! is_array(\$v))
                                     <div>
@@ -1539,6 +1548,7 @@ BLADE;
                                     </div>
                                 @endif
                             @endforeach
+                            @endif
                         </div>
                     </x-ui.card-content>
                 </x-ui.card>
