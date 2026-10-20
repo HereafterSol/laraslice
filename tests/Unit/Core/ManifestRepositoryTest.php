@@ -65,4 +65,66 @@ class ManifestRepositoryTest extends TestCase
         $this->expectException(\JsonException::class);
         ManifestRepository::write($this->dir.'/slice.json', ['name' => "\xB1\x31"]);
     }
+
+    public function test_phase1_yaml_only_slice_loads(): void
+    {
+        $yaml = "name: Tasks\nhandle: tasks\nfields:\n  title:\n    name: title\n    type: string\n";
+        file_put_contents($this->dir.'/slice.yaml', $yaml);
+
+        $manifest = ManifestRepository::readFromSliceDir($this->dir);
+
+        $this->assertSame('Tasks', $manifest['name']);
+        $this->assertArrayHasKey('title', $manifest['fields']);
+        $this->assertFileDoesNotExist($this->dir.'/slice.json');
+    }
+
+    public function test_phase1_json_only_migrates_to_yaml_and_keeps_json(): void
+    {
+        file_put_contents($this->dir.'/slice.json', json_encode([
+            'name' => 'Invoices',
+            'fields' => ['total' => ['name' => 'total', 'type' => 'decimal']],
+        ]));
+
+        $manifest = ManifestRepository::readFromSliceDir($this->dir);
+
+        $this->assertSame('Invoices', $manifest['name']);
+        $this->assertFileExists($this->dir.'/slice.json');
+        $this->assertFileExists($this->dir.'/slice.yaml');
+
+        // Round-trip: YAML parses back to the same manifest
+        $again = ManifestRepository::read($this->dir.'/slice.yaml');
+        $this->assertSame($manifest['name'], $again['name']);
+        $this->assertSame(array_keys($manifest['fields']), array_keys($again['fields']));
+    }
+
+    public function test_phase1_both_present_yaml_wins(): void
+    {
+        file_put_contents($this->dir.'/slice.json', json_encode([
+            'name' => 'FromJson',
+            'fields' => ['a' => ['name' => 'a', 'type' => 'string']],
+        ]));
+        file_put_contents($this->dir.'/slice.yaml', "name: FromYaml\nfields:\n  b:\n    name: b\n    type: string\n");
+
+        $manifest = ManifestRepository::readFromSliceDir($this->dir);
+
+        $this->assertSame('FromYaml', $manifest['name']);
+        $this->assertArrayHasKey('b', $manifest['fields']);
+        $this->assertArrayNotHasKey('a', $manifest['fields']);
+        // JSON was not deleted
+        $this->assertFileExists($this->dir.'/slice.json');
+    }
+
+    public function test_phase1_malformed_yaml_falls_back_to_json(): void
+    {
+        file_put_contents($this->dir.'/slice.yaml', "name: [unclosed\n  bad: : :\n");
+        file_put_contents($this->dir.'/slice.json', json_encode([
+            'name' => 'Fallback',
+            'fields' => ['x' => ['name' => 'x', 'type' => 'string']],
+        ]));
+
+        $manifest = ManifestRepository::readFromSliceDir($this->dir);
+
+        $this->assertSame('Fallback', $manifest['name']);
+        $this->assertFileExists($this->dir.'/slice.json');
+    }
 }

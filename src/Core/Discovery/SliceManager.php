@@ -116,7 +116,7 @@ class SliceManager
      */
     public function findManifest(string $dir): ?string
     {
-        foreach (['slice.json', 'slice.yaml', 'slice.yml'] as $file) {
+        foreach (['slice.yaml', 'slice.yml', 'slice.json'] as $file) {
             $path = $dir.'/'.$file;
             if (file_exists($path)) {
                 return $path;
