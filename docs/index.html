@@ -58,7 +58,7 @@
                     </div>
                     <div>
                         <span class="font-extrabold text-white text-base tracking-tight">LaraSlice</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v1.7.0</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v1.8.0</span>
                     </div>
                 </a>
             </div>
@@ -69,7 +69,7 @@
                 <a href="#anatomy" class="hover:text-amber-400 transition">Slice Anatomy</a>
                 <a href="#three-layers" class="hover:text-amber-400 transition">3-Layer Model</a>
                 <a href="#faq" class="hover:text-amber-400 transition">Developer FAQ</a>
-                <a href="changelog.html" class="text-amber-400 hover:text-amber-300 transition font-bold flex items-center gap-1.5"><span>Changelog</span><span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v1.7.0</span></a>
+                <a href="changelog.html" class="text-amber-400 hover:text-amber-300 transition font-bold flex items-center gap-1.5"><span>Changelog</span><span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v1.8.0</span></a>
             </nav>
 
             <div class="flex items-center gap-3">
@@ -589,11 +589,11 @@
             <!-- FAQ 2 -->
             <div class="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
                 <button type="button" @click="faqOpen = (faqOpen === 2 ? null : 2)" class="w-full px-6 py-4 text-left flex items-center justify-between gap-4 font-bold text-sm text-white hover:text-amber-400 transition cursor-pointer">
-                    <span>2. How does LaraSlice compare to October CMS plugin model?</span>
+                    <span>2. How does LaraSlice compare to runtime-extension plugin models?</span>
                     <span class="font-mono text-base" x-text="faqOpen === 2 ? '−' : '+'">+</span>
                 </button>
                 <div x-show="faqOpen === 2" class="px-6 pb-5 text-xs sm:text-sm text-slate-400 leading-relaxed border-t border-slate-800/60 pt-4" style="display: none;">
-                    October CMS relies heavily on dynamic runtime monkey-patching (<code>UserModel::extend()</code>), which can lead to brittle runtime conflicts and difficult debugging. LaraSlice uses <strong>Domain-Driven Design (DDD) Vertical Slices</strong>: slices communicate strictly via typed DTO contracts and domain events. If you need full ownership of a vendor slice, you publish it via <code>php artisan slice:publish Acme/Shop</code>.
+                    Runtime-extension plugin models rely heavily on dynamic monkey-patching (extending models at boot), which can lead to brittle runtime conflicts and difficult debugging. LaraSlice uses <strong>Domain-Driven Design (DDD) Vertical Slices</strong>: slices communicate strictly via typed DTO contracts and domain events. If you need full ownership of a vendor slice, you publish it via <code>php artisan slice:publish Acme/Shop</code>.
                 </div>
             </div>
 

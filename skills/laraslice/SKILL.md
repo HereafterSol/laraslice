@@ -291,7 +291,7 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 ### Discovery, Blueprint & Scaffolding
 - `php artisan slice:list {--domain=}`: Display all registered slices with Domain, Models, Version, and Status.
 - `php artisan slice:make <SliceName> [<SliceName2> ...] {--domain=} {--workflow} {--field=*} {--flutter}`: Scaffold complete end-to-end vertical slices.
-- `php artisan slice:field <SliceName> [field]`: Enhance an existing slice with new field(s) in a single consolidated migration (October CMS Builder style).
+- `php artisan slice:field <SliceName> [field]`: Enhance an existing slice with new field(s) in a single consolidated migration.
 - `php artisan slice:ai "<prompt>" {--flutter}`: Natural language AI generator that automatically infers slice models, fields, and workflows.
 - `php artisan slice:blueprint:validate <path>`: Validate versioned YAML/JSON blueprints.
 - `php artisan slice:blueprint:plan <path> {--format=table|json}`: Show deterministic schema and file plan before writing code.
@@ -1336,7 +1336,7 @@ LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 
 ---
 
-## Porting non-Laravel sources (e.g. Dolibarr)
+## Porting non-Laravel sources
 
 `slice:port` / Porting Studio accept **any project tree**, not only Laravel.
 
@@ -1346,15 +1346,15 @@ LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 |---------------|-----------|
 | Live DB via `--source-*` | **Preferred** — real tables + row counts |
 | `database/migrations` | Laravel projects |
-| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | Dolibarr, WordPress dumps, mysqldump |
+| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | legacy ERP/CMS dumps, mysqldump |
 | Target app DB | **Never by default** (was a bug). Opt-in: `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` |
 
-### Required for non-Laravel (Dolibarr)
+### Required for non-Laravel sources
 
 Point at the **legacy database** (or ship SQL schema files in the tree):
 
 ```bash
-# Clone or path to Dolibarr code
+# Clone or path to the non-Laravel source code
 php artisan slice:port /path/to/dolibarr \
   --domain=ERP \
   --source-host=127.0.0.1 \
