@@ -4526,7 +4526,7 @@ function larasliceWizard() {
                                     <span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">JSON + YAML</span>
                                     <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">History</span>
                                 </h2>
-                                <p class="text-xs text-muted-foreground mt-0.5">Primary DX surface — persona nav, directory views, dashboard widgets. Saves <code class="font-mono bg-muted px-1 rounded">slice.json</code> + <code class="font-mono bg-muted px-1 rounded">slice.yaml</code> with version ledger; optional DB workflow sync.</p>
+                                <p class="text-xs text-muted-foreground mt-0.5">Primary DX surface — persona nav, directory views, dashboard widgets. Saves <code class="font-mono bg-muted px-1 rounded">slice.yaml</code> with version ledger; optional DB workflow sync.</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

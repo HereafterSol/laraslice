@@ -454,7 +454,7 @@ CARD;
                 }
             }
 
-            // 1. slice.json Manifest
+            // 1. slice.yaml Manifest
             $manifestWorkflow = false;
             if ($includeWorkflow) {
                 if (! empty($options['workflowConfig']) && is_array($options['workflowConfig'])) {
@@ -554,7 +554,7 @@ CARD;
             $manifestData['multitenant'] = $multitenant;
             $manifestData['tenant_key'] = $tenantKey;
 
-            // Phase 2: YAML only. Do not create slice.json.
+            // Phase 2: YAML only. Do not create a JSON twin.
             \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifestData);
 
             if (! empty($manifestData['roles']) && is_array($manifestData['roles'])) {
@@ -1021,8 +1021,8 @@ ACTIONS;
             </x-slot:actions>
 ACTIONS;
             }
-                        $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\') . '/slice.json'));
-            $sliceYamlAbs = str_replace('slice.json', 'slice.yaml', $sliceJsonAbs);
+                        $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\') . '/slice.yaml'));
+            $sliceYamlAbs = str_replace('slice.yaml', 'slice.yaml', $sliceJsonAbs);
 
 $bladeIndex = <<<BLADE
 @extends('layouts.app')

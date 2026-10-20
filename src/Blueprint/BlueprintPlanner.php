@@ -26,7 +26,7 @@ final class BlueprintPlanner
         $root = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
 
         $files = [
-            'slice.json',
+            'slice.yaml',
             'slice.yaml',
             'Models/'.$sliceClass.'.php',
             'Schemas/'.$sliceClass.'Schema.php',

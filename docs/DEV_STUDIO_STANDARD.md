@@ -140,3 +140,8 @@ When starting NetSlice, PythonSlice, JavaSlice, or FlutterSlice:
 2. Implement the CLI ↔ Studio parity table first.
 3. Ship the Start-from picker, overflow menu, and mobile Copilot before any visual polish.
 4. Treat progressive disclosure and YAML diff as the next functional layer, not optional UX.
+
+
+## CLI diff
+
+`php artisan slice:diff {slice}` prints the same unified YAML diff as Studio preview and writes nothing. Reuses `ManifestRepository::unifiedDiff()`.

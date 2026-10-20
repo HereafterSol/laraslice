@@ -25,11 +25,11 @@ class WorkflowWebController extends Controller
         $slices = $manager->getAllSlices();
         $installedSliceNames = collect($slices)->pluck('name')->all();
 
-        // 1. Automatically synchronize any workflows defined in slice.json or slice.yaml of installed slices
+        // 1. Automatically synchronize any workflows defined in slice.yaml of installed slices
         foreach ($slices as $slice) {
             $workflowConfig = $slice->raw['workflow'] ?? null;
-            if (empty($workflowConfig) && file_exists($slice->path.'/slice.json')) {
-                $sData = json_decode(@file_get_contents($slice->path.'/slice.json'), true) ?: [];
+            if (empty($workflowConfig) && file_exists($slice->path.'/slice.yaml')) {
+                $sData = json_decode(@file_get_contents($slice->path.'/slice.yaml'), true) ?: [];
                 $workflowConfig = $sData['workflow'] ?? null;
             }
             if (empty($workflowConfig) && file_exists($slice->path.'/slice.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)) {
@@ -295,7 +295,7 @@ class WorkflowWebController extends Controller
             return back()->withErrors(['manifest' => "Could not locate slice directory for '{$workflow->slice_name}'."]);
         }
 
-        $manifestFile = $slice->path.'/slice.json';
+        $manifestFile = $slice->path.'/slice.yaml';
         if (! File::exists($manifestFile)) {
             return back()->withErrors(['manifest' => "Manifest file not found at {$manifestFile}"]);
         }
@@ -345,7 +345,7 @@ class WorkflowWebController extends Controller
 
         File::put($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
-        return back()->with('success', "Workflow synchronized into {$workflow->slice_name}/slice.json for GitOps & multi-environment deployment!");
+        return back()->with('success', "Workflow synchronized into {$workflow->slice_name}/slice.yaml for GitOps & multi-environment deployment!");
     }
 
     public function inbox(Request $request)

@@ -162,11 +162,11 @@ class SliceRoleProvisioner
     }
 
     /**
-     * Read slice.json and provision its declared roles.
+     * Read slice.yaml and provision its declared roles.
      */
     public function provisionForSlicePath(string $sliceDir, bool $seedDemoUsers = true): array
     {
-        $manifestPath = rtrim($sliceDir, '/\\').'/slice.json';
+        $manifestPath = rtrim($sliceDir, '/\\').'/slice.yaml';
         if (! file_exists($manifestPath)) {
             return ['roles_count' => 0, 'provisioned' => []];
         }

@@ -61,9 +61,9 @@ final class BlueprintStudioController extends Controller
             if (File::exists($sliceFile)) {
                 $source = File::get($sliceFile);
             } else {
-                $jsonFile = $slicesPath.'/'.$requestedSlice.'/slice.json';
+                $jsonFile = $slicesPath.'/'.$requestedSlice.'/slice.yaml';
                 if (! File::exists($jsonFile)) {
-                    $candidates = glob($slicesPath.'/*/'.$requestedSlice.'/slice.json') ?: [];
+                    $candidates = glob($slicesPath.'/*/'.$requestedSlice.'/slice.yaml') ?: [];
                     if (! empty($candidates)) {
                         $jsonFile = $candidates[0];
                     }
@@ -71,7 +71,7 @@ final class BlueprintStudioController extends Controller
                 if (! File::exists($jsonFile) && File::isDirectory($slicesPath)) {
                     $sliceDirName = basename($requestedSlice);
                     foreach (File::allFiles($slicesPath) as $file) {
-                        if ($file->getFilename() === 'slice.json' && strcasecmp(basename(dirname($file->getPathname())), $sliceDirName) === 0) {
+                        if ($file->getFilename() === 'slice.yaml' && strcasecmp(basename(dirname($file->getPathname())), $sliceDirName) === 0) {
                             $jsonFile = $file->getPathname();
                             break;
                         }
@@ -98,7 +98,7 @@ final class BlueprintStudioController extends Controller
             }
         }
 
-        // 4. Collect installed slices that have a slice.yaml or slice.json
+        // 4. Collect installed slices that have a slice.yaml
         $installedSlices = $this->getInstalledSlices($slicesPath);
 
         // 5. Collect database tables for quick introspection
@@ -722,7 +722,7 @@ final class BlueprintStudioController extends Controller
             foreach (File::directories($slicesPath) as $dir) {
                 $sliceName = basename($dir);
                 $yamlPath = $dir.'/slice.yaml';
-                if (File::exists($yamlPath) || File::exists($dir.'/slice.json')) {
+                if (File::exists($yamlPath) || File::exists($dir.'/slice.yaml')) {
                     $installedSlices[] = [
                         'name' => $sliceName,
                         'has_yaml' => File::exists($yamlPath),
@@ -733,7 +733,7 @@ final class BlueprintStudioController extends Controller
                     foreach (File::directories($dir) as $subDir) {
                         $subSliceName = basename($subDir);
                         $subYamlPath = $subDir.'/slice.yaml';
-                        if (File::exists($subYamlPath) || File::exists($subDir.'/slice.json')) {
+                        if (File::exists($subYamlPath) || File::exists($subDir.'/slice.yaml')) {
                             $installedSlices[] = [
                                 'name' => $subSliceName,
                                 'domain' => $domainName,
@@ -835,7 +835,7 @@ final class BlueprintStudioController extends Controller
     }
 
     /**
-     * Convert an existing slice.json manifest into a valid slice.yaml representation.
+     * Convert an existing JSON manifest into a valid slice.yaml representation.
      */
     private function manifestToYamlFile(string $jsonFile, string $sliceName): string
     {

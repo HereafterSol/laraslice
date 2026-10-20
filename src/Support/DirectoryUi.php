@@ -90,7 +90,7 @@ final class DirectoryUi
                 $manager->discover();
                 $slice = $manager->getSlice($sliceName);
                 if ($slice) {
-                    foreach (['slice.json', 'slice.yaml', 'slice.yml'] as $file) {
+                    foreach (['slice.yaml', 'slice.yaml', 'slice.yml'] as $file) {
                         $p = rtrim($slice->path, '/\\').DIRECTORY_SEPARATOR.$file;
                         if (is_file($p)) {
                             return $p;
@@ -130,7 +130,7 @@ final class DirectoryUi
         }
         $base = basename($dir);
         if (strcasecmp($base, $sliceName) === 0 || strcasecmp($base, str_replace(' ', '', $sliceName)) === 0) {
-            foreach (['slice.json', 'slice.yaml', 'slice.yml'] as $file) {
+            foreach (['slice.yaml', 'slice.yaml', 'slice.yml'] as $file) {
                 $p = $dir.DIRECTORY_SEPARATOR.$file;
                 if (is_file($p)) {
                     return $p;

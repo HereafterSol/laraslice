@@ -288,7 +288,7 @@ class SliceSeederService
             $columnTypes[$column['name']] = $this->seedType($column['type_name'], $column['type']);
         }
 
-        // Select/enum fields declared in slice.json only accept their option keys
+        // Select/enum fields declared in slice.yaml only accept their option keys
         $fieldOptions = [];
         $definitions = array_merge(
             is_array($slice->raw['fields'] ?? null) ? $slice->raw['fields'] : [],
@@ -636,12 +636,12 @@ class SliceSeederService
     }
 
     /**
-     * Provision scoped roles and demo user accounts for a slice from slice.json.
+     * Provision scoped roles and demo user accounts for a slice from slice.yaml.
      */
     public function seedSliceRolesAndUsers(SliceManifest $slice): void
     {
         $manifestRoles = [];
-        $sliceJsonPath = $slice->path . '/slice.json';
+        $sliceJsonPath = $slice->path . '/slice.yaml';
         if (file_exists($sliceJsonPath)) {
             $data = json_decode(file_get_contents($sliceJsonPath), true);
             $manifestRoles = $data['roles'] ?? ($data['workflow']['roles'] ?? []);

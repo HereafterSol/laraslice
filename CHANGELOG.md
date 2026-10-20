@@ -1,3 +1,11 @@
+## [Unreleased]
+
+- Studio YAML diff preview before overwrite (no silent writes)
+- Journey breadcrumb: Port → Design → Customize
+- YAML Phase 3: JSON-only load warns once and points at migrate
+- YAML Phase 4: JSON read fallback removed; `slice:migrate-json-to-yaml` is the upgrade path
+- `slice:diff` CLI parity with Studio preview
+
 # Changelog
 
 All notable changes to the **LaraSlice** framework will be documented in this file.

@@ -62,7 +62,7 @@ class SliceManifest
 
         if (str_ends_with($manifestPath, '.yaml') || str_ends_with($manifestPath, '.yml')) {
             $data = class_exists(Yaml::class) ? (Yaml::parse($content) ?: []) : [];
-            $jsonFile = $this->path.'/slice.json';
+            $jsonFile = $this->path.'/slice.yaml';
             if (file_exists($jsonFile)) {
                 $jsonData = json_decode(file_get_contents($jsonFile), true) ?: [];
                 $data = array_merge($jsonData, $data);

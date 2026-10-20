@@ -12,7 +12,7 @@ use LaraSlice\Core\Discovery\SliceManager;
 /**
  * Enterprise Cross-Environment Slice State & Migration Synchronizer.
  *
- * Synchronizes declarative slice manifests (slice.json), version histories,
+ * Synchronizes declarative slice manifests (slice.yaml), version histories,
  * pending database migrations, and cached permissions across environments (Local -> Git -> Staging -> Production).
  */
 class SliceSyncCommand extends Command
@@ -62,7 +62,7 @@ class SliceSyncCommand extends Command
         $totalMigrated = 0;
 
         foreach ($slicesToSync as $slice) {
-            $manifestPath = $slice->manifestPath ?? ($slice->path.'/slice.json');
+            $manifestPath = $slice->manifestPath ?? ($slice->path.'/slice.yaml');
             $manifestData = [];
             if (File::exists($manifestPath)) {
                 $manifestData = json_decode(File::get($manifestPath), true) ?: [];
@@ -112,7 +112,7 @@ class SliceSyncCommand extends Command
                 $migStatus = '<info>Synced ('.count($pendingMigrations).' applied)</info>';
             }
 
-                        // Sync declarative workflow if defined in slice.json
+                        // Sync declarative workflow if defined in slice.yaml
             if (! empty($manifestData['workflow']) && (is_array($manifestData['workflow']) || $manifestData['workflow'] === true)) {
                 try {
                     $wfConfig = is_array($manifestData['workflow']) ? $manifestData['workflow'] : [];
@@ -145,7 +145,7 @@ class SliceSyncCommand extends Command
 
         // Ensure GitOps YAML twin exists for every slice
         foreach ($manager->getAllSlices() as $slice) {
-            $jsonFile = $slice->path.'/slice.json';
+            $jsonFile = $slice->path.'/slice.yaml';
             if (is_file($jsonFile)) {
                 try {
                     $m = \LaraSlice\Core\Discovery\ManifestRepository::read($jsonFile);

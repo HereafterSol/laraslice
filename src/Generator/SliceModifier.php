@@ -50,7 +50,7 @@ class SliceModifier
             throw new \RuntimeException("Slice directory for [{$sliceName}] not found at {$sliceDir}");
         }
 
-        $manifestFile = $sliceDir.'/slice.json';
+        $manifestFile = $sliceDir.'/slice.yaml';
         $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
 
         // Build column definitions and down statements
@@ -157,7 +157,7 @@ PHP;
             $this->addToFillable($sliceDir."/Models/{$childModelName}.php", array_column($fields, 'name'));
         }
 
-        // 4. Update slice.json Manifest Version & Changelog
+        // 4. Update slice.yaml Manifest Version & Changelog
         $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
 
         $manifest['version'] = $newVersion;
@@ -557,7 +557,7 @@ PHP;
     }
 
     /**
-     * Update navigation settings in slice.json (October CMS Builder equivalent)
+     * Update navigation settings in slice.yaml (October CMS Builder equivalent)
      */
     public function updateNavigation(string $sliceName, array $navConfig): array
     {
@@ -565,7 +565,7 @@ PHP;
         $pluralName = Str::plural($studlyName);
         $sliceDir = $this->resolveSliceDir($pluralName);
 
-        $manifestFile = $sliceDir.'/slice.json';
+        $manifestFile = $sliceDir.'/slice.yaml';
         if (! file_exists($manifestFile)) {
             throw new \RuntimeException("Slice manifest not found for [{$sliceName}]");
         }
@@ -891,7 +891,7 @@ PHP;
             throw new \RuntimeException("Slice directory for [{$sliceName}] not found at {$sliceDir}");
         }
 
-        $manifestFile = "{$sliceDir}/slice.json";
+        $manifestFile = "{$sliceDir}/slice.yaml";
         $manifest = file_exists($manifestFile)
             ? ManifestRepository::read($manifestFile)
             : [];
@@ -1057,7 +1057,7 @@ REL;
             }
         }
 
-        // 4. Update manifest slice.json
+        // 4. Update manifest slice.yaml
         if (! isset($manifest['tables'])) {
             $manifest['tables'] = [$parentTable];
         }
@@ -1254,7 +1254,7 @@ REL;
             throw new \RuntimeException("Slice directory for [{$sliceName}] not found at {$sliceDir}");
         }
 
-        $manifestFile = $sliceDir.'/slice.json';
+        $manifestFile = $sliceDir.'/slice.yaml';
         if (! file_exists($manifestFile)) {
             throw new \RuntimeException("Slice manifest not found for [{$sliceName}]");
         }
@@ -1485,7 +1485,7 @@ REL;
             throw new \RuntimeException("Slice directory for [{$sliceName}] not found at {$sliceDir}");
         }
 
-        $manifestFile = $sliceDir.'/slice.json';
+        $manifestFile = $sliceDir.'/slice.yaml';
         $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
 
         $isPrimary = (! $targetTable || $targetTable === Str::plural(Str::snake($studlyName)));
@@ -1618,7 +1618,7 @@ PHP;
             $this->removeValidationRules($serviceFile, $validatedDeletedFields);
         }
 
-        // 4. Update slice.json Metadata
+        // 4. Update slice.yaml Metadata
         $newVersion = self::nextPatchVersion($manifest['version'] ?? null);
         $manifest['version'] = $newVersion;
 
@@ -1749,7 +1749,7 @@ PHP;
     }
 
     /**
-     * Save relationships to slice.json and inject/update Eloquent relation methods on models.
+     * Save relationships to slice.yaml and inject/update Eloquent relation methods on models.
      */
     public function saveRelationships(string $sliceName, array $relations, string $author = 'Developer'): array
     {
@@ -1761,7 +1761,7 @@ PHP;
             throw new \RuntimeException("Slice directory for [{$sliceName}] not found at {$sliceDir}");
         }
 
-        $manifestFile = $sliceDir.'/slice.json';
+        $manifestFile = $sliceDir.'/slice.yaml';
         $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
 
         $cleanedRelations = [];
@@ -1881,7 +1881,7 @@ PHP;
 
     /**
      * Save declarative UI + navigation from Slice Studio (YAML-centric GitOps).
-     * Writes slice.json + slice.yaml and appends version_history ledger entry.
+     * Writes slice.yaml and appends version_history ledger entry.
      *
      * @param  array<string, mixed>  $ui
      * @param  array<string, mixed>  $navigation
@@ -1890,7 +1890,7 @@ PHP;
     public function saveStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null, string $author = 'Developer via Slice Studio'): array
     {
         $slice = $this->findSlice($sliceName);
-        $manifestFile = $slice->path.'/slice.json';
+        $manifestFile = $slice->path.'/slice.yaml';
         $manifest = ManifestRepository::read($manifestFile);
 
         $oldVersion = $manifest['version'] ?? '1.0.0';

@@ -9,7 +9,7 @@ use LaraSlice\Validation\SliceYamlValidator;
 class SliceValidateCommand extends Command
 {
     protected $signature = 'slice:validate
-                            {path? : Path to a slice.yaml / slice.json (omit with --all)}
+                            {path? : Path to a slice.yaml (omit with --all)}
                             {--all : Validate every discovered slice manifest}
                             {--schema= : Override path to slice-v0.1.json}';
 
@@ -38,7 +38,7 @@ class SliceValidateCommand extends Command
             $manager->discover();
             foreach ($manager->getAllSlices() as $slice) {
                 $yaml = $slice->path.DIRECTORY_SEPARATOR.'slice.yaml';
-                $json = $slice->path.DIRECTORY_SEPARATOR.'slice.json';
+                $json = $slice->path.DIRECTORY_SEPARATOR.'slice.yaml';
                 if (is_file($yaml)) {
                     $targets[$slice->name] = $yaml;
                 } elseif (is_file($json)) {

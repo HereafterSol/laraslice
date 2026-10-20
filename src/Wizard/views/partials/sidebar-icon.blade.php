@@ -1,7 +1,7 @@
 {{--
     LaraSlice Sidebar Icon Helper
     
-    Maps icon names from slice.json to inline SVG icons.
+    Maps icon names from slice.yaml to inline SVG icons.
     Usage: @include('laraslice::partials.sidebar-icon', ['icon' => 'users'])
 --}}
 

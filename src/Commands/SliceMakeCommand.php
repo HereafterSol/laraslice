@@ -62,7 +62,7 @@ class SliceMakeCommand extends Command
                 continue;
             }
 
-            $this->line("<fg=green>✓</> {$prefix}Created Slice Manifest: <comment>{$sliceDir}/slice.json</comment>");
+            $this->line("<fg=green>✓</> {$prefix}Created Slice Manifest: <comment>{$sliceDir}/slice.yaml</comment>");
             $this->line("<fg=green>✓</> {$prefix}Created Contracts (DTOs): Form, Listing, Filter");
             $this->line("<fg=green>✓</> {$prefix}Created Model & Migration");
             $this->line("<fg=green>✓</> {$prefix}Created Data Service with CRUD hooks");
