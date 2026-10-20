@@ -399,6 +399,22 @@ class DataTableRows
                             break;
                         }
                     }
+                    // Convention fallback: the label often lives in a *_name
+                    // column (leave_types.type_name, statuses.status_name) —
+                    // prefer the FK segment's own *_name, then any *_name.
+                    if ($labelCol === null) {
+                        $segmentName = Str::afterLast($base, '_') . '_name';
+                        $nameCols = array_values(array_filter(
+                            $cols,
+                            static fn ($cl) => str_ends_with($cl, '_name')
+                        ));
+                        foreach (array_merge([$segmentName], $nameCols) as $candidate) {
+                            if (in_array($candidate, $cols, true)) {
+                                $labelCol = $candidate;
+                                break;
+                            }
+                        }
+                    }
                     static::$labelColumnCache[$tbl] = $labelCol;
                     if ($labelCol !== null) {
                         $targetTable = $tbl;
@@ -440,8 +456,14 @@ class DataTableRows
      */
     protected static function modelDisplayName(Model $model): string
     {
-        foreach (['name', 'title', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $cand) {
+        foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $cand) {
             if (isset($model->{$cand}) && filled($model->{$cand})) {
+                return (string) $model->{$cand};
+            }
+        }
+        // Convention fallback: any *_name attribute (type_name, status_name, ...)
+        foreach (array_keys($model->getAttributes()) as $cand) {
+            if (str_ends_with($cand, '_name') && filled($model->{$cand})) {
                 return (string) $model->{$cand};
             }
         }

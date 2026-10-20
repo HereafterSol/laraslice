@@ -572,6 +572,7 @@ class SlicePortService
                         'nullable' => $nullable,
                         'required' => ! $nullable,
                         'rules' => $nullable ? ['nullable'] : ['required'],
+                        'options' => $f['options'] ?? [],
                     ];
                 }
 
@@ -890,6 +891,9 @@ PHP;
                         $cols[] = [
                             'name' => $colName,
                             'type' => $rc['type_name'] ?? 'string',
+                            // Full column definition (e.g. enum('a','b')) — enum
+                            // vocabularies are extracted from it downstream.
+                            'raw_type' => $rc['type'] ?? null,
                         ];
                         if (str_ends_with($colName, '_id') && ! in_array($colName, ['id', 'uuid', 'tax_id', 'nid'], true)) {
                             $fks[] = $colName;
@@ -1603,6 +1607,31 @@ PHP;
     }
 
     /**
+     * Parse the value list out of a MySQL enum(...) column definition into a
+     * value => label map. Returns null for non-enum definitions.
+     *
+     * @return array<string, string>|null
+     */
+    protected static function parseEnumOptions(?string $rawType): ?array
+    {
+        if ($rawType === null || ! preg_match('/^\s*enum\s*\((.*)\)/is', $rawType, $m)) {
+            return null;
+        }
+        if (! preg_match_all("/'((?:[^'\\\\]|\\\\.)*)'/", $m[1], $mm)) {
+            return null;
+        }
+        $options = [];
+        foreach ($mm[1] as $value) {
+            $value = str_replace("\\'", "'", $value);
+            if ($value !== '') {
+                $options[$value] = Str::headline($value);
+            }
+        }
+
+        return $options !== [] ? $options : null;
+    }
+
+    /**
      * Convert migration columns into Studio Field objects with UI and Form widgets.
      */
     protected function convertColumnsToFields(array $columns): array
@@ -1643,9 +1672,17 @@ PHP;
             $rawType = $col['type'] ?? 'string';
             $studioType = $typeMap[$rawType] ?? 'string';
 
+            // Enum columns carry their vocabulary in the schema itself —
+            // extract it so forms render a select and listings can show the
+            // declared labels instead of raw values with empty options.
+            $enumOptions = self::parseEnumOptions($col['raw_type'] ?? null)
+                ?? self::parseEnumOptions(is_string($rawType) ? $rawType : null);
+
             // Determine input widget & UI control
             $inputType = 'text';
-            if (preg_match('/(file|document|attachment|affidavit|cnic_copy|photo|image|signature|receipt)/i', $cName)) {
+            if ($enumOptions !== null) {
+                $inputType = 'select';
+            } elseif (preg_match('/(file|document|attachment|affidavit|cnic_copy|photo|image|signature|receipt)/i', $cName)) {
                 $inputType = 'file';
                 $studioType = 'string';
             } elseif ($studioType === 'text') {
@@ -1675,7 +1712,10 @@ PHP;
                 'required' => ! $isNullable,
                 'nullable' => $isNullable,
                 'width' => in_array($inputType, ['textarea', 'file']) ? 100 : 50,
-                'optionsText' => '',
+                'optionsText' => $enumOptions !== null
+                    ? implode(', ', array_map(static fn ($v, $l) => "{$v}: {$l}", array_keys($enumOptions), $enumOptions))
+                    : '',
+                'options' => $enumOptions ?? [],
             ];
         }
 
