@@ -34,3 +34,12 @@ done
 # After copy into app/Slices or via Studio Generate
 php artisan slice:repair --publish-ui
 ```
+
+## Apply (Blueprint Studio / CLI)
+
+As of this branch, `BlueprintValidator` accepts **Slice YAML v0.1** (`spec_version: "0.1"`, column `key`, formatters like `date_overdue` / `text_with_badge`).
+
+```bash
+php artisan slice:blueprint:apply blueprints/examples/kitchen-sink.slice.yaml
+# or Load Example → Kitchen Sink in Blueprint Studio → Generate
+```

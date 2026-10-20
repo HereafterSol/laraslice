@@ -16,7 +16,10 @@ final class BlueprintValidator
 
     private const RESERVED_FIELDS = ['id', 'created_at', 'updated_at', 'deleted_at'];
 
-    public const ALLOWED_FORMATTERS = ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'date_time', 'text'];
+    public const ALLOWED_FORMATTERS = [
+        'code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar',
+        'date_time', 'date_overdue', 'text', 'text_with_badge', 'number', 'money', 'badge',
+    ];
 
     /** @param array<string, mixed> $blueprint
      * @return array<string, mixed> Validated blueprint.
@@ -24,10 +27,26 @@ final class BlueprintValidator
     public function validate(array $blueprint): array
     {
         $errors = [];
-        $this->checkKeys($blueprint, ['schema_version', 'name', 'handle', 'description', 'author', 'version', 'models', 'tenant', 'domain', 'app', 'module', 'super_domain', 'sub_domain', 'table_prefix', 'multitenant', 'tenant_key', 'navigation', 'permissions', 'workflow', 'roles', 'icon', 'priority', 'taxonomy', 'ui', 'dependencies', 'porting_notes', 'table_source'], 'blueprint', $errors);
+        $blueprint = $this->normalizeIncomingBlueprint($blueprint);
 
-        if (! in_array(($blueprint['schema_version'] ?? null), [1, 2], true)) {
-            $errors[] = 'schema_version must be the integer 1.';
+        $this->checkKeys($blueprint, [
+            'schema_version', 'spec_version', 'name', 'handle', 'title', 'description', 'author', 'version',
+            'models', 'fields', 'tenant', 'domain', 'app', 'module', 'super_domain', 'sub_domain',
+            'table_prefix', 'multitenant', 'tenant_key', 'navigation', 'permissions', 'workflow', 'roles',
+            'icon', 'priority', 'taxonomy', 'ui', 'dependencies', 'porting_notes', 'table_source',
+            'enabled', 'table',
+        ], 'blueprint', $errors);
+
+        $sv = $blueprint['schema_version'] ?? null;
+        $spec = $blueprint['spec_version'] ?? null;
+        $okSchema = in_array($sv, [1, 2, '1', '2', 0.1, '0.1', '0.1.0'], true)
+            || in_array((string) $spec, ['0.1', '0.1.0'], true);
+        if (! $okSchema && $sv !== null) {
+            $errors[] = 'schema_version must be 1, 2, or 0.1 (Slice YAML v0.1 via spec_version).';
+        }
+        if ($sv === null && $spec === null) {
+            // default ok for legacy apply
+            $blueprint['schema_version'] = 1;
         }
 
         $name = $blueprint['name'] ?? null;
@@ -114,7 +133,7 @@ final class BlueprintValidator
 
                     continue;
                 }
-                $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'encrypted', 'width', 'length', 'input_type', 'optionsText', 'hidden'], $fieldPath, $errors);
+                $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'options_from', 'encrypted', 'width', 'length', 'input_type', 'input', 'optionsText', 'hidden', 'searchable', 'name', 'show_in_form', 'show_in_list', 'rules', 'relation', 'span', 'is_searchable'], $fieldPath, $errors);
 
                 $fieldHandle = $field['handle'] ?? null;
                 if (! $this->isHandle($fieldHandle)) {
@@ -428,7 +447,10 @@ final class BlueprintValidator
 
                                 continue;
                             }
-                            $this->checkKeys($col, ['handle', 'label', 'formatter', 'sortable', 'subtitle_handle', 'avatar_handle'], $colPath, $errors);
+                            $this->checkKeys($col, ['handle', 'key', 'label', 'formatter', 'sortable', 'subtitle_handle', 'avatar_handle', 'badge_from', 'breakdown', 'inferred_from', 'type', 'class', 'html'], $colPath, $errors);
+                            if (empty($col['handle']) && ! empty($col['key'])) {
+                                $col['handle'] = $col['key'];
+                            }
                             if (empty($col['handle']) || ! is_string($col['handle'])) {
                                 $errors[] = "{$colPath}.handle must be a non-empty string.";
                             }
@@ -589,7 +611,87 @@ final class BlueprintValidator
         }
     }
 
+    /**
+     * Accept Slice YAML v0.1 (spec_version) and hybrid pilot shapes; map to schema keys the applier expects.
+     *
+     * @param  array<string, mixed>  $blueprint
+     * @return array<string, mixed>
+     */
+    private function normalizeIncomingBlueprint(array $blueprint): array
+    {
+        if (isset($blueprint['spec_version']) && ! isset($blueprint['schema_version'])) {
+            $blueprint['schema_version'] = 1;
+        }
+
+        if (empty($blueprint['handle']) && ! empty($blueprint['name']) && is_string($blueprint['name'])) {
+            $blueprint['handle'] = \Illuminate\Support\Str::snake($blueprint['name']);
+        }
+
+        // Map-style fields: → models[0].fields list
+        if (empty($blueprint['models']) && ! empty($blueprint['fields']) && is_array($blueprint['fields'])) {
+            $list = [];
+            foreach ($blueprint['fields'] as $k => $f) {
+                if (! is_array($f)) {
+                    continue;
+                }
+                $handle = $f['handle'] ?? $f['name'] ?? (is_string($k) ? $k : null);
+                if (! $handle) {
+                    continue;
+                }
+                $list[] = array_merge($f, [
+                    'handle' => $handle,
+                    'label' => $f['label'] ?? \Illuminate\Support\Str::headline((string) $handle),
+                    'type' => $f['type'] ?? 'string',
+                    'required' => (bool) ($f['required'] ?? ! ($f['nullable'] ?? true)),
+                ]);
+            }
+            $table = $blueprint['table'] ?? \Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($blueprint['handle'] ?? 'items'));
+            $blueprint['models'] = [[
+                'handle' => $blueprint['handle'] ?? 'item',
+                'table' => is_string($table) ? $table : 'items',
+                'root' => true,
+                'fields' => $list,
+            ]];
+        }
+
+        // Column key → handle; expand directory.views
+        if (isset($blueprint['ui']['directory']['columns']) && is_array($blueprint['ui']['directory']['columns'])) {
+            foreach ($blueprint['ui']['directory']['columns'] as $i => $col) {
+                if (! is_array($col)) {
+                    continue;
+                }
+                if (empty($col['handle']) && ! empty($col['key'])) {
+                    $blueprint['ui']['directory']['columns'][$i]['handle'] = $col['key'];
+                    $col['handle'] = $col['key'];
+                }
+                if (empty($col['label']) && ! empty($col['handle'] ?? $col['key'] ?? null)) {
+                    $blueprint['ui']['directory']['columns'][$i]['label'] = \Illuminate\Support\Str::headline((string) ($col['handle'] ?? $col['key']));
+                }
+            }
+        }
+
+        // Field input alias
+        if (isset($blueprint['models']) && is_array($blueprint['models'])) {
+            foreach ($blueprint['models'] as $mi => $model) {
+                if (! is_array($model['fields'] ?? null)) {
+                    continue;
+                }
+                foreach ($model['fields'] as $fi => $field) {
+                    if (! is_array($field)) {
+                        continue;
+                    }
+                    if (isset($field['input']) && ! isset($field['input_type'])) {
+                        $blueprint['models'][$mi]['fields'][$fi]['input_type'] = $field['input'];
+                    }
+                }
+            }
+        }
+
+        return $blueprint;
+    }
+
     private function isHandle(mixed $value): bool
+
     {
         return is_string($value) && preg_match('/^[a-z][a-z0-9_]{0,62}$/', $value) === 1;
     }
