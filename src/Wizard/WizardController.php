@@ -27,18 +27,18 @@ class WizardController extends Controller
 {
     public function show(Request $request)
     {
-        $initialTab = $request->query('tab', 'wizard');
+        // ONE Studio: canonical surface is the shell. ?tab=studio maps to Manage.
+        $mode = $request->query('tab') === 'studio' ? 'manage' : 'create';
+        $qs = $request->getQueryString();
 
-        return view('laraslice::wizard', [
-            'initialTab' => $initialTab,
-        ]);
+        return redirect(route('laraslice.studio').'?mode='.$mode.($qs ? '&'.$qs : ''));
     }
 
     public function studio(Request $request)
     {
-        return view('laraslice::wizard', [
-            'initialTab' => 'studio',
-        ]);
+        $qs = $request->getQueryString();
+
+        return redirect(route('laraslice.studio').'?mode=manage'.($qs ? '&'.$qs : ''));
     }
 
     public function schemaStudio()
