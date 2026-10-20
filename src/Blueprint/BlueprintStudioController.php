@@ -1693,4 +1693,37 @@ final class BlueprintStudioController extends Controller
 
         return $blueprint;
     }
+
+    /**
+     * ONE Studio shell. Modes are panels; only Port is mounted in Phase 1.
+     */
+    public function shell(\Illuminate\Http\Request $request): mixed
+    {
+        $mode = (string) $request->query('mode', '');
+        $hasSlices = false;
+        try {
+            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $hasSlices = count($manager->getAllSlices()) > 0;
+        } catch (\Throwable $e) {
+            $hasSlices = false;
+        }
+
+        return view('laraslice::studio-shell', [
+            'initialMode' => $mode,
+            'hasSlices' => $hasSlices,
+        ]);
+    }
+
+    /**
+     * Lazy panel HTML. Phase 1 serves Port only.
+     */
+    public function panel(string $mode): mixed
+    {
+        if ($mode !== 'port') {
+            abort(404);
+        }
+
+        return view('laraslice::partials.port-panel');
+    }
+
 }
