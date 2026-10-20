@@ -798,12 +798,35 @@ final class BlueprintStudioController extends Controller
         'articles' => 'blog',
     ];
 
+    /** Example blueprints under blueprints/examples (and suites/). */
+    private const EXAMPLE_FILES = [
+        'kitchen-sink' => 'kitchen-sink.slice.yaml',
+        'kitchen_sink' => 'kitchen-sink.slice.yaml',
+        'service-desk' => 'service-desk.slice.yaml',
+        'project-portfolio' => 'project-portfolio.slice.yaml',
+        'crm-companies' => 'suites/crm-companies.slice.yaml',
+        'crm-contacts' => 'suites/crm-contacts.slice.yaml',
+        'crm-deals' => 'suites/crm-deals.slice.yaml',
+        'hr-employees' => 'suites/hr-employees.slice.yaml',
+        'hr-leave-requests' => 'suites/hr-leave-requests.slice.yaml',
+        'shop-products-example' => 'suites/shop-products.slice.yaml',
+        'shop-orders-example' => 'suites/shop-orders.slice.yaml',
+    ];
+
     /**
-     * The YAML of a built-in template; unknown names fall back to the service-desk example.
+     * The YAML of a built-in template or example; unknown names fall back to service-desk.
      */
     private function getTemplateContent(string $template): string
     {
         $root = dirname(__DIR__, 2).'/blueprints';
+
+        if (isset(self::EXAMPLE_FILES[$template])) {
+            $path = $root.'/examples/'.self::EXAMPLE_FILES[$template];
+            if (is_file($path)) {
+                return (string) file_get_contents($path);
+            }
+        }
+
         $path = isset(self::TEMPLATES[$template])
             ? $root.'/templates/'.self::TEMPLATES[$template].'.slice.yaml'
             : $root.'/examples/service-desk.slice.yaml';

@@ -1,0 +1,75 @@
+spec_version: "0.1"
+name: Employees
+handle: employees
+domain: HR
+description: "Employee directory"
+version: 1.0.0
+navigation:
+  label: Employees
+  icon: id-card
+  group: HR
+  order: 10
+models:
+  - handle: employee
+    table: employees
+    root: true
+    fields:
+      - handle: employee_code
+        label: Code
+        type: string
+        required: true
+      - handle: full_name
+        label: Name
+        type: string
+        required: true
+      - handle: department
+        label: Department
+        type: string
+        required: false
+      - handle: status
+        label: Status
+        type: string
+        required: true
+        input: select
+      - handle: hire_date
+        label: Hired
+        type: date
+        required: false
+fields:
+  employee_code:
+    name: employee_code
+    type: string
+    searchable: true
+  full_name:
+    name: full_name
+    type: string
+    searchable: true
+  department:
+    name: department
+    type: string
+  status:
+    name: status
+    type: string
+    input: select
+  hire_date:
+    name: hire_date
+    type: date
+ui:
+  directory:
+    columns:
+      - key: employee_code
+        label: Code
+        formatter: code_badge
+      - key: full_name
+        label: Name
+        formatter: text
+        sortable: true
+      - key: department
+        label: Department
+        formatter: text
+      - key: status
+        label: Status
+        formatter: status_pill
+      - key: hire_date
+        label: Hired
+        formatter: date_time

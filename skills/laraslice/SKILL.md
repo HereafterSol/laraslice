@@ -1396,3 +1396,16 @@ php artisan slice:port /path/to/dolibarr --strip-prefix=llx_ --dry-run --no-inte
 ```
 
 `--dry-run` and `--no-interaction` default `--mode=system-base` and do not prompt.
+
+### Product examples (this branch)
+
+| File | Use |
+|------|-----|
+| `blueprints/examples/kitchen-sink.slice.yaml` | All v0.1 formatters — primary UI QA |
+| `blueprints/examples/suites/crm-*.slice.yaml` | CRM suite |
+| `blueprints/examples/suites/hr-*.slice.yaml` | HR suite |
+| `blueprints/examples/suites/shop-*.slice.yaml` | E-commerce suite |
+
+```bash
+php artisan slice:validate blueprints/examples/kitchen-sink.slice.yaml
+```

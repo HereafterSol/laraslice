@@ -1,0 +1,242 @@
+# Kitchen Sink — every v0.1 formatter, field type, and common UI block.
+# Load in Blueprint Studio or: php artisan slice:validate blueprints/examples/kitchen-sink.slice.yaml
+spec_version: "0.1"
+name: KitchenSink
+handle: kitchen_sink
+title: Kitchen Sink
+domain: Examples
+description: "Reference slice exercising closed v0.1 formatters, field types, and directory UI"
+version: 1.0.0
+enabled: true
+multitenant: false
+navigation:
+  label: Kitchen Sink
+  icon: flask-conical
+  group: Examples
+  order: 1
+  visible: true
+  roles:
+    - admin
+    - employee
+models:
+  - handle: kitchen_sink
+    table: kitchen_sinks
+    root: true
+    timestamps: true
+    fields:
+      - handle: code
+        label: Code
+        type: string
+        required: true
+      - handle: title
+        label: Title
+        type: string
+        required: true
+      - handle: status
+        label: Status
+        type: string
+        required: true
+        input: select
+        options_from: distinct:status
+      - handle: priority
+        label: Priority
+        type: string
+        required: false
+        input: select
+      - handle: progress
+        label: Progress
+        type: integer
+        required: false
+      - handle: amount
+        label: Amount
+        type: decimal
+        required: false
+      - handle: paid_amount
+        label: Paid
+        type: decimal
+        required: false
+      - handle: due_amount
+        label: Unpaid
+        type: decimal
+        required: false
+      - handle: due_date
+        label: Due
+        type: date
+        required: false
+      - handle: started_at
+        label: Started
+        type: datetime
+        required: false
+      - handle: is_active
+        label: Active
+        type: boolean
+        required: false
+      - handle: notes
+        label: Notes
+        type: text
+        required: false
+        input: textarea
+fields:
+  code:
+    name: code
+    type: string
+    searchable: true
+  title:
+    name: title
+    type: string
+    searchable: true
+  status:
+    name: status
+    type: string
+    input: select
+    options_from: distinct:status
+  priority:
+    name: priority
+    type: string
+    input: select
+  progress:
+    name: progress
+    type: integer
+  amount:
+    name: amount
+    type: decimal
+  paid_amount:
+    name: paid_amount
+    type: decimal
+  due_amount:
+    name: due_amount
+    type: decimal
+  due_date:
+    name: due_date
+    type: date
+  started_at:
+    name: started_at
+    type: datetime
+  is_active:
+    name: is_active
+    type: boolean
+  notes:
+    name: notes
+    type: text
+    input: textarea
+ui:
+  directory:
+    views:
+      - table
+      - board
+      - calendar
+    default_view: table
+    inline_edit:
+      - status
+    searchable:
+      - code
+      - title
+    search_placeholder: Search code or title…
+    columns:
+      - key: code
+        label: Code
+        formatter: code_badge
+        sortable: true
+      - key: title
+        label: Title
+        formatter: text_with_badge
+        badge_from: priority
+        sortable: true
+      - key: status
+        label: Status
+        formatter: status_pill
+        sortable: true
+      - key: progress
+        label: Progress
+        formatter: progress_bar
+      - key: amount
+        label: Amount
+        formatter: money_breakdown
+        breakdown:
+          total: amount
+          paid: paid_amount
+          unpaid: due_amount
+      - key: due_date
+        label: Due
+        formatter: date_overdue
+        sortable: true
+      - key: started_at
+        label: Started
+        formatter: date_time
+      - key: is_active
+        label: Active
+        formatter: text
+    quick_filters:
+      - handle: status
+        label: Status
+        options_from: distinct:status
+    sidebar_filters:
+      - handle: due_date
+        label: Due range
+        type: date_range
+    summary_cards:
+      - handle: id
+        label: Total records
+        aggregate: count
+        formatter: number
+      - handle: amount
+        label: Total amount
+        aggregate: sum
+        formatter: money
+    bulk_actions:
+      - handle: delete
+        label: Delete
+        type: native
+      - handle: export
+        label: Export
+        type: native
+    row_actions:
+      display: hybrid
+      items:
+        - handle: view
+          label: View
+          icon: eye
+          placement: inline
+        - handle: edit
+          label: Edit
+          icon: pencil
+          placement: dropdown
+        - handle: delete
+          label: Delete
+          icon: trash-2
+          placement: dropdown
+          danger: true
+  forms:
+    sections:
+      - key: general
+        title: General
+        grid: 2
+        fields:
+          - handle: code
+          - handle: title
+          - handle: status
+          - handle: priority
+          - handle: progress
+          - handle: is_active
+      - key: money
+        title: Money
+        grid: 3
+        fields:
+          - handle: amount
+          - handle: paid_amount
+          - handle: due_amount
+      - key: schedule
+        title: Schedule
+        grid: 2
+        fields:
+          - handle: due_date
+          - handle: started_at
+          - handle: notes
+            span: 2
+  dashboard:
+    enabled: true
+    widgets:
+      - type: stat
+        handle: open
+        label: Open items
+workflow: true

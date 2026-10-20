@@ -1,0 +1,70 @@
+spec_version: "0.1"
+name: LeaveRequests
+handle: leave_requests
+domain: HR
+description: "Employee leave requests"
+version: 1.0.0
+navigation:
+  label: Leave
+  icon: calendar-off
+  group: HR
+  order: 20
+models:
+  - handle: leave_request
+    table: leave_requests
+    root: true
+    fields:
+      - handle: employee_id
+        label: Employee
+        type: integer
+        required: true
+        input: select
+      - handle: leave_type
+        label: Type
+        type: string
+        required: true
+        input: select
+      - handle: status
+        label: Status
+        type: string
+        required: true
+        input: select
+      - handle: start_date
+        label: From
+        type: date
+        required: true
+      - handle: end_date
+        label: To
+        type: date
+        required: true
+fields:
+  leave_type:
+    name: leave_type
+    type: string
+    input: select
+  status:
+    name: status
+    type: string
+    input: select
+  start_date:
+    name: start_date
+    type: date
+  end_date:
+    name: end_date
+    type: date
+ui:
+  directory:
+    columns:
+      - key: leave_type
+        label: Type
+        formatter: text
+      - key: status
+        label: Status
+        formatter: status_pill
+      - key: start_date
+        label: From
+        formatter: date_time
+      - key: end_date
+        label: To
+        formatter: date_overdue
+    inline_edit: [status]

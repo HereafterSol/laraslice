@@ -88,6 +88,16 @@
                         <option value="billing_suite">💳 Billing Suite (3 Slices: Invoices, Payments, Subscriptions)</option>
                         <option value="asset_inventory">📦 Asset & Inventory Suite (2 Slices: Assets, Maintenance)</option>
                     </optgroup>
+                    <optgroup label="🧪 Product examples (v0.1)">
+                        <option value="kitchen-sink">🧪 Kitchen Sink (all formatters)</option>
+                        <option value="crm-companies">💼 CRM · Companies</option>
+                        <option value="crm-contacts">💼 CRM · Contacts</option>
+                        <option value="crm-deals">💼 CRM · Deals</option>
+                        <option value="hr-employees">👥 HR · Employees</option>
+                        <option value="hr-leave-requests">👥 HR · Leave</option>
+                        <option value="shop-products-example">🛒 Shop · Products</option>
+                        <option value="shop-orders-example">🛒 Shop · Orders</option>
+                    </optgroup>
                     <optgroup label="📄 Single Slice Blueprints">
                         <option value="service-desk">🎫 Service Desk (Tickets & Replies)</option>
                         <option value="hr-module">👥 HR & Staff (Departments & Employees)</option>

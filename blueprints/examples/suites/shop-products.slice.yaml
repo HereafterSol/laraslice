@@ -1,0 +1,75 @@
+spec_version: "0.1"
+name: Products
+handle: products
+domain: Shop
+description: "Catalog products"
+version: 1.0.0
+navigation:
+  label: Products
+  icon: package
+  group: Orders
+  order: 10
+models:
+  - handle: product
+    table: products
+    root: true
+    fields:
+      - handle: sku
+        label: SKU
+        type: string
+        required: true
+      - handle: name
+        label: Name
+        type: string
+        required: true
+      - handle: price
+        label: Price
+        type: decimal
+        required: true
+      - handle: stock
+        label: Stock
+        type: integer
+        required: false
+      - handle: status
+        label: Status
+        type: string
+        required: true
+        input: select
+fields:
+  sku:
+    name: sku
+    type: string
+    searchable: true
+  name:
+    name: name
+    type: string
+    searchable: true
+  price:
+    name: price
+    type: decimal
+  stock:
+    name: stock
+    type: integer
+  status:
+    name: status
+    type: string
+    input: select
+ui:
+  directory:
+    columns:
+      - key: sku
+        label: SKU
+        formatter: code_badge
+      - key: name
+        label: Product
+        formatter: text
+        sortable: true
+      - key: price
+        label: Price
+        formatter: money_breakdown
+      - key: stock
+        label: Stock
+        formatter: number
+      - key: status
+        label: Status
+        formatter: status_pill
