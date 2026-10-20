@@ -1,9 +1,11 @@
 # LaraSlice Foundation Roadmap (YAML-centric porting + DX)
 
-Last updated: 2026-10-19 (Phase 2 DataTable classifier + Slice YAML v0.1 draft)  
-Branch: `feat/workflow-bulk-actions`
+Last updated: 2026-10-20 (v1.7.0 release — `feat/workflow-bulk-actions` merged to master)  
+Branch: `master` (feature branch merged)
 
 Goal: ERP-class porting that is **usable for admin / employee / client**, with **demo-aligned IA**, **Slice Studio as daily driver**, and **JSON + YAML + DB** sync.
+
+**v1.7.0 shipped (2026-10-20):** Slice YAML v0.1 spec + validator, formatter pipeline (YAML → pixels), Phase 2 DataTable parser, non-Laravel porting (Dolibarr SQL dumps), Dev Studio Standard. Verified by porting **Worksuite v5.3.9** (85 slices) and **Dolibarr 21** (407 tables). Next: Slice Studio progressive disclosure (first post-merge PR), YAML elimination (JSON → YAML-only), Phase B spec publishing, FlutterSlice proof-of-concept.
 
 ---
 
@@ -114,10 +116,7 @@ Goal: ERP-class porting that is **usable for admin / employee / client**, with *
 | F5 | Full calendar drag-drop | LATER | was C8 |
 | F6 | Live 3-persona E2E vs demo screenshots | NEXT | operator on host app |
 | F7 | Phase 1 formatter inference (status/progress/due/assignee) | DONE | handoff UI richness |
-| F11 | `slice:repair --re-infer-ui` for existing slices | DONE | Muse `b72820c` |
-| F12 | Dual-write conflict rule documented (JSON wins runtime) | DONE | |
-| F13 | YAML-only elimination (spec) | LATER | after branch merge |
-| F8 | DataTable classifier (Phase 2) | DONE | intent→v0.1 formatters; Tasks/Projects/Invoices |
+| F8 | DataTable.php AST parser (Phase 2) | LATER | |
 | F9 | AI → YAML UI (Phase 3) | LATER | |
 | F10 | Craft-style slice:sync apply/rebuild/check | LATER | 
 

@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://packagist.org/packages/hereafter/laraslice"><img src="https://img.shields.io/badge/composer-hereafter%2Flaraslice-orange.svg" alt="Composer Package"></a>
-  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.6.4-amber.svg" alt="Latest Version"></a>
+  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.7.0-amber.svg" alt="Latest Version"></a>
   <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-red.svg" alt="Laravel Version"></a>
   <a href="https://php.net"><img src="https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-blue.svg" alt="PHP Version"></a>
   <a href="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml"><img src="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
@@ -102,6 +102,10 @@ LaraSlice operates on a pragmatic **Three-Layer Hybrid Model** ([ADR-001](docs/a
 | **Flutter Mobile Generator** | Scaffolds native Flutter Dart models, client services, and CRUD UI views with one command (`php artisan slice:export-flutter`). |
 | **Declarative Blueprint Studio** | Visual designer and round-trip `slice.yaml` editor with Statamic-style field widths (`33%`, `50%`, `100%`) and real-time UI mockups. |
 | **Native AI & MCP Server** | Built-in Model Context Protocol server (`/.well-known/mcp`) allowing AI coding agents to inspect schemas and co-author slices. |
+| **Slice YAML v0.1** *(new in 1.7.0)* | Declarative manifest spec with closed vocabularies (8 field types, 10 UI formatters). YAML describes intent; the fixed component library (BlatUI, shadcn-based) decides rendering. Machine-readable JSON Schema + `php artisan slice:validate`. |
+| **Formatter Pipeline** *(new in 1.7.0)* | Directory columns carry `formatter` metadata YAML → pixels: status pills, progress bars, money breakdowns, overdue dates, code badges — rendered from `slice.yaml` with no per-page code. |
+| **Legacy Porting** *(new in 1.7.0)* | `php artisan slice:port` reverse-engineers legacy systems into slices: Laravel monoliths (migrations), non-Laravel PHP (SQL dumps, e.g. Dolibarr), or live databases. Hard-fails on ambiguous source DB instead of guessing. |
+| **Dev Studio Standard** *(new in 1.7.0)* | Unified Dev Studio + CLI contract (`docs/DEV_STUDIO_STANDARD.md`) — the design system every future Slice runtime (NetSlice, PythonSlice, JavaSlice, FlutterSlice) inherits. |
 
 ---
 

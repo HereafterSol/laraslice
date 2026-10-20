@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2026-10-20
+
+**Slice YAML v0.1 + Formatter Pipeline + Non-Laravel Porting**
+
+This release turns ported schemas into rich, demo-grade UI by describing presentation in YAML — and proves it by porting two real systems end-to-end: **Worksuite v5.3.9** (Laravel ERP, 85 slices, 1,630 rows imported) and **Dolibarr 21** (non-Laravel PHP ERP, 407 tables discovered from SQL dumps). Competitor approaches (Filament and Laravel Nova PHP builders, October CMS Tailor blueprints) informed the design; the YAML-first, AI-writable manifest is LaraSlice's differentiator.
+
+### Added
+- **Slice YAML v0.1 spec** — `docs/SLICE_YAML_V0.1.md` + machine-readable JSON Schema (`schemas/slice-v0.1.json`) with closed vocabularies: 8 field types, 10 directory formatters, `input` widget enum. No HTML in YAML, ever.
+- **`php artisan slice:validate`** — Validates a slice YAML against the v0.1 schema (single file or `--all`), with exact error paths; exit 1 on failure. Data type vs form widget split: `type` is storage-only, `input` declares the widget.
+- **Formatter pipeline (YAML → pixels)** — Directory columns carry `formatter` metadata end-to-end: generator emits it, `DataTableRows` maps it, and the data-table renders `status_pill`, `progress_bar`, `money_breakdown`, `date_overdue`, `code_badge`, `text_with_badge`, `composite_user`, `date_time`, `number`, and `text` formatters.
+- **Phase 2 DataTable parser** (`DataTableUiParser`) — Statically classifies source `*DataTable.php` closures into the v0.1 formatter vocabulary (no closure execution, no HTML scraping). Wired into `slice:repair --re-infer-ui --source`.
+- **Request-time directory UI resolution** (`LaraSlice\Support\DirectoryUi`) — Index views resolve column formatters from the live slice manifest at request time; works for path-repo, vendor, and published installs (replaces repair-time absolute-path baking).
+- **Workflow bulk actions** — Declared in YAML (`ui.directory.actions.bulk`), enforced by RBAC, with Studio editors for quick filters, sidebar filters, summary cards, row/bulk actions, and form sections.
+- **Non-Laravel porting** — `slice:port` now discovers schemas from `CREATE TABLE` SQL dumps (Dolibarr `install/mysql`, etc.), strips table prefixes (`--strip-prefix=llx_`, defaults `llx_`/`wp_`), and ports MySQL sources via `--source-*` connection options.
+- **Porting safety: no silent wrong-database** — If no source schema is found, `slice:port` hard-fails with five numbered fix options instead of falling back to the target app DB. Opt-in fallback only via `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` (discouraged).
+- **Runnable examples** — `blueprints/examples/kitchen-sink.slice.yaml` (all 10 formatters) plus CRM (Companies, Contacts, Deals), HR (Employees, Leave Requests), and Shop (Products, Orders) suites. All validate against v0.1 and apply via Blueprint Studio or CLI.
+- **Dev Studio Standard** — `docs/DEV_STUDIO_STANDARD.md`: the unified Dev Studio + CLI contract (parity table, Generate = files + migrate + seed, single "Start from…" picker, mobile rules) that future Slice runtimes (NetSlice, PythonSlice, JavaSlice, FlutterSlice) inherit.
+- **`LARASLICE_MFA_ENABLED`** — Environment toggle for MFA enforcement (dev/test), `SecurityPolicyService::requiresMfa()`; `slice:repair` merges missing keys into published `config/laraslice.php` without overwriting.
+- **`slice:blueprint:apply --migrate / --seed`** — Apply now optionally runs migrations and seeds demo records in the same flow, and always prints the exact seed command.
+
+### Changed
+- **Blueprint applier speaks v0.1** — `BlueprintValidator` normalizes `spec_version: "0.1"`, accepts the full formatter list, maps column `key` → `handle`, and lifts map-style `fields:` into `models[0].fields`. Valid YAML is now also applicable YAML.
+- **Porting Studio & Blueprint Studio** — Single "Start from…" picker (Presets | Examples v0.1 | Single Slice Blueprints); secondary actions move into an overflow menu on small screens; mobile overflow fixed at 390px; AI Copilot starts collapsed on small viewports.
+- **Porting is non-interactive friendly** — `--dry-run` / `--no-interaction` defaults to `mode=system-base` without prompting (CI-safe).
+
+### Fixed
+- **ETL chain** — Source connection is passed through the full port pipeline; `--scaffold` no longer bypasses ETL; NOT NULL target columns missing from source are filled with defaults; column-name mismatches resolved via alias families (`heading`→`title`, `project_name`→`title`, `deadline`→`due_date`). Verified: 1,630 rows / 66 tables imported from Worksuite.
+- **Formatter data loss in data-table** — `$cols` mapping previously dropped `formatter`/`badge_from`/`breakdown`; Alpine now receives formatter metadata intact.
+- **Status column invisible with inline edit** — Cells with `inline_edit` now always render formatted HTML and only show the workflow transition `<select>` when transitions exist.
+- **Studio JS errors** — `selectedSliceIdx` defaulted; null-property guards on Studio pages.
+- **Generated form validation** — Ported fields set `required`/`nullable` from DB nullability; identity columns default to required.
+
+---
+
 ## [1.6.4] - 2026-10-17
 
 ### Added
