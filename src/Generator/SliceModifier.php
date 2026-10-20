@@ -772,7 +772,49 @@ PHP;
         return $content;
     }
 
+    /**
+     * Resolve a Studio slice name the same way other save paths do:
+     * canonical studly → plural → resolveSliceDir.
+     */
+    protected function resolveStudioSliceDir(string $sliceName): string
+    {
+        $studly = \LaraSlice\Support\SliceName::canonical($sliceName);
+        $plural = \Illuminate\Support\Str::plural($studly);
+        $dir = $this->resolveSliceDir($plural);
+        if (! is_dir($dir)) {
+            // Fall back to the raw name (already plural or nested)
+            $dir = $this->resolveSliceDir($sliceName);
+        }
+        if (! is_dir($dir)) {
+            throw new \RuntimeException("Slice directory for [{$sliceName}] not found.");
+        }
+        return $dir;
+    }
+
+    /**
+     * Best-effort model class for workflow sync when we only have a directory.
+     */
+    protected function resolveModelClass(string $sliceDir): ?string
+    {
+        $models = glob(rtrim($sliceDir, '/\\').'/Models/*.php') ?: [];
+        if ($models === []) {
+            return null;
+        }
+        $base = basename($models[0], '.php');
+        $candidates = [
+            'App\\Slices\\'.basename($sliceDir).'\\Models\\'.$base,
+            'App\\Models\\'.$base,
+        ];
+        foreach ($candidates as $c) {
+            if (class_exists($c)) {
+                return $c;
+            }
+        }
+        return null;
+    }
+
     protected function resolveSliceDir(string $pluralName): string
+
     {
         // 1. Direct flat path
         $appPath = rtrim($this->slicesPath, '/\\').DIRECTORY_SEPARATOR.$pluralName;
@@ -1894,8 +1936,8 @@ PHP;
      */
     public function previewStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null): array
     {
-        $slice = $this->findSlice($sliceName);
-        $current = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($slice->path);
+        $sliceDir = $this->resolveStudioSliceDir($sliceName);
+        $current = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
         $next = $this->applyStudioConfig($current, $ui, $navigation, $workflow);
 
         $before = $this->dumpYaml($current);
@@ -1989,11 +2031,10 @@ PHP;
     }
 
     public function saveStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null, string $author = 'Developer via Slice Studio'): array
-
     {
-        $slice = $this->findSlice($sliceName);
-        $manifestFile = $slice->path.'/slice.yaml';
-        $manifest = ManifestRepository::readFromSliceDir($slice->path);
+        $sliceDir = $this->resolveStudioSliceDir($sliceName);
+        $manifestFile = $sliceDir.'/slice.yaml';
+        $manifest = ManifestRepository::readFromSliceDir($sliceDir);
 
         $oldVersion = $manifest['version'] ?? '1.0.0';
         $parts = explode('.', (string) $oldVersion);
@@ -2050,7 +2091,7 @@ PHP;
         if (! empty($manifest['workflow']) && is_array($manifest['workflow'])) {
             try {
                 app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)
-                    ->syncWorkflowFromManifest($manifest['workflow'], $sliceName, $slice->getModelClass());
+                    ->syncWorkflowFromManifest($manifest['workflow'], $sliceName, $this->resolveModelClass($sliceDir));
             } catch (\Throwable $e) {
             }
         }
