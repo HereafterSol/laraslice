@@ -25,6 +25,7 @@ class SlicePortCommand extends Command
                             {--with-files : Copy physical file attachments from storage/app/public}
                             {--scaffold : Automatically scaffold physical vertical slices into app/Slices}
                             {--dry-run : Preview table-to-slice mapping without writing files}
+                            {--strip-prefix= : Comma-separated table prefixes to strip from slice names (e.g. llx_,wp_). Defaults from config LARASLICE_PORT_STRIP_PREFIXES}
                             {--source-connection= : Legacy DB connection name from config/database.php (overrides --source-* options)}
                             {--source-host= : Legacy database host (default: 127.0.0.1)}
                             {--source-port= : Legacy database port (default: 3306)}
