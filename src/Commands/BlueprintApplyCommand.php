@@ -15,9 +15,11 @@ final class BlueprintApplyCommand extends Command
     protected $signature = 'slice:blueprint:apply
                             {path : Path to a validated .json, .yaml, or .yml blueprint}
                             {--plan-hash= : SHA-256 plan hash shown by slice:blueprint:plan}
-                            {--yes : Confirm writing the reviewed slice files}';
+                            {--yes : Confirm writing the reviewed slice files}
+                            {--migrate : Run database migrations after applying (default with --yes when interactive)}
+                            {--seed : Seed demo records after migrate (implies --migrate)}';
 
-    protected $description = 'Generate a supported slice from a reviewed blueprint without running migrations';
+    protected $description = 'Generate a supported slice from a reviewed blueprint; optionally migrate and seed';
 
     public function handle(BlueprintLoader $loader, BlueprintValidator $validator, BlueprintPlanner $planner): int
     {
@@ -38,13 +40,52 @@ final class BlueprintApplyCommand extends Command
 
                 return self::FAILURE;
             }
-            if (! $this->option('yes') && ! $this->confirm('Generate the reviewed files? Database migrations will not run.', false)) {
+            if (! $this->option('yes') && ! $this->confirm('Generate the reviewed files?', false)) {
                 return self::FAILURE;
             }
 
             $target = $applier->apply($blueprint, $plan, $slicesPath, config('laraslice.slices_namespace', 'App\\Slices'));
             $this->components->info("Generated slice at [{$target}].");
-            $this->comment('Files were written atomically. Database migrations were not run.');
+            $this->comment('Files were written atomically.');
+
+            $doMigrate = (bool) $this->option('migrate') || (bool) $this->option('seed');
+            if (! $doMigrate && $this->input->isInteractive() && ! $this->option('no-interaction')) {
+                $doMigrate = $this->confirm('Run database migrations now?', true);
+            }
+
+            if ($doMigrate) {
+                $this->comment('Running migrations…');
+                try {
+                    \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+                    $out = trim(\Illuminate\Support\Facades\Artisan::output());
+                    if ($out !== '') {
+                        $this->line($out);
+                    }
+                    $this->components->info('Migrations finished.');
+                } catch (\Throwable $e) {
+                    $this->components->error('Migration failed: '.$e->getMessage());
+                    $this->line('You can retry with: php artisan migrate');
+                }
+            } else {
+                $this->comment('Migrations were not run. Next: php artisan migrate');
+            }
+
+            $sliceName = $blueprint['name'] ?? $blueprint['handle'] ?? 'Slice';
+            $this->newLine();
+            $this->comment('Demo data:');
+            $this->line('  php artisan slice:seed '.\Illuminate\Support\Str::studly((string) $sliceName).' --count=10');
+            if ($this->option('seed')) {
+                $this->comment('Seeding demo records…');
+                try {
+                    \Illuminate\Support\Facades\Artisan::call('slice:seed', [
+                        'slice' => \Illuminate\Support\Str::studly((string) $sliceName),
+                        '--count' => 10,
+                    ]);
+                    $this->line(trim(\Illuminate\Support\Facades\Artisan::output()));
+                } catch (\Throwable $e) {
+                    $this->components->warn('Seed failed (slice may need a seeder): '.$e->getMessage());
+                }
+            }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {

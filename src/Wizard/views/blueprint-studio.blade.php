@@ -44,69 +44,47 @@
             </p>
         </div>
 
-        <!-- Controls: Preset selector, Template selector, Slice selector, View mode -->
+        <!-- Controls: single Start-from picker + overflow for secondary actions -->
         <div class="flex flex-wrap items-center gap-2.5">
-            <!-- Preset & Archetype Chooser (Matching Porting Studio) -->
+            <!-- Unified Start from… picker (Presets + Examples) -->
             <div class="relative">
-                <select x-model="selectedPreset" @change="choosePreset($event.target.value)" 
-                        class="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 shadow-sm hover:bg-indigo-500/20 focus:outline-none cursor-pointer">
-                    <option value="" disabled selected>⚡ Choose Preset / Archetype...</option>
-                    <optgroup label="⚖️ Statutory & Dispute Adjudication">
-                        <option value="adjudication">⚖️ Dispute Adjudication (7 Slices: Complaints, Hearings, Notices, etc.)</option>
-                        <option value="legal_dispute_adjudication">⚖️ Dispute Adjudication Standard Suite (6 Slices)</option>
-                    </optgroup>
-                    <optgroup label="🏢 Enterprise & Commercial Archetypes">
-                        <option value="erp">🏢 ERP Enterprise Operations (23 Slices)</option>
-                        <option value="healthcare">🏥 Healthcare & Clinical EMR</option>
-                        <option value="ecommerce">🛒 E-Commerce & Retail</option>
-                        <option value="edtech">🎓 EdTech & Learning (LMS)</option>
-                        <option value="fintech">💳 FinTech & Core Banking</option>
+                <select @change="handleStartFrom($event.target.value); $event.target.value = '';"
+                        class="h-9 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 text-xs font-semibold text-indigo-400 shadow-sm hover:bg-indigo-500/20 focus:outline-none cursor-pointer max-w-[220px] sm:max-w-none">
+                    <option value="" disabled selected>Start from…</option>
+                    <optgroup label="⚡ Presets / Archetypes">
+                        <option value="preset:adjudication">⚖️ Dispute Adjudication (7 Slices)</option>
+                        <option value="preset:legal_dispute_adjudication">⚖️ Dispute Adjudication Standard Suite</option>
+                        <option value="preset:erp">🏢 ERP Enterprise Operations</option>
+                        <option value="preset:healthcare">🏥 Healthcare & Clinical EMR</option>
+                        <option value="preset:ecommerce">🛒 E-Commerce & Retail</option>
+                        <option value="preset:edtech">🎓 EdTech & Learning (LMS)</option>
+                        <option value="preset:fintech">💳 FinTech & Core Banking</option>
                     </optgroup>
                     <template x-if="savedPresets && savedPresets.length > 0">
                         <optgroup label="💾 Saved Custom Presets">
                             <template x-for="p in savedPresets" :key="p.slug">
-                                <option :value="'saved:' + p.slug" x-text="'💾 ' + (p.name || p.slug)"></option>
+                                <option :value="'preset:saved:' + p.slug" x-text="'💾 ' + (p.name || p.slug)"></option>
                             </template>
                         </optgroup>
                     </template>
-                </select>
-            </div>
-
-            <!-- Template Quick Load -->
-            <div class="relative">
-                <select @change="loadStudioPreset($event.target.value); $event.target.value = '';" class="h-9 rounded-lg border border-input bg-card px-3 text-xs font-medium text-foreground shadow-sm hover:bg-accent/50 focus:outline-none">
-                    <option value="" disabled selected>Load Example Template / Suite...</option>
-                    <optgroup label="⚖️ Enterprise Judicial & Workflow Suites">
-                        <option value="legal_dispute_adjudication">⚖️ Dispute Adjudication Suite (6 Slices: Complaints, Hearings, Notices, Orders, Inquiries, MasterData)</option>
-                        <option value="grant_subsidy_pipeline">💰 Grant & Capital Disbursement (2 Slices: Grants, Disbursements)</option>
-                        <option value="executive_procurement_approval">📋 Executive Procurement & PO (2 Slices: Requisitions, PurchaseOrders)</option>
-                        <option value="support_service_ticket">🎫 Support Service & Escalation (2 Slices: Tickets, Escalations)</option>
-                    </optgroup>
-                    <optgroup label="📦 Multi-Slice Domain Suites">
-                        <option value="crm_suite">💼 CRM Suite (3 Slices: Companies, Contacts, Deals)</option>
-                        <option value="ecommerce_suite">🛒 E-Commerce Suite (4 Slices: Products, Orders, Customers, Categories)</option>
-                        <option value="billing_suite">💳 Billing Suite (3 Slices: Invoices, Payments, Subscriptions)</option>
-                        <option value="asset_inventory">📦 Asset & Inventory Suite (2 Slices: Assets, Maintenance)</option>
-                    </optgroup>
-                    <optgroup label="🧪 Product examples (v0.1)">
-                        <option value="kitchen-sink">🧪 Kitchen Sink (all formatters)</option>
-                        <option value="crm-companies">💼 CRM · Companies</option>
-                        <option value="crm-contacts">💼 CRM · Contacts</option>
-                        <option value="crm-deals">💼 CRM · Deals</option>
-                        <option value="hr-employees">👥 HR · Employees</option>
-                        <option value="hr-leave-requests">👥 HR · Leave</option>
-                        <option value="shop-products-example">🛒 Shop · Products</option>
-                        <option value="shop-orders-example">🛒 Shop · Orders</option>
+                    <optgroup label="🧪 Examples (v0.1)">
+                        <option value="example:kitchen-sink">🧪 Kitchen Sink (all formatters)</option>
+                        <option value="example:crm-companies">💼 CRM · Companies</option>
+                        <option value="example:crm-contacts">💼 CRM · Contacts</option>
+                        <option value="example:crm-deals">💼 CRM · Deals</option>
+                        <option value="example:hr-employees">👥 HR · Employees</option>
+                        <option value="example:hr-leave-requests">👥 HR · Leave</option>
+                        <option value="example:shop-products-example">🛒 Shop · Products</option>
+                        <option value="example:shop-orders-example">🛒 Shop · Orders</option>
                     </optgroup>
                     <optgroup label="📄 Single Slice Blueprints">
-                        <option value="service-desk">🎫 Service Desk (Tickets & Replies)</option>
-                        <option value="hr-module">👥 HR & Staff (Departments & Employees)</option>
-                        <option value="blog">📝 Articles & Comments</option>
-                        <option value="shop">🛍️ Products & Variants</option>
-                        <option value="shop-orders">📦 Orders & Items</option>
-                        <option value="shop-categories">🏷️ Shop Categories</option>
-                        <option value="crm">🏢 Companies & Contacts</option>
-                        <option value="helpdesk">🎫 Helpdesk Support Ticket</option>
+                        <option value="example:service-desk">🎫 Service Desk</option>
+                        <option value="example:hr-module">👥 HR & Staff</option>
+                        <option value="example:blog">📝 Articles & Comments</option>
+                        <option value="example:shop">🛍️ Products & Variants</option>
+                        <option value="example:shop-orders">📦 Orders & Items</option>
+                        <option value="example:shop-categories">🏷️ Shop Categories</option>
+                        <option value="example:crm">🏢 Companies & Contacts</option>
                     </optgroup>
                 </select>
             </div>
@@ -166,26 +144,41 @@
                 </button>
             </div>
 
-                        <!-- Import YAML Button -->
-            <button type="button" @click="showImportYamlModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs cursor-pointer" title="Import or paste full Domain or Slice YAML">
-                <svg class="size-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                <span>📥 Import YAML</span>
-            </button>
-
-            <!-- Introspect DB Button -->
-            <button type="button" @click="showIntrospectModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/20 transition">
-                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-8 4v6m-3-3h6"/></svg>
-                ✨ Add from DB
-            </button>
-
-            <!-- 1-Click Run Migrations Button -->
-            <form method="POST" action="{{ route('laraslice.wizard.blueprint.migrate') }}" class="inline">
-                @csrf
-                <button type="submit" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 dark:text-amber-400 transition" title="Run php artisan migrate immediately">
-                    <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                    ⚡ Run Migrations
+            <!-- Secondary actions: inline on md+, overflow menu on small screens -->
+            <div class="relative" x-data="{ headerOverflow: false }">
+                <!-- Mobile overflow trigger -->
+                <button type="button" @click="headerOverflow = !headerOverflow" class="md:hidden inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-accent" aria-label="More actions">
+                    ⋯
                 </button>
-            </form>
+                <!-- Mobile menu -->
+                <div x-show="headerOverflow" x-cloak @click.outside="headerOverflow = false"
+                     class="md:hidden absolute right-0 top-full mt-1 z-40 min-w-[180px] rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                    <button type="button" @click="showImportYamlModal = true; headerOverflow = false" class="w-full text-left px-3 py-2 hover:bg-accent">📥 Import YAML</button>
+                    <button type="button" @click="showIntrospectModal = true; headerOverflow = false" class="w-full text-left px-3 py-2 hover:bg-accent">✨ Add from DB</button>
+                    <form method="POST" action="{{ route('laraslice.wizard.blueprint.migrate') }}" class="block">
+                        @csrf
+                        <button type="submit" class="w-full text-left px-3 py-2 hover:bg-accent text-amber-600 dark:text-amber-400">⚡ Run Migrations</button>
+                    </form>
+                </div>
+                <!-- Desktop inline -->
+                <div class="hidden md:flex items-center gap-2.5">
+                    <button type="button" @click="showImportYamlModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs cursor-pointer" title="Import or paste full Domain or Slice YAML">
+                        <svg class="size-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        <span>Import YAML</span>
+                    </button>
+                    <button type="button" @click="showIntrospectModal = true" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary hover:bg-primary/20 transition">
+                        <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-8 4v6m-3-3h6"/></svg>
+                        Add from DB
+                    </button>
+                    <form method="POST" action="{{ route('laraslice.wizard.blueprint.migrate') }}" class="inline">
+                        @csrf
+                        <button type="submit" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 dark:text-amber-400 transition" title="Run php artisan migrate immediately">
+                            <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            Run Migrations
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -5415,7 +5408,25 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             }
         },
 
+        // Unified Start from… dispatcher (presets + examples)
+        handleStartFrom(value) {
+            if (!value) return;
+            if (value.startsWith('preset:')) {
+                const key = value.slice(7); // drop "preset:"
+                this.choosePreset(key);
+                return;
+            }
+            if (value.startsWith('example:')) {
+                const key = value.slice(8); // drop "example:"
+                this.loadStudioPreset(key);
+                return;
+            }
+            // Fallback: treat as example key
+            this.loadStudioPreset(value);
+        },
+
         loadStudioPreset(presetKey) {
+
             if (!presetKey) return;
             if (studioPresets[presetKey]) {
                 const presetSlices = JSON.parse(JSON.stringify(studioPresets[presetKey]));

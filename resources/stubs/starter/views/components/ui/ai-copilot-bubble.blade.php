@@ -1,15 +1,25 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 @php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
 <div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
-    <!-- Floating Trigger Bubble -->
-    <div class="relative group" x-show="!isOpen">
+    <!-- Collapsed restore chip (mobile) -->
+    <button
+        x-show="collapsed && !isOpen"
+        @click="collapsed = false"
+        type="button"
+        class="fixed bottom-4 right-4 z-50 flex size-10 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg border border-indigo-500/40 sm:hidden"
+        aria-label="Show AI Copilot">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+    </button>
+
+    <!-- Floating Trigger Bubble (icon-only + collapsible on small screens) -->
+    <div class="relative group" x-show="!isOpen && !collapsed">
         <!-- Pulse Glow -->
-        <span class="absolute -inset-1 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-70 blur-md group-hover:opacity-100 animate-pulse transition duration-500"></span>
+        <span class="absolute -inset-1 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-70 blur-md group-hover:opacity-100 animate-pulse transition duration-500 hidden sm:block"></span>
         
         <button 
             @click="toggleChat()" 
             type="button"
-            class="relative flex items-center gap-2.5 px-4 py-3 rounded-full bg-slate-900 text-white shadow-2xl border border-indigo-500/40 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-200">
+            class="relative flex items-center gap-2.5 p-2.5 sm:px-4 sm:py-3 rounded-full bg-slate-900 text-white shadow-2xl border border-indigo-500/40 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-200">
             <div class="relative flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-pink-500 text-white font-bold text-xs shadow-inner">
                 <svg class="w-4 h-4 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -580,6 +590,7 @@ function larasliceCopilot() {
         posLeft: null,
         posTop: null,
         isOpen: false,
+        collapsed: window.matchMedia('(max-width: 639px)').matches,
         isLoading: false,
         inputQuery: '',
         showSlashMenu: false,
