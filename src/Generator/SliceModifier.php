@@ -1940,13 +1940,28 @@ PHP;
         $current = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
         $next = $this->applyStudioConfig($current, $ui, $navigation, $workflow);
 
+        // applyStudioConfig always bumps the patch version; a version-only
+        // difference is not a user change, so compare ignoring 'version'.
+        $currentCmp = $current;
+        $nextCmp = $next;
+        unset($currentCmp['version'], $nextCmp['version']);
+        $changed = $currentCmp !== $nextCmp;
+
+        if (! $changed) {
+            return [
+                'diff' => '',
+                'changed' => false,
+                'version' => $current['version'] ?? '1.0.0',
+            ];
+        }
+
         $before = $this->dumpYaml($current);
         $after = $this->dumpYaml($next);
         $diff = $this->unifiedDiff($before, $after, 'slice.yaml (current)', 'slice.yaml (proposed)');
 
         return [
             'diff' => $diff,
-            'changed' => $before !== $after,
+            'changed' => true,
             'version' => $next['version'] ?? ($current['version'] ?? '1.0.0'),
         ];
     }
