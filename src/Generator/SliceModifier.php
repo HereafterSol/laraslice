@@ -772,7 +772,49 @@ PHP;
         return $content;
     }
 
+    /**
+     * Resolve a Studio slice name the same way other save paths do:
+     * canonical studly → plural → resolveSliceDir.
+     */
+    protected function resolveStudioSliceDir(string $sliceName): string
+    {
+        $studly = SliceName::canonical($sliceName);
+        $plural = \Illuminate\Support\Str::plural($studly);
+        $dir = $this->resolveSliceDir($plural);
+        if (! is_dir($dir)) {
+            // Fall back to the raw name (already plural or nested)
+            $dir = $this->resolveSliceDir($sliceName);
+        }
+        if (! is_dir($dir)) {
+            throw new \RuntimeException("Slice directory for [{$sliceName}] not found.");
+        }
+        return $dir;
+    }
+
+    /**
+     * Best-effort model class for workflow sync when we only have a directory.
+     */
+    protected function resolveModelClass(string $sliceDir): ?string
+    {
+        $models = glob(rtrim($sliceDir, '/\\').'/Models/*.php') ?: [];
+        if ($models === []) {
+            return null;
+        }
+        $base = basename($models[0], '.php');
+        $candidates = [
+            'App\\Slices\\'.basename($sliceDir).'\\Models\\'.$base,
+            'App\\Models\\'.$base,
+        ];
+        foreach ($candidates as $c) {
+            if (class_exists($c)) {
+                return $c;
+            }
+        }
+        return null;
+    }
+
     protected function resolveSliceDir(string $pluralName): string
+
     {
         // 1. Direct flat path
         $appPath = rtrim($this->slicesPath, '/\\').DIRECTORY_SEPARATOR.$pluralName;
@@ -1887,11 +1929,127 @@ PHP;
      * @param  array<string, mixed>  $navigation
      * @return array<string, mixed>
      */
+    /**
+     * Build the post-save manifest and a unified YAML diff without writing.
+     *
+     * @return array{diff: string, changed: bool, version: string}
+     */
+    public function previewStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null): array
+    {
+        $sliceDir = $this->resolveStudioSliceDir($sliceName);
+        $current = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
+        $next = $this->applyStudioConfig($current, $ui, $navigation, $workflow);
+
+        // applyStudioConfig always bumps the patch version; a version-only
+        // difference is not a user change, so compare ignoring 'version'.
+        $currentCmp = $current;
+        $nextCmp = $next;
+        unset($currentCmp['version'], $nextCmp['version']);
+        $changed = $currentCmp !== $nextCmp;
+
+        if (! $changed) {
+            return [
+                'diff' => '',
+                'changed' => false,
+                'version' => $current['version'] ?? '1.0.0',
+            ];
+        }
+
+        $before = $this->dumpYaml($current);
+        $after = $this->dumpYaml($next);
+        $diff = $this->unifiedDiff($before, $after, 'slice.yaml (current)', 'slice.yaml (proposed)');
+
+        return [
+            'diff' => $diff,
+            'changed' => true,
+            'version' => $next['version'] ?? ($current['version'] ?? '1.0.0'),
+        ];
+    }
+
+    /**
+     * Apply UI / navigation / workflow onto a manifest and bump the patch version.
+     * Does not write.
+     */
+    protected function applyStudioConfig(array $manifest, array $ui, array $navigation, ?array $workflow): array
+    {
+        $oldVersion = $manifest['version'] ?? '1.0.0';
+        $parts = explode('.', (string) $oldVersion);
+        while (count($parts) < 3) {
+            $parts[] = '0';
+        }
+        $parts[2] = (string) ((int) $parts[2] + 1);
+        $manifest['version'] = implode('.', $parts);
+
+        if ($ui !== []) {
+            $manifest['ui'] = array_replace_recursive($manifest['ui'] ?? [], $ui);
+        }
+        if ($navigation !== []) {
+            $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $navigation);
+        }
+        if ($workflow !== null) {
+            if ($workflow === [] || (isset($workflow['enabled']) && $workflow['enabled'] === false && empty($workflow['states']))) {
+                $manifest['workflow'] = false;
+            } else {
+                $manifest['workflow'] = array_merge(
+                    is_array($manifest['workflow'] ?? null) ? $manifest['workflow'] : [],
+                    $workflow
+                );
+                $manifest['workflow']['enabled'] = $manifest['workflow']['enabled'] ?? true;
+            }
+        }
+
+        return $manifest;
+    }
+
+    protected function dumpYaml(array $manifest): string
+    {
+        if (! class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+            return json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        }
+        return \Symfony\Component\Yaml\Yaml::dump(
+            \LaraSlice\Core\Discovery\ManifestRepository::normalize($manifest),
+            6,
+            2
+        );
+    }
+
+    protected function unifiedDiff(string $before, string $after, string $fromLabel, string $toLabel): string
+    {
+        $a = explode("\n", $before);
+        $b = explode("\n", $after);
+        // Simple line diff (no external process)
+        $out = ["--- {$fromLabel}", "+++ {$toLabel}"];
+        $max = max(count($a), count($b));
+        $changes = 0;
+        for ($i = 0; $i < $max; $i++) {
+            $left = $a[$i] ?? null;
+            $right = $b[$i] ?? null;
+            if ($left === $right) {
+                continue;
+            }
+            $changes++;
+            if ($changes > 200) {
+                $out[] = '... truncated ...';
+                break;
+            }
+            if ($left !== null) {
+                $out[] = '-'.$left;
+            }
+            if ($right !== null) {
+                $out[] = '+'.$right;
+            }
+        }
+        if ($changes === 0) {
+            return '(no changes)';
+        }
+        return implode("\n", $out);
+    }
+
     public function saveStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null, string $author = 'Developer via Slice Studio'): array
     {
-        $slice = $this->findSlice($sliceName);
-        $manifestFile = $slice->path.'/slice.json';
-        $manifest = ManifestRepository::read($manifestFile);
+        $sliceDir = $this->resolveStudioSliceDir($sliceName);
+        $manifestFile = $sliceDir.'/slice.yaml';
+        $manifest = ManifestRepository::readFromSliceDir($sliceDir);
 
         $oldVersion = $manifest['version'] ?? '1.0.0';
         $parts = explode('.', (string) $oldVersion);
@@ -1948,7 +2106,7 @@ PHP;
         if (! empty($manifest['workflow']) && is_array($manifest['workflow'])) {
             try {
                 app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)
-                    ->syncWorkflowFromManifest($manifest['workflow'], $sliceName, $slice->getModelClass());
+                    ->syncWorkflowFromManifest($manifest['workflow'], $sliceName, $this->resolveModelClass($sliceDir));
             } catch (\Throwable $e) {
             }
         }
@@ -1960,7 +2118,7 @@ PHP;
             'navigation' => $manifest['navigation'] ?? [],
             'workflow' => $manifest['workflow'] ?? null,
             'version_history' => $manifest['version_history'],
-            'message' => "Studio config saved for [{$sliceName}] v{$newVersion} (JSON + YAML).",
+            'message' => "Studio config saved for [{$sliceName}] v{$newVersion} (YAML + version_history).",
         ];
     }
 

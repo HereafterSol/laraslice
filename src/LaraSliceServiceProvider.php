@@ -219,6 +219,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/rollback-version', [WizardController::class, 'rollbackVersion'])->name('laraslice.wizard.rollback_version');
                     Route::post('/sync-fields', [WizardController::class, 'syncFields'])->name('laraslice.wizard.sync_fields');
                     Route::post('/save-studio-config', [WizardController::class, 'saveStudioConfig'])->name('laraslice.wizard.save_studio_config');
+                    Route::post('/preview-studio-config', [WizardController::class, 'previewStudioConfig'])->name('laraslice.wizard.preview_studio_config');
                     Route::post('/sync-manifest', [WizardController::class, 'syncManifest'])->name('laraslice.wizard.sync_manifest');
                     Route::post('/save-relationships', [WizardController::class, 'saveRelationships'])->name('laraslice.wizard.save_relationships');
                     Route::post('/batch-generate', [WizardController::class, 'batchGenerate'])->name('laraslice.wizard.batch_generate');

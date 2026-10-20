@@ -125,9 +125,9 @@ Studio lists, dropdowns, and slice pickers must be paginated or virtualized abov
 | Header overflow on small screens | ✅ Blueprint Studio |
 | AI Copilot collapse on mobile | ✅ icon-only + restore chip |
 | Progressive disclosure (Slice Studio) | ✅ wizard + Studio toggle |
-| Diff / version history | 📋 standard (this doc) |
-| Journey breadcrumb | 📋 standard (this doc) |
-| Visual language unification | 📋 standard (this doc) |
+| Diff / version history | ✅ preview modal before Studio save |
+| Journey breadcrumb | ✅ Port → Design → Customize in all three Studios |
+| Visual language unification | ✅ shared journey component; Blueprint overflow already matches |
 | Performance contract | 📋 standard (this doc) |
 
 ---

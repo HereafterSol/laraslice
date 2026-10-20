@@ -1346,7 +1346,35 @@ class WizardController extends Controller
     /**
      * Save UI + navigation from Slice Studio (JSON + YAML + version_history + optional workflow DB sync).
      */
+    /**
+     * Preview YAML diff before Slice Studio overwrite. Does not write.
+     */
+    public function previewStudioConfig(Request $request)
+    {
+        $validated = $request->validate([
+            'slice' => 'required|string',
+            'ui' => 'nullable|array',
+            'navigation' => 'nullable|array',
+            'workflow' => 'nullable|array',
+        ]);
+
+        try {
+            $modifier = new \LaraSlice\Generator\SliceModifier;
+            $preview = $modifier->previewStudioConfig(
+                $validated['slice'],
+                $validated['ui'] ?? [],
+                $validated['navigation'] ?? [],
+                $request->has('workflow') ? ($validated['workflow'] ?? []) : null
+            );
+
+            return response()->json(['success' => true] + $preview);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
     public function saveStudioConfig(Request $request)
+
     {
         $validated = $request->validate([
             'slice' => 'required|string',
