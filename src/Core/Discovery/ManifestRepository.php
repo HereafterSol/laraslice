@@ -183,41 +183,96 @@ final class ManifestRepository
     }
 
     /**
-     * Write GitOps twin slice.yaml next to slice.json (same payload, YAML form).
-     * Keeps file + Studio edits in sync for developers who prefer YAML reviews/PRs.
+     * Write the canonical slice.yaml (Phase 2: YAML is the only write target).
+     *
+     * @param  string  $pathOrDir  A slice directory, a slice.yaml path, or a legacy slice.json path.
      */
-    public static function writeYamlTwin(string $jsonFile, array $manifest): void
+    public static function writeYaml(string $pathOrDir, array $manifest): void
     {
-        $dir = dirname($jsonFile);
-        $yamlPath = $dir.DIRECTORY_SEPARATOR.'slice.yaml';
-        // Prefer symfony/yaml if available via Laravel
-        try {
-            if (class_exists(\Symfony\Component\Yaml\Yaml::class)) {
-                $yaml = \Symfony\Component\Yaml\Yaml::dump(
-                    self::normalize($manifest),
-                    8,
-                    2,
-                    \Symfony\Component\Yaml\Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
-                );
-            } elseif (class_exists(\Illuminate\Support\Facades\Yaml::class)) {
-                $yaml = \Illuminate\Support\Facades\Yaml::dump(self::normalize($manifest));
-            } else {
-                // Minimal fallback: JSON-compatible structure as YAML-ish
-                $yaml = "# LaraSlice GitOps twin of slice.json — edit either; slice:sync reconciles\n"
-                    .json_encode(self::normalize($manifest), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-            }
-            file_put_contents($yamlPath, $yaml, LOCK_EX);
-        } catch (\Throwable $e) {
-            // Non-fatal: JSON remains source of truth at runtime
+        if (is_dir($pathOrDir)) {
+            $yamlPath = rtrim($pathOrDir, '/\\').DIRECTORY_SEPARATOR.'slice.yaml';
+        } elseif (str_ends_with(strtolower($pathOrDir), '.json')) {
+            $yamlPath = dirname($pathOrDir).DIRECTORY_SEPARATOR.'slice.yaml';
+        } else {
+            $yamlPath = $pathOrDir;
+        }
+
+        if (! class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+            throw new \RuntimeException('symfony/yaml is required to write slice.yaml');
+        }
+
+        $yaml = \Symfony\Component\Yaml\Yaml::dump(
+            self::normalize($manifest),
+            8,
+            2,
+            \Symfony\Component\Yaml\Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+        );
+        if (file_put_contents($yamlPath, $yaml, LOCK_EX) === false) {
+            throw new \RuntimeException("Unable to write slice YAML: {$yamlPath}");
         }
     }
 
     /**
-     * Persist both slice.json and slice.yaml.
+     * @deprecated Phase 2: writes YAML only. Kept so existing callers do not break.
+     */
+    public static function writeYamlTwin(string $jsonFile, array $manifest): void
+    {
+        self::writeYaml($jsonFile, $manifest);
+    }
+
+    /**
+     * Phase 2: persist YAML only. Does not create or update slice.json.
+     *
+     * @deprecated Name kept for callers. Use writeYaml().
      */
     public static function writeBoth(string $jsonFile, array $manifest): void
     {
-        self::write($jsonFile, $manifest);
-        self::writeYamlTwin($jsonFile, $manifest);
+        self::writeYaml($jsonFile, $manifest);
+    }
+
+    /**
+     * Convert every slice.json under $root to slice.yaml.
+     * JSON is deleted only when $deleteJson is true (explicit user choice).
+     *
+     * @return array{converted: int, skipped: int, deleted: int, paths: list<string>}
+     */
+    public static function migrateJsonToYaml(string $root, bool $dryRun = false, bool $deleteJson = false): array
+    {
+        $converted = 0;
+        $skipped = 0;
+        $deleted = 0;
+        $paths = [];
+
+        if (! is_dir($root)) {
+            return compact('converted', 'skipped', 'deleted', 'paths');
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || $file->getFilename() !== 'slice.json') {
+                continue;
+            }
+            $jsonPath = $file->getPathname();
+            $dir = dirname($jsonPath);
+            try {
+                $manifest = self::read($jsonPath);
+            } catch (\Throwable $e) {
+                $skipped++;
+                continue;
+            }
+            $paths[] = $dir;
+            if (! $dryRun) {
+                self::writeYaml($dir, $manifest);
+                if ($deleteJson && is_file($jsonPath)) {
+                    @unlink($jsonPath);
+                    $deleted++;
+                }
+            }
+            $converted++;
+        }
+
+        return compact('converted', 'skipped', 'deleted', 'paths');
     }
 }

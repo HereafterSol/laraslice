@@ -554,7 +554,8 @@ CARD;
             $manifestData['multitenant'] = $multitenant;
             $manifestData['tenant_key'] = $tenantKey;
 
-            $this->writeFile($sliceDir.'/slice.json', json_encode($manifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            // Phase 2: YAML only. Do not create slice.json.
+            \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifestData);
 
             if (! empty($manifestData['roles']) && is_array($manifestData['roles'])) {
                 try {
@@ -566,56 +567,7 @@ CARD;
                 }
             }
 
-            // 1b. Canonical slice.yaml Blueprint
-            $yamlData = [
-                'schema_version' => 2,
-                'name' => Str::title(Str::snake($pluralName, ' ')),
-                'handle' => Str::snake(Str::singular($pluralName)),
-                'description' => $description,
-            ];
-
-            if ($superDomainOpt !== null) {
-                $yamlData['super_domain'] = $superDomainOpt;
-                $yamlData['app'] = $superDomainOpt;
-            } elseif ($app !== null) {
-                $yamlData['app'] = $app;
-            }
-            if ($domain !== null) {
-                if ($superDomainOpt !== null && $app !== null) {
-                    $yamlData['module'] = $app;
-                    $yamlData['domain'] = $app;
-                    $yamlData['sub_domain'] = $domain;
-                } else {
-                    $yamlData['module'] = $domain;
-                    $yamlData['domain'] = $domain;
-                }
-                $yamlData['navigation'] = [
-                    'group' => $domain,
-                    'label' => Str::title(Str::snake($pluralName, ' ')),
-                    'url' => $navUrl,
-                ];
-            }
-            $yamlData['table_prefix'] = $tablePrefix ?: null;
-            $yamlData['multitenant'] = $multitenant;
-            $yamlData['tenant_key'] = $tenantKey;
-
-            $yamlData['models'] = [
-                [
-                    'handle' => Str::snake(Str::singular($pluralName)),
-                    'table' => $tableName,
-                    'root' => true,
-                    'fields' => array_map(static fn (array $f): array => [
-                        'handle' => $f['name'],
-                        'label' => $f['label'] ?? Str::headline($f['name']),
-                        'type' => $f['type'],
-                        'required' => empty($f['nullable']),
-                    ], $manifestFields),
-                ],
-            ];
-            if (! empty($options['ui'])) {
-                $yamlData['ui'] = $options['ui'];
-            }
-            $this->writeFile($sliceDir.'/slice.yaml', Yaml::dump($yamlData, 10, 2));
+            // Phase 2: runtime manifest already written as slice.yaml above.
 
             // 2. Model
             $modelContent = <<<PHP
