@@ -1,3 +1,8 @@
+<style>
+    /* Default listing hygiene: long text clamps to two lines (full text in the
+       tooltip) instead of stretching rows or forcing columns off-screen. */
+    .ls-cell-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 300px; white-space: normal; overflow-wrap: anywhere; }
+</style>
 @props([
     'columns' => [],      // [['key'=>'name','label'=>'Name','sortable'=>true,'class'=>''], ...]
     'rows' => [],         // [['name'=>'…','email'=>'…'], ...]
@@ -345,9 +350,9 @@
                                     </div>
                                 </td>
                             @elseif (!empty($col['html']))
-                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle max-w-[340px] whitespace-normal {{ $col['class'] }}" x-html="item.r['{{ $col['key'] }}']"></td>
                             @else
-                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap text-foreground {{ $col['class'] }}" x-text="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle text-foreground {{ $col['class'] }}"><span class="ls-cell-clamp" :title="item.r['{{ $col['key'] }}']" x-text="item.r['{{ $col['key'] }}']"></span></td>
                             @endif
                         @endforeach
                         @isset($actions)
