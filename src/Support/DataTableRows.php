@@ -253,8 +253,13 @@ class DataTableRows
     /**
      * Render formatted financial total with paid and due breakdown.
      */
-    public static function moneyBreakdown(float|int|string $total, float|int|string $paid = 0, float|int|string|null $currency = 'PKR', float|int|string|null $due = null): string
+    public static function moneyBreakdown(float|int|string|null $total, float|int|string $paid = 0, float|int|string|null $currency = 'PKR', float|int|string|null $due = null): string
     {
+        // Real ported data has null amounts (drafts, hollow imports); a
+        // formatter must render the empty placeholder, never crash the list.
+        if ($total === null || $total === '') {
+            return '\u2014';
+        }
         $numTotal = (float) $total;
         $numPaid = (float) $paid;
         $numDue = $due !== null && $due !== '' ? (float) $due : max(0, $numTotal - $numPaid);

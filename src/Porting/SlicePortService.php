@@ -3465,7 +3465,15 @@ public function analyzeSourceNavigation(string $sourcePath): array
 
             // Infer formatter from field name/type (Phase 1 UI richness — handoff)
             $formatter = 'text';
-            $isMoney = str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || str_contains($lower, 'grand_total') || $type === 'decimal';
+            // Money is a name-level signal, never a type-level one. Any
+            // decimal column used to qualify, so geo coordinates became
+            // "Total Latitude $0.00" KPI cards and money-formatted columns
+            // in ported attendance modules. Decimals without a money-like
+            // name render as plain numbers.
+            $isGeo = in_array($lower, ['lat', 'lng', 'latitude', 'longitude'], true)
+                || str_ends_with($lower, '_latitude') || str_ends_with($lower, '_longitude')
+                || str_ends_with($lower, '_lat') || str_ends_with($lower, '_lng');
+            $isMoney = ! $isGeo && (str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || str_contains($lower, 'grand_total') || str_contains($lower, 'cost') || str_contains($lower, 'salary') || str_ends_with($lower, '_fee'));
             $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state' || $lower === 'stage';
             $isDate = str_ends_with($lower, '_at') || str_starts_with($lower, 'date') || in_array($type, ['datetime', 'date', 'timestamp'], true);
             $isDue = in_array($lower, ['due_date', 'deadline', 'due_on'], true) || str_ends_with($lower, '_due');
