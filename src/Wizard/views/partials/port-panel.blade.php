@@ -1,28 +1,14 @@
-<div x-data="portingStudio()" class="min-h-screen bg-background">
-    <!-- Mobile-first header -->
-    <div class="sticky top-0 z-30 bg-card/95 backdrop-blur border-b border-border">
-        <div class="px-4 py-3 md:px-6">
-            <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
-                    <a href="{{ route('laraslice.wizard') }}" class="p-2 -ml-2 rounded-lg hover:bg-muted text-muted-foreground" title="Back to Wizard">
-                        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                    </a>
-                    <div class="min-w-0">
-                        <h1 class="text-base md:text-xl font-bold text-foreground truncate">🔄 Porting Studio</h1>
-            @include('laraslice::partials.journey-breadcrumb', ['current' => 'port'])
+<div x-data="portingStudio()" class="bg-background">
+    <!-- Panel chrome lives in the Dev Studio shell; the panel keeps only its action row + tabs. -->
+    <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
+        <p class="max-w-3xl text-xs text-muted-foreground">Reverse-engineer a legacy app into vertical slices. After Analyze → Apply, ongoing customization (fields, UI, personas, bulk actions, history) continues in <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button>.</p>
+        <button @click="analyze()" :disabled="analyzing" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 md:px-4 md:text-sm">
+            <span x-show="!analyzing">🔍 Analyze</span>
+            <span x-show="analyzing" class="animate-pulse">Analyzing...</span>
+        </button>
+    </div>
+    <div class="border-b border-border">
 
-        <p class="text-xs text-muted-foreground mt-2 max-w-3xl">After Analyze → Apply, all ongoing customization (fields, UI, personas, bulk actions, history) should go through <a href="{{ route('laraslice.wizard.studio') }}" class="text-primary font-semibold underline">Slice Studio</a> — YAML + JSON stay in sync with <code class="font-mono">slice:sync</code>.</p>
-                        <p class="text-[11px] md:text-xs text-muted-foreground truncate hidden sm:block">Reverse-engineer legacy apps into LaraSlice vertical slices</p>
-                    </div>
-                </div>
-                <button @click="analyze()" :disabled="analyzing" class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 md:px-4 text-xs md:text-sm font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50">
-                    <span x-show="!analyzing">🔍 Analyze</span>
-                    <span x-show="analyzing" class="animate-pulse">Analyzing...</span>
-                </button>
-            </div>
-        </div>
-        <!-- Mobile tab selector (dropdown) / Desktop tabs -->
-        <div class="px-4 pb-2 md:px-6">
             <!-- Mobile: select dropdown -->
             <select x-model="activeTab" class="w-full md:hidden h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground">
                 <template x-for="tab in tabs" :key="tab.id">
@@ -1206,7 +1192,12 @@ function portingStudio() {
                 localStorage.setItem('laraslice_studio_slices', JSON.stringify(this.planData.studio_slices));
             }
             sessionStorage.setItem('laraslice_active_slice_idx', '0');
-            window.location.href = '/laraslice/wizard/blueprint?load_port=1';
+            if (window.__oneStudioSetMode) {
+                try { sessionStorage.setItem('laraslice_load_port', '1'); } catch (e) {}
+                window.__oneStudioSetMode('design');
+            } else {
+                window.location.href = '/laraslice/wizard/blueprint?load_port=1';
+            }
         },
 
         csrf() {

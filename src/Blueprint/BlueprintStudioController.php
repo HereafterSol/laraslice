@@ -29,6 +29,19 @@ final class BlueprintStudioController extends Controller
      */
     public function show(Request $request): mixed
     {
+        // ONE Studio: the canonical surface is the Dev Studio shell, Design mode.
+        $qs = $request->getQueryString();
+        $target = route('laraslice.studio').'?mode=design'.($qs ? '&'.$qs : '');
+
+        return redirect($target);
+    }
+
+    /**
+     * Build the Blueprint Studio view (shared by the standalone wrapper and
+     * the Dev Studio Design panel).
+     */
+    private function buildStudioView(Request $request): mixed
+    {
         $requestedSlice = $request->query('slice');
         // The value is used to build file paths and glob patterns, so allow plain slice names only
         if (! is_string($requestedSlice) || ! preg_match('/^[A-Za-z][A-Za-z0-9 _-]{0,80}$/', $requestedSlice)) {
@@ -1700,30 +1713,40 @@ final class BlueprintStudioController extends Controller
     public function shell(\Illuminate\Http\Request $request): mixed
     {
         $mode = (string) $request->query('mode', '');
-        $hasSlices = false;
+        $sliceCount = 0;
         try {
             $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
-            $hasSlices = count($manager->getAllSlices()) > 0;
+            $sliceCount = count($manager->getAllSlices());
         } catch (\Throwable $e) {
-            $hasSlices = false;
+            $sliceCount = 0;
         }
 
         return view('laraslice::studio-shell', [
             'initialMode' => $mode,
-            'hasSlices' => $hasSlices,
+            'hasSlices' => $sliceCount > 0,
+            'sliceCount' => $sliceCount,
         ]);
     }
 
     /**
      * Lazy panel HTML. Phase 1 serves Port only.
      */
-    public function panel(string $mode): mixed
+    public function panel(string $mode, Request $request): mixed
     {
-        if ($mode !== 'port') {
-            abort(404);
+        if ($mode === 'port') {
+            return view('laraslice::partials.port-panel');
         }
 
-        return view('laraslice::partials.port-panel');
+        if ($mode === 'design') {
+            $view = $this->buildStudioView($request);
+            if ($view instanceof \Illuminate\View\View) {
+                return view('laraslice::partials.design-panel', $view->getData());
+            }
+
+            return $view;
+        }
+
+        abort(404);
     }
 
 }
