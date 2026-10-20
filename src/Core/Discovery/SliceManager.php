@@ -831,48 +831,39 @@ PHP;
         $norm = strtolower(str_replace([' ', '_', '-'], '', $name));
         $singNorm = Str::singular($norm);
         $plurNorm = Str::plural($norm);
+        $norms = array_unique([$norm, $singNorm, $plurNorm]);
+        $normalize = fn (string $v): string => strtolower(str_replace([' ', '_', '-'], '', $v));
 
-        foreach ($this->slices as $slice) {
-            $sliceNorm = strtolower(str_replace([' ', '_', '-'], '', $slice->name));
-            if ($sliceNorm === $norm || $sliceNorm === $singNorm || $sliceNorm === $plurNorm) {
-                return $slice;
-            }
+        // Matching runs in strictness passes: an exact name/plural match on
+        // ANY slice must beat a loose path-contains match on an earlier
+        // slice. The old single-pass loop let getSlice('Employee') resolve
+        // to the EmployeeDetails slice (path contains "employee") before
+        // the loop ever reached the Employees slice itself, which made
+        // pages render with another slice's columns and formatters.
+        $passes = [
+            fn (SliceManifest $slice): bool => in_array($normalize($slice->name), $norms, true),
+            fn (SliceManifest $slice): bool => in_array($normalize(basename($slice->path)), $norms, true),
+            fn (SliceManifest $slice): bool => isset($slice->title) && in_array($normalize($slice->title), $norms, true),
+            fn (SliceManifest $slice): bool => isset($slice->raw['handle']) && in_array($normalize((string) $slice->raw['handle']), $norms, true),
+            fn (SliceManifest $slice): bool => file_exists($slice->path.'/Models/'.Str::studly(Str::singular($name)).'.php'),
+            fn (SliceManifest $slice): bool => ! empty($slice->tables) && in_array(Str::snake(Str::plural($name)), $slice->tables, true),
+            function (SliceManifest $slice) use ($norms, $normalize): bool {
+                $relPathNorm = $normalize(str_replace(['\\', '/'], '', $slice->path));
+                foreach ($norms as $n) {
+                    if ($n !== '' && str_contains($relPathNorm, $n)) {
+                        return true;
+                    }
+                }
 
-            $baseNorm = strtolower(str_replace([' ', '_', '-'], '', basename($slice->path)));
-            if ($baseNorm === $norm || $baseNorm === $singNorm || $baseNorm === $plurNorm) {
-                return $slice;
-            }
+                return false;
+            },
+        ];
 
-            if (isset($slice->title)) {
-                $titleNorm = strtolower(str_replace([' ', '_', '-'], '', $slice->title));
-                if ($titleNorm === $norm || $titleNorm === $singNorm || $titleNorm === $plurNorm) {
+        foreach ($passes as $pass) {
+            foreach ($this->slices as $slice) {
+                if ($pass($slice)) {
                     return $slice;
                 }
-            }
-
-            if (isset($slice->raw['handle'])) {
-                $handleNorm = strtolower(str_replace([' ', '_', '-'], '', $slice->raw['handle']));
-                if ($handleNorm === $norm || $handleNorm === $singNorm || $handleNorm === $plurNorm) {
-                    return $slice;
-                }
-            }
-
-            // Match by relative domain/slice path (e.g. ECommerce/Orders, ecommerce/orders)
-            $relPathNorm = strtolower(str_replace(['\\', '/', ' ', '_', '-'], '', $slice->path));
-            if (str_contains($relPathNorm, $norm) || str_contains($relPathNorm, $singNorm) || str_contains($relPathNorm, $plurNorm)) {
-                return $slice;
-            }
-
-            // Match by Model file in slice
-            $studlySing = Str::studly(Str::singular($name));
-            if (file_exists($slice->path.'/Models/'.$studlySing.'.php')) {
-                return $slice;
-            }
-
-            // Match by table name in slice
-            $tableCandidate = Str::snake(Str::plural($name));
-            if (! empty($slice->tables) && in_array($tableCandidate, $slice->tables, true)) {
-                return $slice;
             }
         }
 
