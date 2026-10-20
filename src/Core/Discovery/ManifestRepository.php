@@ -71,6 +71,7 @@ final class ManifestRepository
         }
 
         if ($hasJson) {
+            self::warnOnce($dir, 'Slice at '.$dir.' is JSON-only. Run: php artisan slice:migrate-json-to-yaml');
             $manifest = self::read($json);
             // Auto-migrate-on-read: write YAML twin, keep JSON
             self::writeYamlTwin($json, $manifest);
@@ -124,6 +125,18 @@ final class ManifestRepository
         if ($a != $b) {
             throw new \RuntimeException("YAML round-trip mismatch for {$yamlFile}");
         }
+    }
+
+    /** @var array<string, true> */
+    private static array $warned = [];
+
+    private static function warnOnce(string $key, string $message): void
+    {
+        if (isset(self::$warned[$key])) {
+            return;
+        }
+        self::$warned[$key] = true;
+        self::warn($message);
     }
 
     private static function warn(string $message): void

@@ -58,6 +58,9 @@ class SliceRepairCommand extends Command
             ? 'All slices are up to date.'
             : ($dryRun ? "{$changed} file(s) would be updated; run without --dry-run to apply." : "{$changed} file(s) updated."));
 
+        
+        $this->reportJsonOnlySlices();
+
         return self::SUCCESS;
     }
 
@@ -422,4 +425,37 @@ class SliceRepairCommand extends Command
 
         return $existing;
     }
+
+    /**
+     * Phase 3: list JSON-only slices as pending migration.
+     */
+    protected function reportJsonOnlySlices(): void
+    {
+        $root = config('laraslice.slices_path', app_path('Slices'));
+        if (! is_dir($root)) {
+            return;
+        }
+        $pending = [];
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($it as $file) {
+            if (! $file->isFile() || $file->getFilename() !== 'slice.json') {
+                continue;
+            }
+            $dir = dirname($file->getPathname());
+            if (! is_file($dir.'/slice.yaml') && ! is_file($dir.'/slice.yml')) {
+                $pending[] = $dir;
+            }
+        }
+        if ($pending === []) {
+            return;
+        }
+        $this->warn(count($pending).' slice(s) pending migration (JSON-only):');
+        foreach (array_slice($pending, 0, 20) as $dir) {
+            $this->line('  '.$dir);
+        }
+        $this->comment('Convert with: php artisan slice:migrate-json-to-yaml');
+    }
+
 }
