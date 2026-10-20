@@ -31,6 +31,8 @@ final class DirectoryUi
             return $fallback;
         }
 
+        $fieldIndex = self::fieldIndex($manifest);
+
         $columns = [];
         foreach ($dirCols as $c) {
             if (! is_array($c)) {
@@ -41,18 +43,96 @@ final class DirectoryUi
                 continue;
             }
             $fmt = $c['formatter'] ?? $c['type'] ?? 'text';
+            $label = (string) ($c['label'] ?? \Illuminate\Support\Str::headline((string) $key));
+            // Display labels drop the storage suffix: "Leave Type Id" -> "Leave Type".
+            if (str_ends_with((string) $key, '_id') && $key !== 'id') {
+                $label = (string) preg_replace('/\s+Id$/', '', $label);
+            }
+            $def = $fieldIndex[(string) $key] ?? [];
+            $options = self::normalizeOptions($def['options'] ?? null);
             $columns[] = array_filter([
                 'key' => $key,
-                'label' => $c['label'] ?? \Illuminate\Support\Str::headline((string) $key),
+                'label' => $label,
                 'sortable' => $c['sortable'] ?? true,
                 'formatter' => $fmt,
                 'html' => in_array($fmt, self::HTML_FORMATTERS, true),
                 'badge_from' => $c['badge_from'] ?? null,
                 'breakdown' => $c['breakdown'] ?? null,
+                'options' => $options !== [] ? $options : null,
+                'field_type' => isset($def['type']) && is_string($def['type']) ? $def['type'] : null,
             ], fn ($v) => $v !== null);
         }
 
         return $columns !== [] ? $columns : $fallback;
+    }
+
+
+    /**
+     * Index the manifest's field definitions by field name, from both the
+     * top-level `fields` map and each model's `fields` list.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, array<string, mixed>>
+     */
+    protected static function fieldIndex(array $manifest): array
+    {
+        $index = [];
+        $add = static function ($name, $def) use (&$index): void {
+            if (is_string($name) && $name !== '' && is_array($def)) {
+                $index[$name] ??= $def;
+            }
+        };
+        if (isset($manifest['fields']) && is_array($manifest['fields'])) {
+            foreach ($manifest['fields'] as $name => $def) {
+                $add($name, $def);
+            }
+        }
+        if (isset($manifest['models']) && is_array($manifest['models'])) {
+            foreach ($manifest['models'] as $model) {
+                if (! is_array($model) || ! isset($model['fields']) || ! is_array($model['fields'])) {
+                    continue;
+                }
+                foreach ($model['fields'] as $k => $def) {
+                    if (is_array($def)) {
+                        $add($def['name'] ?? $def['handle'] ?? (is_string($k) ? $k : null), $def);
+                    }
+                }
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * Normalize a field's declared options into a value => label map.
+     * Accepts {value: label} maps, lists of {value, label} pairs, and
+     * plain scalar lists.
+     *
+     * @return array<string, string>
+     */
+    protected static function normalizeOptions(mixed $options): array
+    {
+        $map = [];
+        if (! is_array($options)) {
+            return $map;
+        }
+        foreach ($options as $k => $v) {
+            if (is_array($v)) {
+                $value = $v['value'] ?? $k;
+                $label = $v['label'] ?? $value;
+            } elseif (is_int($k)) {
+                $value = $v;
+                $label = $v;
+            } else {
+                $value = $k;
+                $label = $v;
+            }
+            if (is_scalar($value) && is_scalar($label)) {
+                $map[(string) $value] = (string) $label;
+            }
+        }
+
+        return $map;
     }
 
     /**
