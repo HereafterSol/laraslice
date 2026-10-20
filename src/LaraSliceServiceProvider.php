@@ -189,6 +189,14 @@ class LaraSliceServiceProvider extends ServiceProvider
             $wizardMiddleware = config('laraslice.wizard.middleware', ['web', 'auth']);
             $studio = AuthorizeStudio::class;
             $guard = GuardStudioWrites::class;
+
+            Route::prefix('laraslice')->middleware($wizardMiddleware)->group(function () use ($studio) {
+                Route::middleware("{$studio}:studio.access")->group(function () {
+                    Route::get('/studio', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'shell'])->name('laraslice.studio');
+                    Route::get('/studio/panel/{mode}', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'panel'])->name('laraslice.studio.panel');
+                });
+            });
+
             Route::prefix('laraslice/wizard')->middleware($wizardMiddleware)->group(function () use ($studio, $guard) {
                 Route::middleware("{$studio}:studio.access")->group(function () {
                     Route::get('/', [WizardController::class, 'show'])->name('laraslice.wizard');
@@ -243,7 +251,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/blueprint/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.blueprint.port-execute');
 
                     Route::get('/port-presets', [BlueprintStudioController::class, 'portPresets'])->name('laraslice.wizard.port-presets');
-                    Route::get('/porting', [BlueprintStudioController::class, 'portingStudio'])->name('laraslice.wizard.porting');
+                    Route::get('/porting', function () { return redirect()->route('laraslice.studio', ['mode' => 'port']); })->name('laraslice.wizard.porting');
                     Route::post('/port-plan', [BlueprintStudioController::class, 'portPlan'])->name('laraslice.wizard.port-plan');
                     Route::post('/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.port-inspect');
                     Route::post('/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.port-execute');
