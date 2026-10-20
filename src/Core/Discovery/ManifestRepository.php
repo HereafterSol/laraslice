@@ -5,7 +5,7 @@ namespace LaraSlice\Core\Discovery;
 /**
  * Reads and writes slice manifests in one canonical shape.
  *
- * Phase 1 (YAML elimination): dual-read prefers slice.yaml, falls back to slice.json,
+ * Phase 1 (YAML elimination): YAML is required; JSON-only slices must be migrated.
  * and auto-migrates JSON-only slices by writing YAML (JSON is kept).
  *
  * "fields" (and each "child_fields" table) is a map keyed by column name, e.g.
@@ -33,7 +33,7 @@ final class ManifestRepository
      *
      * Priority:
      *  1. Valid slice.yaml / slice.yml → use it (YAML wins)
-     *  2. Malformed YAML → warn and fall back to slice.json (never fatal)
+     *  2. Malformed YAML → throw (Phase 4, no JSON fallback)
      *  3. JSON only → read JSON, write equivalent YAML (keep JSON), return JSON
      *  4. Neither → throw
      *
@@ -62,22 +62,21 @@ final class ManifestRepository
                 self::assertRoundTrip($manifest, $yaml);
                 return $manifest;
             } catch (\Throwable $e) {
-                self::warn("Malformed YAML at {$yaml}: ".$e->getMessage().' — falling back to slice.json');
-                if ($hasJson) {
-                    return self::read($json);
-                }
-                throw $e;
+                throw new \RuntimeException(
+                    "Malformed YAML at {$yaml}: ".$e->getMessage()
+                    ." — fix the YAML or restore from git. JSON fallback was removed in Phase 4."
+                );
             }
         }
 
         if ($hasJson) {
-            $manifest = self::read($json);
-            // Auto-migrate-on-read: write YAML twin, keep JSON
-            self::writeYamlTwin($json, $manifest);
-            return $manifest;
+            throw new \RuntimeException(
+                "Slice at {$dir} is JSON-only. YAML is required. "
+                ."Run: php artisan slice:migrate-json-to-yaml"
+            );
         }
 
-        throw new \RuntimeException("No slice.yaml or slice.json in {$dir}");
+        throw new \RuntimeException("No slice.yaml in {$dir}. Run: php artisan slice:migrate-json-to-yaml");
     }
 
     private static function isYamlPath(string $file): bool
@@ -124,6 +123,18 @@ final class ManifestRepository
         if ($a != $b) {
             throw new \RuntimeException("YAML round-trip mismatch for {$yamlFile}");
         }
+    }
+
+    /** @var array<string, true> */
+    private static array $warned = [];
+
+    private static function warnOnce(string $key, string $message): void
+    {
+        if (isset(self::$warned[$key])) {
+            return;
+        }
+        self::$warned[$key] = true;
+        self::warn($message);
     }
 
     private static function warn(string $message): void
@@ -185,7 +196,7 @@ final class ManifestRepository
     /**
      * Write the canonical slice.yaml (Phase 2: YAML is the only write target).
      *
-     * @param  string  $pathOrDir  A slice directory, a slice.yaml path, or a legacy slice.json path.
+     * @param  string  $pathOrDir  A slice directory, a slice.yaml path, or a path whose directory should receive slice.yaml.
      */
     public static function writeYaml(string $pathOrDir, array $manifest): void
     {
@@ -221,7 +232,7 @@ final class ManifestRepository
     }
 
     /**
-     * Phase 2: persist YAML only. Does not create or update slice.json.
+     * Phase 2: persist YAML only. Does not create or update JSON.
      *
      * @deprecated Name kept for callers. Use writeYaml().
      */
@@ -231,7 +242,7 @@ final class ManifestRepository
     }
 
     /**
-     * Convert every slice.json under $root to slice.yaml.
+     * Convert every JSON manifest under $root to slice.yaml.
      * JSON is deleted only when $deleteJson is true (explicit user choice).
      *
      * @return array{converted: int, skipped: int, deleted: int, paths: list<string>}
@@ -275,4 +286,36 @@ final class ManifestRepository
 
         return compact('converted', 'skipped', 'deleted', 'paths');
     }
+
+    /**
+     * Line-oriented unified diff. Shared by Studio preview and CLI --diff.
+     */
+    public static function unifiedDiff(string $before, string $after, string $fromLabel = 'current', string $toLabel = 'proposed'): string
+    {
+        $a = explode("\n", $before);
+        $b = explode("\n", $after);
+        $out = ["--- {$fromLabel}", "+++ {$toLabel}"];
+        $changes = 0;
+        $max = max(count($a), count($b));
+        for ($i = 0; $i < $max; $i++) {
+            $left = $a[$i] ?? null;
+            $right = $b[$i] ?? null;
+            if ($left === $right) {
+                continue;
+            }
+            $changes++;
+            if ($changes > 200) {
+                $out[] = '... truncated ...';
+                break;
+            }
+            if ($left !== null) {
+                $out[] = '-'.$left;
+            }
+            if ($right !== null) {
+                $out[] = '+'.$right;
+            }
+        }
+        return $changes === 0 ? '(no changes)' : implode("\n", $out);
+    }
+
 }

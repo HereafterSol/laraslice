@@ -1409,3 +1409,20 @@ php artisan slice:port /path/to/dolibarr --strip-prefix=llx_ --dry-run --no-inte
 ```bash
 php artisan slice:validate blueprints/examples/kitchen-sink.slice.yaml
 ```
+
+
+## YAML-only manifests (Phase 4)
+
+Manifests are `slice.yaml` only. JSON-only slices fail to load with a hint:
+
+```bash
+php artisan slice:migrate-json-to-yaml --dry-run
+php artisan slice:migrate-json-to-yaml
+php artisan slice:migrate-json-to-yaml --delete
+```
+
+Studio Save shows a YAML diff and writes only after confirm. CLI equivalent:
+
+```bash
+php artisan slice:diff Tasks
+```

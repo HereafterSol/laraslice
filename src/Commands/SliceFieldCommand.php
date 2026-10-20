@@ -124,7 +124,7 @@ class SliceFieldCommand extends Command
             $this->line('<fg=green>✓</> Generated <comment>1 consolidated migration</comment>: <comment>'.basename($result['migration']).'</comment>');
             $this->line("<fg=green>✓</> Updated Form and Listing DTOs for all {$fieldCount} field(s)");
             $this->line('<fg=green>✓</> Updated BlatUI Blade Form & Table views');
-            $this->line("<fg=green>✓</> Incremented slice version to <comment>v{$result['version']}</comment> in slice.json");
+            $this->line("<fg=green>✓</> Incremented slice version to <comment>v{$result['version']}</comment> in slice.yaml");
             $this->line("<fg=green>✓</> Appended unified version history record: \"{$result['description']}\"");
 
             if ($this->option('migrate') || $this->confirm('Would you like to run the consolidated migration now?', false)) {

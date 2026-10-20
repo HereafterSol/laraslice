@@ -58,6 +58,9 @@ class SliceRepairCommand extends Command
             ? 'All slices are up to date.'
             : ($dryRun ? "{$changed} file(s) would be updated; run without --dry-run to apply." : "{$changed} file(s) updated."));
 
+        
+        $this->reportJsonOnlySlices();
+
         return self::SUCCESS;
     }
 
@@ -94,14 +97,14 @@ class SliceRepairCommand extends Command
     }
 
     /**
-     * Re-apply demo-aligned module groups (Work, Finance, HR, CRM, …) onto existing slice.json + slice.yaml.
+     * Re-apply demo-aligned module groups (Work, Finance, HR, CRM, …) onto existing slice.yaml.
      */
     protected function remapNavigationGroups(\LaraSlice\Core\Discovery\SliceManager $manager, array $slices): int
     {
         $porter = app(\LaraSlice\Porting\SlicePortService::class);
         $n = 0;
         foreach ($slices as $slice) {
-            $json = $slice->path.'/slice.json';
+            $json = $slice->path.'/slice.yaml';
             if (! is_file($json)) {
                 continue;
             }
@@ -145,7 +148,7 @@ class SliceRepairCommand extends Command
             $this->line("<fg=gray>Phase 2 source:</> {$sourcePath}");
         }
         foreach ($slices as $slice) {
-            $json = $slice->path.'/slice.json';
+            $json = $slice->path.'/slice.yaml';
             if (! is_file($json)) {
                 continue;
             }
@@ -422,4 +425,37 @@ class SliceRepairCommand extends Command
 
         return $existing;
     }
+
+    /**
+     * Phase 3: list JSON-only slices as pending migration.
+     */
+    protected function reportJsonOnlySlices(): void
+    {
+        $root = config('laraslice.slices_path', app_path('Slices'));
+        if (! is_dir($root)) {
+            return;
+        }
+        $pending = [];
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($it as $file) {
+            if (! $file->isFile() || $file->getFilename() !== 'slice.json') {
+                continue;
+            }
+            $dir = dirname($file->getPathname());
+            if (! is_file($dir.'/slice.yaml') && ! is_file($dir.'/slice.yml')) {
+                $pending[] = $dir;
+            }
+        }
+        if ($pending === []) {
+            return;
+        }
+        $this->warn(count($pending).' slice(s) pending migration (JSON-only):');
+        foreach (array_slice($pending, 0, 20) as $dir) {
+            $this->line('  '.$dir);
+        }
+        $this->comment('Convert with: php artisan slice:migrate-json-to-yaml');
+    }
+
 }

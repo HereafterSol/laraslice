@@ -306,7 +306,7 @@ class WizardController extends Controller
         $manager = app(SliceManager::class);
         $slices = [];
         foreach ($manager->getAllSlices() as $slice) {
-            $manifestFile = $slice->path.'/slice.json';
+            $manifestFile = $slice->path.'/slice.yaml';
             // Fields are always keyed by column name for the studio UI
             $raw = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : ManifestRepository::normalize($slice->toArray());
             $normPath = str_replace('\\', '/', $slice->path);
@@ -1400,7 +1400,7 @@ class WizardController extends Controller
     }
 
     /**
-     * Reconcile slice.yaml ↔ slice.json and sync workflow to DB (GitOps pull into runtime).
+     * Reconcile slice.yaml and sync workflow to DB (GitOps pull into runtime).
      */
     public function syncManifest(Request $request)
     {
@@ -1423,7 +1423,7 @@ class WizardController extends Controller
                 return response()->json(['success' => false, 'message' => 'Slice not found'], 404);
             }
 
-            $jsonFile = $slice->path.'/slice.json';
+            $jsonFile = $slice->path.'/slice.yaml';
             $yamlFile = $slice->path.'/slice.yaml';
             $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($jsonFile);
 

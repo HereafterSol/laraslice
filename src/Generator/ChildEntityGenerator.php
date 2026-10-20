@@ -21,7 +21,7 @@ class ChildEntityGenerator
         $parentRouteName = Str::snake($parentTable);
         $parentModelClass = "{$sliceNamespace}\\{$pluralSlice}\\Models\\{$parentStudly}";
 
-        $manifestFile = "{$sliceDir}/slice.json";
+        $manifestFile = "{$sliceDir}/slice.yaml";
         $manifest = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : [];
         $domain = $manifest['domain'] ?? $manifest['navigation']['group'] ?? null;
         $domainSlug = $domain ? Str::slug($domain) : null;

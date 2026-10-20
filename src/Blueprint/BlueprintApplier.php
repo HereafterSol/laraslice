@@ -270,7 +270,7 @@ final class BlueprintApplier
 
     private function normalizeManifest(string $sliceDirectory, array $blueprint, array $models): void
     {
-        $manifestPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.json';
+        $manifestPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.yaml';
         $manifest = json_decode((string) file_get_contents($manifestPath), true, flags: JSON_THROW_ON_ERROR);
         $root = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
         $manifest['blueprint'] = ['schema_version' => 1, 'handle' => $blueprint['handle']];

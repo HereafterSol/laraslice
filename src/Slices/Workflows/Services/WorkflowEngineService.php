@@ -228,7 +228,7 @@ class WorkflowEngineService
     }
 
     /**
-     * Synchronize a workflow declared in slice.json or array format into the database.
+     * Synchronize a workflow declared in slice.yaml or array format into the database.
      */
     public function syncWorkflowFromManifest(array $workflowConfig, string $sliceName, ?string $entityModel = null): Workflow
     {

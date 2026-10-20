@@ -8,14 +8,14 @@
     if (! empty($roles)) {
         $filteredRoles = collect($roles);
     } elseif ($slice) {
-        // 2. Try loading domain-bound roles from slice manifest (slice.json)
+        // 2. Try loading domain-bound roles from slice manifest (slice.yaml)
         $sliceJsonPath = null;
-        $matches = glob(base_path("app/Slices/*/{$slice}/slice.json"));
+        $matches = glob(base_path("app/Slices/*/{$slice}/slice.yaml"));
         if (! empty($matches)) {
             $sliceJsonPath = $matches[0];
         } else {
             $studly = \Illuminate\Support\Str::studly($slice);
-            $matches = glob(base_path("app/Slices/*/{$studly}/slice.json"));
+            $matches = glob(base_path("app/Slices/*/{$studly}/slice.yaml"));
             if (! empty($matches)) {
                 $sliceJsonPath = $matches[0];
             }

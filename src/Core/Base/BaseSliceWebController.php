@@ -398,7 +398,7 @@ abstract class BaseSliceWebController extends Controller
             // Fall through to file-based lookup
         }
 
-        // Fallback: read slice.yaml (or slice.json for core slices) directly
+        // Fallback: read slice.yaml directly
         try {
             $ref = new \ReflectionClass($this);
             $ctrlPath = $ref->getFileName();
@@ -409,8 +409,8 @@ abstract class BaseSliceWebController extends Controller
                 $data = \Symfony\Component\Yaml\Yaml::parseFile($yamlPath);
                 return $data['ui'] ?? [];
             }
-            // Core framework slices declare ui in slice.json
-            $jsonPath = $sliceDir . '/slice.json';
+            // Core framework slices declare ui in slice.yaml
+            $jsonPath = $sliceDir . '/slice.yaml';
             if (file_exists($jsonPath)) {
                 $data = json_decode(file_get_contents($jsonPath), true);
                 return $data['ui'] ?? [];

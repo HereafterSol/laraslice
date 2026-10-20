@@ -81,7 +81,7 @@ class SliceWizardCommand extends Command
         $generator = new SliceGenerator;
         $sliceDir = $generator->generate($name, $fields, $includeWorkflow);
 
-        $this->line("<fg=green>✓</> Created Slice Manifest: <comment>{$sliceDir}/slice.json</comment>");
+        $this->line("<fg=green>✓</> Created Slice Manifest: <comment>{$sliceDir}/slice.yaml</comment>");
         $this->line('<fg=green>✓</> Generated Contracts & DTOs');
         $this->line('<fg=green>✓</> Generated Model & Database Migration');
         $this->line('<fg=green>✓</> Generated Slice Service (CRUD & Search)');

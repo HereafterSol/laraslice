@@ -80,7 +80,7 @@ class SliceManager
     }
 
     /**
-     * Recursively scan directory up to $maxDepth for slices containing slice.json or slice.yaml.
+     * Recursively scan directory up to $maxDepth for slices containing slice.yaml.
      */
     protected function scanDirectoryForSlices(string $path, int $depth = 0, int $maxDepth = 6): void
     {
@@ -112,11 +112,11 @@ class SliceManager
     }
 
     /**
-     * Find manifest file prioritizing slice.yaml, then slice.yml, then slice.json.
+     * Find manifest file prioritizing slice.yaml, then slice.yml.
      */
     public function findManifest(string $dir): ?string
     {
-        foreach (['slice.yaml', 'slice.yml', 'slice.json'] as $file) {
+        foreach (['slice.yaml', 'slice.yml', 'slice.yaml'] as $file) {
             $path = $dir.'/'.$file;
             if (file_exists($path)) {
                 return $path;
@@ -646,7 +646,7 @@ class SliceManager
     }
 
     /**
-     * Patch index.blade.php so <x-ui.data-table> receives views / inline_edit / date-key from slice.json.
+     * Patch index.blade.php so <x-ui.data-table> receives views / inline_edit / date-key from slice.yaml.
      */
     protected function repairIndexDirectoryUi(SliceManifest $slice): void
     {
@@ -658,7 +658,7 @@ class SliceManager
         if (! is_file($index)) {
             return;
         }
-        $manifestFile = $slice->path.'/slice.json';
+        $manifestFile = $slice->path.'/slice.yaml';
         if (! is_file($manifestFile)) {
             return;
         }
@@ -709,7 +709,7 @@ class SliceManager
         $statusKeyEsc = addslashes($statusKey);
 
         if (! str_contains($content, '$tableViews')) {
-            $sliceJsonPath = str_replace('\\', '/', $slice->path.'/slice.json');
+            $sliceJsonPath = str_replace('\\', '/', $slice->path.'/slice.yaml');
             $bootstrap = <<<PHP
 @php
     if (! isset(\$manifest) || ! is_array(\$manifest)) {
@@ -1004,7 +1004,7 @@ PHP;
             $groupSlug = $group ? Str::slug($group) : null;
             $groupDot = $groupSlug ? str_replace('-', '_', $groupSlug).'.' : '';
 
-            // Determine route: explicit in slice.json, or fallback to registered candidate route names
+            // Determine route: explicit in slice.yaml, or fallback to registered candidate route names
             $routeCandidates = array_values(array_filter([
                 $slice->navigation['route'] ?? null,
                 $groupDot ? $groupDot.$snake.'.index' : null,
@@ -1377,8 +1377,8 @@ PHP;
             $activeRoleSlugs = [];
             foreach ($this->slices as $s) {
                 $manifestRoles = $s->raw['roles'] ?? ($s->raw['workflow']['roles'] ?? []);
-                if (empty($manifestRoles) && file_exists($s->path.'/slice.json')) {
-                    $sJson = json_decode(@file_get_contents($s->path.'/slice.json'), true) ?: [];
+                if (empty($manifestRoles) && file_exists($s->path.'/slice.yaml')) {
+                    $sJson = json_decode(@file_get_contents($s->path.'/slice.yaml'), true) ?: [];
                     $manifestRoles = $sJson['roles'] ?? ($sJson['workflow']['roles'] ?? []);
                 }
                 foreach ($manifestRoles as $r) {
@@ -1477,8 +1477,8 @@ PHP;
 
         $newActive = ($active !== null) ? (bool) $active : ! $slice->active;
 
-        // Update slice.json
-        $jsonPath = $slice->path.'/slice.json';
+        // Update slice.yaml
+        $jsonPath = $slice->path.'/slice.yaml';
         if (file_exists($jsonPath)) {
             $data = json_decode(file_get_contents($jsonPath), true) ?: [];
             $data['active'] = $newActive;
@@ -1653,8 +1653,8 @@ PHP;
         // Collect role slugs associated with this slice before code deletion
         $sliceRoleSlugs = [];
         $sliceManifestRoles = $slice->raw['roles'] ?? ($slice->raw['workflow']['roles'] ?? []);
-        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.json')) {
-            $sJson = json_decode(@file_get_contents($slice->path.'/slice.json'), true) ?: [];
+        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml')) {
+            $sJson = json_decode(@file_get_contents($slice->path.'/slice.yaml'), true) ?: [];
             $sliceManifestRoles = $sJson['roles'] ?? ($sJson['workflow']['roles'] ?? []);
         }
         if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)) {
@@ -1894,14 +1894,14 @@ PHP;
     }
 
     /**
-     * Ensure index.blade.php loads directory columns (with formatters) from slice.json at runtime.
+     * Ensure index.blade.php loads directory columns (with formatters) from slice.yaml at runtime.
      */
     protected function injectRuntimeDirectoryColumns(string $content, string $sliceName): string
     {
         $marker = 'DirectoryUi::columnsForSlice';
         $hasRuntime = str_contains($content, $marker);
         $hasStale = str_contains($content, '__DIR__')
-            && str_contains($content, 'load formatters from slice.json');
+            && str_contains($content, 'load formatters from slice.yaml');
         $hasBakedAbs = str_contains($content, 'absolute path baked at repair time');
 
         if ($hasRuntime && ! $hasStale && ! $hasBakedAbs) {
@@ -1909,7 +1909,7 @@ PHP;
         }
 
         // Strip prior loader variants (DIR, absolute, previous DirectoryUi)
-        if (str_contains($content, 'load formatters from slice.json')
+        if (str_contains($content, 'load formatters from slice.yaml')
             || str_contains($content, '$__mf')
             || str_contains($content, $marker)
             || $hasBakedAbs) {
@@ -1930,7 +1930,7 @@ PHP;
         $nameEsc = addslashes($sliceName);
         $snippet = <<<BLADE
 
-        // Runtime: load formatters from slice.json via registered slice path (works for vendor + path installs)
+        // Runtime: load formatters from slice.yaml via registered slice path (works for vendor + path installs)
         \$columns = \\LaraSlice\\Support\\DirectoryUi::columnsForSlice('{$nameEsc}', \$columns);
 
 BLADE;
