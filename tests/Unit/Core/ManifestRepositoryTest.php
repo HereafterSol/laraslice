@@ -127,4 +127,49 @@ class ManifestRepositoryTest extends TestCase
         $this->assertSame('Fallback', $manifest['name']);
         $this->assertFileExists($this->dir.'/slice.json');
     }
+
+    public function test_phase2_write_yaml_only_does_not_create_json(): void
+    {
+        ManifestRepository::writeYaml($this->dir, [
+            'name' => 'Orders',
+            'fields' => ['sku' => ['name' => 'sku', 'type' => 'string']],
+        ]);
+
+        $this->assertFileExists($this->dir.'/slice.yaml');
+        $this->assertFileDoesNotExist($this->dir.'/slice.json');
+
+        $manifest = ManifestRepository::readFromSliceDir($this->dir);
+        $this->assertSame('Orders', $manifest['name']);
+    }
+
+    public function test_phase2_migrate_dry_run_does_not_write(): void
+    {
+        file_put_contents($this->dir.'/slice.json', json_encode([
+            'name' => 'Legacy',
+            'fields' => ['a' => ['name' => 'a', 'type' => 'string']],
+        ]));
+
+        $result = ManifestRepository::migrateJsonToYaml($this->dir, true, false);
+
+        $this->assertSame(1, $result['converted']);
+        $this->assertFileDoesNotExist($this->dir.'/slice.yaml');
+        $this->assertFileExists($this->dir.'/slice.json');
+    }
+
+    public function test_phase2_migrate_converts_and_keeps_json_unless_delete(): void
+    {
+        file_put_contents($this->dir.'/slice.json', json_encode([
+            'name' => 'Legacy',
+            'fields' => ['a' => ['name' => 'a', 'type' => 'string']],
+        ]));
+
+        $result = ManifestRepository::migrateJsonToYaml($this->dir, false, false);
+        $this->assertSame(1, $result['converted']);
+        $this->assertFileExists($this->dir.'/slice.yaml');
+        $this->assertFileExists($this->dir.'/slice.json');
+
+        $deleted = ManifestRepository::migrateJsonToYaml($this->dir, false, true);
+        $this->assertSame(1, $deleted['deleted']);
+        $this->assertFileDoesNotExist($this->dir.'/slice.json');
+    }
 }
