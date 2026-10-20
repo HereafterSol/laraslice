@@ -31,7 +31,8 @@ models:
       -
         handle: service_desk_id
         label: 'Service desk'
-        type: foreign_id
+        type: integer
+        input: select
         required: true
       -
         handle: subject
@@ -41,7 +42,8 @@ models:
       -
         handle: status
         label: Status
-        type: enum
+        type: string
+        input: select
         default: open
         options:
           open: Open

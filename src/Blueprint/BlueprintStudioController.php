@@ -1737,6 +1737,15 @@ final class BlueprintStudioController extends Controller
             return view('laraslice::partials.port-panel');
         }
 
+        if ($mode === 'schema') {
+            $view = app(\LaraSlice\Wizard\WizardController::class)->schemaStudioView();
+            if ($view instanceof \Illuminate\View\View) {
+                return view('laraslice::partials.schema-panel', $view->getData());
+            }
+
+            return $view;
+        }
+
         if ($mode === 'create' || $mode === 'manage') {
             return view('laraslice::partials.wizard-panel', [
                 'initialTab' => $mode === 'manage' ? 'studio' : 'wizard',

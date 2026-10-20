@@ -16,7 +16,8 @@ models:
       -
         handle: owner_email
         label: 'Owner email'
-        type: email
+        type: string
+        input: email
         required: true
       -
         handle: is_active
@@ -36,7 +37,8 @@ models:
       -
         handle: portfolio_id
         label: Portfolio
-        type: foreign_id
+        type: integer
+        input: select
         required: true
       -
         handle: title
@@ -46,7 +48,8 @@ models:
       -
         handle: priority
         label: Priority
-        type: enum
+        type: string
+        input: select
         default: normal
         options:
           low: Low
@@ -55,7 +58,8 @@ models:
       -
         handle: status
         label: Status
-        type: enum
+        type: string
+        input: select
         default: planned
         options:
           planned: Planned

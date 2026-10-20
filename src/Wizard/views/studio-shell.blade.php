@@ -111,8 +111,22 @@
                 <p class="mt-1 text-[11px] text-muted-foreground">Carried from your BRD / description. AI blueprint drafting from a brief is the next step — for now, keep it beside you while you model the domain below.</p>
                 <pre class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-background/70 p-3 text-[11px] leading-relaxed text-foreground" x-text="kickoffBrief"></pre>
             </div>
-            <div x-show="!designLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Design…</div>
-            <div id="one-studio-design" x-show="designLoaded"></div>
+            <div class="mb-4 flex w-fit items-center gap-0.5 rounded-full bg-muted p-1" role="tablist" aria-label="Design views">
+                <button type="button" role="tab" @click="setDesignView('blueprint')"
+                        :class="designView === 'blueprint' ? 'bg-background text-foreground shadow-sm font-semibold' : 'text-muted-foreground hover:text-foreground'"
+                        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition">📐 Blueprint</button>
+                <button type="button" role="tab" @click="setDesignView('schema')"
+                        :class="designView === 'schema' ? 'bg-background text-foreground shadow-sm font-semibold' : 'text-muted-foreground hover:text-foreground'"
+                        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition">⚡ Schema</button>
+            </div>
+            <div x-show="designView === 'blueprint'">
+                <div x-show="!designLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Design…</div>
+                <div id="one-studio-design" x-show="designLoaded"></div>
+            </div>
+            <div x-show="designView === 'schema'" x-cloak>
+                <div x-show="!schemaLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Schema…</div>
+                <div id="one-studio-schema" x-show="schemaLoaded"></div>
+            </div>
         </div>
         {{-- CREATE + MANAGE share one mounted wizard panel; the shell mode drives its tab. --}}
         <div x-show="mode === 'create' || mode === 'manage'" x-cloak>
@@ -133,6 +147,8 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
         portLoaded: false,
         designLoaded: false,
         wizardLoaded: false,
+        schemaLoaded: false,
+        designView: new URLSearchParams(window.location.search).get('view') === 'schema' ? 'schema' : 'blueprint',
         kickoffText: '',
         kickoffBrief: '',
         modes: [
@@ -147,7 +163,7 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
                 this.mountPort();
             }
             if (this.mode === 'design') {
-                this.mountDesign();
+                if (this.designView === 'schema') { this.mountSchema(); } else { this.mountDesign(); }
             }
             if (this.mode === 'create' || this.mode === 'manage') {
                 this.mountWizard(this.mode);
@@ -171,7 +187,7 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
                 this.mountPort();
             }
             if (id === 'design') {
-                this.mountDesign();
+                if (this.designView === 'schema') { this.mountSchema(); } else { this.mountDesign(); }
             }
             if (id === 'create' || id === 'manage') {
                 this.mountWizard(id);
@@ -187,6 +203,42 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
         dismissKickoff() {
             this.kickoffBrief = '';
             try { sessionStorage.removeItem('laraslice_kickoff'); } catch (e) {}
+        },
+        setDesignView(v) {
+            this.designView = v;
+            const url = new URL(window.location.href);
+            url.searchParams.set('view', v);
+            history.replaceState({}, '', url.pathname + url.search);
+            if (v === 'schema') { this.mountSchema(); } else { this.mountDesign(); }
+        },
+        async mountSchema() {
+            if (this.schemaLoaded) return;
+            const el = document.getElementById('one-studio-schema');
+            if (!el) return;
+            const res = await fetch(@js(route('laraslice.studio.panel', ['mode' => 'schema'])), {
+                headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) {
+                el.innerHTML = '<p class="text-sm text-destructive">Could not load Schema.</p>';
+                this.schemaLoaded = true;
+                return;
+            }
+            const html = await res.text();
+            el.innerHTML = html;
+            el.querySelectorAll('script').forEach((oldScript) => {
+                const s = document.createElement('script');
+                if (oldScript.src) {
+                    s.src = oldScript.src;
+                } else {
+                    s.textContent = oldScript.textContent;
+                }
+                document.body.appendChild(s);
+                oldScript.remove();
+            });
+            this.schemaLoaded = true;
+            if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                window.Alpine.initTree(el);
+            }
         },
         async mountPort() {
             if (this.portLoaded) return;
