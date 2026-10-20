@@ -2794,6 +2794,8 @@ function larasliceWizard() {
 
         <!-- Top Mode Selector -->
         <div class="flex flex-wrap items-center gap-2.5 mb-8 bg-card p-1.5 rounded-2xl border border-border w-fit shadow-xs">
+            @include('laraslice::partials.journey-breadcrumb', ['current' => 'customize'])
+
             <button @click="mainTab = 'wizard'; try { history.replaceState({}, '', '{{ route('laraslice.wizard') }}'); } catch(e){}"
                     :class="mainTab === 'wizard' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 font-bold' : 'text-muted-foreground hover:text-foreground font-medium'"
                     class="px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-2 cursor-pointer">
