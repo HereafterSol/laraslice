@@ -636,15 +636,39 @@ REL;
                     continue;
                 }
                 $declType = (string) ($declaredRelation['type'] ?? 'hasMany');
-                if (! in_array($declType, ['hasMany', 'belongsTo'], true)) {
+                if (! in_array($declType, ['hasMany', 'belongsTo', 'belongsToMany'], true)) {
                     continue;
                 }
                 $declTarget = Str::studly(Str::singular((string) ($declaredRelation['model'] ?? $declaredRelation['name'])));
+                $declTargetExport = var_export($declTarget, true);
+                if ($declType === 'belongsToMany') {
+                    $pivot = is_array($declaredRelation['pivot'] ?? null) ? $declaredRelation['pivot'] : [];
+                    $pivotTable = (string) ($pivot['table'] ?? $declaredRelation['table'] ?? '');
+                    if ($pivotTable === '') {
+                        continue;
+                    }
+                    $pivotArgs = var_export($pivotTable, true).', '
+                        .var_export((string) ($pivot['foreign_pivot_key'] ?? Str::singular($tableName).'_id'), true).', '
+                        .var_export((string) ($pivot['related_pivot_key'] ?? Str::singular(Str::snake($declTarget)).'_id'), true);
+                    $modelRelations .= <<<REL
+
+
+    public function {$declMethod}(): \\Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany
+    {
+        // Resolved among installed slices (and App\\Models) when first used
+        \$class = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$declTargetExport})
+            ?? throw new \\LogicException('No model class named {$declTarget} was found for relation {$declaredRelation['name']}.');
+
+        return \$this->belongsToMany(\$class, {$pivotArgs});
+    }
+REL;
+                    $emittedRelationMethods[$declMethod] = true;
+                    continue;
+                }
                 $declFk = (string) ($declaredRelation['foreign_key'] ?? ($declType === 'hasMany'
                     ? Str::singular($tableName).'_id'
                     : Str::snake((string) $declaredRelation['name']).'_id'));
                 $declFkExport = var_export($declFk, true);
-                $declTargetExport = var_export($declTarget, true);
                 $declReturn = $declType === 'hasMany' ? 'HasMany' : 'BelongsTo';
                 $declCall = $declType === 'hasMany' ? 'hasMany' : 'belongsTo';
                 $modelRelations .= <<<REL

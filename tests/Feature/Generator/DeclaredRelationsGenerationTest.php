@@ -64,6 +64,7 @@ class DeclaredRelationsGenerationTest extends TestCase
                 ['name' => 'items', 'type' => 'hasMany', 'model' => 'invoice_item', 'foreign_key' => 'invoice_id'],
                 ['name' => 'payments', 'type' => 'hasMany', 'model' => 'payment', 'foreign_key' => 'invoice_id'],
                 ['name' => 'currency', 'type' => 'belongsTo', 'model' => 'currency', 'foreign_key' => 'currency_code'],
+                ['name' => 'tags', 'type' => 'belongsToMany', 'model' => 'tag', 'pivot' => ['table' => 'invoice_tag', 'foreign_pivot_key' => 'invoice_id', 'related_pivot_key' => 'tag_id']],
             ],
         ]);
 
@@ -74,6 +75,8 @@ class DeclaredRelationsGenerationTest extends TestCase
         $this->assertStringContainsString('function currency()', $model);
         $this->assertStringContainsString("hasMany(\$class, 'invoice_id')", $model);
         $this->assertStringContainsString("belongsTo(\$class, 'currency_code')", $model);
+        $this->assertStringContainsString('function tags()', $model);
+        $this->assertStringContainsString("belongsToMany(\$class, 'invoice_tag', 'invoice_id', 'tag_id')", $model);
         // The FK-field belongsTo for customer_id still generates.
         $this->assertSame(1, substr_count($model, 'function customer('));
 
