@@ -1607,6 +1607,12 @@ BLADE;
                     <x-lucide-arrow-left class="size-3.5" />
                     <span>Back</span>
                 </x-ui.button>
+                @isset(\$documentUrl)
+                <x-ui.button href="{{ \$documentUrl }}" as="a" variant="outline" size="sm" class="gap-1.5">
+                    <x-lucide-file-text class="size-3.5" />
+                    Document
+                </x-ui.button>
+                @endisset
                 <x-ui.button href="{{ route('{$routeNamePrefix}.edit', \$id) }}" as="a" variant="outline" size="sm" class="gap-1.5">
                     <x-lucide-pencil class="size-3.5" />
                     <span>Edit</span>

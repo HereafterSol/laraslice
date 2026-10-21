@@ -304,6 +304,132 @@ final class DirectoryUi
      * @param  array<string, mixed>  $manifest
      * @return array<string, array<string, mixed>>
      */
+    /**
+     * Resolve a declared printable document (G2): ui.show.document
+     * turns a record into a document structure — header fields, a
+     * line-items table (from the declared relation or repeater), and
+     * a totals block. This is the standard "document" pattern every
+     * slice inherits by declaring it; the source application's
+     * invoice documents are the reference shape.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{title: string, header: list<array{label: string, value: string}>, items: ?array{columns: list<array{handle: string, label: string}>, rows: list<list<string>>}, totals: list<array{label: string, value: string}>}|null
+     */
+    public static function documentFromManifest(array $manifest, mixed $record): ?array
+    {
+        $decl = $manifest['ui']['show']['document'] ?? null;
+        if (! is_array($decl) || ! is_object($record)) {
+            return null;
+        }
+        $fields = self::fieldIndex($manifest);
+        $attributes = method_exists($record, 'getAttributes') ? $record->getAttributes() : [];
+        $skip = ['id', 'created_at', 'updated_at', 'deleted_at', 'company_id', 'tenant_id', 'organization_id', 'workflow_state_entered_at'];
+
+        $header = [];
+        foreach (($decl['fields'] ?? array_keys($fields)) as $handle) {
+            $handle = (string) $handle;
+            if (in_array($handle, $skip, true) || ! array_key_exists($handle, $attributes)) {
+                continue;
+            }
+            $header[] = [
+                'label' => (string) (($fields[$handle]['label'] ?? null) ?? \Illuminate\Support\Str::headline($handle)),
+                'value' => self::documentValue($handle, $fields[$handle] ?? [], $attributes[$handle]),
+            ];
+        }
+
+        $items = null;
+        $itemsHandle = (string) ($decl['line_items'] ?? '');
+        if ($itemsHandle === '') {
+            foreach ($fields as $handle => $def) {
+                if (($def['type'] ?? null) === 'repeater') {
+                    $itemsHandle = (string) $handle;
+                    break;
+                }
+            }
+        }
+        if ($itemsHandle !== '' && method_exists($record, $itemsHandle)) {
+            try {
+                $rows = $record->{$itemsHandle};
+                $rows = is_iterable($rows) ? collect($rows) : collect();
+                $columns = [];
+                $repeaterFields = $fields[$itemsHandle]['repeater_fields'] ?? [];
+                if (is_array($repeaterFields) && $repeaterFields !== []) {
+                    foreach ($repeaterFields as $rf) {
+                        if (is_array($rf) && ! empty($rf['handle'])) {
+                            $columns[] = ['handle' => (string) $rf['handle'], 'label' => (string) ($rf['label'] ?? \Illuminate\Support\Str::headline((string) $rf['handle']))];
+                        }
+                    }
+                }
+                $formatted = [];
+                foreach ($rows as $row) {
+                    $rowAttrs = is_object($row) && method_exists($row, 'getAttributes') ? $row->getAttributes() : (is_array($row) ? $row : []);
+                    if ($columns === [] && $rowAttrs !== []) {
+                        foreach (array_keys($rowAttrs) as $key) {
+                            if (in_array($key, $skip, true) || str_ends_with((string) $key, '_id')) {
+                                continue;
+                            }
+                            $columns[] = ['handle' => (string) $key, 'label' => \Illuminate\Support\Str::headline((string) $key)];
+                            if (count($columns) >= 6) {
+                                break;
+                            }
+                        }
+                    }
+                    $line = [];
+                    foreach ($columns as $col) {
+                        $line[] = self::documentValue($col['handle'], [], $rowAttrs[$col['handle']] ?? null);
+                    }
+                    $formatted[] = $line;
+                }
+                if ($columns !== []) {
+                    $items = ['columns' => $columns, 'rows' => $formatted];
+                }
+            } catch (\Throwable) {
+                $items = null;
+            }
+        }
+
+        $totals = [];
+        foreach (($decl['totals'] ?? []) as $handle) {
+            $handle = (string) $handle;
+            if (! array_key_exists($handle, $attributes)) {
+                continue;
+            }
+            $totals[] = [
+                'label' => (string) (($fields[$handle]['label'] ?? null) ?? \Illuminate\Support\Str::headline($handle)),
+                'value' => self::documentValue($handle, $fields[$handle] ?? [], $attributes[$handle]),
+            ];
+        }
+
+        return [
+            'title' => (string) ($decl['title'] ?? \Illuminate\Support\Str::headline((string) ($manifest['name'] ?? 'Document'))),
+            'header' => $header,
+            'items' => $items,
+            'totals' => $totals,
+        ];
+    }
+
+    protected static function documentValue(string $handle, array $def, mixed $raw): string
+    {
+        if ($raw === null || $raw === '') {
+            return '—';
+        }
+        if (is_bool($raw)) {
+            return $raw ? 'Yes' : 'No';
+        }
+        $inference = \LaraSlice\Support\FieldInference::analyze($handle, (string) ($def['type'] ?? 'string'));
+        if ((($inference['is_money'] ?? false) || ($inference['formatter'] ?? null) === 'money') && is_numeric($raw)) {
+            return number_format((float) $raw, 2);
+        }
+        if (is_string($raw) && (str_ends_with($handle, '_at') || str_contains((string) ($def['type'] ?? ''), 'date'))) {
+            $ts = strtotime($raw);
+            if ($ts !== false) {
+                return date('M j, Y', $ts);
+            }
+        }
+
+        return is_scalar($raw) ? (string) $raw : json_encode($raw);
+    }
+
     protected static function fieldIndex(array $manifest): array
     {
         $index = [];
