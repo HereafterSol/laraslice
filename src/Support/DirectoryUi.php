@@ -272,9 +272,22 @@ final class DirectoryUi
                     continue;
                 }
                 foreach (($def['filter'] ?? []) as $column => $value) {
-                    $query = is_array($value)
-                        ? $query->whereIn((string) $column, $value)
-                        : $query->where((string) $column, $value);
+                    if (is_array($value)) {
+                        // '!'-prefixed values exclude (whereNotIn) —
+                        // e.g. open tasks = board column is not the
+                        // complete column, the source app's own
+                        // definition, which no status filter expresses.
+                        $exclude = array_values(array_filter($value, fn ($v) => is_string($v) && str_starts_with($v, '!')));
+                        $include = array_values(array_diff($value, $exclude));
+                        if ($exclude !== []) {
+                            $query = $query->whereNotIn((string) $column, array_map(fn ($v) => substr($v, 1), $exclude));
+                        }
+                        if ($include !== []) {
+                            $query = $query->whereIn((string) $column, $include);
+                        }
+                    } else {
+                        $query = $query->where((string) $column, $value);
+                    }
                 }
                 $aggregate = (string) ($def['aggregate'] ?? 'count');
                 $raw = match ($aggregate) {

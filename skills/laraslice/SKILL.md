@@ -304,6 +304,11 @@ scopes the period. Declared-route registration reads the controller
 class from the routes file's own `use` statement — never derive it
 from the slice namespace (segment casing breaks PSR-4 lookups).
 
+Show-stat filters (F3c extension): a stat's `filter:` values may be
+`!`-prefixed to EXCLUDE (whereNotIn) — for definitions inclusion
+cannot express, e.g. open tasks = `board_column_id: ['!<complete-id>']`
+(the source application's own User::openTasks definition).
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
