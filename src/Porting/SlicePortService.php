@@ -576,6 +576,7 @@ class SlicePortService
                     ];
                 }
 
+                $childRelations = $this->relationsForChildTables($info['child_tables'] ?? [], $primaryTable, $tables, $tenantKey);
                 $options = [
                     'app' => $app,
                     'super_domain' => $superDomain,
@@ -584,12 +585,16 @@ class SlicePortService
                     'multitenant' => $multitenant,
                     'tenant_key' => $tenantKey,
                     'description' => $info['description'] ?? "Vertical slice for {$sliceName}",
+                    // F3: declared relations so the generated root model
+                    // actually implements its hasMany methods (detail-page
+                    // relation tabs and $model->relation access need them).
+                    'relations' => $childRelations,
                     // v1.6.2: Generate canonical ui: block from real inspected fields + workflow bulk_actions
                     'ui' => $this->buildUiFromInspectedFields(
                         $sliceName,
                         $fields,
                         $tenantKey,
-                        $this->relationsForChildTables($info['child_tables'] ?? [], $primaryTable, $tables, $tenantKey),
+                        $childRelations,
                         $workflowConfigs[$sliceName] ?? null,
                         $sourcePath ?: null
                     ),

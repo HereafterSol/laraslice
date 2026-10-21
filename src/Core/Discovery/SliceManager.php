@@ -795,8 +795,56 @@ PHP;
                         .'\\'.basename($slice->path);
             }
             $candidates[] = rtrim($namespace, '\\').'\\Models\\'.$studlyName;
+
+            // Deeply nested slices (App/Module/Slice) do not match the
+            // domain+basename derivation above; the directory path under
+            // the slices root maps 1:1 onto the namespace (PSR-4).
+            $real = realpath($slice->path);
+            if ($real !== false) {
+                $marker = DIRECTORY_SEPARATOR.'Slices'.DIRECTORY_SEPARATOR;
+                $pos = strrpos($real, $marker);
+                if ($pos !== false) {
+                    $relative = substr($real, $pos + strlen($marker));
+                    $segments = array_map(static fn ($s) => Str::studly($s), explode(DIRECTORY_SEPARATOR, $relative));
+                    $base = ($packageSlices !== false && str_starts_with($real, $packageSlices))
+                        ? 'LaraSlice\\Slices'
+                        : rtrim((string) config('laraslice.slices_namespace', 'App\\Slices'), '\\');
+                    $candidates[] = $base.'\\'.implode('\\', $segments).'\\Models\\'.$studlyName;
+                }
+            }
         }
         $candidates[] = 'App\\Models\\'.$studlyName;
+
+        // Filesystem fallback: slices shadowed by a duplicate name never
+        // enter the name-keyed registry above, but their model classes
+        // still exist on disk — locate Models/<Name>.php under a slices
+        // root and derive the class from its PSR-4 path.
+        $roots = [];
+        if ($packageSlices !== false) {
+            $roots[] = [$packageSlices, 'LaraSlice\\Slices'];
+        }
+        if (function_exists('app_path')) {
+            $roots[] = [app_path('Slices'), rtrim((string) config('laraslice.slices_namespace', 'App\\Slices'), '\\')];
+        }
+        foreach ($roots as [$root, $baseNs]) {
+            if (! is_dir($root)) {
+                continue;
+            }
+            try {
+                $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
+                $it->setMaxDepth(6);
+                foreach ($it as $file) {
+                    if ($file->isFile() && $file->getFilename() === $studlyName.'.php'
+                        && basename(dirname($file->getPathname())) === 'Models') {
+                        $relative = substr($file->getPathname(), strlen($root) + 1, -4);
+                        $segments = array_map(static fn ($s) => Str::studly($s), explode(DIRECTORY_SEPARATOR, $relative));
+                        $candidates[] = $baseNs.'\\'.implode('\\', $segments);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // A broken tree must not break model resolution.
+            }
+        }
 
         foreach ($candidates as $class) {
             if (class_exists($class) && is_subclass_of($class, Model::class)) {

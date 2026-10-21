@@ -136,6 +136,97 @@ final class DirectoryUi
     }
 
     /**
+     * Resolve the related-record tabs for a slice's detail (show) page.
+     *
+     * Sources, in precedence order, deduplicated by relation name:
+     *  1. `ui.show.tabs` entries declared with `type: relation`;
+     *  2. the root model's `hasMany` relations in the manifest;
+     *  3. repeater (line-item) form fields — aggregate children are the
+     *     record's most important related records.
+     *
+     * When a record is supplied and exposes the relation method, each tab
+     * gains a `count` so the detail page reads as a hub, not a flat grid.
+     * (F3: this replaces a generated-template fallback that read the
+     * manifest as JSON and silently found nothing once manifests became
+     * YAML-only.)
+     *
+     * @return list<array{handle: string, label: string, type: string, relation: string, count?: int}>
+     */
+    public static function relatedTabs(string $sliceName, mixed $record = null): array
+    {
+        return self::relatedTabsFromManifest(self::readManifest($sliceName), $record);
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{handle: string, label: string, type: string, relation: string, count?: int}>
+     */
+    public static function relatedTabsFromManifest(array $manifest, mixed $record = null): array
+    {
+        $tabs = [];
+        $seen = [];
+        $add = static function (string $relation, ?string $label) use (&$tabs, &$seen): void {
+            if ($relation === '' || isset($seen[$relation])) {
+                return;
+            }
+            $seen[$relation] = true;
+            $tabs[] = [
+                'handle' => $relation,
+                'label' => $label !== null && $label !== '' ? $label : \Illuminate\Support\Str::headline($relation),
+                'type' => 'relation',
+                'relation' => $relation,
+            ];
+        };
+
+        foreach (($manifest['ui']['show']['tabs'] ?? []) as $tab) {
+            if (is_array($tab) && ($tab['type'] ?? '') === 'relation') {
+                $add((string) ($tab['relation'] ?? $tab['handle'] ?? ''), isset($tab['label']) ? (string) $tab['label'] : null);
+            }
+        }
+
+        $root = $manifest['models'][0] ?? null;
+        if (is_array($root)) {
+            foreach (($root['relations'] ?? []) as $rel) {
+                if (is_array($rel) && ($rel['type'] ?? '') === 'hasMany') {
+                    $add((string) ($rel['name'] ?? ''), isset($rel['label']) ? (string) $rel['label'] : null);
+                }
+            }
+        }
+
+        foreach (($manifest['ui']['forms']['sections'] ?? []) as $section) {
+            if (! is_array($section)) {
+                continue;
+            }
+            foreach (($section['fields'] ?? []) as $field) {
+                if (is_array($field) && ($field['type'] ?? '') === 'repeater' && isset($field['handle'])) {
+                    $add((string) $field['handle'], isset($field['label']) ? (string) $field['label'] : null);
+                }
+            }
+        }
+
+        if (is_object($record)) {
+            foreach ($tabs as $i => $tab) {
+                $relation = $tab['relation'];
+                if (! method_exists($record, $relation)) {
+                    continue;
+                }
+                try {
+                    $query = $record->{$relation}();
+                    if (is_object($query)) {
+                        // Relations forward count() via __call, so probe by
+                        // calling it — the catch keeps a bad relation safe.
+                        $tabs[$i]['count'] = (int) $query->count();
+                    }
+                } catch (\Throwable $e) {
+                    // A broken relation must never break the detail page.
+                }
+            }
+        }
+
+        return $tabs;
+    }
+
+    /**
      * Index the manifest's field definitions by field name, from both the
      * top-level `fields` map and each model's `fields` list.
      *
