@@ -511,6 +511,108 @@ final class DirectoryUi
         ];
     }
 
+    /**
+     * Resolve a declared report view (G2): records grouped by a field
+     * with computed aggregates — the standard pattern behind tabular
+     * report pages (group-by + count/sum/avg + a totals row).
+     * Declared as ui.directory.report { group_by, aggregates:
+     * [{fn: count|sum|avg, column?, label?}], date_field?, title? }.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<int|string, string>  $labelMap  group value => label (relationship options)
+     * @return array{title: string, groupLabel: string, columns: list<string>, rows: list<array{label: string, values: list<string>}>, totals: list<string>, count: int}|null
+     */
+    public static function reportFromManifest(array $manifest, iterable $records, array $labelMap = []): ?array
+    {
+        $decl = $manifest['ui']['directory']['report'] ?? null;
+        if (! is_array($decl) || empty($decl['group_by']) || empty($decl['aggregates']) || ! is_array($decl['aggregates'])) {
+            return null;
+        }
+        $fields = self::fieldIndex($manifest);
+        $groupBy = (string) $decl['group_by'];
+        $groupDef = $fields[$groupBy] ?? [];
+        $labelField = str_ends_with($groupBy, '_id') ? substr($groupBy, 0, -3).'_name' : null;
+
+        $aggregates = [];
+        foreach ($decl['aggregates'] as $agg) {
+            if (is_array($agg) && ! empty($agg['fn'])) {
+                $aggregates[] = [
+                    'fn' => in_array($agg['fn'], ['sum', 'avg'], true) ? $agg['fn'] : 'count',
+                    'column' => isset($agg['column']) ? (string) $agg['column'] : null,
+                    'label' => (string) ($agg['label'] ?? \Illuminate\Support\Str::headline((string) ($agg['column'] ?? 'count'))),
+                ];
+            }
+        }
+        if ($aggregates === []) {
+            return null;
+        }
+
+        $groups = [];
+        $all = [];
+        foreach ($records as $record) {
+            $attrs = match (true) {
+                is_object($record) && method_exists($record, 'getAttributes') => $record->getAttributes(),
+                is_array($record) => $record,
+                is_object($record) => get_object_vars($record),
+                default => [],
+            };
+            $all[] = $attrs;
+            $key = $attrs[$groupBy] ?? null;
+            $key = $key === null ? '—' : (string) $key;
+            $groups[$key] ??= ['label' => (string) ($labelMap[$key] ?? ($labelField ? ($attrs[$labelField] ?? null) : null) ?? self::optionLabel($groupDef, $key) ?? $key), 'rows' => []];
+            $groups[$key]['rows'][] = $attrs;
+        }
+
+        $compute = function (array $rows) use ($aggregates, $fields): array {
+            $values = [];
+            foreach ($aggregates as $agg) {
+                if ($agg['fn'] === 'count' || $agg['column'] === null) {
+                    $values[] = number_format(count($rows));
+                    continue;
+                }
+                $col = $agg['column'];
+                $nums = array_filter(array_map(fn ($r) => $r[$col] ?? null, $rows), fn ($v) => is_numeric($v));
+                $raw = $agg['fn'] === 'sum' ? array_sum($nums) : (count($nums) ? array_sum($nums) / count($nums) : 0);
+                $values[] = self::documentValue($col, $fields[$col] ?? [], $raw);
+            }
+
+            return $values;
+        };
+
+        $rows = [];
+        foreach ($groups as $group) {
+            $rows[] = ['label' => $group['label'], 'values' => $compute($group['rows'])];
+        }
+        usort($rows, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
+
+        return [
+            'title' => (string) ($decl['title'] ?? \Illuminate\Support\Str::headline((string) ($manifest['name'] ?? 'Report')).' Report'),
+            'groupLabel' => (string) ($decl['group_label'] ?? ($groupDef['label'] ?? \Illuminate\Support\Str::headline($groupBy))),
+            'columns' => array_column($aggregates, 'label'),
+            'rows' => $rows,
+            'totals' => $compute($all),
+            'count' => count($all),
+        ];
+    }
+
+    protected static function optionLabel(array $fieldDef, string $value): ?string
+    {
+        $options = $fieldDef['options'] ?? null;
+        if (! is_array($options)) {
+            return null;
+        }
+        foreach ($options as $k => $opt) {
+            if (is_array($opt) && isset($opt['value']) && (string) $opt['value'] === $value) {
+                return isset($opt['label']) ? (string) $opt['label'] : null;
+            }
+            if (is_string($k) && $k === $value && is_string($opt)) {
+                return $opt;
+            }
+        }
+
+        return null;
+    }
+
     protected static function fieldIndex(array $manifest): array
     {
         $index = [];

@@ -294,6 +294,16 @@ Declared routes (document + matrix) are registered by SliceManager
 BEFORE the slice's own resource routes, or the {id} show route
 swallows the /matrix segment.
 
+Report views (G2): declare
+`ui.directory.report: { group_by:, aggregates: [{fn: count|sum|avg, column?, label?}], date_field?:, title?: }`
+and the slice gains `{index-uri}/report` — grouped rows with
+computed aggregates and a totals row via
+`DirectoryUi::reportFromManifest()` and the standard package report
+template (slice-overridable). With `date_field`, `?month=&year=`
+scopes the period. Declared-route registration reads the controller
+class from the routes file's own `use` statement — never derive it
+from the slice namespace (segment casing breaks PSR-4 lookups).
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
