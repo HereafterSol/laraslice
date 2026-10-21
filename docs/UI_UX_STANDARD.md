@@ -30,7 +30,9 @@ project workspace.
   actions row with view switchers (list/board/calendar), ONE card
   holding the table and its pagination footer, two-line identity
   cells, inline-editable status, avatar stacks, single kebab
-  row-actions menu.
+  row-actions menu. A Filters button opens the full declared
+  filter set in a right drawer. The calendar view is currently
+  a date-grouped list — a true month grid is a later component.
 - **P2 Detail hub** — tab bar directly under the topbar (the
   record's name is the title), overview = asymmetric card grid:
   declared stats, gauge, charts, related tabs with counts
