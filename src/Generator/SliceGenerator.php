@@ -6,6 +6,7 @@ use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Support\Directory;
+use LaraSlice\Support\FieldInference;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceGenerator
@@ -140,6 +141,20 @@ class SliceGenerator
                     break;
                 }
             }
+        }
+
+        // F5: inference parity — when the caller did not declare
+        // directory columns, derive the same default directory the
+        // porter builds (shared FieldInference rules) so hand-made
+        // slices render with formatters, quick filters, and summary
+        // cards instead of plain text columns.
+        $uiOption = is_array($options['ui'] ?? null) ? $options['ui'] : [];
+        if (empty($uiOption['directory']['columns'])) {
+            $uiOption['directory'] = array_merge(
+                $this->buildDefaultDirectory($fields, (string) ($options['tenant_key'] ?? 'company_id')),
+                is_array($uiOption['directory'] ?? null) ? $uiOption['directory'] : []
+            );
+            $options['ui'] = $uiOption;
         }
 
         // DTO properties strictly for defined fields
@@ -538,6 +553,7 @@ CARD;
                         "{$snakeName}.delete",
                     ],
                 'namespace' => $sliceNamespace,
+                'ui' => $uiOption ?? [],
                 'navigation' => [
                     'label' => Str::title(Str::snake($pluralName, ' ')),
                     'url' => $navUrl,
@@ -1848,6 +1864,106 @@ BLADE;
      *
      * @return array<string, array{table: string, foreign_key: string, model: string, fields: array<string, array{label: string, type: string, required: bool, options: array}>}>
      */
+    /**
+     * Build the default ui.directory for a slice whose caller declared
+     * no directory columns, mirroring the porter's assembly (same
+     * shapes, same caps) from the slice's fields. F5.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     * @return array<string, mixed>
+     */
+    private function buildDefaultDirectory(array $fields, string $tenantKey = 'company_id'): array
+    {
+        $columns = [];
+        $quickFilters = [];
+        $summaryCards = [];
+        $searchable = [];
+        $hasStatus = false;
+
+        foreach ($fields as $f) {
+            $handle = (string) ($f['name'] ?? '');
+            if ($handle === '' || in_array($handle, ['id', $tenantKey, 'created_at', 'updated_at', 'deleted_at'], true) || ! empty($f['hidden'])) {
+                continue;
+            }
+            $label = (string) ($f['label'] ?? Str::headline($handle));
+            $type = (string) ($f['type'] ?? 'string');
+            $signals = FieldInference::analyze($handle, $type);
+            $hasStatus = $hasStatus || $signals['is_status'];
+
+            if (count($columns) < 8) {
+                $col = [
+                    'handle' => $handle,
+                    'key' => $handle,
+                    'label' => $label,
+                    'formatter' => $signals['formatter'],
+                    'type' => $signals['formatter'],
+                    'sortable' => true,
+                ];
+                if ($signals['is_assignee']) {
+                    $col['relation'] = Str::camel(str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle);
+                }
+                $columns[] = $col;
+            }
+
+            if (($signals['is_status'] || $signals['is_priority']) && count($quickFilters) < 5) {
+                $quickFilters[] = [
+                    'handle' => $handle,
+                    'label' => $label,
+                    'is_searchable' => false,
+                    'options_from' => 'distinct:'.$handle,
+                ];
+            }
+
+            if ($signals['is_money'] && count($summaryCards) < 3) {
+                $cardLabel = preg_match('/\b(total|amount|balance)\b/i', $label) ? $label : 'Total '.$label;
+                $summaryCards[] = [
+                    'handle' => $handle,
+                    'label' => $cardLabel,
+                    'aggregate' => 'sum',
+                    'formatter' => 'money',
+                ];
+            }
+
+            $lower = strtolower($handle);
+            if (in_array($type, ['string', 'text'], true) && ! $signals['is_status'] && count($searchable) < 5
+                && ! str_contains($lower, 'password') && ! str_contains($lower, 'token') && strlen($handle) < 30) {
+                $searchable[] = $handle;
+            }
+        }
+
+        if ($summaryCards === []) {
+            $summaryCards[] = [
+                'handle' => 'id',
+                'label' => 'Total Records',
+                'aggregate' => 'count',
+                'formatter' => 'number',
+            ];
+        }
+
+        $views = ['table'];
+        if ($hasStatus) {
+            $views[] = 'board';
+        }
+
+        return [
+            'columns' => $columns,
+            'searchable' => $searchable,
+            'quick_filters' => $quickFilters,
+            'summary_cards' => $summaryCards,
+            'views' => $views,
+            'default_view' => 'table',
+            'inline_edit' => $hasStatus ? ['status'] : [],
+            'row_actions' => [
+                'display' => 'dropdown',
+                'items' => [
+                    ['handle' => 'view', 'label' => 'View', 'icon' => 'eye', 'placement' => 'inline'],
+                    ['handle' => 'edit', 'label' => 'Edit', 'icon' => 'pencil', 'placement' => 'dropdown'],
+                    ['handle' => 'delete', 'label' => 'Delete', 'icon' => 'trash-2', 'placement' => 'dropdown', 'danger' => true],
+                ],
+            ],
+        ];
+    }
+
     protected function extractRepeaterDefinitions(array $uiConfig, string $rootTable): array
     {
         $defs = [];
