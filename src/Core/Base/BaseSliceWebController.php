@@ -123,7 +123,7 @@ abstract class BaseSliceWebController extends Controller
             ]
         );
 
-        return view($this->getViewPrefix().'index', $viewData);
+        return view($this->ownViewName('index'), $viewData);
     }
 
     public function create()
@@ -146,7 +146,7 @@ abstract class BaseSliceWebController extends Controller
             ]
         );
 
-        return view($this->getViewPrefix().'form', $viewData);
+        return view($this->ownViewName('form'), $viewData);
     }
 
     protected function getFormViewData(mixed $form, bool $isNew): array
@@ -310,7 +310,7 @@ abstract class BaseSliceWebController extends Controller
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
         }
 
-        $showView = $this->getViewPrefix().'show';
+        $showView = $this->ownViewName('show');
         $ownManifest = $this->ownManifest();
         if (view()->exists($showView)) {
             return view($showView, [
@@ -356,7 +356,7 @@ abstract class BaseSliceWebController extends Controller
             ]
         );
 
-        return view($this->getViewPrefix().'form', $viewData);
+        return view($this->ownViewName('form'), $viewData);
     }
 
     public function store(Request $request)
@@ -521,6 +521,46 @@ abstract class BaseSliceWebController extends Controller
      *
      * @return array{create: string, edit: string, show: string}
      */
+    /**
+     * Resolve a view name for THIS slice (G6). Same-named slices share
+     * the generated '{plural}::' namespace and Laravel renders the
+     * first registered hint — another slice's template. When the
+     * shared namespace's winning hint is not this controller's own
+     * slice directory, fall back to the unique path-derived namespace
+     * SliceManager registered for this slice (ls_...), so a slice
+     * always renders its own templates.
+     */
+    protected function ownViewName(string $view): string
+    {
+        $default = $this->getViewPrefix().$view;
+        try {
+            $file = (new \ReflectionClass($this))->getFileName();
+            if (! $file) {
+                return $default;
+            }
+            $sliceDir = dirname(dirname($file));
+            $viewsDir = $sliceDir.'/Resources/views';
+            if (! is_file($viewsDir.'/'.$view.'.blade.php')) {
+                return $default;
+            }
+            $ns = rtrim($this->getViewPrefix(), ':');
+            $hints = view()->getFinder()->getHints()[$ns] ?? [];
+            foreach ($hints as $hint) {
+                if (is_file($hint.'/'.$view.'.blade.php')) {
+                    if (realpath($hint) === realpath($viewsDir)) {
+                        return $default; // shared namespace already resolves to my own views
+                    }
+                    break; // another slice shadows the shared namespace
+                }
+            }
+            $unique = \LaraSlice\Core\Discovery\SliceManager::viewNamespaceForPath($sliceDir).'::'.$view;
+
+            return view()->exists($unique) ? $unique : $default;
+        } catch (\Throwable) {
+            return $default;
+        }
+    }
+
     protected function presentationModes(): array
     {
         $declared = $this->ownManifest()['ui']['presentation']

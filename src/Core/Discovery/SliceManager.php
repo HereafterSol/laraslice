@@ -184,6 +184,35 @@ class SliceManager
         return true;
     }
 
+    /**
+     * Deterministic, collision-free view namespace for the slice at
+     * the given directory: 'ls_' + the path relative to the slices
+     * base, snake-cased (e.g. ERP/ERP/Work/Tasks ->
+     * ls_erp_erp_work_tasks; a root slice Tasks -> ls_tasks). (G6)
+     */
+    public static function viewNamespaceForPath(string $sliceDir, ?string $slicesBase = null): string
+    {
+        $dir = str_replace('\\', '/', rtrim($sliceDir, '/'));
+        $base = $slicesBase ?? (string) config('laraslice.slices_path', function_exists('app_path') ? app_path('Slices') : '');
+        $base = str_replace('\\', '/', rtrim((string) $base, '/'));
+
+        $relative = ($base !== '' && str_starts_with($dir, $base.'/'))
+            ? substr($dir, strlen($base) + 1)
+            : basename($dir);
+
+        // Segment-wise slug: acronyms stay whole (ERP -> erp, not
+        // e_r_p — Str::snake shreds those), StudlyCase splits on
+        // lower-to-upper boundaries (EmployeeShifts -> employee_shifts).
+        $parts = [];
+        foreach (explode('/', $relative) as $segment) {
+            $segment = preg_replace('/(?<=[a-z0-9])([A-Z])/', '_$1', $segment) ?? $segment;
+            $segment = preg_replace('/[^a-zA-Z0-9]+/', '_', $segment) ?? $segment;
+            $parts[] = strtolower(trim($segment, '_'));
+        }
+
+        return 'ls_'.implode('_', array_filter($parts));
+    }
+
     protected function bootSlice(SliceManifest $slice): void
     {
         // 1. Register Migrations
@@ -209,6 +238,12 @@ class SliceManager
                 }
             }
 
+            // G6: the name-variant namespaces above are SHARED by every
+            // same-named slice (first hint wins), so also register a
+            // namespace derived from the slice's own directory path —
+            // unique per slice — which BaseSliceWebController resolves
+            // when the shared namespace is shadowed by another slice.
+            $this->app['view']->addNamespace(self::viewNamespaceForPath($slice->path), $viewsPath);
         }
 
         // 3. Register Routes (web.php and api.php)
