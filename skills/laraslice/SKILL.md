@@ -284,6 +284,16 @@ items table and the totals block. A slice overrides the template
 with its own `Resources/views/document.blade.php`. Generated show
 pages link to it via the controller's `documentUrl`.
 
+Matrix views (G2): declare
+`ui.directory.matrix: { row_key:, date_field:, cell_field?:, marker?:, title?: }`
+and the slice gains `{index-uri}/matrix?month=&year=` — a rows x
+days-of-month grid with per-row presence counts, served by
+`DirectoryUi::matrixFromManifest()` through the standard package
+template (slice-overridable via `Resources/views/matrix.blade.php`).
+Declared routes (document + matrix) are registered by SliceManager
+BEFORE the slice's own resource routes, or the {id} show route
+swallows the /matrix segment.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 

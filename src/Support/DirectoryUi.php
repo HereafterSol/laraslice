@@ -430,6 +430,87 @@ final class DirectoryUi
         return is_scalar($raw) ? (string) $raw : json_encode($raw);
     }
 
+    /**
+     * Resolve a declared matrix directory view (G2): records become
+     * a rows x days-of-month grid — the standard pattern behind
+     * timesheet/attendance-style screens. Declared as
+     * ui.directory.matrix { row_key, date_field, cell_field?, marker?,
+     * title? }. Pure transform: the controller fetches the month's
+     * records (declared-filter criteria), this builds the grid.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<int|string, string>  $labelMap  row_key value => label (relationship options)
+     * @return array{title: string, days: list<array{n: int, dow: string, weekend: bool}>, rows: list<array{key: mixed, label: string, cells: array<int, string>, present: int}>, month: int, year: int}|null
+     */
+    public static function matrixFromManifest(array $manifest, iterable $records, int $month, int $year, array $labelMap = []): ?array
+    {
+        $decl = $manifest['ui']['directory']['matrix'] ?? null;
+        if (! is_array($decl) || empty($decl['row_key']) || empty($decl['date_field'])) {
+            return null;
+        }
+        $rowKey = (string) $decl['row_key'];
+        $dateField = (string) $decl['date_field'];
+        $cellField = isset($decl['cell_field']) ? (string) $decl['cell_field'] : null;
+        $marker = (string) ($decl['marker'] ?? 'P');
+        $labelField = isset($decl['row_label']) ? (string) $decl['row_label'] : (str_ends_with($rowKey, '_id') ? substr($rowKey, 0, -3).'_name' : $rowKey);
+
+        $daysInMonth = (int) date('t', mktime(0, 0, 0, $month, 1, $year));
+        $days = [];
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $ts = mktime(0, 0, 0, $month, $d, $year);
+            $dow = (int) date('N', $ts);
+            $days[] = ['n' => $d, 'dow' => date('D', $ts), 'weekend' => $dow >= 6];
+        }
+
+        $rows = [];
+        foreach ($records as $record) {
+            // Records arrive as Eloquent models (getAttributes), as
+            // listing business objects (typed public properties), or
+            // as plain arrays — accept all three.
+            $attrs = match (true) {
+                is_object($record) && method_exists($record, 'getAttributes') => $record->getAttributes(),
+                is_array($record) => $record,
+                is_object($record) => get_object_vars($record),
+                default => [],
+            };
+            $rawDate = $attrs[$dateField] ?? null;
+            $key = $attrs[$rowKey] ?? null;
+            if ($rawDate === null || $key === null) {
+                continue;
+            }
+            $ts = strtotime((string) $rawDate);
+            if ($ts === false || (int) date('n', $ts) !== $month || (int) date('Y', $ts) !== $year) {
+                continue;
+            }
+            $day = (int) date('j', $ts);
+            if (! isset($rows[$key])) {
+                $rows[$key] = [
+                    'key' => $key,
+                    'label' => (string) ($labelMap[$key] ?? $attrs[$labelField] ?? $key),
+                    'cells' => [],
+                    'present' => 0,
+                ];
+            }
+            if (! isset($rows[$key]['cells'][$day])) {
+                $cell = $cellField !== null && isset($attrs[$cellField]) && $attrs[$cellField] !== ''
+                    ? mb_strimwidth((string) $attrs[$cellField], 0, 3)
+                    : $marker;
+                $rows[$key]['cells'][$day] = $cell;
+                $rows[$key]['present']++;
+            }
+        }
+        $rows = array_values($rows);
+        usort($rows, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
+
+        return [
+            'title' => (string) ($decl['title'] ?? \Illuminate\Support\Str::headline((string) ($manifest['name'] ?? 'Matrix'))),
+            'days' => $days,
+            'rows' => $rows,
+            'month' => $month,
+            'year' => $year,
+        ];
+    }
+
     protected static function fieldIndex(array $manifest): array
     {
         $index = [];

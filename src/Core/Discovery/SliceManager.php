@@ -184,6 +184,50 @@ class SliceManager
         return true;
     }
 
+
+    /**
+     * Register the G2 declared routes (document, matrix) for a slice.
+     * Silent no-op when the slice declares neither, its routes file
+     * cannot be parsed, or its controller class does not exist.
+     */
+    protected function registerDeclaredRoutes(SliceManifest $slice): void
+    {
+        $document = is_array($slice->raw['ui']['show']['document'] ?? null);
+        $matrix = is_array($slice->raw['ui']['directory']['matrix'] ?? null);
+        if (! $document && ! $matrix) {
+            return;
+        }
+        try {
+            $routesPath = $slice->getRoutesPath();
+            $webFile = $routesPath ? $routesPath.'/web.php' : null;
+            if (! $webFile || ! is_file($webFile)) {
+                return;
+            }
+            $contents = (string) file_get_contents($webFile);
+            if (! preg_match("/Route::prefix\('([^']+)'\)->name\('([^']+)\.'\)/", $contents, $m)) {
+                return;
+            }
+            [, $uriPrefix, $namePrefix] = $m;
+            $controllerClass = $slice->getNamespace().'\\Controllers\\'.Str::studly(Str::singular($slice->name)).'WebController';
+            if (! class_exists($controllerClass)) {
+                return;
+            }
+            $middleware = config('laraslice.generated_routes.web_middleware', ['web', 'auth']);
+            if ($document && ! Route::has($namePrefix.'.document')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/{id}/document', [$controllerClass, 'document'])
+                    ->name($namePrefix.'.document');
+            }
+            if ($matrix && ! Route::has($namePrefix.'.matrix')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/matrix', [$controllerClass, 'matrix'])
+                    ->name($namePrefix.'.matrix');
+            }
+        } catch (\Throwable) {
+            // Declared routes must never break slice booting.
+        }
+    }
+
     /**
      * Deterministic, collision-free view namespace for the slice at
      * the given directory: 'ls_' + the path relative to the slices
@@ -246,6 +290,15 @@ class SliceManager
             $this->app['view']->addNamespace(self::viewNamespaceForPath($slice->path), $viewsPath);
         }
 
+        // 2b. Declared document/matrix routes (G2) — registered
+        // BEFORE the slice's own resource routes on purpose: the
+        // resource show route ({id}) would otherwise swallow the
+        // /matrix segment. Name prefix + controller are derived from
+        // the slice's routes file and generator conventions; the
+        // declarations live in the manifest (ui.show.document,
+        // ui.directory.matrix). Existing installs need no file edits.
+        $this->registerDeclaredRoutes($slice);
+
         // 3. Register Routes (web.php and api.php)
         if ($routesPath = $slice->getRoutesPath()) {
             $webRoute = $routesPath.'/web.php';
@@ -256,34 +309,6 @@ class SliceManager
             $apiRoute = $routesPath.'/api.php';
             if (file_exists($apiRoute)) {
                 Route::prefix('api')->middleware(['api'])->group($apiRoute);
-            }
-        }
-
-        // 3b. Declared document view (G2): a slice declaring
-        // ui.show.document gets {index-uri}/{id}/document served by
-        // its own controller's document() action — no routes-file
-        // edit needed on existing installs.
-        if (is_array($slice->raw['ui']['show']['document'] ?? null)) {
-            try {
-                $navUrl = trim((string) ($slice->navigation['url'] ?? ''), '/');
-                if ($navUrl !== '') {
-                    foreach (Route::getRoutes() as $route) {
-                        $routeName = (string) $route->getName();
-                        if (str_ends_with($routeName, '.index') && trim($route->uri(), '/') === $navUrl) {
-                            $namePrefix = substr($routeName, 0, -strlen('index'));
-                            $controller = $route->getAction('controller');
-                            $controllerClass = is_string($controller) ? explode('@', $controller)[0] : null;
-                            if ($controllerClass && ! Route::has($namePrefix.'document')) {
-                                Route::middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))
-                                    ->get($navUrl.'/{id}/document', [$controllerClass, 'document'])
-                                    ->name($namePrefix.'document');
-                            }
-                            break;
-                        }
-                    }
-                }
-            } catch (\Throwable) {
-                // A document declaration must never break slice booting.
             }
         }
 
