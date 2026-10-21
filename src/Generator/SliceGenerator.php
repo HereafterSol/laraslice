@@ -1524,7 +1524,17 @@ BLADE;
         </div>
     </x-ui.card>
 
-    <!-- Tier 2: 4-KPI Metric Strip -->
+    <!-- Tier 2: KPI Metric Strip — declared ui.show.stats (F3c) replace the generic cards -->
+    @if(!empty(\$showStats ?? []))
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        @foreach(\$showStats as \$stat)
+        <x-ui.card class="p-4 bg-card border shadow-xs">
+            <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">{{ \$stat['label'] }}</span>
+            <span class="text-xl font-bold text-foreground mt-1 block">{{ \$stat['value'] }}</span>
+        </x-ui.card>
+        @endforeach
+    </div>
+    @else
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <x-ui.card class="p-4 bg-card border shadow-xs">
             <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">Record ID</span>
@@ -1545,6 +1555,8 @@ BLADE;
             <span class="text-sm font-semibold text-foreground mt-1 block">{{ \$record->updated_at?->diffForHumans() ?? '—' }}</span>
         </x-ui.card>
     </div>
+
+    @endif
 
     @if(\$workflow)
         <!-- Workflow Stepper Pipeline -->

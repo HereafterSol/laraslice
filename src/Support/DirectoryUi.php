@@ -227,6 +227,77 @@ final class DirectoryUi
     }
 
     /**
+     * Compute the declared header stats for a slice's detail page.
+     *
+     * Manifest contract (`ui.show.stats`): each entry names a relation
+     * on the record, an aggregate (count | sum | avg, with `column` for
+     * sum/avg), an optional equality/`whereIn` `filter` map over the
+     * related table's columns, and a label. This is how a hub header
+     * shows domain counters (open tasks, hours logged) instead of the
+     * generic record-id/status strip. A stat whose relation or query
+     * fails is skipped — a broken declaration must never break or
+     * misreport the page. (F3c.)
+     *
+     * @return list<array{handle: string, label: string, value: string}>
+     */
+    public static function showStats(string $sliceName, mixed $record = null): array
+    {
+        return self::showStatsFromManifest(self::readManifest($sliceName), $record);
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{handle: string, label: string, value: string}>
+     */
+    public static function showStatsFromManifest(array $manifest, mixed $record = null): array
+    {
+        $defs = $manifest['ui']['show']['stats'] ?? [];
+        if (! is_array($defs) || $defs === [] || ! is_object($record)) {
+            return [];
+        }
+
+        $stats = [];
+        foreach ($defs as $def) {
+            if (! is_array($def)) {
+                continue;
+            }
+            $relation = (string) ($def['relation'] ?? '');
+            $handle = (string) ($def['handle'] ?? $relation);
+            if ($relation === '' || $handle === '' || ! method_exists($record, $relation)) {
+                continue;
+            }
+            try {
+                $query = $record->{$relation}();
+                if (! is_object($query)) {
+                    continue;
+                }
+                foreach (($def['filter'] ?? []) as $column => $value) {
+                    $query = is_array($value)
+                        ? $query->whereIn((string) $column, $value)
+                        : $query->where((string) $column, $value);
+                }
+                $aggregate = (string) ($def['aggregate'] ?? 'count');
+                $raw = match ($aggregate) {
+                    'sum' => (float) $query->sum((string) ($def['column'] ?? '')),
+                    'avg' => (float) $query->avg((string) ($def['column'] ?? '')),
+                    default => (int) $query->count(),
+                };
+            } catch (\Throwable $e) {
+                continue;
+            }
+            $stats[] = [
+                'handle' => $handle,
+                'label' => (string) ($def['label'] ?? \Illuminate\Support\Str::headline($handle)),
+                'value' => $aggregate === 'count'
+                    ? number_format((int) $raw)
+                    : rtrim(rtrim(number_format((float) $raw, 2, '.', ''), '0'), '.'),
+            ];
+        }
+
+        return $stats;
+    }
+
+    /**
      * Index the manifest's field definitions by field name, from both the
      * top-level `fields` map and each model's `fields` list.
      *
