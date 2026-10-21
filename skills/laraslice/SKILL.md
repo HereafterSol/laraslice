@@ -222,6 +222,15 @@ record/status/created cards — e.g. an employee hub's Open Tasks
 (filtered by status), Projects, Hours Logged (sum of time-log hours),
 Tickets.
 
+Formatter inference is shared: `FieldInference` holds the name/type
+signal rules (status → status_pill, money-named → money_breakdown —
+never type-driven, so geo decimals stay plain; due dates →
+date_overdue; progress → progress_bar; codes → code_badge; assignees
+→ composite_user). The porter AND the generator's default directory
+both use it: a slice generated without a declared `ui.directory`
+still gets inferred columns, status/priority quick filters, and
+money summary cards in its manifest. Declared columns always win.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 

@@ -3641,46 +3641,16 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $type = $f['type'] ?? 'string';
             $lower = strtolower($handle);
 
-            // Infer formatter from field name/type (Phase 1 UI richness — handoff)
-            $formatter = 'text';
-            // Money is a name-level signal, never a type-level one. Any
-            // decimal column used to qualify, so geo coordinates became
-            // "Total Latitude $0.00" KPI cards and money-formatted columns
-            // in ported attendance modules. Decimals without a money-like
-            // name render as plain numbers.
-            $isGeo = in_array($lower, ['lat', 'lng', 'latitude', 'longitude'], true)
-                || str_ends_with($lower, '_latitude') || str_ends_with($lower, '_longitude')
-                || str_ends_with($lower, '_lat') || str_ends_with($lower, '_lng');
-            $isMoney = ! $isGeo && (str_contains($lower, 'amount') || str_contains($lower, 'total') || str_contains($lower, 'price') || str_contains($lower, 'balance') || str_contains($lower, 'grand_total') || str_contains($lower, 'cost') || str_contains($lower, 'salary') || str_ends_with($lower, '_fee'));
-            $isStatus = $lower === 'status' || str_contains($lower, 'status_') || $lower === 'state' || $lower === 'stage';
-            $isDate = str_ends_with($lower, '_at') || str_starts_with($lower, 'date') || in_array($type, ['datetime', 'date', 'timestamp'], true);
-            $isDue = in_array($lower, ['due_date', 'deadline', 'due_on'], true) || str_ends_with($lower, '_due');
-            $isProgress = str_contains($lower, 'progress') || str_contains($lower, 'percent') || str_contains($lower, 'completion') || $lower === 'completion_percent';
-            $isAssignee = in_array($lower, ['user_id', 'assignee_id', 'assigned_to', 'employee_id', 'owner_id'], true)
-                || str_ends_with($lower, '_by') && str_contains($lower, 'assign');
-            $isPriority = $lower === 'priority' || $lower === 'urgency';
-            $isCode = $lower === 'code' || str_ends_with($lower, '_code') || in_array($lower, ['invoice_number', 'order_number', 'task_short_code', 'project_short_code'], true);
-
-            if ($isProgress) {
-                $formatter = 'progress_bar';
-            } elseif ($isMoney) {
-                // Prefer plain currency until paid/total pair is detected below
-                $formatter = 'money_breakdown';
-            } elseif ($isStatus) {
-                $formatter = 'status_pill';
-            } elseif ($isDue) {
-                $formatter = 'date_overdue';
-            } elseif ($isDate) {
-                $formatter = 'date_time';
-            } elseif ($isCode) {
-                $formatter = 'code_badge';
-            } elseif ($isAssignee) {
-                $formatter = 'composite_user';
-            } elseif ($isPriority) {
-                $formatter = 'status_pill';
-            } elseif (str_contains($lower, 'email')) {
-                $formatter = 'text';
-            }
+            // Infer formatter + signals from the shared FieldInference
+            // rules (F5: the same inference the generator's default UI
+            // uses, so ported and hand-made slices render identically).
+            $signals = \LaraSlice\Support\FieldInference::analyze($handle, (string) $type);
+            $formatter = $signals['formatter'];
+            $isMoney = $signals['is_money'];
+            $isStatus = $signals['is_status'];
+            $isDate = $signals['is_date'];
+            $isAssignee = $signals['is_assignee'];
+            $isPriority = $signals['is_priority'];
 
             // Directory columns: up to 8 meaningful fields (ERP density)
             if (count($columns) < 8) {
