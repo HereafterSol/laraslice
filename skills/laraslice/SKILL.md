@@ -274,6 +274,16 @@ SliceManager's registry is name-keyed, so same-named slices hide
 each other there; the command deliberately bypasses it and rewrites
 only inside each slice's own directory).
 
+Document views (G2): declare
+`ui.show.document: { title:, line_items: <relation|repeater>, totals: [fields] }`
+and the slice gains `{index-uri}/{id}/document` — SliceManager
+registers the route centrally (no routes-file edit), the base
+controller serves `DirectoryUi::documentFromManifest()`, and the
+package's standard print template renders header fields, the line
+items table and the totals block. A slice overrides the template
+with its own `Resources/views/document.blade.php`. Generated show
+pages link to it via the controller's `documentUrl`.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 

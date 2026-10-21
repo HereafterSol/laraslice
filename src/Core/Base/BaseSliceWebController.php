@@ -327,10 +327,49 @@ abstract class BaseSliceWebController extends Controller
                 // over the record's relations.
                 'showStats' => \LaraSlice\Support\DirectoryUi::showStatsFromManifest($ownManifest, $record),
                 ...$this->overlayLayoutData(request()),
+                'documentUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('document'))
+                    ? route($this->resolveRouteName('document'), $this->routeParameters(['id' => $id]))
+                    : null,
             ]);
         }
 
         return $this->edit($id);
+    }
+
+    /**
+     * Printable document view (G2): serves the slice's declared
+     * ui.show.document at {prefix}/{id}/document. The route is
+     * registered centrally by SliceManager for declared slices. The
+     * slice's own document template wins; the package's standard
+     * document template renders otherwise.
+     */
+    public function document(string|int $id)
+    {
+        $this->authorizeSlice('view');
+
+        $service = $this->getService();
+        $record = method_exists($service, 'findModel') ? $service->findModel($id) : null;
+        if (! $record) {
+            $record = $service->getItemById($id);
+        }
+        if (! $record) {
+            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
+        }
+
+        $document = \LaraSlice\Support\DirectoryUi::documentFromManifest($this->ownManifest(), $record);
+        if ($document === null) {
+            abort(404);
+        }
+
+        $own = $this->ownViewName('document');
+        $view = view()->exists($own) ? $own : 'laraslice::documents.default';
+
+        return view($view, [
+            'document' => $document,
+            'record' => $record,
+            'routePrefix' => $this->getRoutePrefix(),
+            'routeParameters' => $this->routeParameters(['id' => $id]),
+        ]);
     }
 
     public function edit(string|int $id)

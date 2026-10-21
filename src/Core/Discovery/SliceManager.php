@@ -259,6 +259,34 @@ class SliceManager
             }
         }
 
+        // 3b. Declared document view (G2): a slice declaring
+        // ui.show.document gets {index-uri}/{id}/document served by
+        // its own controller's document() action — no routes-file
+        // edit needed on existing installs.
+        if (is_array($slice->raw['ui']['show']['document'] ?? null)) {
+            try {
+                $navUrl = trim((string) ($slice->navigation['url'] ?? ''), '/');
+                if ($navUrl !== '') {
+                    foreach (Route::getRoutes() as $route) {
+                        $routeName = (string) $route->getName();
+                        if (str_ends_with($routeName, '.index') && trim($route->uri(), '/') === $navUrl) {
+                            $namePrefix = substr($routeName, 0, -strlen('index'));
+                            $controller = $route->getAction('controller');
+                            $controllerClass = is_string($controller) ? explode('@', $controller)[0] : null;
+                            if ($controllerClass && ! Route::has($namePrefix.'document')) {
+                                Route::middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))
+                                    ->get($navUrl.'/{id}/document', [$controllerClass, 'document'])
+                                    ->name($namePrefix.'document');
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+                // A document declaration must never break slice booting.
+            }
+        }
+
         // 4. Register custom SliceServiceProvider if exists
         $sliceNamespace = $slice->getNamespace();
         $providerClass = "{$sliceNamespace}\\{$slice->name}SliceServiceProvider";
