@@ -1165,7 +1165,7 @@ $bladeIndex = <<<BLADE
     <!-- Compact Top Bar (Matches Enterprise ERP Standard) -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-border/40">
         <div class="flex items-center gap-3">
-            <h1 class="text-xl font-bold tracking-tight text-foreground">{$pluralName}</h1>
+            <h1 class="text-base font-medium text-foreground">{$pluralName}</h1>
             <div class="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
                 <a href="{{ Route::has('dashboard') ? route('dashboard') : url('/') }}" class="hover:text-primary transition-colors">Home</a>
                 <span>•</span>
@@ -1295,7 +1295,7 @@ $bladeIndex = <<<BLADE
             @foreach(\$kpiCards as \$card)
             <div class="rounded-2xl border border-border bg-card p-4 shadow-2xs">
                 <p class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{{ \$card['label'] ?? (\$card['handle'] ?? 'Stat') }}</p>
-                <p class="text-2xl font-bold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
+                <p class="text-xl font-semibold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
             </div>
             @endforeach
         </div>
@@ -1439,6 +1439,7 @@ $bladeIndex = <<<BLADE
             :status-key="\$statusKey"
             :inline-edit="\$inlineEdit"
             :date-key="\$dateKey"
+            density="compact"
         >
 {$rowActionsSlot}
         </x-ui.data-table>
@@ -1602,7 +1603,7 @@ BLADE;
                 </div>
                 <div>
                     <div class="flex items-center gap-2.5">
-                        <h1 class="text-2xl font-bold tracking-tight text-foreground">{{ \$label }}</h1>
+                        <h1 class="text-base font-medium text-foreground">{{ \$label }}</h1>
                         <x-ui.badge variant="outline" class="font-mono text-xs">#{{ \$id }}</x-ui.badge>
                         <x-ui.status-pill :status="\$currentState" :label="\$stateLabel" :color="\$badgeColor" />
                     </div>
@@ -1646,7 +1647,7 @@ BLADE;
         @foreach(\$showStats as \$stat)
         <x-ui.card class="p-4 bg-card border shadow-xs">
             <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">{{ \$stat['label'] }}</span>
-            <span class="text-xl font-bold text-foreground mt-1 block">{{ \$stat['value'] }}</span>
+            <span class="text-xl font-semibold text-foreground mt-1 block">{{ \$stat['value'] }}</span>
         </x-ui.card>
         @endforeach
     </div>

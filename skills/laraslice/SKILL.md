@@ -395,6 +395,44 @@ For mission-critical ERP, banking, and government applications, models and actio
 
 ---
 
+## 5.5 Standard UI/UX (core foundation — study before generating any UI)
+
+The standard UI is the parity vehicle: slices that use only the
+standard patterns match a mature ERP's density and interactions by
+default. NEVER invent per-slice layouts or CSS for standard screens.
+Full standard: `docs/UI_UX_STANDARD.md`.
+
+**Density tokens:** base font 14px; page title 16px/500; buttons
+and inputs ~39px; card radius 4px; table rows 42–61px (generated
+lists use the data-table's compact density); page padding ~24px;
+full-width content. Status colors are semantic and global (red
+overdue/incomplete, amber to-do, blue doing, green done/paid).
+People render as avatars, never bare ids.
+
+**The nine standard patterns** (declare them; do not hand-build):
+P1 List (attached filter strip, view switchers, one card =
+table + pagination, inline status select, avatar stacks, kebab
+row actions) · P2 Detail hub (tab bar under the topbar,
+`ui.show.tabs`/`ui.show.stats`, gauge + chart cards) · P3 Form
+(one sectioned card, labels above inputs, quick-add selects,
+in-card save bar) · P4 Dashboard (declared widget cards,
+designed empty states) · P5 Report, P6 Document, P7 Matrix
+(G2 declarations: `ui.directory.report`, `ui.show.document`,
+`ui.directory.matrix`) · P8 Views (`ui.directory.views`
+list/board/calendar) · P9 Settings hub (every feature's
+settings in ONE searchable hub, declared via `settings:` in
+the slice manifest and aggregated by the framework).
+
+**Components:** BlatUI first — see `docs/UI-COMPONENT-MAPPING.md`
+(`data-table`, `stat`, `tabs`, `chart`, `kanban`, `gantt`,
+`scheduler`, `repeater`, `rich-text-editor`, `avatar-group`,
+`status-pill`, `filter-tabs`, `empty`, `drawer`). Foundation
+additions in progress: gauge, status-select, widget-card,
+week-strip, filter-strip, save-bar, kebab-actions, section-card,
+tab-bar, view-switcher. Rollout phases S-UI 1–5; verify every
+generated screen side-by-side against the reference application
+before calling it done.
+
 ## 6. Layout Guidelines (`layouts.app`)
 
 All administrative slice views extend `layouts.app` / `<x-layouts.app>` (Dashboard-01 BlatUI layout):
