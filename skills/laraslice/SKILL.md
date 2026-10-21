@@ -196,6 +196,20 @@ following column nullability. A repeater whose rows are all removed
 still syncs (the component submits a `_repeaters[]` marker), while a
 partial API update that omits the collection leaves children untouched.
 
+**Detail-page composition (hub tabs).** A slice's show page composes
+related-record tabs from the manifest, resolved at request time by
+`DirectoryUi::relatedTabs()` in this precedence: (1) `ui.show.tabs`
+entries with `type: relation`, (2) the root model's declared `hasMany`
+relations, (3) repeater form fields. The base web controller resolves
+tabs from *its own slice's* manifest (duplicate slice names make
+name-based lookup unreliable) and passes them to the view with live
+relation counts. Declared relations must exist as methods on the model:
+the generator emits them from the manifest relations it is given
+(deduplicated against repeater and foreign-key relations), resolving
+target classes through `SliceManager::modelClass()`, which derives
+namespaces from each slice's actual directory path and falls back to a
+filesystem scan so slices shadowed by a duplicate name still resolve.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 

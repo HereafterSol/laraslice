@@ -603,6 +603,7 @@ PHP;
             }
 
             $modelRelations = '';
+            $emittedRelationMethods = [];
             foreach ($repeaterDefinitions as $repeaterHandle => $repeaterDef) {
                 $childModel = Str::studly(Str::singular($repeaterDef['model'] ?? $repeaterDef['table']));
                 $relMethod = Str::camel($repeaterHandle);
@@ -620,6 +621,45 @@ PHP;
         return \$this->hasMany(\$class, {$fkExport});
     }
 REL;
+                $emittedRelationMethods[$relMethod] = true;
+            }
+            // Declared manifest relations (models[].relations, passed via
+            // options by the porter / blueprint callers): without methods
+            // for these, detail-page relation tabs and $model->relation
+            // access have nothing to call. F3.
+            foreach (($options['relations'] ?? []) as $declaredRelation) {
+                if (! is_array($declaredRelation) || empty($declaredRelation['name'])) {
+                    continue;
+                }
+                $declMethod = Str::camel((string) $declaredRelation['name']);
+                if (isset($emittedRelationMethods[$declMethod])) {
+                    continue;
+                }
+                $declType = (string) ($declaredRelation['type'] ?? 'hasMany');
+                if (! in_array($declType, ['hasMany', 'belongsTo'], true)) {
+                    continue;
+                }
+                $declTarget = Str::studly(Str::singular((string) ($declaredRelation['model'] ?? $declaredRelation['name'])));
+                $declFk = (string) ($declaredRelation['foreign_key'] ?? ($declType === 'hasMany'
+                    ? Str::singular($tableName).'_id'
+                    : Str::snake((string) $declaredRelation['name']).'_id'));
+                $declFkExport = var_export($declFk, true);
+                $declTargetExport = var_export($declTarget, true);
+                $declReturn = $declType === 'hasMany' ? 'HasMany' : 'BelongsTo';
+                $declCall = $declType === 'hasMany' ? 'hasMany' : 'belongsTo';
+                $modelRelations .= <<<REL
+
+
+    public function {$declMethod}(): \\Illuminate\\Database\\Eloquent\\Relations\\{$declReturn}
+    {
+        // Resolved among installed slices (and App\\Models) when first used
+        \$class = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$declTargetExport})
+            ?? throw new \\LogicException('No model class named {$declTarget} was found for relation {$declaredRelation['name']}.');
+
+        return \$this->{$declCall}(\$class, {$declFkExport});
+    }
+REL;
+                $emittedRelationMethods[$declMethod] = true;
             }
             foreach ($fields as $def) {
                 $isForeignKey = ($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id');
@@ -628,6 +668,10 @@ REL;
                 }
                 $relation = $def['relation'] ?? [];
                 $relName = Str::camel($relation['name'] ?? Str::replaceLast('_id', '', $def['name']));
+                if (isset($emittedRelationMethods[$relName])) {
+                    continue;
+                }
+                $emittedRelationMethods[$relName] = true;
                 $targetModel = Str::studly(Str::singular($relation['model'] ?? Str::replaceLast('_id', '', $def['name'])));
                 $foreignKey = var_export($def['name'], true);
                 $targetExport = var_export($targetModel, true);
@@ -1507,37 +1551,8 @@ BLADE;
         </button>
         @endif
 
-        {{-- Aggregate related records (ERP Project hub parity) --}}
-        @php
-            \$relatedTabs = \$relatedTabs ?? [];
-            if (\$relatedTabs === [] && isset(\$record) && is_object(\$record)) {
-                try {
-                    \$_mf = '{$sliceJsonAbs}';
-                    if (is_file(\$_mf)) {
-                        \$_m = json_decode((string) file_get_contents(\$_mf), true) ?: [];
-                        foreach ((\$_m['ui']['show']['tabs'] ?? []) as \$_tab) {
-                            if ((\$_tab['type'] ?? '') === 'relation') {
-                                \$relatedTabs[] = \$_tab;
-                            }
-                        }
-                        if (\$relatedTabs === []) {
-                            foreach ((\$_m['models'][0]['relations'] ?? []) as \$_rel) {
-                                if ((\$_rel['type'] ?? '') === 'hasMany') {
-                                    \$relatedTabs[] = [
-                                        'handle' => \$_rel['name'] ?? '',
-                                        'label' => \\Illuminate\\Support\\Str::headline(\$_rel['name'] ?? 'Related'),
-                                        'type' => 'relation',
-                                        'relation' => \$_rel['name'] ?? '',
-                                    ];
-                                }
-                            }
-                        }
-                    }
-                } catch (\\Throwable \$e) {
-                    \$relatedTabs = [];
-                }
-            }
-        @endphp
+        {{-- Aggregate related records: tabs resolved from the manifest (ui.show.tabs, root model relations, repeater fields) --}}
+        @php \$relatedTabs = \$relatedTabs ?? \LaraSlice\Support\DirectoryUi::relatedTabs('{$studlyName}', \$record ?? null); @endphp
         @foreach(\$relatedTabs as \$rtab)
             @if(!empty(\$rtab['handle']))
             <button
@@ -1548,6 +1563,9 @@ BLADE;
             >
                 <x-lucide-layers class="size-4" />
                 <span>{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</span>
+                @isset(\$rtab['count'])
+                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold leading-none">{{ \$rtab['count'] }}</span>
+                @endisset
             </button>
             @endif
         @endforeach

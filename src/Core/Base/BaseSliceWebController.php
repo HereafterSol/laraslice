@@ -267,6 +267,11 @@ abstract class BaseSliceWebController extends Controller
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(),
                 'can' => $this->sliceAbilities(),
+                // F3: detail-page composition. Resolved from THIS
+                // controller's own manifest (duplicate slice names make
+                // name-based lookup unreliable) so the show view can
+                // render related-record tabs with live counts.
+                'relatedTabs' => \LaraSlice\Support\DirectoryUi::relatedTabsFromManifest($this->ownManifest(), $record),
             ]);
         }
 
@@ -418,6 +423,35 @@ abstract class BaseSliceWebController extends Controller
         }
 
         return Str::snake(Str::singular($prefix));
+    }
+
+    /**
+     * Parse this controller's own slice manifest from disk.
+     *
+     * The controller file lives two levels below the slice root
+     * (Controllers/XxxController.php), which identifies the slice
+     * unambiguously even when several slices share a name.
+     *
+     * @return array<string, mixed>
+     */
+    protected function ownManifest(): array
+    {
+        try {
+            $ref = new \ReflectionClass($this);
+            $sliceDir = dirname((string) $ref->getFileName(), 2);
+            foreach (['slice.yaml', 'slice.yml'] as $file) {
+                $path = $sliceDir.DIRECTORY_SEPARATOR.$file;
+                if (is_file($path)) {
+                    $data = \Symfony\Component\Yaml\Yaml::parseFile($path);
+
+                    return is_array($data) ? $data : [];
+                }
+            }
+        } catch (\Throwable $e) {
+            // A missing manifest means no composed tabs; never fail show().
+        }
+
+        return [];
     }
 
     /**
