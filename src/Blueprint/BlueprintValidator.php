@@ -420,7 +420,7 @@ final class BlueprintValidator
             if (! is_array($ui['presentation'])) {
                 $errors[] = "{$path}.presentation must be a map.";
             } else {
-                $this->checkKeys($ui['presentation'], ['create', 'edit', 'drawer_width'], "{$path}.presentation", $errors);
+                $this->checkKeys($ui['presentation'], ['create', 'edit', 'show', 'drawer_width'], "{$path}.presentation", $errors);
                 foreach (['create', 'edit'] as $mode) {
                     if (isset($ui['presentation'][$mode]) && ! in_array($ui['presentation'][$mode], ['drawer', 'page'], true)) {
                         $errors[] = "{$path}.presentation.{$mode} must be either 'drawer' or 'page'.";

@@ -115,6 +115,7 @@ abstract class BaseSliceWebController extends Controller
                 'can' => $this->sliceAbilities(),
                 'summaryCards' => $summaryCards,
                 'summaryData' => $summaryData,
+                'presentation' => $this->presentationModes(),
                 'quickFilters' => $quickFilters,
                 'sidebarFilters' => $sidebarFilters,
                 'activeFilters' => $filter instanceof BaseFilter ? $filter->getCriteria() : [],
@@ -135,6 +136,7 @@ abstract class BaseSliceWebController extends Controller
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
             $this->getFormViewData($form, true),
+            $this->overlayLayoutData(request()),
             [
                 'form' => $form,
                 'isNew' => true,
@@ -324,6 +326,7 @@ abstract class BaseSliceWebController extends Controller
                 // F3c: declared header stats (ui.show.stats) computed
                 // over the record's relations.
                 'showStats' => \LaraSlice\Support\DirectoryUi::showStatsFromManifest($ownManifest, $record),
+                ...$this->overlayLayoutData(request()),
             ]);
         }
 
@@ -343,6 +346,7 @@ abstract class BaseSliceWebController extends Controller
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
             $this->getFormViewData($form, false),
+            $this->overlayLayoutData(request()),
             [
                 'form' => $form,
                 'isNew' => false,
@@ -509,6 +513,41 @@ abstract class BaseSliceWebController extends Controller
     /**
      * Load UI config from the slice's slice.yaml.
      */
+    /**
+     * Resolve the declared overlay presentation for create/edit/show
+     * (ui.presentation.*): page (default), drawer, or modal. (F7 —
+     * URL-bound overlays: the canonical route stays the screen's URL;
+     * drawer/modal only change how it is presented from list pages.)
+     *
+     * @return array{create: string, edit: string, show: string}
+     */
+    protected function presentationModes(): array
+    {
+        $declared = $this->ownManifest()['ui']['presentation']
+            ?? $this->getSliceUiConfig()['presentation']
+            ?? [];
+        $modes = [];
+        foreach (['create', 'edit', 'show'] as $action) {
+            $mode = is_array($declared) ? ($declared[$action] ?? 'page') : 'page';
+            $modes[$action] = in_array($mode, ['drawer', 'modal'], true) ? $mode : 'page';
+        }
+
+        return $modes;
+    }
+
+    /**
+     * When the overlay loader fetches a screen, the same canonical URL
+     * answers with the fragment layout (content only, no app chrome).
+     *
+     * @return array<string, string>
+     */
+    protected function overlayLayoutData(Request $request): array
+    {
+        return $request->headers->has('X-LaraSlice-Overlay')
+            ? ['overlayLayout' => 'laraslice::layouts.fragment']
+            : [];
+    }
+
     protected function getSliceUiConfig(): array
     {
         // The controller's OWN manifest wins (G5): route-prefix lookup
