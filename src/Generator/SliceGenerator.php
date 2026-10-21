@@ -78,6 +78,11 @@ class SliceGenerator
             $sliceNamespace = "{$this->namespace}\\{$pluralName}";
         }
         $navUrl = '/'.$routePrefix;
+        // G6 step 2: route NAMES are path-qualified for nested slices
+        // (erp/erp/work/tasks -> erp_erp_work_tasks.*) so same-named
+        // slices never share route names; root slices keep the plain
+        // plural name, unchanged.
+        $routeNamePrefix = str_replace('/', '_', str_replace('-', '_', $routePrefix));
 
         $multitenant = filter_var($options['multitenant'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $tenantKey = $options['tenant_key'] ?? 'company_id';
@@ -938,7 +943,7 @@ class {$studlyName}WebController extends BaseSliceWebController
 
     protected function getRoutePrefix(): string
     {
-        return '{$pluralSnake}.';
+        return '{$routeNamePrefix}.';
     }
 }
 PHP;
@@ -974,8 +979,8 @@ PHP;
 use Illuminate\Support\Facades\Route;
 use {$sliceNamespace}\\Controllers\\{$studlyName}WebController;
 
-// Plural resource routes: {$pluralSnake}.index, {$pluralSnake}.create, etc.
-Route::prefix('{$routePrefix}')->name('{$pluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {
+// Plural resource routes: {$routeNamePrefix}.index, {$routeNamePrefix}.create, etc.
+Route::prefix('{$routePrefix}')->name('{$routeNamePrefix}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {
     Route::get('/', [{$studlyName}WebController::class, 'index'])->name('index');
     Route::get('/create', [{$studlyName}WebController::class, 'create'])->name('create');
     Route::post('/', [{$studlyName}WebController::class, 'store'])->name('store');
@@ -1189,12 +1194,12 @@ $bladeIndex = <<<BLADE
 
             @if(\$can['create'] ?? true)
             @if((\$presentation['create'] ?? 'page') !== 'page')
-            <button type="button" data-overlay-url="{{ route('{$pluralSnake}.create') }}" data-overlay-mode="{{ \$presentation['create'] }}" data-overlay-title="Add {$studlyName}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-colors cursor-pointer">
+            <button type="button" data-overlay-url="{{ route('{$routeNamePrefix}.create') }}" data-overlay-mode="{{ \$presentation['create'] }}" data-overlay-title="Add {$studlyName}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-colors cursor-pointer">
                 <x-lucide-plus class="size-3.5" />
                 <span>Add {$studlyName}</span>
             </button>
             @else
-            <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" size="sm" class="gap-1.5 shadow-xs font-semibold">
+            <x-ui.button href="{{ route('{$routeNamePrefix}.create') }}" as="a" size="sm" class="gap-1.5 shadow-xs font-semibold">
                 <x-lucide-plus class="size-3.5" />
                 <span>Add {$studlyName}</span>
             </x-ui.button>
@@ -1218,9 +1223,9 @@ $bladeIndex = <<<BLADE
         // Runtime: load formatters via registered slice path (vendor + path installs)
         \$columns = \\LaraSlice\\Support\\DirectoryUi::columnsForSlice('{$studlyName}', \$columns);
         \$rows = \\LaraSlice\\Support\\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
-            'show_url'   => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.show') ? route('{$pluralSnake}.show', \$item->id) : null,
-            'edit_url'   => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.edit') ? route('{$pluralSnake}.edit', \$item->id) : null,
-            'delete_url' => \Illuminate\Support\Facades\Route::has('{$pluralSnake}.destroy') ? route('{$pluralSnake}.destroy', \$item->id) : null,
+            'show_url'   => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.show') ? route('{$routeNamePrefix}.show', \$item->id) : null,
+            'edit_url'   => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.edit') ? route('{$routeNamePrefix}.edit', \$item->id) : null,
+            'delete_url' => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.destroy') ? route('{$routeNamePrefix}.destroy', \$item->id) : null,
         ]);
     @endphp
 
@@ -1233,7 +1238,7 @@ $bladeIndex = <<<BLADE
             </div>
             <div class="flex items-center gap-2 pt-1">
                 @if(\$can['create'] ?? true)
-                <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" size="sm">
+                <x-ui.button href="{{ route('{$routeNamePrefix}.create') }}" as="a" size="sm">
                     Create {$studlyName}
                 </x-ui.button>
                 @endif
@@ -1482,7 +1487,7 @@ BLADE;
 @section('content')
 <div class="w-full max-w-5xl mx-auto space-y-6">
     <div class="flex items-center gap-2 text-xs text-muted-foreground">
-        <a href="{{ route('{$pluralSnake}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
+        <a href="{{ route('{$routeNamePrefix}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
         <span>/</span>
         <span class="text-foreground font-medium">{{ \$isNew ? 'Create {$studlyName}' : 'Edit {$studlyName} #' . \$form->id }}</span>
     </div>
@@ -1501,7 +1506,7 @@ BLADE;
         </div>
     @endif
 
-    <form action="{{ \$isNew ? route('{$pluralSnake}.store') : route('{$pluralSnake}.update', \$form->id) }}" method="POST" class="space-y-6">
+    <form action="{{ \$isNew ? route('{$routeNamePrefix}.store') : route('{$routeNamePrefix}.update', \$form->id) }}" method="POST" class="space-y-6">
         @csrf
         @if(!\$isNew) @method('PUT') @endif
 
@@ -1509,7 +1514,7 @@ BLADE;
 
         <!-- Sticky Bottom Form Actions Bar -->
         <div class="sticky bottom-4 z-10 p-4 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-lg flex items-center justify-between">
-            <x-ui.button href="{{ route('{$pluralSnake}.index') }}" as="a" variant="ghost" class="text-xs font-semibold text-muted-foreground hover:text-foreground">
+            <x-ui.button href="{{ route('{$routeNamePrefix}.index') }}" as="a" variant="ghost" class="text-xs font-semibold text-muted-foreground hover:text-foreground">
                 Cancel
             </x-ui.button>
 
@@ -1554,7 +1559,7 @@ BLADE;
 <div class="space-y-6" x-data="{ activeTab: new URLSearchParams(window.location.search).get('tab') || 'overview' }">
     <!-- Breadcrumbs -->
     <div class="flex items-center gap-2 text-xs text-muted-foreground">
-        <a href="{{ route('{$pluralSnake}.index') }}" class="hover:text-primary transition-colors flex items-center gap-1">
+        <a href="{{ route('{$routeNamePrefix}.index') }}" class="hover:text-primary transition-colors flex items-center gap-1">
             <x-lucide-arrow-left class="size-3" />
             <span>{$pluralName}</span>
         </a>
@@ -1598,15 +1603,15 @@ BLADE;
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
-                <x-ui.button href="{{ route('{$pluralSnake}.index') }}" as="a" variant="outline" size="sm" class="gap-1.5">
+                <x-ui.button href="{{ route('{$routeNamePrefix}.index') }}" as="a" variant="outline" size="sm" class="gap-1.5">
                     <x-lucide-arrow-left class="size-3.5" />
                     <span>Back</span>
                 </x-ui.button>
-                <x-ui.button href="{{ route('{$pluralSnake}.edit', \$id) }}" as="a" variant="outline" size="sm" class="gap-1.5">
+                <x-ui.button href="{{ route('{$routeNamePrefix}.edit', \$id) }}" as="a" variant="outline" size="sm" class="gap-1.5">
                     <x-lucide-pencil class="size-3.5" />
                     <span>Edit</span>
                 </x-ui.button>
-                <form action="{{ route('{$pluralSnake}.destroy', \$id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
+                <form action="{{ route('{$routeNamePrefix}.destroy', \$id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
                     @csrf
                     @method('DELETE')
                     <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">

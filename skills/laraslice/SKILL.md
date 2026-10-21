@@ -264,6 +264,16 @@ renders its OWN templates; route NAMES are still shared (duplicate
 names resolve to one URI — path-qualified route names are the
 remaining G6 step).
 
+Route names (G6 step 2): nested slices get PATH-QUALIFIED route
+names — the generator derives the name prefix from the URI hierarchy
+(erp/erp/work/tasks -> erp_erp_work_tasks.*) across the routes file,
+the controller's getRoutePrefix() and every blade route() reference;
+root slices keep plain names. Existing installs repair with
+`slice:qualify-routes [SliceName] [--dry-run]` (filesystem scan —
+SliceManager's registry is name-keyed, so same-named slices hide
+each other there; the command deliberately bypasses it and rewrites
+only inside each slice's own directory).
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
