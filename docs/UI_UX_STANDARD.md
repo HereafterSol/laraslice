@@ -33,10 +33,14 @@ project workspace.
   row-actions menu. A Filters button opens the full declared
   filter set in a right drawer. The calendar view is currently
   a date-grouped list — a true month grid is a later component.
-- **P2 Detail hub** — tab bar directly under the topbar (the
-  record's name is the title), overview = asymmetric card grid:
-  declared stats, gauge, charts, related tabs with counts
-  (`ui.show.tabs`, `ui.show.stats`).
+- **P2 Detail hub** — tab bar directly under the header,
+  overview = declared stats, then declared widgets, then the
+  detail grid. Widgets (`ui.show.widgets`): `gauge` (a filtered
+  relation aggregate over a max aggregate, a record field, or
+  a number — rendered by the `x-ui.gauge` SVG ring) and
+  `chart` (relation counts grouped by a column, labels and
+  group order from the declaration, rendered by `x-ui.chart`).
+  Related tabs with counts come from `ui.show.tabs`.
 - **P3 Form** — one card, in-card section headers, labels above
   inputs, quick-add beside selects, rich text for long text,
   in-card save bar (Save / Save & More / Cancel).

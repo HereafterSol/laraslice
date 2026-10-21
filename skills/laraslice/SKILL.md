@@ -412,8 +412,10 @@ People render as avatars, never bare ids.
 **The nine standard patterns** (declare them; do not hand-build):
 P1 List (attached filter strip, view switchers, one card =
 table + pagination, inline status select, avatar stacks, kebab
-row actions) · P2 Detail hub (tab bar under the topbar,
-`ui.show.tabs`/`ui.show.stats`, gauge + chart cards) · P3 Form
+row actions) · P2 Detail hub (tab bar under the header,
+`ui.show.tabs`/`ui.show.stats`/`ui.show.widgets` — gauge =
+filtered aggregate over a max, chart = grouped relation
+counts with declared labels/order) · P3 Form
 (one sectioned card, labels above inputs, quick-add selects,
 in-card save bar) · P4 Dashboard (declared widget cards,
 designed empty states) · P5 Report, P6 Document, P7 Matrix
