@@ -1192,6 +1192,12 @@ $bladeIndex = <<<BLADE
                 <span>Export</span>
             </button>
 
+            @isset(\$matrixUrl)
+            <x-ui.button href="{{ \$matrixUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
+                <x-lucide-grid-3x3 class="size-3.5" />
+                <span>Matrix</span>
+            </x-ui.button>
+            @endisset
             @if(\$can['create'] ?? true)
             @if((\$presentation['create'] ?? 'page') !== 'page')
             <button type="button" data-overlay-url="{{ route('{$routeNamePrefix}.create') }}" data-overlay-mode="{{ \$presentation['create'] }}" data-overlay-title="Add {$studlyName}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-colors cursor-pointer">

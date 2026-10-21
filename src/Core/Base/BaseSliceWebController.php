@@ -116,6 +116,9 @@ abstract class BaseSliceWebController extends Controller
                 'summaryCards' => $summaryCards,
                 'summaryData' => $summaryData,
                 'presentation' => $this->presentationModes(),
+                'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
+                    ? route($this->resolveRouteName('matrix'), $this->routeParameters())
+                    : null,
                 'quickFilters' => $quickFilters,
                 'sidebarFilters' => $sidebarFilters,
                 'activeFilters' => $filter instanceof BaseFilter ? $filter->getCriteria() : [],
@@ -124,6 +127,69 @@ abstract class BaseSliceWebController extends Controller
         );
 
         return view($this->ownViewName('index'), $viewData);
+    }
+
+    /**
+     * Matrix directory view (G2): rows x days-of-month grid for
+     * slices declaring ui.directory.matrix, served at
+     * {index-uri}/matrix?month=&year=. SliceManager registers the
+     * route centrally for declared slices.
+     */
+    public function matrix(Request $request)
+    {
+        $this->authorizeSlice('view');
+
+        $manifest = $this->ownManifest();
+        $decl = $manifest['ui']['directory']['matrix'] ?? null;
+        if (! is_array($decl) || empty($decl['row_key']) || empty($decl['date_field'])) {
+            abort(404);
+        }
+        $month = (int) $request->query('month', (int) date('n'));
+        $year = (int) $request->query('year', (int) date('Y'));
+        $month = ($month >= 1 && $month <= 12) ? $month : (int) date('n');
+        $year = ($year >= 1970 && $year <= 2100) ? $year : (int) date('Y');
+
+        $filterClass = $this->getFilterClass();
+        $filter = new $filterClass($request->all());
+        if ($filter instanceof BaseFilter) {
+            $filter->withLimit(5000);
+            $dateField = (string) $decl['date_field'];
+            $filter->setCriteria([
+                $dateField.'_from' => sprintf('%04d-%02d-01', $year, $month),
+                $dateField.'_to' => date('Y-m-t', mktime(0, 0, 0, $month, 1, $year)).' 23:59:59',
+            ]);
+        }
+        $items = $this->getService()->getList($filter)->items;
+
+        $formClass = $this->getFormClass();
+        $options = $this->resolveRelationshipOptions(new $formClass);
+        // Relationship options are keyed by convention (usersOptions,
+        // userOptions, ...) — find the map for the matrix row key.
+        $rowKey = (string) $decl['row_key'];
+        $base = str_ends_with($rowKey, '_id') ? substr($rowKey, 0, -3) : $rowKey;
+        $labelMap = [];
+        foreach ([$rowKey, \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)).'Options', \Illuminate\Support\Str::camel($base).'Options', \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)).'Options'] as $candidateKey) {
+            if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
+                $labelMap = $options[$candidateKey];
+                break;
+            }
+        }
+
+        $matrix = \LaraSlice\Support\DirectoryUi::matrixFromManifest($manifest, $items, $month, $year, is_array($labelMap) ? $labelMap : []);
+        if ($matrix === null) {
+            abort(404);
+        }
+
+        $own = $this->ownViewName('matrix');
+        $view = view()->exists($own) ? $own : 'laraslice::directory.matrix';
+
+        return view($view, [
+            'matrix' => $matrix,
+            'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+                ? route($this->resolveRouteName('index'), $this->routeParameters())
+                : url('/'),
+            'routePrefix' => $this->getRoutePrefix(),
+        ]);
     }
 
     public function create()
