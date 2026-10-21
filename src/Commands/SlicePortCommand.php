@@ -142,6 +142,12 @@ class SlicePortCommand extends Command
                     $this->warn("  [{$s}] {$err}");
                 }
             }
+            if (! empty($result['collisions'])) {
+                $this->warn('⚠  Slice collisions detected — existing slices already claim these names/tables; their UI may keep serving the ported data:');
+                foreach ($result['collisions'] as $hit) {
+                    $this->warn("  [{$hit['slice']}] {$hit['type']} collision on table {$hit['table']} with existing slice {$hit['existing_slice']} ({$hit['existing_path']})");
+                }
+            }
 
             if (! empty($result['data_import'])) {
                 $di = $result['data_import'];

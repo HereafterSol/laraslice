@@ -2879,6 +2879,83 @@ public function analyzeSourceNavigation(string $sourcePath): array
     /**
      * Execute full vertical slice generation and migration directly from a structured Architecture Plan.
      */
+    /**
+     * F1: detect collisions between the planned slices and slices already
+     * present in the target application.
+     *
+     * A collision is reported when an existing slice has the same
+     * normalized name but is bound to a different primary table (the
+     * Frankenstein case: the existing slice's UI ends up serving the
+     * ported data), or when a different-named existing slice already
+     * claims the planned slice's root table. Re-porting the same slice
+     * (same name, same table) is not a collision.
+     *
+     * @param  array<int, array<string, mixed>>  $modules
+     * @return array<int, array{slice: string, type: string, table: string, existing_slice: string, existing_path: string}>
+     */
+    public function detectTargetCollisions(array $modules): array
+    {
+        try {
+            if (! function_exists('app') || ! app()->bound(\LaraSlice\Core\Discovery\SliceManager::class)) {
+                return [];
+            }
+            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager->discover();
+            $existing = $manager->getSlices();
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $normalize = fn (string $v): string => strtolower(str_replace([' ', '_', '-'], '', $v));
+        $byName = [];
+        $byTable = [];
+        foreach ($existing as $slice) {
+            $primary = $slice->primaryTable();
+            $byName[$normalize($slice->name)] = ['slice' => $slice, 'primary' => $primary];
+            $claimed = $slice->tables ?? [];
+            if ($primary !== null && ! in_array($primary, $claimed, true)) {
+                $claimed[] = $primary;
+            }
+            foreach ($claimed as $t) {
+                $byTable[$t] = $slice;
+            }
+        }
+
+        $collisions = [];
+        foreach ($modules as $module) {
+            foreach (($module['slices'] ?? []) as $slice) {
+                $name = (string) ($slice['name'] ?? '');
+                $rootTable = (string) ($slice['root_table'] ?? '');
+                if ($name === '' || $rootTable === '') {
+                    continue;
+                }
+                $hit = $byName[$normalize($name)] ?? null;
+                if ($hit && $hit['primary'] !== null && $hit['primary'] !== $rootTable) {
+                    $collisions[] = [
+                        'slice' => $name,
+                        'type' => 'name',
+                        'table' => $rootTable,
+                        'existing_slice' => $hit['slice']->name,
+                        'existing_path' => $hit['slice']->path,
+                    ];
+                    continue;
+                }
+                $tableHit = $byTable[$rootTable] ?? null;
+                if ($tableHit && $normalize($tableHit->name) !== $normalize($name)) {
+                    $collisions[] = [
+                        'slice' => $name,
+                        'type' => 'table',
+                        'table' => $rootTable,
+                        'existing_slice' => $tableHit->name,
+                        'existing_path' => $tableHit->path,
+                    ];
+                }
+            }
+        }
+
+        return $collisions;
+    }
+
     public function executeFromPlan(array $plan, bool $importData = false, bool $withFiles = false, bool $importAuth = false, ?array $sourceConnection = null): array
     {
         @set_time_limit(300);
@@ -2893,6 +2970,12 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $createdSlices = [];
         $scaffoldedChildren = [];
         $errors = [];
+        // F1: preflight collision audit. Porting into an app that already
+        // has same-named slices (e.g. the bundled examples) used to absorb
+        // the collision silently: the example's list and 3-field form kept
+        // serving the ported table while row links resolved across slice
+        // trees. Collisions are now detected up front and reported.
+        $collisions = $this->detectTargetCollisions($modules);
 
         foreach ($modules as $module) {
             $moduleName = $module['name'] ?? 'Core';
@@ -3024,6 +3107,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             'slices_created' => $createdSlices,
             'child_tables_created' => $scaffoldedChildren,
             'errors' => $errors,
+            'collisions' => $collisions,
             'data_import' => $dataImportResult,
         ];
     }

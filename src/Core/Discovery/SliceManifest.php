@@ -228,6 +228,40 @@ class SliceManifest
         return is_dir($path) ? $path : null;
     }
 
+    /**
+     * The slice's primary (root) table, resolved across manifest shapes:
+     * the declared tables list, the root model's manifest entry, and
+     * finally the model class itself. Older manifests declare none of
+     * these keys, which left ->tables empty and blinded porter collision
+     * detection and link audits for exactly the slices that needed them.
+     */
+    public function primaryTable(): ?string
+    {
+        if (! empty($this->tables)) {
+            return (string) $this->tables[0];
+        }
+
+        foreach (($this->raw['models'] ?? []) as $model) {
+            if (is_array($model) && ! empty($model['table']) && ($model['root'] ?? true)) {
+                return (string) $model['table'];
+            }
+        }
+
+        $class = $this->getModelClass();
+        if ($class && class_exists($class)) {
+            try {
+                $table = (new $class)->getTable();
+                if (is_string($table) && $table !== '') {
+                    return $table;
+                }
+            } catch (\Throwable $e) {
+                // fall through to null
+            }
+        }
+
+        return null;
+    }
+
     public function getModelClass(): ?string
     {
         $modelsDir = $this->path.'/Models';

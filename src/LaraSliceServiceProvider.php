@@ -39,6 +39,7 @@ use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceSeedCommand;
 use LaraSlice\Commands\SliceMigrateJsonToYamlCommand;
 use LaraSlice\Commands\SliceDiffCommand;
+use LaraSlice\Commands\SliceLinksCommand;
 use LaraSlice\Commands\SliceSyncCommand;
 use LaraSlice\Commands\SliceToggleCommand;
 use LaraSlice\Commands\SliceUiPruneCommand;
@@ -150,6 +151,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 BlueprintApplyCommand::class,
                 SliceSyncCommand::class,
                 SliceDiffCommand::class,
+                SliceLinksCommand::class,
                 SliceMigrateJsonToYamlCommand::class,
             SlicePortCommand::class,
                 SliceCacheCommand::class,
