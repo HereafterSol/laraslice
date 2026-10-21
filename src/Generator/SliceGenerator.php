@@ -1158,7 +1158,7 @@ $bladeIndex = <<<BLADE
 @extends('layouts.app')
 
 @section('content')
-<div class="space-y-4">
+<div class="space-y-3">
     {{-- Bulk workflow forward (shows when table rows checked) --}}
     <x-workflows::bulk-bar slice="{$studlyName}" />
 
@@ -1291,9 +1291,9 @@ $bladeIndex = <<<BLADE
             }
         @endphp
         @if(!empty(\$kpiCards))
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="flex flex-wrap gap-3 [&>*]:flex-1 [&>*]:min-w-44 [&>*]:max-w-xs">
             @foreach(\$kpiCards as \$card)
-            <div class="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+            <div class="rounded-lg border border-border bg-card px-4 py-3 shadow-2xs">
                 <p class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{{ \$card['label'] ?? (\$card['handle'] ?? 'Stat') }}</p>
                 <p class="text-xl font-semibold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
             </div>
@@ -1303,7 +1303,7 @@ $bladeIndex = <<<BLADE
 
         <!-- Quick Filter Tabs (from ui.directory.quick_filters) -->
         @if(!empty(\$quickFilters))
-        <div class="mb-4">
+        <div>
             @foreach(\$quickFilters as \$qf)
             <x-ui.filter-tabs
                 :tabs="\$qf['options'] ?? []"
@@ -1315,7 +1315,7 @@ $bladeIndex = <<<BLADE
 
         <!-- Sidebar Filters (from ui.directory.sidebar_filters) — declared filters apply server-side (G5) -->
         @if(!empty(\$sidebarFilters ?? []))
-        <form method="GET" class="mb-4 rounded-2xl border border-border bg-card p-4 shadow-xs">
+        <form method="GET" class="border-b border-border/60 pb-3">
             <div class="flex flex-wrap items-end gap-3">
                 @foreach(\$sidebarFilters as \$sf)
                 @php \$sfHandle = \$sf['handle'] ?? ''; \$sfLabel = \$sf['label'] ?? \Illuminate\Support\Str::headline(\$sfHandle); @endphp
