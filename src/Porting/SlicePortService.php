@@ -589,7 +589,7 @@ class SlicePortService
                         $sliceName,
                         $fields,
                         $tenantKey,
-                        [],
+                        $this->relationsForChildTables($info['child_tables'] ?? [], $primaryTable, $tables, $tenantKey),
                         $workflowConfigs[$sliceName] ?? null,
                         $sourcePath ?: null
                     ),
@@ -1723,6 +1723,57 @@ PHP;
     }
 
     /**
+     * F2: repeater sub-fields for a child table — every editable column
+     * except the parent FK, the tenant key, and audit/system columns.
+     */
+    /**
+     * F2: hasMany relation descriptors (with repeater fields) for a
+     * slice's child tables, in the shape the UI builders consume.
+     */
+    protected function relationsForChildTables(array $childTables, string $primaryTable, array $tables, string $tenantKey = 'company_id'): array
+    {
+        $relations = [];
+        foreach ($childTables as $childTable) {
+            $childTable = is_array($childTable) ? ($childTable['table'] ?? '') : (string) $childTable;
+            if ($childTable === '') {
+                continue;
+            }
+            $fk = Str::singular($primaryTable).'_id';
+            $relations[] = [
+                'name' => Str::snake($childTable),
+                'type' => 'hasMany',
+                'model' => Str::snake(Str::singular($childTable)),
+                'foreign_key' => $fk,
+                'table' => $childTable,
+                'fields' => $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey),
+            ];
+        }
+
+        return $relations;
+    }
+
+    protected function repeaterFieldsForChild(array $columns, string $foreignKey, string $tenantKey = 'company_id'): array
+    {
+        $skip = [$foreignKey, $tenantKey, 'id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'added_by', 'last_updated_by'];
+        $out = [];
+        foreach ($this->convertColumnsToFields($columns) as $f) {
+            $handle = $f['handle'] ?? '';
+            if ($handle === '' || in_array($handle, $skip, true)) {
+                continue;
+            }
+            $out[] = [
+                'handle' => $handle,
+                'label' => $f['label'] ?? Str::headline($handle),
+                'type' => $f['type'] ?? 'string',
+                'required' => (bool) ($f['required'] ?? false),
+                'options' => $f['options'] ?? [],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Build rich multi-slice structures directly consumable by Blueprint Studio Alpine.js.
      */
     public function buildStudioSlices(array $sliceMapping, array $tables, string $domain, array $options = []): array
@@ -1755,6 +1806,8 @@ PHP;
                         'type' => 'hasMany',
                         'model' => $childHandle,
                         'foreign_key' => $fk,
+                        'table' => $childTable,
+                        'fields' => $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey),
                     ];
                     $allRelations[] = [
                         'type' => 'hasMany',
@@ -3405,6 +3458,39 @@ public function analyzeSourceNavigation(string $sourcePath): array
     public function buildCanonicalUiFromSlice(array $slice, string $sliceName, string $rootTable): array
     {
         $pages = $slice['pages'] ?? [];
+        // F2: hasMany relations derived from the plan's child tables so the
+        // form gains a populated line-item repeater (this variable was
+        // previously undefined and the repeater loop never ran).
+        $relations = [];
+        foreach (($slice['child_tables'] ?? []) as $childDef) {
+            $childTable = is_array($childDef) ? ($childDef['table'] ?? '') : (string) $childDef;
+            if ($childTable === '') {
+                continue;
+            }
+            $fk = Str::singular($rootTable).'_id';
+            $repFields = [];
+            foreach ($this->getFieldsForTable($childTable) as $cf) {
+                $cfName = $cf['name'] ?? '';
+                if ($cfName === '' || $cfName === $fk) {
+                    continue;
+                }
+                $repFields[] = [
+                    'handle' => $cfName,
+                    'label' => $cf['label'] ?? Str::headline($cfName),
+                    'type' => $cf['type'] ?? 'string',
+                    'required' => ! ($cf['nullable'] ?? true),
+                    'options' => $cf['options'] ?? [],
+                ];
+            }
+            $relations[] = [
+                'name' => $childTable,
+                'type' => 'hasMany',
+                'model' => Str::snake(Str::singular($childTable)),
+                'table' => $childTable,
+                'foreign_key' => $fk,
+                'fields' => $repFields,
+            ];
+        }
         $cols = [];
         if (! empty($pages['index']['columns'])) {
             foreach ($pages['index']['columns'] as $c) {
@@ -3477,8 +3563,11 @@ public function analyzeSourceNavigation(string $sourcePath): array
                                 'handle' => $relName,
                                 'type' => 'repeater',
                                 'label' => \Illuminate\Support\Str::headline($relName),
-                                // Repeater sub-fields will be populated from child table columns
-                                'repeater_fields' => [],
+                                'model' => $rel['model'] ?? \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($relName)),
+                                'table' => $rel['table'] ?? $relName,
+                                'foreign_key' => $rel['foreign_key'] ?? '',
+                                // Sub-fields come from the child table's columns
+                                'repeater_fields' => $rel['fields'] ?? [],
                                 'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
                             ],
                         ],
@@ -3698,8 +3787,11 @@ public function analyzeSourceNavigation(string $sourcePath): array
                                 'handle' => $relName,
                                 'type' => 'repeater',
                                 'label' => \Illuminate\Support\Str::headline($relName),
-                                // Repeater sub-fields will be populated from child table columns
-                                'repeater_fields' => [],
+                                'model' => $rel['model'] ?? \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($relName)),
+                                'table' => $rel['table'] ?? $relName,
+                                'foreign_key' => $rel['foreign_key'] ?? '',
+                                // Sub-fields come from the child table's columns
+                                'repeater_fields' => $rel['fields'] ?? [],
                                 'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
                             ],
                         ],

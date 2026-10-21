@@ -572,7 +572,7 @@ final class BlueprintValidator
 
                                             continue;
                                         }
-                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help', 'type', 'label', 'repeater_fields', 'add_button_text'], $fldPath, $errors);
+                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help', 'type', 'label', 'repeater_fields', 'add_button_text', 'model', 'table', 'foreign_key'], $fldPath, $errors);
                                         if (empty($fld['handle']) || ! is_string($fld['handle'])) {
                                             $errors[] = "{$fldPath}.handle must be a non-empty string.";
                                         }

@@ -322,6 +322,7 @@ abstract class BaseSliceWebController extends Controller
         $formClass = $this->getFormClass();
         // A create must never target an existing record through a smuggled id
         $form = $formClass::fromArray($request->except(['id']));
+        $this->captureRepeaterMarkers($request, $form);
 
         $id = $this->getService()->save($form);
         try {
@@ -359,6 +360,7 @@ abstract class BaseSliceWebController extends Controller
         $data = $request->all();
         $data['id'] = $id;
         $form = $formClass::fromArray($data);
+        $this->captureRepeaterMarkers($request, $form);
 
         $this->getService()->save($form);
         $msg = 'Record updated successfully.';
@@ -378,6 +380,30 @@ abstract class BaseSliceWebController extends Controller
 
         return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
             ->with('success', 'Record deleted successfully');
+    }
+
+    /**
+     * Repeater forms submit a hidden _repeaters[] marker per collection so
+     * a collection whose rows were ALL removed still counts as provided
+     * (it submits no array key at all). Mark those DTO properties provided
+     * and normalize their values for the service's child sync.
+     */
+    protected function captureRepeaterMarkers(Request $request, object $form): void
+    {
+        $service = $this->getService();
+        if (! $service instanceof BaseSliceService || ! $form instanceof BaseFormBusinessObject) {
+            return;
+        }
+        $marked = (array) $request->input('_repeaters', []);
+        foreach (array_keys($service->repeaterDefinitions()) as $handle) {
+            if (in_array($handle, $marked, true) || $request->has($handle)) {
+                if (property_exists($form, $handle)) {
+                    $value = $request->input($handle);
+                    $form->{$handle} = is_array($value) ? $value : [];
+                }
+                $form->markProvided($handle);
+            }
+        }
     }
 
     /**

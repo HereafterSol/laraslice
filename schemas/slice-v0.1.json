@@ -167,6 +167,28 @@
         },
         "options": {
           "type": "array"
+        },
+        "model": {
+          "type": "string",
+          "description": "Repeater only: child model handle the collection binds to."
+        },
+        "table": {
+          "type": "string",
+          "description": "Repeater only: child table the collection syncs against."
+        },
+        "foreign_key": {
+          "type": "string",
+          "description": "Repeater only: child table column referencing the root record."
+        },
+        "repeater_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          },
+          "description": "Repeater only: editable child columns."
+        },
+        "add_button_text": {
+          "type": "string"
         }
       },
       "additionalProperties": true
