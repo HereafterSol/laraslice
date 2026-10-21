@@ -253,6 +253,17 @@ Never put Blade `@if` inside a component tag in table slots (it
 breaks component rendering there) — emit ternary-valued props
 instead (empty string = off).
 
+View namespaces (G6): every slice registers its name-variant
+namespaces PLUS a unique path-derived one (`ls_` + path relative to
+the slices base, acronyms kept whole). Same-named slices share the
+plain namespace first-match-wins, so `BaseSliceWebController`
+resolves index/form/show through `ownViewName()` — when the shared
+namespace's winning hint is not the controller's own slice
+directory, it uses the slice's unique namespace. A slice always
+renders its OWN templates; route NAMES are still shared (duplicate
+names resolve to one URI — path-qualified route names are the
+remaining G6 step).
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
