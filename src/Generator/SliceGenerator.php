@@ -1397,12 +1397,15 @@ $bladeIndex = <<<BLADE
         @endphp
         @php
             \$dirUi = \$manifest['ui']['directory'] ?? [];
-            \$tableViews = \$dirUi['views'] ?? ['table'];
+            // Controller-passed values (own manifest) win; the
+            // file-read $dirUi is only a fallback — its relative
+            // path silently misses in compiled views.
+            \$tableViews = \$tableViews ?? \$dirUi['views'] ?? ['table'];
             if (! is_array(\$tableViews) || \$tableViews === []) {
                 \$tableViews = ['table'];
             }
-            \$defaultView = \$dirUi['default_view'] ?? 'table';
-            \$inlineEdit = \$dirUi['inline_edit'] ?? [];
+            \$defaultView = \$defaultView ?? \$dirUi['default_view'] ?? 'table';
+            \$inlineEdit = \$inlineEdit ?? \$dirUi['inline_edit'] ?? [];
             if (! is_array(\$inlineEdit)) {
                 \$inlineEdit = [];
             }
@@ -1439,6 +1442,7 @@ $bladeIndex = <<<BLADE
             :status-key="\$statusKey"
             :inline-edit="\$inlineEdit"
             :date-key="\$dateKey"
+            :inline-update-url="\$inlineUpdateUrl ?? null"
             density="compact"
         >
 {$rowActionsSlot}

@@ -195,7 +195,8 @@ class SliceManager
         $document = is_array($slice->raw['ui']['show']['document'] ?? null);
         $matrix = is_array($slice->raw['ui']['directory']['matrix'] ?? null);
         $report = is_array($slice->raw['ui']['directory']['report'] ?? null);
-        if (! $document && ! $matrix && ! $report) {
+        $inline = ! empty($slice->raw['ui']['directory']['inline_edit'] ?? []);
+        if (! $document && ! $matrix && ! $report && ! $inline) {
             return;
         }
         try {
@@ -235,6 +236,11 @@ class SliceManager
                 Route::middleware($middleware)
                     ->get($uriPrefix.'/report', [$controllerClass, 'report'])
                     ->name($namePrefix.'.report');
+            }
+            if ($inline && ! Route::has($namePrefix.'.inline')) {
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/{id}/inline', [$controllerClass, 'inlineUpdate'])
+                    ->name($namePrefix.'.inline');
             }
         } catch (\Throwable) {
             // Declared routes must never break slice booting.

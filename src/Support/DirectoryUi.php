@@ -50,6 +50,14 @@ final class DirectoryUi
             }
             $def = $fieldIndex[(string) $key] ?? [];
             $options = self::normalizeOptions($def['options'] ?? null);
+            if ($options === []) {
+                // The value set may live only in the directory's
+                // filter declarations (literal options, or
+                // options_from: distinct:<col>) — the inline
+                // editor and other consumers need it on the
+                // column itself.
+                $options = self::filterDeclaredOptions($manifest, (string) $key, $sliceName);
+            }
             $columns[] = array_filter([
                 'key' => $key,
                 'label' => $label,
@@ -662,6 +670,51 @@ final class DirectoryUi
      *
      * @return array<string, string>
      */
+    /**
+     * Options for a column from the directory's filter
+     * declarations when the field itself declares none.
+     */
+    protected static function filterDeclaredOptions(array $manifest, string $handle, string $sliceName): array
+    {
+        $directory = $manifest['ui']['directory'] ?? [];
+        foreach (['quick_filters', 'sidebar_filters'] as $group) {
+            foreach ((array) ($directory[$group] ?? []) as $filter) {
+                if (! is_array($filter) || ($filter['handle'] ?? null) !== $handle) {
+                    continue;
+                }
+                if (! empty($filter['options'])) {
+                    return self::normalizeOptions($filter['options']);
+                }
+                $from = (string) ($filter['options_from'] ?? '');
+                if (str_starts_with($from, 'distinct:')) {
+                    $column = substr($from, strlen('distinct:'));
+                    try {
+                        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                        // Models are usually the singular of the
+                        // slice name (Leaves -> Leaf).
+                        $modelClass = $manager->modelClass(\Illuminate\Support\Str::studly($sliceName))
+                            ?? $manager->modelClass(\Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($sliceName)));
+                        if ($modelClass && class_exists($modelClass)) {
+                            $values = $modelClass::query()->distinct()->pluck($column);
+                            $map = [];
+                            foreach ($values as $value) {
+                                if (is_scalar($value) && (string) $value !== '') {
+                                    $map[(string) $value] = \Illuminate\Support\Str::headline((string) $value);
+                                }
+                            }
+
+                            return $map;
+                        }
+                    } catch (\Throwable) {
+                        return [];
+                    }
+                }
+            }
+        }
+
+        return [];
+    }
+
     protected static function normalizeOptions(mixed $options): array
     {
         $map = [];

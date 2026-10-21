@@ -122,10 +122,24 @@ abstract class BaseSliceWebController extends Controller
                 'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
                     ? route($this->resolveRouteName('matrix'), $this->routeParameters())
                     : null,
+                // Relative path: the template is consumed by a
+                // same-origin fetch, and route()'s absolute form
+                // would pin APP_URL's host into the page.
+                'inlineUpdateUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('inline'))
+                    ? route($this->resolveRouteName('inline'), $this->routeParameters(['id' => '__ID__']), false)
+                    : null,
                 'quickFilters' => $quickFilters,
                 'sidebarFilters' => $sidebarFilters,
                 'activeFilters' => $filter instanceof BaseFilter ? $filter->getCriteria() : [],
                 'uiPresentationCreate' => $uiConfig['presentation']['create'] ?? 'page',
+                // Directory UI values come from the controller's own
+                // manifest (G5 own-manifest-first). Generated blades
+                // historically re-read the manifest from a relative
+                // file path, which silently yields [] in compiled
+                // views — controller values take precedence there.
+                'inlineEdit' => array_values((array) ($uiConfig['directory']['inline_edit'] ?? [])),
+                'tableViews' => array_values((array) ($uiConfig['directory']['views'] ?? ['table'])),
+                'defaultView' => (string) ($uiConfig['directory']['default_view'] ?? 'table'),
             ]
         );
 
@@ -476,6 +490,58 @@ abstract class BaseSliceWebController extends Controller
      * slice's own document template wins; the package's standard
      * document template renders otherwise.
      */
+    /**
+     * Inline field update (standard list pattern P1): persists ONE
+     * field of ONE record from the list's inline editor (e.g. the
+     * status select). The field must be declared in the slice's
+     * own ui.directory.inline_edit, and when the field declares
+     * options the value must be one of them — the declaration is
+     * the allowlist, nothing else is writable through here.
+     */
+    public function inlineUpdate(Request $request, string|int $id)
+    {
+        $field = (string) $request->input('field', '');
+        $manifest = $this->ownManifest();
+        $allowed = (array) ($manifest['ui']['directory']['inline_edit'] ?? []);
+        if ($field === '' || ! in_array($field, $allowed, true)) {
+            return response()->json(['success' => false, 'message' => 'Field is not inline-editable.'], 422);
+        }
+
+        $value = $request->input('value');
+        $optionValues = null;
+        $fieldDefs = [];
+        foreach ((array) ($manifest['fields'] ?? []) as $def) {
+            if (is_array($def) && isset($def['handle'])) {
+                $fieldDefs[$def['handle']] = $def;
+            }
+        }
+        foreach ((array) ($manifest['models'] ?? []) as $model) {
+            foreach ((array) ($model['fields'] ?? []) as $def) {
+                if (is_array($def) && isset($def['handle'])) {
+                    $fieldDefs[$def['handle']] = $def;
+                }
+            }
+        }
+        if (isset($fieldDefs[$field]['options']) && is_array($fieldDefs[$field]['options'])) {
+            $optionValues = [];
+            foreach ($fieldDefs[$field]['options'] as $k => $opt) {
+                $optionValues[] = (string) (is_array($opt) ? ($opt['value'] ?? $k) : (is_int($k) ? $opt : $k));
+            }
+        }
+        if ($optionValues !== null && ! in_array((string) $value, $optionValues, true)) {
+            return response()->json(['success' => false, 'message' => 'Value is not a declared option.'], 422);
+        }
+
+        $service = $this->getService();
+        $record = method_exists($service, 'findModel') ? $service->findModel($id) : null;
+        if (! $record) {
+            return response()->json(['success' => false, 'message' => 'Record not found.'], 404);
+        }
+        $record->forceFill([$field => $value])->save();
+
+        return response()->json(['success' => true]);
+    }
+
     public function document(string|int $id)
     {
         $this->authorizeSlice('view');
