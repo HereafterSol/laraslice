@@ -12,7 +12,7 @@
             <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js" integrity="sha384-5/joNqFnRyVWzXp99bHot6RHG+EksGp+USSgZwPar7T9SD9PKKER37n/8bXBAZGd" crossorigin="anonymous"></script>
         @endif
     </head>
-    <body class="min-h-screen bg-background text-foreground antialiased font-sans flex flex-col selection:bg-primary/20 selection:text-primary"
+    <body class="min-h-screen bg-background text-foreground antialiased font-sans text-sm flex flex-col selection:bg-primary/20 selection:text-primary"
           x-data="{
               searchOpen: false,
               themeMode: localStorage.getItem('theme:mode') || 'light',
