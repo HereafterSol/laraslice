@@ -8,6 +8,28 @@ class BaseFilter implements IFilterObject
 {
     public ?string $search = null;
 
+    /**
+     * Declared-filter criteria (handle => value), populated by the web
+     * controller from the slice manifest's quick/sidebar filters —
+     * never directly from arbitrary request input. Range filters use
+     * the `<handle>_from` / `<handle>_to` key convention. (G5.)
+     *
+     * @var array<string, mixed>
+     */
+    protected array $criteria = [];
+
+    /** @param array<string, mixed> $criteria */
+    public function setCriteria(array $criteria): void
+    {
+        $this->criteria = $criteria;
+    }
+
+    /** @return array<string, mixed> */
+    public function getCriteria(): array
+    {
+        return $this->criteria;
+    }
+
     public int $page = 1;
 
     public int $limit = 20;

@@ -1301,6 +1301,43 @@ $bladeIndex = <<<BLADE
         </div>
         @endif
 
+        <!-- Sidebar Filters (from ui.directory.sidebar_filters) — declared filters apply server-side (G5) -->
+        @if(!empty(\$sidebarFilters ?? []))
+        <form method="GET" class="mb-4 rounded-2xl border border-border bg-card p-4 shadow-xs">
+            <div class="flex flex-wrap items-end gap-3">
+                @foreach(\$sidebarFilters as \$sf)
+                @php \$sfHandle = \$sf['handle'] ?? ''; \$sfLabel = \$sf['label'] ?? \Illuminate\Support\Str::headline(\$sfHandle); @endphp
+                @if((\$sf['type'] ?? 'select') === 'date_range')
+                <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {{ \$sfLabel }} from
+                    <input type="date" name="{{ \$sfHandle }}_from" value="{{ \$activeFilters[\$sfHandle . '_from'] ?? '' }}" class="h-9 rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
+                </label>
+                <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {{ \$sfLabel }} to
+                    <input type="date" name="{{ \$sfHandle }}_to" value="{{ \$activeFilters[\$sfHandle . '_to'] ?? '' }}" class="h-9 rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
+                </label>
+                @else
+                <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {{ \$sfLabel }}
+                    <select name="{{ \$sfHandle }}" class="h-9 min-w-40 rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground">
+                        <option value="">All</option>
+                        @foreach(\$sf['options'] ?? [] as \$opt)
+                        <option value="{{ \$opt['value'] }}" @selected((string) (\$activeFilters[\$sfHandle] ?? '') === (string) \$opt['value'])>{{ \$opt['label'] }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                @endif
+                @endforeach
+                <div class="flex items-center gap-2">
+                    <x-ui.button type="submit" size="sm">Filter</x-ui.button>
+                    @if(!empty(\$activeFilters ?? []))
+                    <x-ui.button href="{{ request()->url() }}" as="a" variant="outline" size="sm">Clear</x-ui.button>
+                    @endif
+                </div>
+            </div>
+        </form>
+        @endif
+
         <!-- High-Density Data Table with Automatic 3-Dots Action Column -->
         @php
             // Studio YAML bulk_actions (ui.directory.bulk_actions) + DB workflow engine

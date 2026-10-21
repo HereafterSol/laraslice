@@ -39,7 +39,6 @@ abstract class BaseSliceWebController extends Controller
             $filter->withLimit((int) config('laraslice.data_table.max_rows', 1000));
         }
 
-        $pagedList = $this->getService()->getList($filter);
         $formClass = $this->getFormClass();
         $createForm = new $formClass();
 
@@ -47,6 +46,38 @@ abstract class BaseSliceWebController extends Controller
         $uiConfig = $this->getSliceUiConfig();
         $summaryCards = $uiConfig['directory']['summary_cards'] ?? [];
         $quickFilters = $uiConfig['directory']['quick_filters'] ?? [];
+        $sidebarFilters = $uiConfig['directory']['sidebar_filters'] ?? [];
+
+        // G5: declared filters must actually filter. Build the criteria
+        // ONLY from handles the manifest declares (quick + sidebar),
+        // including the `<handle>_from` / `<handle>_to` range inputs of
+        // date_range filters, and hand them to the service via the
+        // filter object. Before this, filter tabs/sidebar declarations
+        // rendered (or didn't) but never narrowed a single row.
+        $relationshipOptions = $this->resolveRelationshipOptions($createForm);
+        if ($filter instanceof BaseFilter) {
+            $criteria = [];
+            foreach (array_merge($quickFilters, $sidebarFilters) as $declared) {
+                $handle = $declared['handle'] ?? null;
+                if (! is_string($handle) || $handle === '') {
+                    continue;
+                }
+                if ($request->filled($handle)) {
+                    $criteria[$handle] = $request->input($handle);
+                }
+                foreach (['from', 'to'] as $suffix) {
+                    $rangeKey = $handle.'_'.$suffix;
+                    if ($request->filled($rangeKey)) {
+                        $criteria[$rangeKey] = $request->input($rangeKey);
+                    }
+                }
+            }
+            if ($criteria !== []) {
+                $filter->setCriteria($criteria);
+            }
+        }
+
+        $pagedList = $this->getService()->getList($filter);
         $summaryData = $this->computeSummaryData($summaryCards);
         // Resolve quick filter options from distinct values
         foreach ($quickFilters as &$qf) {
@@ -57,8 +88,23 @@ abstract class BaseSliceWebController extends Controller
         }
         unset($qf);
 
+        // Resolve sidebar filter select options (distinct values or
+        // related-record labels) into the same value/label shape.
+        foreach ($sidebarFilters as &$sf) {
+            $from = $sf['options_from'] ?? null;
+            if (is_string($from) && str_starts_with($from, 'distinct:')) {
+                $sf['options'] = $this->getDistinctFilterOptions(substr($from, 9));
+            } elseif (is_string($from) && str_starts_with($from, 'relation:')) {
+                $field = substr($from, 9);
+                $base = str_ends_with($field, '_id') ? substr($field, 0, -3) : $field;
+                $map = $relationshipOptions[\Illuminate\Support\Str::camel($base).'Options'] ?? [];
+                $sf['options'] = collect($map)->map(fn ($label, $value) => ['value' => $value, 'label' => (string) $label])->values()->toArray();
+            }
+        }
+        unset($sf);
+
         $viewData = array_merge(
-            $this->resolveRelationshipOptions($createForm),
+            $relationshipOptions,
             [
                 'pagedList' => $pagedList,
                 'filter' => $filter,
@@ -70,6 +116,8 @@ abstract class BaseSliceWebController extends Controller
                 'summaryCards' => $summaryCards,
                 'summaryData' => $summaryData,
                 'quickFilters' => $quickFilters,
+                'sidebarFilters' => $sidebarFilters,
+                'activeFilters' => $filter instanceof BaseFilter ? $filter->getCriteria() : [],
                 'uiPresentationCreate' => $uiConfig['presentation']['create'] ?? 'page',
             ]
         );
@@ -463,17 +511,11 @@ abstract class BaseSliceWebController extends Controller
      */
     protected function getSliceUiConfig(): array
     {
-        try {
-            // Try SliceManager first
-            $slice = app(\LaraSlice\Core\Discovery\SliceManager::class)->getSliceByRoutePrefix($this->getRoutePrefix());
-            if (!empty($slice->ui)) {
-                return (array) $slice->ui;
-            }
-        } catch (\Throwable $e) {
-            // Fall through to file-based lookup
-        }
-
-        // Fallback: read slice.yaml directly
+        // The controller's OWN manifest wins (G5): route-prefix lookup
+        // is name-based and silently resolves a different slice when
+        // names collide — the Tasks index once rendered another slice's
+        // quick filters and none of its own sidebar filters. Same
+        // own-manifest principle as show() (F3).
         try {
             $ref = new \ReflectionClass($this);
             $ctrlPath = $ref->getFileName();
@@ -491,7 +533,16 @@ abstract class BaseSliceWebController extends Controller
                 return $data['ui'] ?? [];
             }
         } catch (\Throwable $e) {
-            // Silently fail
+            // Fall through to the registry lookup
+        }
+
+        try {
+            $slice = app(\LaraSlice\Core\Discovery\SliceManager::class)->getSliceByRoutePrefix($this->getRoutePrefix());
+            if (!empty($slice->ui)) {
+                return (array) $slice->ui;
+            }
+        } catch (\Throwable $e) {
+            // No registry entry either
         }
 
         return [];

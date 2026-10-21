@@ -317,6 +317,48 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         if ($search = $filter->getSearch()) {
             $this->applySearch($query, $search);
         }
+
+        // Declared-filter criteria (G5): the controller only ever sets
+        // keys the slice manifest declares, so applying them generically
+        // here is safe — equality, whereIn for arrays, and the
+        // `<handle>_from` / `<handle>_to` range convention.
+        if (method_exists($filter, 'getCriteria')) {
+            $model = null;
+            try {
+                $modelClass = $this->getModelClass();
+                $model = new $modelClass;
+            } catch (\Throwable $e) {
+                $model = null;
+            }
+            foreach ($filter->getCriteria() as $key => $value) {
+                if ($value === null || $value === '' || $value === []) {
+                    continue;
+                }
+                // A declared filter whose column the table does not have
+                // (stale manifest, partial port) is skipped, never a 500.
+                // The check asks the model's own connection; if it cannot
+                // run at all, the criterion still applies (fail open).
+                $column = str_ends_with($key, '_from') ? substr($key, 0, -5) : (str_ends_with($key, '_to') ? substr($key, 0, -3) : $key);
+                if ($model !== null && ! in_array($column, $model->getFillable(), true)) {
+                    try {
+                        if (! $model->getConnection()->getSchemaBuilder()->hasColumn($model->getTable(), $column)) {
+                            continue;
+                        }
+                    } catch (\Throwable $e) {
+                        // Schema check unavailable — apply the criterion.
+                    }
+                }
+                if (str_ends_with($key, '_from')) {
+                    $query->where(substr($key, 0, -5), '>=', $value);
+                } elseif (str_ends_with($key, '_to')) {
+                    $query->where(substr($key, 0, -3), '<=', $value);
+                } elseif (is_array($value)) {
+                    $query->whereIn($key, $value);
+                } else {
+                    $query->where($key, $value);
+                }
+            }
+        }
     }
 
     /** Create a base query that subclasses may scope to an aggregate or tenant. */

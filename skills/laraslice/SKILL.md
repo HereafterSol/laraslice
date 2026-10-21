@@ -231,6 +231,17 @@ both use it: a slice generated without a declared `ui.directory`
 still gets inferred columns, status/priority quick filters, and
 money summary cards in its manifest. Declared columns always win.
 
+Declared filters APPLY: the web controller builds filter criteria
+only from handles the manifest declares (`ui.directory.quick_filters`
++ `sidebar_filters`, including `<handle>_from`/`<handle>_to` inputs
+of `date_range` filters) and the base service applies them to the
+list query (equality / whereIn / ranges; a declared column the table
+lacks is skipped, never a 500). The generated index renders the
+sidebar filters as a GET panel with resolved select options
+(`distinct:` values or `relation:` labels). UI config resolution is
+own-manifest-first — route-prefix/name lookups mis-resolve when
+slice names collide.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
