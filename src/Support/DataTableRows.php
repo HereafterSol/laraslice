@@ -101,6 +101,16 @@ class DataTableRows
                 }
             }
 
+            // Every row carries the record's key under a reserved
+            // name so row-level JS (inline updates, transitions)
+            // can address the record even when `id` is not one of
+            // the declared columns.
+            if ($item instanceof Model) {
+                $row['__id'] = $item->getKey();
+            } elseif (is_object($item) && isset($item->id)) {
+                $row['__id'] = $item->id;
+            }
+
             if ($extra !== null) {
                 $row = array_merge($row, $extra($item));
             }

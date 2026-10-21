@@ -22,6 +22,7 @@
     'defaultView' => 'table',    // YAML ui.directory.default_view
     'statusKey' => 'status',     // column key used for board columns
     'inlineEdit' => [],          // YAML ui.directory.inline_edit e.g. ['status']
+    'inlineUpdateUrl' => null,   // POST endpoint template (.../{id}/inline with __ID__) for plain inline edits
     'dateKey' => null,           // preferred date column for calendar view
     'density' => 'comfortable',  // comfortable | compact (ERP high-density grids)
 ])
@@ -66,6 +67,7 @@
         defaultView: @js($defaultView ?: 'table'),
         statusKey: @js($statusKey ?: 'status'),
         inlineEdit: @js(array_values($inlineEdit ?: [])),
+        inlineUpdateUrl: @js($inlineUpdateUrl),
         dateKey: @js($dateKey),
         workflowTransitionUrlTemplate: @js(
             \Illuminate\Support\Facades\Route::has('workflows.transition')
@@ -367,6 +369,24 @@
                                                 <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
                                             </template>
                                         </select>
+                                        {{-- Plain inline edit (P1 status select): no workflow engine — the
+                                             field's declared options post to the slice's inline endpoint. --}}
+                                        <select
+                                            x-show="(workflowTransitions || []).length === 0 && inlineUpdateUrl"
+                                            x-cloak
+                                            class="h-8 min-w-[6.5rem] max-w-[9rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                                            :value="item.r['{{ $col['key'] }}__raw'] || ''"
+                                            @change="applyInlineUpdate(item.r, '{{ $col['key'] }}', $event.target.value)"
+                                        >
+                                            @foreach (($col['options'] ?? []) as $optKey => $optVal)
+                                                @php
+                                                    if (is_array($optVal)) { $ov = $optVal['value'] ?? $optKey; $ol = $optVal['label'] ?? $ov; }
+                                                    elseif (is_int($optKey)) { $ov = $optVal; $ol = $optVal; }
+                                                    else { $ov = $optKey; $ol = $optVal; }
+                                                @endphp
+                                                <option value="{{ $ov }}">{{ $ol }}</option>
+                                            @endforeach
+                                        </select>
                                     </div>
                                 </td>
                             @elseif (!empty($col['html']))
@@ -490,6 +510,7 @@ if (typeof window.blatDataTable === 'undefined') {
             },
             colVisible(key) { return !this.hiddenCols.includes(key); },
             inlineEdit: cfg.inlineEdit || [],
+            inlineUpdateUrl: cfg.inlineUpdateUrl || null,
             dateKey: cfg.dateKey || null,
             workflowTransitionUrlTemplate: cfg.workflowTransitionUrlTemplate || null,
             calCursor: new Date(),
@@ -553,7 +574,7 @@ if (typeof window.blatDataTable === 'undefined') {
             },
             async applyInlineTransition(row, transitionSlug) {
                 if (!transitionSlug || !this.workflowSlice) return;
-                const id = row[this.rowKey] ?? row.id;
+                const id = row[this.rowKey] ?? row.__id ?? row.id;
                 if (!id) { alert('Missing record id'); return; }
                 let url = this.workflowTransitionUrlTemplate;
                 if (!url && this.workflowBulkUrl) {
@@ -584,6 +605,33 @@ if (typeof window.blatDataTable === 'undefined') {
                     const wt = (this.workflowTransitions || []).find(t => t.slug === transitionSlug);
                     if (wt && this.statusKey) {
                         row[this.statusKey + '__raw'] = wt.label || transitionSlug;
+                    }
+                    window.location.reload();
+                } catch (e) {
+                    alert(e.message || String(e));
+                }
+            },
+            async applyInlineUpdate(row, field, value) {
+                if (!this.inlineUpdateUrl || !field) return;
+                const id = row[this.rowKey] ?? row.__id ?? row.id;
+                if (!id) { alert('Missing record id'); return; }
+                const url = this.inlineUpdateUrl.replace('__ID__', encodeURIComponent(id));
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': this.csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({ field: field, value: value }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.success === false) {
+                        alert(data.message || 'Update failed');
+                        window.location.reload();
+                        return;
                     }
                     window.location.reload();
                 } catch (e) {

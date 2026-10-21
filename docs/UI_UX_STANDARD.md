@@ -65,9 +65,14 @@ view-switcher.
 
 ## Rollout
 
-Phases S-UI 1 (tokens & shell) → S-UI 2 (list) → S-UI 3 (hub &
-form, incl. overlay single-column forms) → S-UI 4 (dashboard)
-→ S-UI 5 (settings hub). Each phase: build once in the
+Phases S-UI 1 (tokens & shell — DONE) → S-UI 2 (list — the
+filter strip, kebab actions and the inline status select are
+live: `ui.directory.inline_edit` declares editable fields, the
+framework registers `{index}/{id}/inline`, values are guarded
+against the field's declared options, and column options fall
+back to the filter declarations incl. `distinct:`) → S-UI 3
+(hub & form, incl. overlay single-column forms) → S-UI 4
+(dashboard) → S-UI 5 (settings hub). Each phase: build once in the
 foundation, regenerate demo slices (`slice:repair --re-infer-ui`
 and template refresh), verify side-by-side against the
 reference ERP. The Studio follows the same tokens.
