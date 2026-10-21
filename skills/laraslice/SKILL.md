@@ -206,7 +206,9 @@ name-based lookup unreliable) and passes them to the view with live
 relation counts. Declared relations must exist as methods on the model:
 the generator emits them from the manifest relations it is given
 (deduplicated against repeater and foreign-key relations), resolving
-target classes through `SliceManager::modelClass()`, which derives
+target classes through `SliceManager::modelClass()` — including
+`belongsToMany` relations declared with a `pivot: {table,
+foreign_pivot_key, related_pivot_key}` block — which derives
 namespaces from each slice's actual directory path and falls back to a
 filesystem scan so slices shadowed by a duplicate name still resolve.
 
