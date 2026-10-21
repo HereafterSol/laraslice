@@ -39,6 +39,19 @@ abstract class BaseFormBusinessObject implements IBusinessObject
         return $this->providedFields === null || in_array($property, $this->providedFields, true);
     }
 
+    /**
+     * Record a property as supplied by the current request even when its
+     * value is empty — e.g. a repeater whose rows were all removed submits
+     * no array at all, and the service still needs to know the (now empty)
+     * collection was provided so it can sync deletions.
+     */
+    public function markProvided(string $property): void
+    {
+        if ($this->providedFields !== null && ! in_array($property, $this->providedFields, true)) {
+            $this->providedFields[] = $property;
+        }
+    }
+
     public static function fromArray(array $data): static
     {
         $instance = new static;

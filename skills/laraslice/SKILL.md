@@ -168,6 +168,34 @@ Use child sub-tables **only** when an entity has no independent business life wi
   - `POST /orders/{id}/items` (Add line item to order)
   - `DELETE /order-items/{id}` (Delete line item by unique ID)
 
+**Inline line items (repeater fields).** Aggregates whose children are
+edited *inside* the parent form (invoice lines, order items) declare a
+repeater field in `ui.forms.sections[].fields`:
+
+```yaml
+- handle: items            # form collection name; submits as items[n][field]
+  type: repeater
+  label: Items
+  model: invoice_item      # child model handle
+  table: invoice_items     # child table (synced directly)
+  foreign_key: invoice_id  # child column referencing the root record
+  repeater_fields:         # editable child columns (never the FK/tenant/audit)
+    - { handle: name, label: Name, type: string, required: true }
+    - { handle: quantity, label: Quantity, type: decimal, required: true }
+    - { handle: price, label: Price, type: decimal, required: true }
+  add_button_text: Add Item
+```
+
+The generator turns this into a DTO array property, a `hasMany` on the
+root model, and `repeaterDefinitions()` on the service. The base service
+then validates each row, syncs children transactionally on save (insert /
+update-in-place by `id` / delete removed rows), loads them into edit
+forms, and deletes them with the parent. Porter output populates
+`repeater_fields` from the child table's columns, with `required`
+following column nullability. A repeater whose rows are all removed
+still syncs (the component submits a `_repeaters[]` marker), while a
+partial API update that omits the collection leaves children untouched.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
@@ -291,7 +319,7 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 ### Discovery, Blueprint & Scaffolding
 - `php artisan slice:list {--domain=}`: Display all registered slices with Domain, Models, Version, and Status.
 - `php artisan slice:make <SliceName> [<SliceName2> ...] {--domain=} {--workflow} {--field=*} {--flutter}`: Scaffold complete end-to-end vertical slices.
-- `php artisan slice:field <SliceName> [field]`: Enhance an existing slice with new field(s) in a single consolidated migration.
+- `php artisan slice:field <SliceName> [field]`: Enhance an existing slice with new field(s) in a single consolidated migration (October CMS Builder style).
 - `php artisan slice:ai "<prompt>" {--flutter}`: Natural language AI generator that automatically infers slice models, fields, and workflows.
 - `php artisan slice:blueprint:validate <path>`: Validate versioned YAML/JSON blueprints.
 - `php artisan slice:blueprint:plan <path> {--format=table|json}`: Show deterministic schema and file plan before writing code.
@@ -1336,7 +1364,7 @@ LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 
 ---
 
-## Porting non-Laravel sources
+## Porting non-Laravel sources (e.g. Dolibarr)
 
 `slice:port` / Porting Studio accept **any project tree**, not only Laravel.
 
@@ -1346,15 +1374,15 @@ LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 |---------------|-----------|
 | Live DB via `--source-*` | **Preferred** — real tables + row counts |
 | `database/migrations` | Laravel projects |
-| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | legacy ERP/CMS dumps, mysqldump |
+| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | Dolibarr, WordPress dumps, mysqldump |
 | Target app DB | **Never by default** (was a bug). Opt-in: `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` |
 
-### Required for non-Laravel sources
+### Required for non-Laravel (Dolibarr)
 
 Point at the **legacy database** (or ship SQL schema files in the tree):
 
 ```bash
-# Clone or path to the non-Laravel source code
+# Clone or path to Dolibarr code
 php artisan slice:port /path/to/dolibarr \
   --domain=ERP \
   --source-host=127.0.0.1 \

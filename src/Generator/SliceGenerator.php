@@ -143,6 +143,12 @@ class SliceGenerator
         }
 
         // DTO properties strictly for defined fields
+        // F2: repeater (line-item) collections declared in the UI config
+        $repeaterDefinitions = $this->extractRepeaterDefinitions(
+            is_array($options['ui'] ?? null) ? $options['ui'] : [],
+            $tableName
+        );
+
         $dtoFormList = [];
         $dtoListingList = [];
         foreach ($fields as $f) {
@@ -150,6 +156,9 @@ class SliceGenerator
             if (empty($f['hidden']) && ($f['show_in_list'] ?? true)) {
                 $dtoListingList[] = '    '.$this->fieldNormalizer->dtoProperty($f['name'], $f);
             }
+        }
+        foreach (array_keys($repeaterDefinitions) as $repeaterHandle) {
+            $dtoFormList[] = "    public array \${$repeaterHandle} = [];";
         }
         $dtoFormBody = implode("\n", array_filter($dtoFormList));
         $dtoListingBody = implode("\n", array_filter($dtoListingList));
@@ -364,12 +373,19 @@ HTML;
                         $subFieldDefs = [];
                         foreach ($repFields as $rf) {
                             $rfName = $rf['handle'] ?? $rf['name'] ?? '';
-                            $rfLabel = $rf['label'] ?? \Illuminate\Support\Str::headline($rfName);
-                            $rfType = $rf['type'] ?? 'text';
-                            $subFieldDefs[] = "['name' => '{$rfName}', 'label' => '{$rfLabel}', 'type' => '{$rfType}']";
+                            if ($rfName === '') {
+                                continue;
+                            }
+                            $subFieldDefs[] = preg_replace('/\s+/', ' ', var_export([
+                                'name' => $rfName,
+                                'label' => $rf['label'] ?? \Illuminate\Support\Str::headline($rfName),
+                                'type' => $rf['type'] ?? 'string',
+                                'required' => (bool) ($rf['required'] ?? false),
+                                'options' => $rf['options'] ?? [],
+                            ], true));
                         }
                         $subFieldsStr = '[' . implode(', ', $subFieldDefs) . ']';
-                        $cardInputs[] = "<x-ui.repeater name=\"{$fHandle}\" label=\"{$repLabel}\" :fields=\"{$subFieldsStr}\" addButtonText=\"{$addBtn}\" class=\"md:col-span-2 lg:col-span-3\" />";
+                        $cardInputs[] = "<x-ui.repeater name=\"{$fHandle}\" label=\"{$repLabel}\" :fields=\"{$subFieldsStr}\" :initial-items=\"old('{$fHandle}', \$form->{$fHandle} ?? [])\" addButtonText=\"{$addBtn}\" class=\"md:col-span-2 lg:col-span-3\" />";
                         continue;
                     }
 
@@ -587,6 +603,24 @@ PHP;
             }
 
             $modelRelations = '';
+            foreach ($repeaterDefinitions as $repeaterHandle => $repeaterDef) {
+                $childModel = Str::studly(Str::singular($repeaterDef['model'] ?? $repeaterDef['table']));
+                $relMethod = Str::camel($repeaterHandle);
+                $fkExport = var_export($repeaterDef['foreign_key'], true);
+                $targetExport = var_export($childModel, true);
+                $modelRelations .= <<<REL
+
+
+    public function {$relMethod}(): \\Illuminate\\Database\\Eloquent\\Relations\\HasMany
+    {
+        // Resolved among installed slices (and App\\Models) when first used
+        \$class = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$targetExport})
+            ?? throw new \\LogicException('No model class named {$childModel} was found for repeater {$repeaterHandle}.');
+
+        return \$this->hasMany(\$class, {$fkExport});
+    }
+REL;
+            }
             foreach ($fields as $def) {
                 $isForeignKey = ($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id');
                 if (! $isForeignKey) {
@@ -682,6 +716,9 @@ PHP;
             $this->writeFile($sliceDir."/Contracts/{$studlyName}FilterBusinessObject.php", $filterDto);
 
             // 4. Service
+            $repeaterServiceMethod = $repeaterDefinitions === []
+                ? ''
+                : "\n    public function repeaterDefinitions(): array\n    {\n        return ".var_export($repeaterDefinitions, true).";\n    }\n";
             $service = <<<PHP
 <?php
 
@@ -703,6 +740,7 @@ class {$studlyName}SliceService extends BaseSliceService
         return {$studlyName}::class;
     }
 
+{$repeaterServiceMethod}
     protected function mapToForm(Model \$model): IBusinessObject
     {
         return {$studlyName}FormBusinessObject::fromArray(\$model->toArray());
@@ -1746,6 +1784,61 @@ BLADE;
 
             throw $exception;
         }
+    }
+
+    /**
+     * F2: normalize repeater (line-item) field declarations from a UI
+     * config into service-ready definitions keyed by form handle.
+     * Metadata (table / foreign_key / model) defaults from the handle
+     * and the root table when the manifest does not state them.
+     *
+     * @return array<string, array{table: string, foreign_key: string, model: string, fields: array<string, array{label: string, type: string, required: bool, options: array}>}>
+     */
+    protected function extractRepeaterDefinitions(array $uiConfig, string $rootTable): array
+    {
+        $defs = [];
+        foreach (($uiConfig['forms']['sections'] ?? []) as $section) {
+            foreach (($section['fields'] ?? []) as $field) {
+                if (! is_array($field) || ($field['type'] ?? '') !== 'repeater') {
+                    continue;
+                }
+                $handle = $field['handle'] ?? '';
+                if (! is_string($handle) || $handle === '') {
+                    continue;
+                }
+                $table = is_string($field['table'] ?? null) && $field['table'] !== ''
+                    ? $field['table']
+                    : Str::snake($handle);
+                $fields = [];
+                foreach (($field['repeater_fields'] ?? []) as $rf) {
+                    if (! is_array($rf)) {
+                        continue;
+                    }
+                    $rfName = $rf['handle'] ?? $rf['name'] ?? '';
+                    if (! is_string($rfName) || $rfName === '' || $rfName === 'id') {
+                        continue;
+                    }
+                    $fields[$rfName] = [
+                        'label' => $rf['label'] ?? Str::headline($rfName),
+                        'type' => $rf['type'] ?? 'string',
+                        'required' => (bool) ($rf['required'] ?? false),
+                        'options' => is_array($rf['options'] ?? null) ? $rf['options'] : [],
+                    ];
+                }
+                $defs[$handle] = [
+                    'table' => $table,
+                    'foreign_key' => is_string($field['foreign_key'] ?? null) && $field['foreign_key'] !== ''
+                        ? $field['foreign_key']
+                        : Str::singular($rootTable).'_id',
+                    'model' => is_string($field['model'] ?? null) && $field['model'] !== ''
+                        ? $field['model']
+                        : Str::snake(Str::singular($table)),
+                    'fields' => $fields,
+                ];
+            }
+        }
+
+        return $defs;
     }
 
     private function writeFile(string $path, string $contents): void
