@@ -1097,13 +1097,14 @@ PHP;
                 $rowActionsSlot = <<<ACTIONS
             <x-slot:actions>
                 <div class="flex items-center gap-1 justify-end">
-                    <a :href="item.r.show_url" class="size-8 rounded-lg hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border/60" title="View">
+                    <a :href="item.r.show_url" @if((\$presentation['show'] ?? 'page') !== 'page') :data-overlay-url="item.r.show_url" data-overlay-mode="{{ \$presentation['show'] }}" data-overlay-title="View" @endif class="size-8 rounded-lg hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border/60" title="View">
                         <x-lucide-eye class="size-4" />
                     </a>
                     <x-ui.row-actions 
                         edit-url="item.r.edit_url" 
                         delete-url="item.r.delete_url"
                         delete-confirm="Are you sure you want to delete this {$studlyName}?"
+                        edit-overlay="{{ (\$presentation['edit'] ?? 'page') !== 'page' ? \$presentation['edit'] : '' }}
                     />
                 </div>
             </x-slot:actions>
@@ -1112,10 +1113,10 @@ ACTIONS;
                 $rowActionsSlot = <<<ACTIONS
             <x-slot:actions>
                 <div class="flex items-center gap-1 justify-end">
-                    <a :href="item.r.show_url" class="size-8 rounded-lg hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="View">
+                    <a :href="item.r.show_url" @if((\$presentation['show'] ?? 'page') !== 'page') :data-overlay-url="item.r.show_url" data-overlay-mode="{{ \$presentation['show'] }}" data-overlay-title="View" @endif class="size-8 rounded-lg hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="View">
                         <x-lucide-eye class="size-4" />
                     </a>
-                    <a :href="item.r.edit_url" class="size-8 rounded-lg hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                    <a :href="item.r.edit_url" @if((\$presentation['edit'] ?? 'page') !== 'page') :data-overlay-url="item.r.edit_url" data-overlay-mode="{{ \$presentation['edit'] }}" data-overlay-title="Edit" @endif class="size-8 rounded-lg hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                         <x-lucide-pencil class="size-4" />
                     </a>
                     <form method="POST" :action="item.r.delete_url" onsubmit="return confirm('Are you sure you want to delete this {$studlyName}?')" class="inline">
@@ -1138,6 +1139,8 @@ ACTIONS;
                         edit-url="item.r.edit_url"
                         delete-url="item.r.delete_url"
                         delete-confirm="Are you sure you want to delete this {$studlyName}?"
+                        view-overlay="{{ (\$presentation['show'] ?? 'page') !== 'page' ? \$presentation['show'] : '' }}"
+                        edit-overlay="{{ (\$presentation['edit'] ?? 'page') !== 'page' ? \$presentation['edit'] : '' }}
                     />
                 </div>
             </x-slot:actions>
@@ -1185,19 +1188,11 @@ $bladeIndex = <<<BLADE
             </button>
 
             @if(\$can['create'] ?? true)
-            @if((\$uiPresentationCreate ?? 'page') === 'drawer')
-            <x-ui.drawer>
-                <x-ui.drawer-trigger as-child>
-                    <x-ui.button size="sm" class="gap-1.5 shadow-xs font-semibold">
-                        <x-lucide-plus class="size-3.5" />
-                        <span>Add {$studlyName}</span>
-                    </x-ui.button>
-                </x-ui.drawer-trigger>
-                <x-ui.drawer-content>
-                    <x-ui.drawer-header><x-ui.drawer-title>Add {$studlyName}</x-ui.drawer-title></x-ui.drawer-header>
-                    <div id="{$pluralSnake}-drawer-form"></div>
-                </x-ui.drawer-content>
-            </x-ui.drawer>
+            @if((\$presentation['create'] ?? 'page') !== 'page')
+            <button type="button" data-overlay-url="{{ route('{$pluralSnake}.create') }}" data-overlay-mode="{{ \$presentation['create'] }}" data-overlay-title="Add {$studlyName}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-colors cursor-pointer">
+                <x-lucide-plus class="size-3.5" />
+                <span>Add {$studlyName}</span>
+            </button>
             @else
             <x-ui.button href="{{ route('{$pluralSnake}.create') }}" as="a" size="sm" class="gap-1.5 shadow-xs font-semibold">
                 <x-lucide-plus class="size-3.5" />
@@ -1432,12 +1427,57 @@ $bladeIndex = <<<BLADE
         </x-ui.data-table>
     @endif
 </div>
+
+{{-- F7: URL-bound overlay shells — drawer/modal presentations load the canonical route URL's fragment (see the loader below) --}}
+@if(in_array('drawer', \$presentation ?? [], true))
+<x-ui.drawer direction="right">
+    <x-ui.drawer-trigger id="ls-overlay-drawer-trigger" class="hidden"><span></span></x-ui.drawer-trigger>
+    <x-ui.drawer-content>
+        <x-ui.drawer-header><x-ui.drawer-title id="ls-overlay-drawer-title">Details</x-ui.drawer-title></x-ui.drawer-header>
+        <div id="ls-overlay-drawer-body" class="overflow-y-auto px-4 pb-6"></div>
+    </x-ui.drawer-content>
+</x-ui.drawer>
+@endif
+@if(in_array('modal', \$presentation ?? [], true))
+<x-ui.dialog id="ls-overlay-modal">
+    <x-ui.dialog-content class="sm:max-w-3xl">
+        <x-ui.dialog-header><x-ui.dialog-title id="ls-overlay-modal-title">Details</x-ui.dialog-title></x-ui.dialog-header>
+        <div id="ls-overlay-modal-body" class="overflow-y-auto max-h-[75vh]"></div>
+    </x-ui.dialog-content>
+</x-ui.dialog>
+@endif
+@if(array_filter(\$presentation ?? [], fn (\$m) => \$m !== 'page'))
+<script>
+document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-overlay-url]');
+    if (!t || !t.getAttribute('data-overlay-url')) return;
+    e.preventDefault();
+    var mode = t.getAttribute('data-overlay-mode') || 'drawer';
+    var url = t.getAttribute('data-overlay-url');
+    var title = t.getAttribute('data-overlay-title') || '';
+    var body = document.getElementById(mode === 'modal' ? 'ls-overlay-modal-body' : 'ls-overlay-drawer-body');
+    var titleEl = document.getElementById(mode === 'modal' ? 'ls-overlay-modal-title' : 'ls-overlay-drawer-title');
+    if (titleEl) titleEl.textContent = title;
+    if (body) body.innerHTML = '<div class="p-6 text-sm text-muted-foreground">Loading…</div>';
+    if (mode === 'modal') {
+        window.dispatchEvent(new CustomEvent('open-dialog-ls-overlay-modal'));
+    } else {
+        var trigger = document.getElementById('ls-overlay-drawer-trigger');
+        if (trigger) trigger.click();
+    }
+    fetch(url, { headers: { 'X-LaraSlice-Overlay': mode, 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+        .then(function (r) { return r.text(); })
+        .then(function (html) { if (body) body.innerHTML = html; })
+        .catch(function () { if (body) body.innerHTML = '<div class="p-6 text-sm text-destructive">Could not load this screen.</div>'; });
+});
+</script>
+@endif
 @endsection
 BLADE;
             $this->writeFile($sliceDir.'/Resources/views/index.blade.php', $bladeIndex);
 
             $bladeForm = <<<BLADE
-@extends('layouts.app')
+@extends(\$overlayLayout ?? 'layouts.app')
 
 @section('content')
 <div class="w-full max-w-5xl mx-auto space-y-6">
@@ -1493,7 +1533,7 @@ BLADE;
             $this->writeFile($sliceDir.'/Resources/views/edit.blade.php', $bladeForm);
 
             $showView = <<<BLADE
-@extends('layouts.app')
+@extends(\$overlayLayout ?? 'layouts.app')
 
 @section('content')
 @php

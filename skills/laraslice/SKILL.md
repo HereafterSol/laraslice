@@ -242,6 +242,17 @@ sidebar filters as a GET panel with resolved select options
 own-manifest-first — route-prefix/name lookups mis-resolve when
 slice names collide.
 
+Overlay presentation is URL-bound (F7): declare
+`ui.presentation: { create: page|drawer|modal, edit: ..., show: ... }`
+and list-page actions load the screen's CANONICAL route URL as a
+fragment into a drawer/modal shell — the same URL still works
+standalone as a full page. The base controller answers overlay
+fetches (header `X-LaraSlice-Overlay`) with the fragment layout;
+generated form/show blades use `@extends($overlayLayout ?? ...)`.
+Never put Blade `@if` inside a component tag in table slots (it
+breaks component rendering there) — emit ternary-valued props
+instead (empty string = off).
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
