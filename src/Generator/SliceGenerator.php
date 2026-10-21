@@ -1666,6 +1666,57 @@ BLADE;
         </div>
     </x-ui.card>
 
+    <!-- Tier 3: Responsive Sub-Tabs Ribbon -->
+    <div class="border-b border-border flex items-center gap-1 overflow-x-auto">
+        <button 
+            type="button"
+            @click="activeTab = 'overview'; window.history.replaceState(null, '', '?tab=overview')"
+            class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
+            :class="activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        >
+            <x-lucide-file-text class="size-4" />
+            <span>Overview & Details</span>
+        </button>
+
+        @if(\$workflow)
+        <button 
+            type="button"
+            @click="activeTab = 'workflow'; window.history.replaceState(null, '', '?tab=workflow')"
+            class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
+            :class="activeTab === 'workflow' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        >
+            <x-lucide-git-branch class="size-4" />
+            <span>Workflow & Audit Trail</span>
+        </button>
+        @endif
+
+        {{-- Aggregate related records: tabs resolved from the manifest (ui.show.tabs, root model relations, repeater fields) --}}
+        @php \$relatedTabs = \$relatedTabs ?? \LaraSlice\Support\DirectoryUi::relatedTabs('{$studlyName}', \$record ?? null); @endphp
+        @foreach(\$relatedTabs as \$rtab)
+            @if(!empty(\$rtab['handle']))
+            <button
+                type="button"
+                @click="activeTab = '{{ \$rtab['handle'] }}'; window.history.replaceState(null, '', '?tab={{ \$rtab['handle'] }}')"
+                class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
+                :class="activeTab === '{{ \$rtab['handle'] }}' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            >
+                <x-lucide-layers class="size-4" />
+                <span>{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</span>
+                @isset(\$rtab['count'])
+                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold leading-none">{{ \$rtab['count'] }}</span>
+                @endisset
+            </button>
+            @endif
+        @endforeach
+    </div>
+
+    @if(\$workflow)
+        <!-- Workflow Stepper Pipeline -->
+        <x-workflows::stepper :model="\$record" />
+    @endif
+
+    <!-- Tab 1: Overview & Parameters -->
+    <div x-show="activeTab === 'overview'" x-transition class="space-y-6">
     <!-- Tier 2: KPI Metric Strip — declared ui.show.stats (F3c) replace the generic cards -->
     @if(!empty(\$showStats ?? []))
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1700,57 +1751,6 @@ BLADE;
 
     @endif
 
-    @if(\$workflow)
-        <!-- Workflow Stepper Pipeline -->
-        <x-workflows::stepper :model="\$record" />
-    @endif
-
-    <!-- Tier 3: Responsive Sub-Tabs Ribbon -->
-    <div class="border-b border-border flex items-center gap-1 overflow-x-auto">
-        <button 
-            type="button"
-            @click="activeTab = 'overview'; window.history.replaceState(null, '', '?tab=overview')"
-            class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
-            :class="activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
-        >
-            <x-lucide-file-text class="size-4" />
-            <span>Overview & Details</span>
-        </button>
-
-        @if(\$workflow)
-        <button 
-            type="button"
-            @click="activeTab = 'workflow'; window.history.replaceState(null, '', '?tab=workflow')"
-            class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
-            :class="activeTab === 'workflow' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
-        >
-            <x-lucide-git-branch class="size-4" />
-            <span>Workflow & Audit Trail</span>
-        </button>
-        @endif
-
-        {{-- Aggregate related records: tabs resolved from the manifest (ui.show.tabs, root model relations, repeater fields) --}}
-        @php \$relatedTabs = \$relatedTabs ?? \LaraSlice\Support\DirectoryUi::relatedTabs('{$studlyName}', \$record ?? null); @endphp
-        @foreach(\$relatedTabs as \$rtab)
-            @if(!empty(\$rtab['handle']))
-            <button
-                type="button"
-                @click="activeTab = '{{ \$rtab['handle'] }}'; window.history.replaceState(null, '', '?tab={{ \$rtab['handle'] }}')"
-                class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap"
-                :class="activeTab === '{{ \$rtab['handle'] }}' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
-            >
-                <x-lucide-layers class="size-4" />
-                <span>{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</span>
-                @isset(\$rtab['count'])
-                    <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold leading-none">{{ \$rtab['count'] }}</span>
-                @endisset
-            </button>
-            @endif
-        @endforeach
-    </div>
-
-    <!-- Tab 1: Overview & Parameters -->
-    <div x-show="activeTab === 'overview'" x-transition class="space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <!-- Left 2/3 Main Fieldset -->
             <div class="lg:col-span-2 space-y-6">
