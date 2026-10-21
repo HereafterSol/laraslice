@@ -116,6 +116,9 @@ abstract class BaseSliceWebController extends Controller
                 'summaryCards' => $summaryCards,
                 'summaryData' => $summaryData,
                 'presentation' => $this->presentationModes(),
+                'reportUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('report'))
+                    ? route($this->resolveRouteName('report'), $this->routeParameters())
+                    : null,
                 'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
                     ? route($this->resolveRouteName('matrix'), $this->routeParameters())
                     : null,
@@ -185,6 +188,70 @@ abstract class BaseSliceWebController extends Controller
 
         return view($view, [
             'matrix' => $matrix,
+            'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+                ? route($this->resolveRouteName('index'), $this->routeParameters())
+                : url('/'),
+            'routePrefix' => $this->getRoutePrefix(),
+        ]);
+    }
+
+    /**
+     * Report view (G2): grouped aggregates for slices declaring
+     * ui.directory.report, served at {index-uri}/report with an
+     * optional month/year period when the declaration names a
+     * date_field. SliceManager registers the route centrally.
+     */
+    public function report(Request $request)
+    {
+        $this->authorizeSlice('view');
+
+        $manifest = $this->ownManifest();
+        $decl = $manifest['ui']['directory']['report'] ?? null;
+        if (! is_array($decl) || empty($decl['group_by'])) {
+            abort(404);
+        }
+
+        $filterClass = $this->getFilterClass();
+        $filter = new $filterClass($request->all());
+        if ($filter instanceof BaseFilter) {
+            $filter->withLimit(5000);
+            if (! empty($decl['date_field']) && $request->filled('month') && $request->filled('year')) {
+                $month = max(1, min(12, (int) $request->query('month')));
+                $year = max(1970, min(2100, (int) $request->query('year')));
+                $dateField = (string) $decl['date_field'];
+                $filter->setCriteria([
+                    $dateField.'_from' => sprintf('%04d-%02d-01', $year, $month),
+                    $dateField.'_to' => date('Y-m-t', mktime(0, 0, 0, $month, 1, $year)).' 23:59:59',
+                ]);
+            }
+        }
+        $items = $this->getService()->getList($filter)->items;
+
+        $formClass = $this->getFormClass();
+        $options = $this->resolveRelationshipOptions(new $formClass);
+        $groupBy = (string) $decl['group_by'];
+        $base = str_ends_with($groupBy, '_id') ? substr($groupBy, 0, -3) : $groupBy;
+        $labelMap = [];
+        foreach ([$groupBy, \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)).'Options', \Illuminate\Support\Str::camel($base).'Options', \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)).'Options'] as $candidateKey) {
+            if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
+                $labelMap = $options[$candidateKey];
+                break;
+            }
+        }
+
+        $report = \LaraSlice\Support\DirectoryUi::reportFromManifest($manifest, $items, $labelMap);
+        if ($report === null) {
+            abort(404);
+        }
+
+        $own = $this->ownViewName('report');
+        $view = view()->exists($own) ? $own : 'laraslice::directory.report';
+
+        return view($view, [
+            'report' => $report,
+            'hasPeriod' => ! empty($decl['date_field']),
+            'month' => (int) $request->query('month', (int) date('n')),
+            'year' => (int) $request->query('year', (int) date('Y')),
             'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
                 ? route($this->resolveRouteName('index'), $this->routeParameters())
                 : url('/'),

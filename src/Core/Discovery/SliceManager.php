@@ -194,7 +194,8 @@ class SliceManager
     {
         $document = is_array($slice->raw['ui']['show']['document'] ?? null);
         $matrix = is_array($slice->raw['ui']['directory']['matrix'] ?? null);
-        if (! $document && ! $matrix) {
+        $report = is_array($slice->raw['ui']['directory']['report'] ?? null);
+        if (! $document && ! $matrix && ! $report) {
             return;
         }
         try {
@@ -208,7 +209,14 @@ class SliceManager
                 return;
             }
             [, $uriPrefix, $namePrefix] = $m;
-            $controllerClass = $slice->getNamespace().'\\Controllers\\'.Str::studly(Str::singular($slice->name)).'WebController';
+            // The controller class comes from the routes file's own
+            // use statement — deriving it from the slice namespace
+            // breaks on segment casing (Financialaccounting vs
+            // FinancialAccounting) under PSR-4.
+            if (! preg_match("/use\s+([A-Za-z0-9_\\\\]+WebController);/", $contents, $um)) {
+                return;
+            }
+            $controllerClass = $um[1];
             if (! class_exists($controllerClass)) {
                 return;
             }
@@ -222,6 +230,11 @@ class SliceManager
                 Route::middleware($middleware)
                     ->get($uriPrefix.'/matrix', [$controllerClass, 'matrix'])
                     ->name($namePrefix.'.matrix');
+            }
+            if ($report && ! Route::has($namePrefix.'.report')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/report', [$controllerClass, 'report'])
+                    ->name($namePrefix.'.report');
             }
         } catch (\Throwable) {
             // Declared routes must never break slice booting.

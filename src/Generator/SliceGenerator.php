@@ -1192,6 +1192,12 @@ $bladeIndex = <<<BLADE
                 <span>Export</span>
             </button>
 
+            @isset(\$reportUrl)
+            <x-ui.button href="{{ \$reportUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
+                <x-lucide-bar-chart-3 class="size-3.5" />
+                <span>Report</span>
+            </x-ui.button>
+            @endisset
             @isset(\$matrixUrl)
             <x-ui.button href="{{ \$matrixUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
                 <x-lucide-grid-3x3 class="size-3.5" />
