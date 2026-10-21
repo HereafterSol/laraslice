@@ -98,4 +98,93 @@ class DetailCompositionTest extends TestCase
     {
         $this->assertSame([], DirectoryUi::relatedTabsFromManifest([]));
     }
+
+    public function test_show_stats_compute_counts_sums_and_filters(): void
+    {
+        $record = new class
+        {
+            public function tasks(): object
+            {
+                return new FakeStatQuery([
+                    ['status' => 'incomplete'],
+                    ['status' => 'incomplete'],
+                    ['status' => 'completed'],
+                ]);
+            }
+
+            public function projectTimeLogs(): object
+            {
+                return new FakeStatQuery([
+                    ['total_hours' => 4.5],
+                    ['total_hours' => 6.5],
+                ]);
+            }
+
+            public function broken(): object
+            {
+                throw new \RuntimeException('relation exploded');
+            }
+        };
+
+        $manifest = ['ui' => ['show' => ['stats' => [
+            ['handle' => 'open_tasks', 'label' => 'Open Tasks', 'relation' => 'tasks', 'aggregate' => 'count', 'filter' => ['status' => ['incomplete']]],
+            ['handle' => 'all_tasks', 'label' => 'Tasks', 'relation' => 'tasks', 'aggregate' => 'count'],
+            ['handle' => 'hours', 'label' => 'Hours Logged', 'relation' => 'projectTimeLogs', 'aggregate' => 'sum', 'column' => 'total_hours'],
+            ['handle' => 'avg_hours', 'label' => 'Avg Hours', 'relation' => 'projectTimeLogs', 'aggregate' => 'avg', 'column' => 'total_hours'],
+            ['handle' => 'broken', 'label' => 'Broken', 'relation' => 'broken', 'aggregate' => 'count'],
+            ['handle' => 'ghost', 'label' => 'Ghost', 'relation' => 'missingRelation', 'aggregate' => 'count'],
+        ]]]];
+
+        $stats = DirectoryUi::showStatsFromManifest($manifest, $record);
+
+        $this->assertSame(['open_tasks', 'all_tasks', 'hours', 'avg_hours'], array_column($stats, 'handle'), 'broken and missing relations are skipped, not fatal');
+        $this->assertSame('2', $stats[0]['value']);
+        $this->assertSame('3', $stats[1]['value']);
+        $this->assertSame('11', $stats[2]['value'], 'whole sums render without decimals');
+        $this->assertSame('5.5', $stats[3]['value']);
+    }
+
+    public function test_show_stats_empty_without_record_or_defs(): void
+    {
+        $this->assertSame([], DirectoryUi::showStatsFromManifest(['ui' => ['show' => ['stats' => [['relation' => 'tasks']]]]], null));
+        $this->assertSame([], DirectoryUi::showStatsFromManifest([], new class
+        {
+        }));
+    }
+}
+
+/** Minimal relation-query double: filters and aggregates in memory. */
+class FakeStatQuery
+{
+    /** @param list<array<string, mixed>> $rows */
+    public function __construct(private array $rows) {}
+
+    public function whereIn(string $column, array $values): static
+    {
+        $this->rows = array_values(array_filter($this->rows, fn ($r) => in_array($r[$column] ?? null, $values, true)));
+
+        return $this;
+    }
+
+    public function where(string $column, mixed $value): static
+    {
+        $this->rows = array_values(array_filter($this->rows, fn ($r) => ($r[$column] ?? null) === $value));
+
+        return $this;
+    }
+
+    public function count(): int
+    {
+        return count($this->rows);
+    }
+
+    public function sum(string $column): float
+    {
+        return array_sum(array_column($this->rows, $column));
+    }
+
+    public function avg(string $column): float
+    {
+        return $this->count() ? $this->sum($column) / $this->count() : 0.0;
+    }
 }

@@ -261,6 +261,7 @@ abstract class BaseSliceWebController extends Controller
         }
 
         $showView = $this->getViewPrefix().'show';
+        $ownManifest = $this->ownManifest();
         if (view()->exists($showView)) {
             return view($showView, [
                 'record' => $record,
@@ -271,7 +272,10 @@ abstract class BaseSliceWebController extends Controller
                 // controller's own manifest (duplicate slice names make
                 // name-based lookup unreliable) so the show view can
                 // render related-record tabs with live counts.
-                'relatedTabs' => \LaraSlice\Support\DirectoryUi::relatedTabsFromManifest($this->ownManifest(), $record),
+                'relatedTabs' => \LaraSlice\Support\DirectoryUi::relatedTabsFromManifest($ownManifest, $record),
+                // F3c: declared header stats (ui.show.stats) computed
+                // over the record's relations.
+                'showStats' => \LaraSlice\Support\DirectoryUi::showStatsFromManifest($ownManifest, $record),
             ]);
         }
 

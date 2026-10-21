@@ -212,6 +212,16 @@ foreign_pivot_key, related_pivot_key}` block — which derives
 namespaces from each slice's actual directory path and falls back to a
 filesystem scan so slices shadowed by a duplicate name still resolve.
 
+Hub headers can also declare **stats** in YAML (`ui.show.stats`):
+each entry names a `relation`, an `aggregate` (`count`, or `sum`/`avg`
+with a `column`), an optional `filter` map (equality or `whereIn` over
+the related table's columns), and a `label`. The base controller
+computes them via `DirectoryUi::showStats()` and the show template
+renders them as the KPI strip in place of the generic
+record/status/created cards — e.g. an employee hub's Open Tasks
+(filtered by status), Projects, Hours Logged (sum of time-log hours),
+Tickets.
+
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
 
