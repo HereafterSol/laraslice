@@ -106,6 +106,18 @@ abstract class BaseSliceWebController extends Controller
                 if (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
                     $criteria[$handle] = $filterDefaults[$handle];
                 }
+                // Range defaults (progress 0-20% in the source):
+                // default_from / default_to apply while neither
+                // range key appears in the request.
+                if ((array_key_exists('default_from', $declared) || array_key_exists('default_to', $declared))
+                    && ! in_array($handle.'_from', $queryKeys, true) && ! in_array($handle.'_to', $queryKeys, true)) {
+                    if (array_key_exists('default_from', $declared)) {
+                        $criteria[$handle.'_from'] = $declared['default_from'];
+                    }
+                    if (array_key_exists('default_to', $declared)) {
+                        $criteria[$handle.'_to'] = $declared['default_to'];
+                    }
+                }
             }
             if ($criteria !== []) {
                 $filter->setCriteria($criteria);
@@ -204,6 +216,9 @@ abstract class BaseSliceWebController extends Controller
                 'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
                     ? route($this->resolveRouteName('matrix'), $this->routeParameters())
                     : null,
+                'bulkEntryLabel' => ($be = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($this->ownManifest())) !== null
+                    ? ($be['title'] ?? 'Bulk Entry')
+                    : 'Bulk Entry',
                 'bulkEntryUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('bulk_entry'))
                     ? route($this->resolveRouteName('bulk_entry'), $this->routeParameters())
                     : null,

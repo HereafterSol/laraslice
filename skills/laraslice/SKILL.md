@@ -437,6 +437,15 @@ one active timer per user across the log table, a second
 start refused; stop computes `total_hours`/`total_minutes`
 when the log table carries them).
 
+**Mind · Body · Heart.** Every system is three files: the
+Mind (`system.yaml` — purpose, journeys, roles as permission
+clubs with per-person overrides, navigation, flows,
+integrations, operations), the Body (`*.ui.yaml` per slice —
+the page-level UI spec), and the Heart (`slice.yaml` — the
+only file that runs). Full guide: `docs/MIND_BODY_HEART.md`.
+The Mind and Body are checked against the Heart; the soul
+(design identity) is declared in the Mind, never a fourth file.
+
 **The fidelity stage (porting).** A port is functional by
 default; REPLICATION is a separate stage. Flow: (1) EXTRACT the
 source app's rendered pages (toolbar actions, filter selects
@@ -460,7 +469,13 @@ relation is `users`); column `label_table`/`label_column` when
 the label table breaks the FK naming convention; the `date`
 formatter. Do NOT add summary cards the source list does not
 have, and match the source's column set — extra columns are
-deltas too.
+deltas too. More vocabulary: range filters declare
+`default_from`/`default_to` (applied while neither range key
+is in the request) and render as `number_range` or
+`date_range` in the drawer; the bulk-entry toolbar button
+takes its label from the declaration's `title` (Mark
+Attendance); a calendar-default list renders its month grid
+even with zero records instead of the empty state.
 
 **Components:** BlatUI first — see `docs/UI-COMPONENT-MAPPING.md`
 (`data-table`, `stat`, `tabs`, `chart`, `kanban`, `gantt`,

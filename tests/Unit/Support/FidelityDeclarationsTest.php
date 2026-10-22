@@ -50,4 +50,20 @@ class FidelityDeclarationsTest extends TestCase
         $tabs = file_get_contents(dirname(__DIR__, 3).'/resources/stubs/starter/views/components/ui/filter-tabs.blade.php');
         $this->assertStringContainsString('__all__', $tabs);
     }
+
+    public function test_stage_two_markers(): void
+    {
+        $mgr = file_get_contents(dirname(__DIR__, 3).'/src/Core/Discovery/SliceManager.php');
+        $this->assertStringContainsString('(j) Fidelity', $mgr);
+        $this->assertStringContainsString('(k) Fidelity', $mgr);
+
+        $gen = file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
+        $this->assertStringContainsString('number_range', $gen);
+        $this->assertStringContainsString('bulkEntryLabel', $gen);
+        $this->assertStringContainsString("!== 'calendar'", $gen);
+
+        $ctl = file_get_contents(dirname(__DIR__, 3).'/src/Core/Base/BaseSliceWebController.php');
+        $this->assertStringContainsString('default_from', $ctl);
+        $this->assertStringContainsString('bulkEntryLabel', $ctl);
+    }
 }

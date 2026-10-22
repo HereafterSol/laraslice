@@ -561,6 +561,33 @@ class SliceManager
                             $vChanged = true;
                         }
                     }
+                    if ($base === 'index.blade.php') {
+                        // (j) Fidelity: a calendar-default list must
+                        // show its (possibly empty) month grid, not
+                        // the empty state — the source calendar page
+                        // renders with zero records.
+                        if (str_contains($vContent, '@if (count($rows) === 0)') && ! str_contains($vContent, "?? 'table') !== 'calendar'")) {
+                            $vContent = str_replace(
+                                '@if (count($rows) === 0)',
+                                "@if (count(\$rows) === 0 && (\$defaultView ?? 'table') !== 'calendar')",
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php') {
+                        // (k) Fidelity: the bulk-entry toolbar button
+                        // takes the slice's declared title (Mark
+                        // Attendance), not the generic label.
+                        if (str_contains($vContent, '<span>Bulk Entry</span>')) {
+                            $vContent = str_replace(
+                                '<span>Bulk Entry</span>',
+                                '<span>{{ $bulkEntryLabel ?? \'Bulk Entry\' }}</span>',
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
                         // (d) Declared-view toolbar buttons (matrix /
                         // report / bulk entry) — the controller passes
