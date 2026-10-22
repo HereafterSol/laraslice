@@ -221,7 +221,7 @@ class SlicePortService
         }
 
         $tenancy = $this->detectMultiTenancy($tables);
-        $classified = $this->classifyTables($tables);
+        $classified = $this->classifyTables($tables, $this->servedRootTables($cleanPath));
         $mappingResult = $this->buildSliceMapping($classified, $domain);
         $sliceMapping = $mappingResult['mapping'];
         $unmappedPivots = $mappingResult['unmapped_pivots'];
@@ -1185,7 +1185,40 @@ PHP;
         return \Illuminate\Support\Str::studly($name);
     }
 
-    private function classifyTables(array $tables): array
+    /**
+     * Tables the source application serves through its own model or
+     * controller (app/Models/Holiday.php, HolidayController) are
+     * standalone modules by the source's own architecture — the
+     * classifier must never demote them to child entities of another
+     * slice, however their columns are named. Returns table names.
+     *
+     * @return array<int, string>
+     */
+    private function servedRootTables(string $sourcePath): array
+    {
+        $served = [];
+        foreach (['app'.DIRECTORY_SEPARATOR.'Models', 'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'] as $rel) {
+            $dir = $sourcePath.DIRECTORY_SEPARATOR.$rel;
+            if (! is_dir($dir)) {
+                continue;
+            }
+            $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
+            foreach ($files as $file) {
+                if ($file->getExtension() !== 'php') {
+                    continue;
+                }
+                $base = $file->getBasename('.php');
+                $base = preg_replace('/Controller$/', '', $base);
+                if ($base !== '' && $base !== 'Controller') {
+                    $served[] = Str::plural(Str::snake($base));
+                }
+            }
+        }
+
+        return array_values(array_unique($served));
+    }
+
+    private function classifyTables(array $tables, array $servedRoots = []): array
 
     {
         $classified = [
@@ -1289,10 +1322,28 @@ PHP;
                 continue;
             }
 
-            // Determine if table is a child entity of an existing root
+            // Determine if table is a child entity of an existing root.
+            // Two corroboration rules keep standalone modules out of
+            // the child bucket: (1) a table the source serves through
+            // its own model/controller is a root by the source's own
+            // architecture; (2) foreign keys here are inferred from
+            // column NAMES — a link whose column is not an integer
+            // type (a TEXT event_id is a label, not a reference) is
+            // not evidence of containment.
             $isChild = false;
-            if (! $isCanonicalRoot) {
+            if (! $isCanonicalRoot && ! in_array($tName, $servedRoots, true)) {
+                $columnTypes = [];
+                foreach ($tInfo['columns'] ?? [] as $col) {
+                    $colName = is_array($col) ? ($col['name'] ?? '') : ($col->name ?? '');
+                    $colType = is_array($col) ? ($col['type'] ?? '') : ($col->type_name ?? $col->type ?? '');
+                    if ($colName !== '') {
+                        $columnTypes[$colName] = strtolower((string) $colType);
+                    }
+                }
                 foreach ($tInfo['foreign_keys'] as $fk) {
+                    if (isset($columnTypes[$fk]) && ! preg_match('/int|serial/', $columnTypes[$fk])) {
+                        continue;
+                    }
                     $base = preg_replace('/_id$/', '', $fk);
                     if (in_array($base, $ignoredInDegreeKeys, true)) {
                         continue;

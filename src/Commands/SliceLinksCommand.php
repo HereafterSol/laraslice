@@ -21,6 +21,8 @@ use LaraSlice\Core\Discovery\SliceManager;
  *    (the later registration wins the key) or names that differ only
  *    by spacing/case (normalized lookups can only pick one) are
  *    reported from SliceManager::nameCollisions().
+ *  - no table is claimed by two distinctly-named active slices
+ *    (cross-port table ownership — see Check 4).
  *
  * Exits non-zero when problems are found (CI-friendly). Writes nothing.
  */
@@ -144,6 +146,28 @@ final class SliceLinksCommand extends Command
                     ? "duplicate slice name — the later registration wins the registry key: {$list}"
                     : "names collide when normalized — name-based lookups resolve deterministically to one of: {$list}",
             ];
+        }
+
+        // Check 4: table ownership. When two active slices claim the
+        // same table (the classic cross-port collision: two source
+        // apps ported into one install, both owning `invoices`),
+        // their models write through each other and the richer slice
+        // is shadowed by whichever registered its routes last. The
+        // remedy is a porter-level decision (prefix one port's
+        // tables); this check makes the collision impossible to miss.
+        // Scope: distinctly-named claimants that survived registration
+        // — same-name overwrites never reach this loop and are
+        // reported by Check 3 instead.
+        $owners = [];
+        foreach ($manager->getActiveSlices() as $slice) {
+            foreach ($manager->getSliceTables($slice) as $table) {
+                $owners[$table][$slice->name.' @ '.$slice->path] = true;
+            }
+        }
+        foreach ($owners as $table => $claimants) {
+            if (count($claimants) > 1) {
+                $problems[] = ['table:'.$table, 'claimed by '.count($claimants).' active slices — models write through each other: '.implode('; ', array_keys($claimants))];
+            }
         }
 
         $this->info("Checked {$checked} navigable slices and ".count($claims)." page-route names.");
