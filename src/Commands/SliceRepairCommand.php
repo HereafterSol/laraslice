@@ -23,7 +23,10 @@ class SliceRepairCommand extends Command
         $manager->discover();
 
         $name = $this->argument('slice');
-        $slices = $name ? array_filter([$manager->getSlice($name)]) : $manager->getAllSlices();
+        // Repair iterates every DISCOVERED manifest, not just the
+        // name-keyed registry: shadowed twin trees are booted and
+        // serving pages, so their blades need the upgrades too.
+        $slices = $name ? array_filter([$manager->getSlice($name)]) : $manager->discoveredSlices();
         if ($name && $slices === []) {
             $this->error("Slice [{$name}] not found.");
 
