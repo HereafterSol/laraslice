@@ -74,6 +74,7 @@ class DataTableRows
                             (string) ($column['badge_from'] ?? 'priority')
                         ),
                         'progress_bar' => static::progressBar((float) $val),
+                        'timer' => static::resolveTimer($item),
                         'date' => static::formatDateValue($val, 'date'),
                         'date_time' => static::formatDateValue($val, 'datetime'),
                         'date_overdue' => static::dateOverdue($val),
@@ -195,6 +196,34 @@ class DataTableRows
      * comma-separated name string. Ids are batch-resolved
      * against the users table when possible.
      */
+    /**
+     * List timer cell (P11 extension): the listing BO exposes
+     * timer_start_url / timer_stop_url / timer_running (+ an
+     * optional timer_elapsed label); the cell renders the actual
+     * start/stop forms so a timer can be driven from the list,
+     * exactly like the source system's timer column.
+     */
+    public static function resolveTimer(mixed $item): string
+    {
+        $startUrl = data_get($item, 'timer_start_url');
+        $stopUrl = data_get($item, 'timer_stop_url');
+        $running = (bool) data_get($item, 'timer_running');
+        $token = csrf_token();
+        if ($running && is_string($stopUrl) && $stopUrl !== '') {
+            $elapsed = data_get($item, 'timer_elapsed');
+            $label = is_string($elapsed) && $elapsed !== '' ? 'Stop · '.e($elapsed) : 'Stop';
+
+            return '<form method="POST" action="'.e($stopUrl).'" class="inline"><input type="hidden" name="_token" value="'.e($token).'" />'
+                .'<button type="submit" class="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive/20 cursor-pointer">'.$label.'</button></form>';
+        }
+        if (is_string($startUrl) && $startUrl !== '') {
+            return '<form method="POST" action="'.e($startUrl).'" class="inline"><input type="hidden" name="_token" value="'.e($token).'" />'
+                .'<button type="submit" class="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 cursor-pointer">Start</button></form>';
+        }
+
+        return '—';
+    }
+
     public static function resolveUserStack(mixed $item, string $key, mixed $val, array $column): string
     {
         $raw = $val;

@@ -469,7 +469,27 @@ relation is `users`); column `label_table`/`label_column` when
 the label table breaks the FK naming convention; the `date`
 formatter. Do NOT add summary cards the source list does not
 have, and match the source's column set — extra columns are
-deltas too. More vocabulary: range filters declare
+deltas too. Declared patterns that close the last list gaps: **P13
+import** (`ui.directory.import` — CSV header→field map, optional
+upsert `key`; standard import page + template download),
+**P14 invite** (`ui.directory.invite` + an `actions[]` entry of
+kind `invite` — provisions users for records whose link field is
+empty: account + role club + activation email), **P15 reference
+actions** (`ui.directory.reference_sets` + `actions[]` kind
+`seed` — idempotent upserts from the slice's Resources/data
+file, e.g. Mark Default Holidays), **P16 cross-slice create**
+(`actions[]` kind `route` with `params_from_filter` — carries
+the current filter into another slice's create page, e.g.
+Create Timelog Invoice). A range may declare `placement: strip`
+(renders in the list's top strip, not the drawer) and a
+`columns` + `column_param` + `default_column` triple — the
+date_filter_on choice: the request picks WHICH date column the
+range applies to. A column may declare `formatter: timer`
+(driven by BO-exposed timer URLs/state) and `always_visible:
+true` (the wide-table column discipline never hides it). The
+filters drawer itself is the package partial
+`laraslice::directory.filters-drawer` — one maintenance point
+for every slice. More vocabulary: range filters declare
 `default_from`/`default_to` (applied while neither range key
 is in the request) and render as `number_range` or
 `date_range` in the drawer; the bulk-entry toolbar button
