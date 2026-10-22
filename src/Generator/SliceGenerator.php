@@ -1519,6 +1519,55 @@ document.addEventListener('click', function (e) {
         .then(function (html) { if (body) body.innerHTML = html; })
         .catch(function () { if (body) body.innerHTML = '<div class="p-6 text-sm text-destructive">Could not load this screen.</div>'; });
 });
+// F7 follow-up: submitting a form INSIDE an overlay posts via fetch
+// instead of navigating the whole page to the index. Success closes
+// the overlay and refreshes the page behind it (filters live in the
+// URL, so a reload keeps the operator's place); a 422 renders the
+// standard error banner at the top of the form in place.
+document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || form.tagName !== 'FORM') return;
+    var drawerBody = document.getElementById('ls-overlay-drawer-body');
+    var modalBody = document.getElementById('ls-overlay-modal-body');
+    var body = null, mode = null;
+    if (drawerBody && drawerBody.contains(form)) { body = drawerBody; mode = 'drawer'; }
+    if (modalBody && modalBody.contains(form)) { body = modalBody; mode = 'modal'; }
+    if (!body) return;
+    e.preventDefault();
+    fetch(form.getAttribute('action'), { method: 'POST', body: new FormData(form), headers: { 'X-LaraSlice-Overlay': mode, 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+        .then(function (r) { return r.text().then(function (text) { return { status: r.status, text: text }; }); })
+        .then(function (res) {
+            var json = null;
+            try { json = JSON.parse(res.text); } catch (err) {}
+            if (json && json.success) {
+                if (mode === 'modal') {
+                    window.dispatchEvent(new CustomEvent('close-dialog-ls-overlay-modal'));
+                } else {
+                    var closer = document.querySelector('[data-slot="drawer-close"]');
+                    if (closer) closer.click();
+                }
+                window.location.reload();
+                return;
+            }
+            if (json && json.errors) {
+                var messages = [];
+                Object.keys(json.errors).forEach(function (k) { (json.errors[k] || []).forEach(function (m) { messages.push(m); }); });
+                var old = form.querySelector('[data-ls-overlay-errors]');
+                if (old) old.remove();
+                var div = document.createElement('div');
+                div.setAttribute('data-ls-overlay-errors', '');
+                div.className = 'p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm shadow-xs';
+                div.setAttribute('role', 'alert');
+                var list = messages.map(function (m) { var li = document.createElement('li'); li.textContent = m; return li.outerHTML; }).join('');
+                div.innerHTML = '<div class="font-semibold">Please fix the following:</div><ul class="list-disc pl-9 mt-1 space-y-0.5">' + list + '</ul>';
+                form.prepend(div);
+                div.scrollIntoView({ block: 'nearest' });
+                return;
+            }
+            body.innerHTML = res.text;
+        })
+        .catch(function () {});
+});
 </script>
 @endif
 @endsection

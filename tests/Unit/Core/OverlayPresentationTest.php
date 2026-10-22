@@ -43,6 +43,18 @@ class OverlayPresentationTest extends TestCase
         $this->assertSame(['create' => 'page', 'edit' => 'page', 'show' => 'page'], $c->modes());
     }
 
+    public function test_generated_index_intercepts_overlay_form_submits(): void
+    {
+        // The overlay submit handler ships in the generated index
+        // template: it posts the form in place, and it must read the
+        // target via getAttribute('action') — generated forms carry
+        // submit buttons named "action" that shadow form.action.
+        $generator = file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
+        $this->assertStringContainsString('data-ls-overlay-errors', $generator);
+        $this->assertStringContainsString("form.getAttribute('action')", $generator);
+        $this->assertStringNotContainsString('fetch(form.action', $generator);
+    }
+
     public function test_overlay_request_gets_fragment_layout(): void
     {
         $c = new PresentationProbeController;

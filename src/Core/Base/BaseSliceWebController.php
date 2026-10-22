@@ -933,6 +933,19 @@ abstract class BaseSliceWebController extends Controller
         $this->getService()->save($form);
         $msg = 'Record updated successfully.';
 
+        if ($request->wantsJson() || $request->ajax() || $request->header('Accept') === 'application/json') {
+            $updatedModel = $this->getService()->getItemById($id);
+            $label = $updatedModel->name ?? $updatedModel->title ?? $updatedModel->label ?? ('#'.$id);
+
+            return response()->json([
+                'success' => true,
+                'id' => $id,
+                'label' => $label,
+                'item' => $updatedModel,
+                'message' => $msg,
+            ], 200);
+        }
+
         if ($request->input('action') === 'save_continue') {
             return back()->with('success', $msg);
         }

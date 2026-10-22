@@ -36,6 +36,13 @@ class ChildEntityGenerator
 
         $parentUrlPrefix = $domainSlug ? "{$domainSlug}/{$parentRouteName}" : $parentRouteName;
 
+        // Standalone child routes are named from the URL hierarchy
+        // (G6): a domain-prefixed child (crm/contacts) registers
+        // crm_contacts.*, not the flat contacts.* that collides with
+        // every other domain's same-named child. Root-level children
+        // keep the historic flat name.
+        $childRouteName = str_replace('/', '_', $domainSlug ? "{$domainSlug}/{$childPluralSnake}" : $childPluralSnake);
+
         $namespace = "{$sliceNamespace}\\{$pluralSlice}";
 
         // 1. Generate DTOs
@@ -280,7 +287,7 @@ class {$childStudly}WebController extends BaseSliceWebController
     protected function getRoutePrefix(): string
     {
         if (request()->route('parentId') === null) {
-            return '{$childPluralSnake}.';
+            return '{$childRouteName}.';
         }
         return '{$parentRouteName}.{$childPluralSnake}.';
     }
@@ -346,7 +353,7 @@ PHP;
         }
         $dataTableColumns = implode("\n", $columnLines);
 
-        $editLinkExpr = "\$parentId ? (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', ['id' => \$item->id, 'parentId' => \$parentId]) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$parentId, 'id' => \$item->id])) : (\\Illuminate\\Support\\Facades\\Route::has('{$childPluralSnake}.edit') ? route('{$childPluralSnake}.edit', \$item->id) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$item->{$foreignKey} ?? 0, 'id' => \$item->id]))";
+        $editLinkExpr = "\$parentId ? (\\Illuminate\\Support\\Facades\\Route::has('{$childRouteName}.edit') ? route('{$childRouteName}.edit', ['id' => \$item->id, 'parentId' => \$parentId]) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$parentId, 'id' => \$item->id])) : (\\Illuminate\\Support\\Facades\\Route::has('{$childRouteName}.edit') ? route('{$childRouteName}.edit', \$item->id) : route('{$parentRouteName}.{$childPluralSnake}.edit', ['parentId' => \$item->{$foreignKey} ?? 0, 'id' => \$item->id]))";
 
         $indexBlade = <<<BLADE
 @extends('layouts.app')
@@ -366,7 +373,7 @@ PHP;
             <p class="text-sm text-muted-foreground">{{ \$parentId ? 'Manage {$childPluralLabel} linked with {$parentStudly} #' . \$parentId : 'Manage and organize all {$childPluralLabel}' }}</p>
         </div>
         @if(\$can['create'] ?? true)
-        <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.create') ? route('{$childPluralSnake}.create') : '#') }}" as="a" class="bg-primary text-primary-foreground font-semibold shadow-sm">
+        <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childRouteName}.create') ? route('{$childRouteName}.create') : '#') }}" as="a" class="bg-primary text-primary-foreground font-semibold shadow-sm">
             <x-lucide-plus class="mr-2 h-4 w-4" /> Create {$childSingularLabel}
         </x-ui.button>
         @endif
@@ -385,7 +392,7 @@ PHP;
             <div class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
                 <x-lucide-inbox class="size-8 text-muted-foreground/40" />
                 <p class="text-sm font-medium">No {$childPluralLabel} found</p>
-                <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.create') ? route('{$childPluralSnake}.create') : '#') }}" as="a" variant="outline" size="sm">
+                <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.create', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childRouteName}.create') ? route('{$childRouteName}.create') : '#') }}" as="a" variant="outline" size="sm">
                     Create your first {$childSingularLabel}
                 </x-ui.button>
             </div>
@@ -527,7 +534,7 @@ HTML;
         @if(\$parentId)
             <a href="{{ route('{$parentRouteName}.{$childPluralSnake}.index', ['parentId' => \$parentId]) }}" class="hover:text-foreground transition-colors">{$childPluralLabel}</a>
         @else
-            <a href="{{ \Illuminate\Support\Facades\Route::has('{$childPluralSnake}.index') ? route('{$childPluralSnake}.index') : url('/{$childPluralSnake}') }}" class="hover:text-foreground transition-colors">{$childPluralLabel}</a>
+            <a href="{{ \Illuminate\Support\Facades\Route::has('{$childRouteName}.index') ? route('{$childRouteName}.index') : url('/{$childPluralSnake}') }}" class="hover:text-foreground transition-colors">{$childPluralLabel}</a>
         @endif
         <span>/</span>
         <span class="text-foreground font-medium">{{ \$isNew ? 'Create {$childSingularLabel}' : 'Edit {$childSingularLabel} #' . \$form->id }}</span>
@@ -538,7 +545,7 @@ HTML;
             <x-ui.card-description>Configure {$childSingularLabel} details and link with {$parentStudly}</x-ui.card-description>
         </x-ui.card-header>
         <x-ui.card-content class="p-6">
-            <form action="{{ \$isNew ? (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.store') ? route('{$childPluralSnake}.store') : route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => old('{$foreignKey}', 0)]))) : (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$parentId, 'id' => \$form->id]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.update') ? route('{$childPluralSnake}.update', \$form->id) : route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$form->{$foreignKey} ?? 0, 'id' => \$form->id]))) }}" method="POST" class="space-y-6">
+            <form action="{{ \$isNew ? (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childRouteName}.store') ? route('{$childRouteName}.store') : route('{$parentRouteName}.{$childPluralSnake}.store', ['parentId' => old('{$foreignKey}', 0)]))) : (\$parentId ? route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$parentId, 'id' => \$form->id]) : (\Illuminate\Support\Facades\Route::has('{$childRouteName}.update') ? route('{$childRouteName}.update', \$form->id) : route('{$parentRouteName}.{$childPluralSnake}.update', ['parentId' => \$form->{$foreignKey} ?? 0, 'id' => \$form->id]))) }}" method="POST" class="space-y-6">
                 @csrf
                 @if(!\$isNew) @method('PUT') @endif
                 
@@ -570,7 +577,7 @@ HTML;
                 </div>
                 
                 <div class="flex justify-end gap-3 pt-4 border-t border-border">
-                    <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.index', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childPluralSnake}.index') ? route('{$childPluralSnake}.index') : url('/{$childPluralSnake}')) }}" as="a" variant="outline">Cancel</x-ui.button>
+                    <x-ui.button href="{{ \$parentId ? route('{$parentRouteName}.{$childPluralSnake}.index', ['parentId' => \$parentId]) : (\Illuminate\Support\Facades\Route::has('{$childRouteName}.index') ? route('{$childRouteName}.index') : url('/{$childPluralSnake}')) }}" as="a" variant="outline">Cancel</x-ui.button>
                     <x-ui.button type="submit" class="bg-primary text-primary-foreground font-semibold shadow-xs">Save</x-ui.button>
                 </div>
             </form>
@@ -609,7 +616,7 @@ BLADE;
                 $routeDef = "Route::prefix('{$parentUrlPrefix}/{parentId}')->name('{$parentRouteName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n    Route::resource('{$childPluralSnake}', {$childStudly}WebController::class)->parameters(['{$childPluralSnake}' => 'id'])->except(['show']);\n});\n";
 
                 // Global top-level routes: /crm/contacts or /contacts
-                $routeDef .= "\nRoute::prefix('{$childUrlPrefix}')->name('{$childPluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n"
+                $routeDef .= "\nRoute::prefix('{$childUrlPrefix}')->name('{$childRouteName}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n"
                     ."    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
                     ."    Route::get('/create', [{$childStudly}WebController::class, 'create'])->name('create');\n"
                     ."    Route::post('/', [{$childStudly}WebController::class, 'store'])->name('store');\n"
