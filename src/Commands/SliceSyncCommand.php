@@ -64,12 +64,16 @@ class SliceSyncCommand extends Command
         foreach ($slicesToSync as $slice) {
             $manifestPath = $slice->manifestPath ?? ($slice->path.'/slice.yaml');
             $manifestData = [];
-            if (File::exists($manifestPath)) {
-                $manifestData = json_decode(File::get($manifestPath), true) ?: [];
-            } elseif (File::exists($slice->path.'/slice.yaml')) {
-                try {
-                    $manifestData = \Symfony\Component\Yaml\Yaml::parse(File::get($slice->path.'/slice.yaml')) ?: [];
-                } catch (\Throwable $e) {}
+            // YAML is the canonical manifest — parse through the
+            // repository (YAML wins). JSON-decoding a .yaml path
+            // silently yields an empty manifest, which used to
+            // skip workflow sync for every YAML slice.
+            try {
+                $manifestData = \LaraSlice\Core\Discovery\ManifestRepository::read($manifestPath) ?: [];
+            } catch (\Throwable $e) {
+                if (File::exists($manifestPath)) {
+                    $manifestData = json_decode(File::get($manifestPath), true) ?: [];
+                }
             }
 
             $version = $manifestData['version'] ?? $slice->version ?? 'v1.0.0';
