@@ -28,6 +28,16 @@
 
 ---
 
+## Mind · Body · Heart
+
+Every LaraSlice system is described by three plain files anyone can read:
+
+- **Mind** (`system.yaml`) — *why* the system exists: purpose, user journeys, roles (clubs of permissions, with per-person overrides), navigation, workflows, integrations, templates, and operations like backups and sync. A non-technical owner can read and sign this.
+- **Body** (`*.ui.yaml`, one per slice) — *what every page looks like*: toolbars, filters with their defaults, columns, tabs, dialogs. Extracted from a legacy app when porting; designed up front when planning; audited against the running app.
+- **Heart** (`slice.yaml`, one per slice) — *what runs*: data, fields, relations, UI declarations, workflows, settings. The only runtime truth; the Mind and Body are checked against it, never the reverse.
+
+The **soul** — your design identity (design system, density, refinement) — is declared in the Mind and realized by the Heart's runtime. Porting drafts all three files from the old system; a fresh project writes the Mind first and generates the rest. Full guide: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md).
+
 ## 🌿 Vision, Mission & Philosophy
 
 > *"Sowing Seeds of Innovation, Harvesting Compassion: Bridging Today’s Technology with Tomorrow’s Generosity."*
@@ -104,7 +114,7 @@ LaraSlice operates on a pragmatic **Three-Layer Hybrid Model** ([ADR-001](docs/a
 | **Native AI & MCP Server** | Built-in Model Context Protocol server (`/.well-known/mcp`) allowing AI coding agents to inspect schemas and co-author slices. |
 | **Slice YAML v0.1** *(new in 1.7.0)* | Declarative manifest spec with closed vocabularies (8 field types, 10 UI formatters). YAML describes intent; the fixed component library (BlatUI, shadcn-based) decides rendering. Machine-readable JSON Schema + `php artisan slice:validate`. |
 | **Formatter Pipeline** *(new in 1.7.0)* | Directory columns carry `formatter` metadata YAML → pixels: status pills, progress bars, money breakdowns, overdue dates, code badges — rendered from `slice.yaml` with no per-page code. |
-| **Legacy Porting** *(new in 1.7.0)* | `php artisan slice:port` reverse-engineers legacy systems into slices: Laravel monoliths (migrations), non-Laravel PHP (SQL dumps from legacy ERPs/CMSs), or live databases. Hard-fails on ambiguous source DB instead of guessing. |
+| **Legacy Porting** *(new in 1.7.0)* | `php artisan slice:port` reverse-engineers legacy systems into slices: Laravel monoliths (migrations), non-Laravel PHP (SQL dumps, e.g. Dolibarr), or live databases. Hard-fails on ambiguous source DB instead of guessing. |
 | **Dev Studio Standard** *(new in 1.7.0)* | Unified Dev Studio + CLI contract (`docs/DEV_STUDIO_STANDARD.md`) — the design system every future Slice runtime (NetSlice, PythonSlice, JavaSlice, FlutterSlice) inherits. |
 
 ---
@@ -354,8 +364,8 @@ This copies the core slice from the framework into `app/Slices/Users`. Once publ
 - **Generation Gap Pattern**: Scaffolding separates base definitions in `Generated/Base*.php` from hand-written subclasses in `Models/`.
 - **Upstream Starter Remote**: If the LaraSlice team adds new features to starter slices (e.g. 2FA), simply pull from the starter remote (`git fetch upstream && git merge upstream/main`).
 
-### 3. How does LaraSlice compare to runtime-extension plugin models?
-- **vs. runtime-extension models**: plugin systems that rely on runtime monkey-patching (extending models dynamically at boot) break IDE auto-completion and static analysis (PHPStan). LaraSlice enforces compile-time type safety via clean DTO contracts and Bounded Contexts.
+### 3. How does LaraSlice compare to October CMS or Laravel Breeze?
+- **vs. October CMS**: October CMS relies on runtime monkey-patching (`UserModel::extend()`), which breaks IDE auto-completion and static analysis (PHPStan). LaraSlice enforces compile-time type safety via clean DTO contracts and Bounded Contexts.
 - **vs. Laravel Breeze**: Breeze dumps flat code into monolithic `app/Http/Controllers/` and `app/Models/`. LaraSlice encapsulates complete vertical slices (`Contracts/`, `Models/`, `Migrations/`, `Views/`, `Routes/`, and Flutter clients) under cohesive bounded contexts.
 
 ---

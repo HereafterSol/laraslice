@@ -1219,7 +1219,7 @@ $bladeIndex = <<<BLADE
             @isset(\$bulkEntryUrl)
             <x-ui.button href="{{ \$bulkEntryUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
                 <x-lucide-clipboard-check class="size-3.5" />
-                <span>Bulk Entry</span>
+                <span>{{ \$bulkEntryLabel ?? 'Bulk Entry' }}</span>
             </x-ui.button>
             @endisset
             @if(\$can['create'] ?? true)
@@ -1259,7 +1259,7 @@ $bladeIndex = <<<BLADE
         ]);
     @endphp
 
-    @if (count(\$rows) === 0)
+    @if (count(\$rows) === 0 && (\$defaultView ?? 'table') !== 'calendar')
         <div class="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-foreground rounded-2xl border border-dashed border-border bg-card/50">
             <x-lucide-inbox class="size-8 text-muted-foreground/50" />
             <div>
@@ -1361,7 +1361,16 @@ $bladeIndex = <<<BLADE
                 @foreach(\$sidebarFilters as \$sf)
                 @if((\$sf['ui'] ?? true) === false) @continue @endif
                 @php \$sfHandle = \$sf['handle'] ?? ''; \$sfLabel = \$sf['label'] ?? \Illuminate\Support\Str::headline(\$sfHandle); @endphp
-                @if((\$sf['type'] ?? 'select') === 'date_range')
+                @if((\$sf['type'] ?? 'select') === 'number_range')
+                <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {{ \$sfLabel }} from
+                    <input type="number" name="{{ \$sfHandle }}_from" value="{{ \$activeFilters[\$sfHandle . '_from'] ?? '' }}" class="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
+                </label>
+                <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {{ \$sfLabel }} to
+                    <input type="number" name="{{ \$sfHandle }}_to" value="{{ \$activeFilters[\$sfHandle . '_to'] ?? '' }}" class="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
+                </label>
+                @elseif((\$sf['type'] ?? 'select') === 'date_range')
                 <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     {{ \$sfLabel }} from
                     <input type="date" name="{{ \$sfHandle }}_from" value="{{ \$activeFilters[\$sfHandle . '_from'] ?? '' }}" class="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
