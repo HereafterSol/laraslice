@@ -41,7 +41,8 @@ project workspace.
   `chart` (relation counts grouped by a column, labels and
   group order from the declaration, rendered by `x-ui.chart`).
   Related tabs with counts come from `ui.show.tabs`.
-- **P3 Form** — one card, in-card section headers, labels above
+- **P3 Form** — one card, in-card section headers (collapsible:
+  each section card carries a chevron toggle), labels above
   inputs, quick-add beside selects, rich text for long text,
   in-card save bar (Save / Save & More / Cancel). In an overlay
   (drawer/modal presentation) the same form renders
