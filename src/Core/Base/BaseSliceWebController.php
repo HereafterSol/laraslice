@@ -473,6 +473,7 @@ abstract class BaseSliceWebController extends Controller
                 // F3c: declared header stats (ui.show.stats) computed
                 // over the record's relations.
                 'showStats' => \LaraSlice\Support\DirectoryUi::showStatsFromManifest($ownManifest, $record),
+                'showWidgets' => \LaraSlice\Support\DirectoryUi::showWidgetsFromManifest($ownManifest, $record),
                 ...$this->overlayLayoutData(request()),
                 'documentUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('document'))
                     ? route($this->resolveRouteName('document'), $this->routeParameters(['id' => $id]))

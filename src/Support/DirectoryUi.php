@@ -257,6 +257,151 @@ final class DirectoryUi
      * @param  array<string, mixed>  $manifest
      * @return list<array{handle: string, label: string, value: string}>
      */
+    /**
+     * Declared overview widgets (ui.show.widgets) for a record:
+     * the hub-overview composition layer (S-UI 3). Types:
+     *
+     * - gauge: {value: {relation, aggregate, filter?},
+     *   max: {relation, ...} | {field} | number} -> value/max
+     *   with a computed percent.
+     * - chart: {relation, group_by, chart: donut|pie|bar,
+     *   labels: {value: label}} -> grouped counts.
+     *
+     * A widget that cannot be computed is skipped, never
+     * misreported (same rule as declared stats).
+     */
+    public static function showWidgetsFromManifest(array $manifest, mixed $record = null): array
+    {
+        $defs = $manifest['ui']['show']['widgets'] ?? [];
+        if (! is_array($defs) || $defs === [] || ! is_object($record)) {
+            return [];
+        }
+
+        $widgets = [];
+        foreach ($defs as $def) {
+            if (! is_array($def)) {
+                continue;
+            }
+            $handle = (string) ($def['handle'] ?? '');
+            $type = (string) ($def['type'] ?? '');
+            try {
+                if ($type === 'gauge' && $handle !== '') {
+                    $value = self::widgetAggregate($record, (array) ($def['value'] ?? []));
+                    $maxSpec = $def['max'] ?? null;
+                    $max = is_numeric($maxSpec) ? (float) $maxSpec
+                        : (is_array($maxSpec) && isset($maxSpec['field'])
+                            ? (float) (data_get($record, (string) $maxSpec['field']) ?? 0)
+                            : (is_array($maxSpec) ? self::widgetAggregate($record, $maxSpec) : null));
+                    if ($value === null || $max === null || $max <= 0) {
+                        continue;
+                    }
+                    $widgets[] = [
+                        'handle' => $handle,
+                        'type' => 'gauge',
+                        'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                        'value' => $value,
+                        'max' => $max,
+                        'percent' => max(0.0, min(100.0, round($value / $max * 100, 1))),
+                        'display' => self::trimNumber($value).' / '.self::trimNumber($max),
+                    ];
+                } elseif ($type === 'chart' && $handle !== '') {
+                    $relation = (string) ($def['relation'] ?? '');
+                    $groupBy = (string) ($def['group_by'] ?? '');
+                    if ($relation === '' || $groupBy === '' || ! method_exists($record, $relation)) {
+                        continue;
+                    }
+                    $items = $record->{$relation}()->limit(500)->get();
+                    $counts = [];
+                    foreach ($items as $item) {
+                        $gv = data_get($item, $groupBy);
+                        if ($gv === null || ! is_scalar($gv)) {
+                            continue;
+                        }
+                        $counts[(string) $gv] = ($counts[(string) $gv] ?? 0) + 1;
+                    }
+                    if ($counts === []) {
+                        continue;
+                    }
+                    $labelsMap = (array) ($def['labels'] ?? []);
+                    if ($labelsMap !== []) {
+                        // Declared label maps also declare the
+                        // group order (board columns, statuses).
+                        $ordered = [];
+                        foreach ($labelsMap as $k => $_) {
+                            if (isset($counts[(string) $k])) {
+                                $ordered[(string) $k] = $counts[(string) $k];
+                            }
+                        }
+                        foreach ($counts as $k => $n) {
+                            $ordered[$k] ??= $n;
+                        }
+                        $counts = $ordered;
+                    }
+                    $labels = [];
+                    $series = [];
+                    foreach ($counts as $k => $n) {
+                        $labels[] = (string) ($labelsMap[$k] ?? \Illuminate\Support\Str::headline($k));
+                        $series[] = $n;
+                    }
+                    $widgets[] = [
+                        'handle' => $handle,
+                        'type' => 'chart',
+                        'chart' => (string) ($def['chart'] ?? 'donut'),
+                        'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                        'labels' => $labels,
+                        'series' => $series,
+                    ];
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return $widgets;
+    }
+
+    /**
+     * One relation aggregate for a widget spec:
+     * {relation, aggregate: count|sum|avg, column?, filter?}
+     * with the declared-stats filter semantics ('!' excludes).
+     */
+    protected static function widgetAggregate(mixed $record, array $spec): ?float
+    {
+        $relation = (string) ($spec['relation'] ?? '');
+        if ($relation === '' || ! is_object($record) || ! method_exists($record, $relation)) {
+            return null;
+        }
+        $query = $record->{$relation}();
+        if (! is_object($query)) {
+            return null;
+        }
+        foreach (($spec['filter'] ?? []) as $column => $value) {
+            if (is_array($value)) {
+                $exclude = array_values(array_filter($value, fn ($v) => is_string($v) && str_starts_with($v, '!')));
+                $include = array_values(array_diff($value, $exclude));
+                if ($exclude !== []) {
+                    $query = $query->whereNotIn((string) $column, array_map(fn ($v) => substr($v, 1), $exclude));
+                }
+                if ($include !== []) {
+                    $query = $query->whereIn((string) $column, $include);
+                }
+            } else {
+                $query = $query->where((string) $column, $value);
+            }
+        }
+
+        return match ((string) ($spec['aggregate'] ?? 'count')) {
+            'sum' => (float) $query->sum((string) ($spec['column'] ?? '')),
+            'avg' => (float) $query->avg((string) ($spec['column'] ?? '')),
+            default => (float) $query->count(),
+        };
+    }
+
+    protected static function trimNumber(float $n): string
+    {
+        return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
+    }
+
     public static function showStatsFromManifest(array $manifest, mixed $record = null): array
     {
         $defs = $manifest['ui']['show']['stats'] ?? [];

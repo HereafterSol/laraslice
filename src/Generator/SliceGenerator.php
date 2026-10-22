@@ -1751,7 +1751,24 @@ BLADE;
 
     @endif
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {{-- Declared overview widgets (ui.show.widgets, S-UI 3): gauges and charts computed server-side --}}
+        @if(!empty(\$showWidgets ?? []))
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            @foreach(\$showWidgets as \$widget)
+            @if((\$widget['type'] ?? '') === 'gauge')
+            <x-ui.card class="p-5 bg-card border shadow-xs">
+                <x-ui.gauge :value="\$widget['value']" :max="\$widget['max']" :label="\$widget['title']" :display="\$widget['display']" />
+            </x-ui.card>
+            @elseif((\$widget['type'] ?? '') === 'chart')
+            <x-ui.card class="p-5 bg-card border shadow-xs">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ \$widget['title'] }}</p>
+                <x-ui.chart :type="\$widget['chart']" :labels="\$widget['labels']" :series="\$widget['series']" :height="200" />
+            </x-ui.card>
+            @endif
+            @endforeach
+        </div>
+        @endif
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <!-- Left 2/3 Main Fieldset -->
             <div class="lg:col-span-2 space-y-6">
                 <x-ui.card variant="sectioned" class="border shadow-xs bg-card">
