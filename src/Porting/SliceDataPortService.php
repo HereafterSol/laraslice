@@ -27,6 +27,24 @@ class SliceDataPortService
     protected array $mergeTables = ['users' => 'email'];
 
     /**
+     * Columns that reference the users table by convention in the
+     * source domains this porter serves (actor/audit keys included).
+     * After a port, merged users carry FRESH target ids, so every
+     * one of these columns in every imported table must be remapped
+     * from source user ids to target user ids by email — otherwise
+     * the ported data points at the wrong people (or nobody).
+     * Deliberately excluded: client_id (references clients in most
+     * domains; where a source uses users-as-clients the operator
+     * remaps that one column with the reported map) and employee_id
+     * (references employee records, not user accounts).
+     */
+    protected array $userReferenceColumns = [
+        'user_id', 'added_by', 'last_updated_by', 'created_by', 'updated_by',
+        'deleted_by', 'edited_by_user', 'approved_by', 'assigned_to',
+        'assigned_by', 'owner_id', 'from_user_id', 'to_user_id', 'actor_id',
+    ];
+
+    /**
      * Opt-in: import legacy roles/permissions through normalized merge.
      * Default false — auth tables are skipped to protect framework RBAC.
      */
@@ -121,6 +139,11 @@ class SliceDataPortService
                 $totalRowsImported += $imported['rows'] ?? 0;
             }
 
+            // Identity remap: merged users received fresh target ids,
+            // so imported user references still carry source-space ids.
+            // Rewrite them by email before constraints come back on.
+            $identityRemap = $this->remapUserIdentities($tables, $sourcePdo, $driver);
+
             \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
 
         } catch (Throwable $e) {
@@ -132,6 +155,7 @@ class SliceDataPortService
             'total_rows' => $totalRowsImported,
             'skipped_tables' => $skippedTables,
             'tables_imported' => count(array_filter($results, fn($r) => ($r['rows'] ?? 0) > 0)),
+            'identity_remap' => $identityRemap ?? [],
             'auth_reconciliation' => $this->reconcileAuthAfterImport(),
         ];
     }
@@ -961,6 +985,89 @@ class SliceDataPortService
      *  2. Re-seeds all framework permissions via SliceManager::syncPermissions().
      *  3. Re-attaches all permissions to both privileged roles.
      */
+    /**
+     * Remap user references in imported tables from source user ids
+     * to target user ids, matched by email. Runs once per import,
+     * after every table (users included) has been imported, so the
+     * map reflects the target's real post-merge ids. Values that do
+     * not correspond to a source user are left untouched, as are
+     * columns and tables outside the import list. Returns a
+     * per-table, per-column count of rewritten cells.
+     *
+     * @param  array<int, string>  $importedTables
+     * @return array<string, array<string, int>>
+     */
+    protected function remapUserIdentities(array $importedTables, $sourcePdo, string $driver): array
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('users')) {
+                return [];
+            }
+            $sourceTables = $this->getSourceTableList($sourcePdo, $driver);
+            if (! in_array('users', $sourceTables, true)) {
+                return [];
+            }
+
+            $emailBySourceId = [];
+            foreach ($sourcePdo->query('SELECT id, email FROM users')->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $email = strtolower(trim((string) ($row['email'] ?? '')));
+                if ($email !== '') {
+                    $emailBySourceId[(int) $row['id']] = $email;
+                }
+            }
+            $targetIdByEmail = [];
+            foreach (\Illuminate\Support\Facades\DB::table('users')->select('id', 'email')->get() as $u) {
+                $targetIdByEmail[strtolower((string) $u->email)] = (int) $u->id;
+            }
+
+            $map = [];
+            foreach ($emailBySourceId as $sourceId => $email) {
+                $targetId = $targetIdByEmail[$email] ?? null;
+                if ($targetId !== null && $targetId !== $sourceId) {
+                    $map[$sourceId] = $targetId;
+                }
+            }
+            if ($map === []) {
+                return [];
+            }
+
+            $report = [];
+            foreach ($importedTables as $table) {
+                if ($table === 'users' || in_array($table, $this->systemAuthTables, true)) {
+                    continue;
+                }
+                if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                    continue;
+                }
+                $columns = array_intersect(
+                    $this->userReferenceColumns,
+                    \Illuminate\Support\Facades\Schema::getColumnListing($table)
+                );
+                foreach ($columns as $column) {
+                    $changed = 0;
+                    foreach (array_chunk($map, 200, true) as $chunk) {
+                        $cases = '';
+                        $ids = [];
+                        foreach ($chunk as $from => $to) {
+                            $cases .= ' WHEN '.(int) $from.' THEN '.(int) $to;
+                            $ids[] = (int) $from;
+                        }
+                        $changed += \Illuminate\Support\Facades\DB::affectingStatement(
+                            "UPDATE `{$table}` SET `{$column}` = CASE `{$column}`{$cases} ELSE `{$column}` END WHERE `{$column}` IN (".implode(', ', $ids).')'
+                        );
+                    }
+                    if ($changed > 0) {
+                        $report[$table][$column] = $changed;
+                    }
+                }
+            }
+
+            return $report;
+        } catch (Throwable $e) {
+            return ['_error' => $e->getMessage()];
+        }
+    }
+
     public function reconcileAuthAfterImport(): array
     {
         $summary = ['roles_ensured' => [], 'permissions_synced' => false, 'errors' => []];
