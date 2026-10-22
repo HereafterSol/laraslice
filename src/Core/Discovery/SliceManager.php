@@ -521,6 +521,46 @@ class SliceManager
                             }
                         }
                     }
+                    if ($base === 'index.blade.php') {
+                        // (f) Fidelity defaults: quick-filter tabs need
+                        // the active value + declared default from the
+                        // controller, or a default filter applies
+                        // invisibly and the All tab cannot clear it.
+                        if (str_contains($vContent, '<x-ui.filter-tabs') && ! str_contains($vContent, 'filterDefaults')) {
+                            $vContent = str_replace(
+                                ':param="$qf[\'handle\']"',
+                                ':param="$qf[\'handle\']"' . "\n" . '                :activeTab="$activeFilters[$qf[\'handle\']] ?? null"' . "\n" . '                :default="$filterDefaults[$qf[\'handle\']] ?? null"',
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php') {
+                        // (g) Fidelity actions: blades predating the
+                        // declared-actions include never render
+                        // ui.directory.actions buttons.
+                        if (! str_contains($vContent, 'directory.actions') && str_contains($vContent, 'Quick Filter Tabs')) {
+                            $vContent = str_replace(
+                                '<!-- Quick Filter Tabs',
+                                "@include('laraslice::directory.actions')\n\n        <!-- Quick Filter Tabs",
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php') {
+                        // (h) Fidelity: criteria-only filters
+                        // (ui: false — relation-exists declarations)
+                        // must not render an empty drawer select.
+                        if (str_contains($vContent, '@foreach($sidebarFilters as $sf)') && ! str_contains($vContent, "sf['ui']")) {
+                            $vContent = str_replace(
+                                '@foreach($sidebarFilters as $sf)',
+                                "@foreach(\$sidebarFilters as \$sf)\n                @if((\$sf['ui'] ?? true) === false) @continue @endif",
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
                         // (d) Declared-view toolbar buttons (matrix /
                         // report / bulk entry) — the controller passes

@@ -356,7 +356,7 @@
                                 {{-- Show status_pill HTML; only show transition select when workflow transitions exist --}}
                                 <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')">
                                     <div class="flex items-center gap-2 min-w-0">
-                                        <span class="shrink-0" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
+                                        <span class="shrink-0" x-show="(workflowTransitions || []).length > 0 || !inlineUpdateUrl" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
                                         <select
                                             x-show="(workflowTransitions || []).length > 0"
                                             x-cloak
@@ -364,7 +364,7 @@
                                             :value="item.r['{{ $col['key'] }}__raw'] || ''"
                                             @change="applyInlineTransition(item.r, $event.target.value)"
                                         >
-                                            <option value="" x-text="item.r['{{ $col['key'] }}__raw'] || '—'"></option>
+                                            <option value="">Transition…</option>
                                             <template x-for="wt in workflowTransitions" :key="wt.slug">
                                                 <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
                                             </template>

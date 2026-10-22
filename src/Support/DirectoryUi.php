@@ -66,6 +66,8 @@ final class DirectoryUi
                 'html' => in_array($fmt, self::HTML_FORMATTERS, true),
                 'badge_from' => $c['badge_from'] ?? null,
                 'breakdown' => $c['breakdown'] ?? null,
+                'label_table' => $c['label_table'] ?? null,
+                'label_column' => $c['label_column'] ?? null,
                 'options' => $options !== [] ? $options : null,
                 'field_type' => isset($def['type']) && is_string($def['type']) ? $def['type'] : null,
             ], fn ($v) => $v !== null);

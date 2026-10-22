@@ -334,6 +334,42 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                 if ($value === null || $value === '' || $value === []) {
                     continue;
                 }
+                // Relation-exists criteria (translated by the
+                // controller from type: relation_exists filters).
+                if (str_starts_with($key, '__exists:')) {
+                    $parts = explode('.', substr($key, strlen('__exists:')), 2);
+                    if (count($parts) !== 2) {
+                        continue;
+                    }
+                    [$relation, $relKey] = $parts;
+                    try {
+                        $modelClass = $this->getModelClass();
+                        $probe = new $modelClass;
+                        if (! method_exists($probe, $relation)) {
+                            continue;
+                        }
+                    } catch (\Throwable $e) {
+                        continue;
+                    }
+                    // Qualify the key with the related table: an
+                    // unqualified 'id' is ambiguous across pivot joins.
+                    $qualified = $relKey;
+                    try {
+                        $relTable = $probe->{$relation}()->getRelated()->getTable();
+                        if (! str_contains($relKey, '.')) {
+                            $qualified = $relTable.'.'.$relKey;
+                        }
+                    } catch (\Throwable $e) {
+                        // Keep the bare key.
+                    }
+                    if (is_string($value) && str_starts_with($value, '!')) {
+                        $neg = substr($value, 1);
+                        $query->whereDoesntHave($relation, fn ($q) => $q->where($qualified, $neg));
+                    } else {
+                        $query->whereHas($relation, fn ($q) => $q->where($qualified, $value));
+                    }
+                    continue;
+                }
                 // A declared filter whose column the table does not have
                 // (stale manifest, partial port) is skipped, never a 500.
                 // The check asks the model's own connection; if it cannot
@@ -353,7 +389,25 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                 } elseif (str_ends_with($key, '_to')) {
                     $query->where(substr($key, 0, -3), '<=', $value);
                 } elseif (is_array($value)) {
-                    $query->whereIn($key, $value);
+                    // '!'-prefixed entries exclude (fidelity defaults
+                    // like "hide completed" ride on this).
+                    $include = [];
+                    $exclude = [];
+                    foreach ($value as $v) {
+                        if (is_string($v) && str_starts_with($v, '!')) {
+                            $exclude[] = substr($v, 1);
+                        } else {
+                            $include[] = $v;
+                        }
+                    }
+                    if ($include !== []) {
+                        $query->whereIn($key, $include);
+                    }
+                    if ($exclude !== []) {
+                        $query->whereNotIn($key, $exclude);
+                    }
+                } elseif (is_string($value) && str_starts_with($value, '!')) {
+                    $query->whereNotIn($key, explode(',', substr($value, 1)));
                 } else {
                     $query->where($key, $value);
                 }
