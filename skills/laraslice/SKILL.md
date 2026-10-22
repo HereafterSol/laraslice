@@ -417,8 +417,9 @@ row actions) · P2 Detail hub (tab bar under the header,
 filtered aggregate over a max, chart = grouped relation
 counts with declared labels/order) · P3 Form
 (one sectioned card, labels above inputs, quick-add selects,
-in-card save bar) · P4 Dashboard (declared widget cards,
-designed empty states) · P5 Report, P6 Document, P7 Matrix
+in-card save bar) · P4 Dashboard (`ui.dashboard.widgets`
+per slice — counter/list/week/chart — aggregated into the
+standard dashboard; designed empty state) · P5 Report, P6 Document, P7 Matrix
 (G2 declarations: `ui.directory.report`, `ui.show.document`,
 `ui.directory.matrix`) · P8 Views (`ui.directory.views`
 list/board/calendar) · P9 Settings hub (every feature's

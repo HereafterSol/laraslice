@@ -49,9 +49,16 @@ project workspace.
   container drops its max-width, via the fragment layout's
   overlay rules. The drawer width is declared per slice:
   `ui.presentation.drawer_width` (sm|md|lg|xl, default lg).
-- **P4 Dashboard** — declared widgets in a masonry grid: profile
-  card, dual counters, mini-tables, week strip, calendar;
-  designed empty states, never blank panels.
+- **P4 Dashboard** — widgets declared per slice under
+  `ui.dashboard.widgets` and aggregated by the framework into
+  the standard dashboard (the package registers one when the
+  host app defines none): `counter` (filtered model aggregate),
+  `list` (recent records linking to their detail pages),
+  `week` (records bucketed Mon–Sun by a date field, rendered
+  by `x-ui.week-strip`), `chart` (grouped counts with declared
+  labels/order). All render inside `x-ui.widget-card`; an
+  undeclared dashboard shows a designed empty state explaining
+  the declaration, never a blank page.
 - **P5 Report** — `ui.directory.report`: filter + grouped table
   with totals (G2). **P6 Document** — `ui.show.document`
   printable sheet (G2). **P7 Matrix** — `ui.directory.matrix`

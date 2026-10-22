@@ -330,21 +330,38 @@ class LaraSliceServiceProvider extends ServiceProvider
             return null;
         });
 
-        // 8. Register default dashboard route fallback if host application doesn't define one
+        // 8. Register the standard dashboard if the host application
+        // doesn't define one: it aggregates the widgets slices
+        // declare under ui.dashboard.widgets (S-UI 4, pattern P4).
         $this->app->booted(function () {
             $routes = Route::getRoutes();
             $hasDashboard = $routes->hasNamedRoute('dashboard');
             if (! $hasDashboard) {
                 Route::middleware(['web', 'auth'])->get('/dashboard', function () {
-                    $user = auth()->user();
-                    if ($user && Access::allows($user, 'studio.access') && Route::has('laraslice.wizard')) {
-                        return redirect()->route('laraslice.wizard');
-                    }
-                    if (Route::has('account.settings')) {
-                        return redirect()->route('account.settings');
+                    $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                    $entries = [];
+                    foreach ($manager->getActiveSlices() as $slice) {
+                        if (empty($slice->raw['ui']['dashboard']['widgets'] ?? [])) {
+                            continue;
+                        }
+                        $routes = ['index' => null, 'show' => null];
+                        $routesPath = $slice->getRoutesPath();
+                        $webFile = $routesPath ? $routesPath.'/web.php' : null;
+                        if ($webFile && is_file($webFile)
+                            && preg_match("/Route::prefix\('([^']+)'\)/", (string) file_get_contents($webFile), $m)) {
+                            $routes['index'] = '/'.trim($m[1], '/');
+                            $routes['show'] = $routes['index'].'/{id}';
+                        }
+                        $entries[] = [
+                            'manifest' => $slice->raw,
+                            'model' => $slice->getModelClass(),
+                            'routes' => $routes,
+                        ];
                     }
 
-                    return redirect('/');
+                    return view('laraslice::dashboard', [
+                        'widgets' => \LaraSlice\Support\DashboardUi::collect($entries),
+                    ]);
                 })->name('dashboard');
             }
         });
