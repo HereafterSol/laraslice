@@ -378,11 +378,12 @@ abstract class BaseSliceWebController extends Controller
             abort(404);
         }
         $data = $request->validate([
-            'date' => ['required', 'date_format:Y-m-d'],
+            'date' => ['nullable', 'date_format:Y-m-d'],
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
             'entries' => ['array'],
             'entries.*' => ['array'],
         ]);
-        $date = $data['date'];
 
         $service = $this->getService();
         $ref = new \ReflectionMethod($service, 'getModelClass');
@@ -392,38 +393,104 @@ abstract class BaseSliceWebController extends Controller
             abort(500, 'Bulk entry: model class not resolvable.');
         }
 
-        $saved = 0;
-        foreach (($data['entries'] ?? []) as $rowKeyValue => $submitted) {
-            if (! is_array($submitted)) {
-                continue;
-            }
-            $values = [];
-            $hasDateValue = false;
-            foreach ($decl['fields'] as $f) {
-                $v = $submitted[$f['handle']] ?? null;
-                if ($v === null || $v === '') {
+        // One save pass for one date; range mode calls it per date.
+        $saveForDate = function (string $date) use ($data, $decl, $modelClass): int {
+            $saved = 0;
+            foreach (($data['entries'] ?? []) as $rowKeyValue => $submitted) {
+                if (! is_array($submitted)) {
                     continue;
                 }
-                if ($f['input'] === 'time' || $f['input'] === 'datetime' || $f['handle'] === $decl['date_field']) {
-                    $values[$f['handle']] = $date.' '.(preg_match('/^\d{2}:\d{2}$/', (string) $v) ? $v.':00' : $v);
-                    if ($f['handle'] === $decl['date_field']) {
-                        $hasDateValue = true;
+                $values = [];
+                $hasDateValue = false;
+                foreach ($decl['fields'] as $f) {
+                    $v = $submitted[$f['handle']] ?? null;
+                    if ($v === null || $v === '') {
+                        continue;
                     }
-                } else {
-                    $values[$f['handle']] = $v;
+                    if ($f['input'] === 'time' || $f['input'] === 'datetime' || $f['handle'] === $decl['date_field']) {
+                        $values[$f['handle']] = $date.' '.(preg_match('/^\d{2}:\d{2}$/', (string) $v) ? $v.':00' : $v);
+                        if ($f['handle'] === $decl['date_field']) {
+                            $hasDateValue = true;
+                        }
+                    } else {
+                        $values[$f['handle']] = $v;
+                    }
+                }
+                if (! $hasDateValue || $values === []) {
+                    continue;
+                }
+                $model = $modelClass::query()
+                    ->where($decl['row_key'], $rowKeyValue)
+                    ->whereDate($decl['date_field'], $date)
+                    ->first() ?? new $modelClass;
+                $model->forceFill(array_merge($values, [$decl['row_key'] => $rowKeyValue]));
+                $model->save();
+                $saved++;
+            }
+
+            return $saved;
+        };
+
+        $rangeMode = ! empty($decl['range']) && ! empty($data['from']) && ! empty($data['to']);
+        if ($rangeMode) {
+            // Holiday dates in range (declared slice + date field)
+            $holidayDates = [];
+            if (! empty($decl['holidays'])) {
+                try {
+                    $holidayClass = app(\LaraSlice\Core\Discovery\SliceManager::class)->modelClass($decl['holidays']['slice']);
+                    if (is_string($holidayClass) && class_exists($holidayClass)) {
+                        $holidayDates = $holidayClass::query()
+                            ->whereDate($decl['holidays']['date_field'], '>=', $data['from'])
+                            ->whereDate($decl['holidays']['date_field'], '<=', $data['to'])
+                            ->pluck($decl['holidays']['date_field'])
+                            ->map(fn ($d) => date('Y-m-d', strtotime((string) $d)))
+                            ->all();
+                    }
+                } catch (\Throwable $e) {
+                    $holidayDates = [];
                 }
             }
-            if (! $hasDateValue || $values === []) {
-                continue;
+
+            $saved = 0;
+            $days = 0;
+            $skippedHolidays = 0;
+            $skippedWeekends = 0;
+            $cursor = new \DateTimeImmutable($data['from']);
+            $last = new \DateTimeImmutable($data['to']);
+            while ($cursor <= $last) {
+                $day = $cursor->format('Y-m-d');
+                if (in_array($day, $holidayDates, true)) {
+                    $skippedHolidays++;
+                } elseif (! empty($decl['skip_weekends']) && (int) $cursor->format('N') >= 6) {
+                    $skippedWeekends++;
+                } else {
+                    $saved += $saveForDate($day);
+                    $days++;
+                }
+                $cursor = $cursor->modify('+1 day');
             }
-            $model = $modelClass::query()
-                ->where($decl['row_key'], $rowKeyValue)
-                ->whereDate($decl['date_field'], $date)
-                ->first() ?? new $modelClass;
-            $model->forceFill(array_merge($values, [$decl['row_key'] => $rowKeyValue]));
-            $model->save();
-            $saved++;
+
+            $notes = [];
+            if ($skippedHolidays > 0) {
+                $notes[] = "skipped {$skippedHolidays} holiday date(s)";
+            }
+            if ($skippedWeekends > 0) {
+                $notes[] = "skipped {$skippedWeekends} weekend date(s)";
+            }
+            $message = "Saved {$saved} record(s) across {$days} date(s)" . ($notes === [] ? '.' : ' (' . implode(', ', $notes) . ').');
+
+            return redirect()
+                ->route($this->resolveRouteName('bulk_entry'), $this->routeParameters(['date' => $data['from']]))
+                ->with('success', $message);
         }
+
+        if (empty($data['date'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'date' => 'A date (or a from/to range) is required.',
+            ]);
+        }
+        $date = $data['date'];
+        $saved = $saveForDate($date);
 
         return redirect()
             ->route($this->resolveRouteName('bulk_entry'), $this->routeParameters(['date' => $date]))

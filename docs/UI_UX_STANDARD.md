@@ -91,7 +91,7 @@ project workspace.
   the declaring slice. Bespoke settings pages (SMTP, Theme,
   AI) appear in the same rail as links. The hub is the
   settings home at `/admin/settings`.
-- **P10 Bulk entry** — `ui.directory.bulk_entry` declares a
+- **P10 Bulk entry** — `ui.directory.bulk_entry` declares a Range extension: `range: true` applies one submission across a from/to range (the source systems' bulk-mark semantics), skipping declared `holidays {slice, date_field}` dates and, when `skip_weekends: true`, Saturdays/Sundays; the save message reports records, dates, and skips.
   one-date grid: rows are the row key's relationship options,
   columns the declared fields (time/datetime/text/select),
   served at `{index}/bulk-entry?date=` with one Save for the

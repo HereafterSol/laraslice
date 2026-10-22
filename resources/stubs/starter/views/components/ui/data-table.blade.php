@@ -31,7 +31,7 @@
     $searchPlaceholder ??= __('Start typing to search...');
     $actionsLabel ??= __('Action');
 
-    $htmlFormatters = ['composite_user', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue', 'badge'];
+    $htmlFormatters = ['composite_user', 'user_stack', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue', 'badge'];
     $cols = collect($columns)->map(function ($c) use ($htmlFormatters) {
         $fmt = $c['formatter'] ?? $c['type'] ?? null;
         $html = (bool) ($c['html'] ?? ($fmt && in_array($fmt, $htmlFormatters, true)));
@@ -412,17 +412,31 @@
         </table>
     </div>
 
-    <!-- Compact Pagination Strip -->
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs">
+    <!-- Pagination footer (inside the card): range + page size + pager -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border px-4 py-2.5 mt-0 text-xs bg-muted/20">
         <p class="text-muted-foreground">
+            <span>{{ __('Showing') }}</span>
+            <span class="font-semibold text-foreground" x-text="filtered.length === 0 ? 0 : (page - 1) * pageSize + 1"></span>
+            <span>{{ __('to') }}</span>
+            <span class="font-semibold text-foreground" x-text="Math.min(page * pageSize, filtered.length)"></span>
+            <span>{{ __('of') }}</span>
+            <span class="font-semibold text-foreground" x-text="filtered.length"></span>
+            <span>{{ __('entries') }}</span>
             @if ($selectable)
-                <span x-text="@js(__(':selected of :total row(s) selected.')).replace(':selected', selected.length).replace(':total', rows.length)"></span>
-            @else
-                <span x-text="@js(__(':count total record(s).')).replace(':count', sorted.length)"></span>
+                <span x-show="selected.length > 0" x-cloak class="ml-1.5" x-text="@js(__(':selected selected.')).replace(':selected', selected.length)"></span>
             @endif
             <span class="text-muted-foreground/60 ml-1.5" x-show="filtered.length !== rows.length" x-cloak x-text="'(' + filtered.length + ' matching current filter)'"></span>
         </p>
         <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1.5 text-muted-foreground">
+                <span class="font-medium">{{ __('Per page') }}</span>
+                <select x-model.number="pageSize" @change="page = 1" class="h-7 rounded-md border border-input bg-background px-1.5 text-xs text-foreground cursor-pointer">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </label>
             <span class="font-medium text-muted-foreground" x-text="@js(__('Page :page of :pages')).replace(':pages', pageCount).replace(':page', page)"></span>
             <div class="flex items-center gap-1">
                 <x-ui.button variant="outline" size="sm" class="h-7 px-2.5 text-xs" x-bind:disabled="page === 1" @click="prev()">{{ __('Previous') }}</x-ui.button>

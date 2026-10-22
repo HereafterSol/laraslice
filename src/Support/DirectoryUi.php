@@ -13,7 +13,7 @@ final class DirectoryUi
 {
     /** @var list<string> */
     public const HTML_FORMATTERS = [
-        'code_badge', 'composite_user', 'status_pill', 'money_breakdown',
+        'code_badge', 'composite_user', 'user_stack', 'status_pill', 'money_breakdown',
         'progress_bar', 'badge', 'text_with_badge', 'date_overdue',
     ];
 
@@ -765,11 +765,26 @@ final class DirectoryUi
             return null;
         }
 
+        // Range mode (P10 extension): one submission applies the
+        // same row values across a date range — the source
+        // systems' bulk-mark semantics — skipping declared
+        // holiday dates (and weekends when declared).
+        $holidays = null;
+        if (! empty($decl['holidays']) && is_array($decl['holidays']) && ! empty($decl['holidays']['slice'])) {
+            $holidays = [
+                'slice' => (string) $decl['holidays']['slice'],
+                'date_field' => (string) ($decl['holidays']['date_field'] ?? 'date'),
+            ];
+        }
+
         return [
             'title' => (string) ($decl['title'] ?? 'Bulk Entry'),
             'row_key' => $rowKey,
             'date_field' => $dateField,
             'fields' => $fields,
+            'range' => (bool) ($decl['range'] ?? false),
+            'skip_weekends' => (bool) ($decl['skip_weekends'] ?? false),
+            'holidays' => $holidays,
         ];
     }
 
