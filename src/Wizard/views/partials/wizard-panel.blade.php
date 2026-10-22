@@ -2782,7 +2782,6 @@ function larasliceWizard() {
             </div>
             <!-- Left Steps Sidebar (hidden on small screens — progress bar replaces it) -->
             <div class="hidden md:block col-span-12 md:col-span-5 lg:col-span-4 space-y-6">
-            <div class="col-span-12 md:col-span-5 lg:col-span-4 space-y-6">
                 <div class="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-xl">
                     <!-- Step 1 Indicator -->
                     <div class="flex items-center space-x-4 cursor-pointer" @click="step = 1">
@@ -3191,7 +3190,7 @@ function larasliceWizard() {
 
                             <!-- High-Density Data Grid Table (Blueprint Studio Image 3 Style) -->
                             <div x-show="currentFieldsList().length > 0" class="overflow-x-auto rounded-xl border border-border">
-                                <table class="w-full text-left text-xs">
+                                <table class="w-full min-w-[1080px] text-left text-[13px]">
                                     <thead class="bg-muted/50 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
                                         <tr>
                                             <th class="w-10 px-2 py-2.5 text-center">#</th>
@@ -3218,15 +3217,15 @@ function larasliceWizard() {
                                                 </td>
                                                 <!-- Field Handle -->
                                                 <td class="px-2.5 py-2">
-                                                    <input type="text" x-model="field.name" placeholder="e.g. title, sku" class="h-7 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 font-mono text-xs font-semibold text-foreground focus:bg-background focus:outline-none">
+                                                    <input type="text" x-model="field.name" placeholder="e.g. title, sku" class="h-8 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 font-mono text-[13px] font-semibold text-foreground focus:bg-background focus:outline-none">
                                                 </td>
                                                 <!-- Display Label -->
                                                 <td class="px-2.5 py-2">
-                                                    <input type="text" x-model="field.label" placeholder="Display Label" class="h-7 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 text-xs text-foreground focus:bg-background focus:outline-none">
+                                                    <input type="text" x-model="field.label" placeholder="Display Label" class="h-8 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 text-[13px] text-foreground focus:bg-background focus:outline-none">
                                                 </td>
                                                 <!-- Data Type -->
                                                 <td class="px-2.5 py-2">
-                                                    <select x-model="field.type" class="h-7 w-full rounded border border-input bg-card px-2 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary">
+                                                    <select x-model="field.type" class="h-8 w-full rounded border border-input bg-card px-2 text-[13px] font-medium text-foreground focus:ring-1 focus:ring-primary">
                                                         <option value="string">string (varchar)</option>
                                                         <option value="text">text (longtext)</option>
                                                         <option value="integer">integer</option>
@@ -3915,18 +3914,22 @@ function larasliceWizard() {
                                 <div class="px-3.5 py-2.5 bg-muted/40 hover:bg-muted/70 transition flex items-center justify-between cursor-pointer select-none transition-colors"
                                      :class="collapsedDomains[grp.domain] ? 'rounded-xl' : 'rounded-t-xl border-b border-border/40'"
                                      @click="toggleDomainCollapse(grp.domain)">
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <svg class="w-3.5 h-3.5 text-muted-foreground transition-transform duration-200"
-                                             :class="collapsedDomains[grp.domain] ? '-rotate-90' : 'rotate-0'"
-                                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                        <span class="font-bold text-xs text-foreground truncate" x-text="grp.domain"></span>
-                                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-muted text-muted-foreground border border-border/80" x-text="grp.slices.length + ' slice' + (grp.slices.length > 1 ? 's' : '')"></span>
-                                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" x-text="grp.totalModels + ' model' + (grp.totalModels > 1 ? 's' : '')"></span>
-                                        <span x-show="grp.status === 'active'" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/20">Active</span>
-                                        <span x-show="grp.status === 'disabled'" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/20">Disabled</span>
-                                        <span x-show="grp.status === 'partial'" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 border border-amber-500/20">Partial</span>
+                                    <div class="flex flex-col gap-1 min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <svg class="w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform duration-200"
+                                                 :class="collapsedDomains[grp.domain] ? '-rotate-90' : 'rotate-0'"
+                                                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                            <span class="font-bold text-[13px] text-foreground truncate" x-text="grp.domain"></span>
+                                            <span x-show="grp.status === 'active'" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/20">Active</span>
+                                            <span x-show="grp.status === 'disabled'" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/20">Disabled</span>
+                                            <span x-show="grp.status === 'partial'" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 border border-amber-500/20">Partial</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 pl-5">
+                                            <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-muted text-muted-foreground border border-border/80" x-text="grp.slices.length + ' slice' + (grp.slices.length > 1 ? 's' : '')"></span>
+                                            <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" x-text="grp.totalModels + ' model' + (grp.totalModels > 1 ? 's' : '')"></span>
+                                        </div>
                                     </div>
 
                                     <!-- Domain Actions -->
@@ -4069,12 +4072,22 @@ function larasliceWizard() {
                                 :class="selectedSlice?.active !== false ? 'border-border bg-muted/40 hover:bg-muted text-foreground' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'">
                             <span x-text="selectedSlice?.active !== false ? '👁 Hide from Nav' : '👁 Show in Nav'"></span>
                         </button>
-                        <button type="button" @click="wipeSliceData(selectedSlice.name, $event)" title="Wipe (Truncate) Table Records" class="px-3 py-2 border border-border bg-muted/30 hover:bg-muted text-foreground font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs">
-                            <span>🧹</span> Wipe
-                        </button>
-                        <button type="button" @click="openDeleteModal('slice', selectedSlice.name, $event)" title="Remove Slice (Granular Options)" class="px-3 py-2 border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs">
-                            <span>🗑</span> Remove
-                        </button>
+                        <div x-data="{ dangerOpen: false }" class="relative">
+                            <button type="button" @click="dangerOpen = !dangerOpen" title="Destructive actions" class="px-3 py-2 border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs">
+                                <span>⚠</span> Danger
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                            <div x-show="dangerOpen" @click.outside="dangerOpen = false" x-cloak class="absolute right-0 mt-1.5 w-56 rounded-xl border border-border bg-card shadow-xl p-1.5 z-40">
+                                <button type="button" @click="dangerOpen = false; wipeSliceData(selectedSlice.name, $event)" class="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-2 cursor-pointer">
+                                    <span>🧹</span> Wipe data…
+                                    <span class="ml-auto text-[10px] font-normal text-muted-foreground">asks first</span>
+                                </button>
+                                <button type="button" @click="dangerOpen = false; openDeleteModal('slice', selectedSlice.name, $event)" class="w-full text-left px-3 py-2 rounded-lg hover:bg-destructive/10 text-xs font-semibold text-destructive flex items-center gap-2 cursor-pointer">
+                                    <span>🗑</span> Remove slice…
+                                    <span class="ml-auto text-[10px] font-normal text-muted-foreground">options</span>
+                                </button>
+                            </div>
+                        </div>
                         <a :href="selectedSlice?.ui_url || '/' + (selectedSlice?.name ? selectedSlice.name.toLowerCase() : '')" target="_blank" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer">
                             <span>Open Slice UI</span>
                             <span>↗</span>
@@ -4236,7 +4249,7 @@ function larasliceWizard() {
 
                     <!-- Fields Data Grid Table -->
                     <div class="overflow-x-auto rounded-xl border border-border">
-                        <table class="w-full text-left text-xs">
+                        <table class="w-full min-w-[1080px] text-left text-[13px]">
                             <thead class="bg-muted/50 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
                                 <tr>
                                     <th class="w-12 px-2.5 py-2.5 text-center">#</th>
@@ -4256,7 +4269,7 @@ function larasliceWizard() {
                             </thead>
                             <tbody class="divide-y divide-border/60 bg-card">
                                 <template x-for="(field, fIdx) in studioFields" :key="fIdx">
-                                    <tr class="hover:bg-muted/20 transition-colors" :class="field.is_existing ? '' : 'bg-primary/5'">
+                                    <tr class="hover:bg-muted/20 transition-colors even:bg-muted/10" :class="field.is_existing ? '' : 'bg-primary/5'">
                                         <!-- Reorder Arrows -->
                                         <td class="px-2 py-2 text-center text-muted-foreground font-mono">
                                             <div class="flex items-center justify-center gap-0.5">
@@ -4266,15 +4279,15 @@ function larasliceWizard() {
                                         </td>
                                         <!-- Handle -->
                                         <td class="px-3 py-2">
-                                            <input type="text" x-model="field.handle" placeholder="e.g. sku, price" class="h-7 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 font-mono text-xs font-semibold text-foreground focus:bg-background focus:outline-none">
+                                            <input type="text" x-model="field.handle" placeholder="e.g. sku, price" class="h-8 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 font-mono text-[13px] font-semibold text-foreground focus:bg-background focus:outline-none">
                                         </td>
                                         <!-- Label -->
                                         <td class="px-3 py-2">
-                                            <input type="text" x-model="field.label" placeholder="e.g. Variant SKU" class="h-7 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 text-xs text-foreground focus:bg-background focus:outline-none">
+                                            <input type="text" x-model="field.label" placeholder="e.g. Variant SKU" class="h-8 w-full rounded border border-transparent hover:border-input focus:border-input bg-transparent px-1.5 text-[13px] text-foreground focus:bg-background focus:outline-none">
                                         </td>
                                         <!-- Type -->
                                         <td class="px-3 py-2">
-                                            <select x-model="field.type" class="h-7 w-full rounded border border-input bg-card px-2 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary">
+                                            <select x-model="field.type" class="h-8 w-full rounded border border-input bg-card px-2 text-[13px] font-medium text-foreground focus:ring-1 focus:ring-primary">
                                                 <option value="string">string (varchar)</option>
                                                 <option value="text">text (longtext)</option>
                                                 <option value="integer">integer</option>
@@ -4777,7 +4790,7 @@ function larasliceWizard() {
 
                     <template x-if="studioRelations.length > 0">
                         <div class="overflow-x-auto rounded-xl border border-border">
-                            <table class="w-full text-left text-xs">
+                            <table class="w-full min-w-[1080px] text-left text-[13px]">
                                 <thead class="bg-muted/50 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
                                     <tr>
                                         <th class="w-10 px-3 py-2.5 text-center">#</th>
@@ -4806,7 +4819,7 @@ function larasliceWizard() {
                                             </td>
                                             <!-- Relation Type -->
                                             <td class="px-3 py-2">
-                                                <select x-model="rel.type" @change="onStudioRelationTypeChange(rel)" class="h-7 w-full rounded border border-input bg-card px-2 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary">
+                                                <select x-model="rel.type" @change="onStudioRelationTypeChange(rel)" class="h-8 w-full rounded border border-input bg-card px-2 text-[13px] font-medium text-foreground focus:ring-1 focus:ring-primary">
                                                     <option value="belongsTo">belongsTo</option>
                                                     <option value="hasMany">hasMany</option>
                                                     <option value="hasOne">hasOne</option>
@@ -4917,7 +4930,7 @@ function larasliceWizard() {
                     <!-- TAB 1: DIRECTORY COLUMNS & SEMANTIC FORMATTERS -->
                     <div x-show="uiTab === 'directory'" class="space-y-3">
                         <div class="overflow-x-auto rounded-xl border border-border">
-                            <table class="w-full text-left text-xs">
+                            <table class="w-full min-w-[1080px] text-left text-[13px]">
                                 <thead class="bg-muted/50 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
                                     <tr>
                                         <th class="w-12 px-3 py-2 text-center">In Table</th>
@@ -5023,7 +5036,7 @@ function larasliceWizard() {
 
                         <!-- Form Widths & Searchable Selects Table -->
                         <div class="overflow-x-auto rounded-xl border border-border">
-                            <table class="w-full text-left text-xs">
+                            <table class="w-full min-w-[1080px] text-left text-[13px]">
                                 <thead class="bg-muted/50 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
                                     <tr>
                                         <th class="w-12 px-3 py-2 text-center">In Form</th>
