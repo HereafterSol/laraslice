@@ -49,6 +49,11 @@ project workspace.
   container drops its max-width, via the fragment layout's
   overlay rules. The drawer width is declared per slice:
   `ui.presentation.drawer_width` (sm|md|lg|xl, default lg).
+  Validation failures render as an error summary banner above
+  the form (never a silent bounce); quick-add drawer inputs
+  must never carry HTML `required` — the drawer lives inside
+  the parent form and would block its submission (quick-add
+  validates in JS).
 - **P4 Dashboard** — widgets declared per slice under
   `ui.dashboard.widgets` and aggregated by the framework into
   the standard dashboard (the package registers one when the
