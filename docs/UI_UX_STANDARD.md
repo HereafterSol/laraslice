@@ -54,6 +54,14 @@ project workspace.
   must never carry HTML `required` — the drawer lives inside
   the parent form and would block its submission (quick-add
   validates in JS).
+  Submitting a form inside an overlay posts in place: success
+  closes the overlay and refreshes the page behind it (filters
+  live in the URL, so the operator keeps their place); a
+  validation failure renders the same error banner inside the
+  overlay. Implementation note: overlay scripts must read the
+  form target via `form.getAttribute('action')` — generated
+  forms carry submit buttons named `action`, which shadow the
+  `form.action` property.
 - **P4 Dashboard** — widgets declared per slice under
   `ui.dashboard.widgets` and aggregated by the framework into
   the standard dashboard (the package registers one when the
