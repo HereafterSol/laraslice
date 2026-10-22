@@ -5,6 +5,9 @@ use LaraSlice\Slices\Settings\Controllers\SettingWebController;
 use LaraSlice\Slices\Settings\Controllers\ThemeWebController;
 
 Route::middleware(['web', 'auth'])->prefix('admin/settings')->name('settings.')->group(function () {
+    Route::get('/', [SettingWebController::class, 'hub'])->name('hub');
+    Route::post('/{section}', [SettingWebController::class, 'saveHubSection'])->where('section', '[^/]+')->name('hub.save');
+
     Route::get('/smtp', [SettingWebController::class, 'smtp'])->name('smtp');
     Route::post('/smtp', [SettingWebController::class, 'saveSmtp'])->name('smtp.save');
     Route::post('/smtp/test', [SettingWebController::class, 'testSmtp'])->name('smtp.test');
@@ -16,5 +19,4 @@ Route::middleware(['web', 'auth'])->prefix('admin/settings')->name('settings.')-
 });
 
 Route::redirect('/settings/theme', '/admin/settings/theme');
-Route::redirect('/settings', '/admin/settings/smtp');
-Route::redirect('/admin/settings', '/admin/settings/smtp');
+Route::redirect('/settings', '/admin/settings');

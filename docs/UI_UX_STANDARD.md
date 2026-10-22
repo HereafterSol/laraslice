@@ -66,9 +66,17 @@ project workspace.
 - **P8 Views** — `ui.directory.views` switches list/board/
   calendar over the same data and filters.
 - **P9 Settings hub** — every feature's settings live in ONE
-  searchable hub: left rail + search + one form-card section per
-  feature, declared via `settings:` in slice YAML and aggregated
-  by the framework (S-UI 5).
+  searchable hub: left rail (270px) + search + one form-card
+  section per feature, each with its own Save. Sections are
+  declared via top-level `settings:` in slice YAML and
+  aggregated by the framework (`Support\SettingsUi`); field
+  types are text, number, textarea, select, toggle and secret
+  (encrypted at rest, blank saves keep the value). Values
+  persist through the core Setting store, keyed
+  `{section}.{field}` (overridable per field) and grouped by
+  the declaring slice. Bespoke settings pages (SMTP, Theme,
+  AI) appear in the same rail as links. The hub is the
+  settings home at `/admin/settings`.
 
 ## Components
 
