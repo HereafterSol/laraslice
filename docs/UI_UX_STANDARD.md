@@ -43,7 +43,12 @@ project workspace.
   Related tabs with counts come from `ui.show.tabs`.
 - **P3 Form** — one card, in-card section headers, labels above
   inputs, quick-add beside selects, rich text for long text,
-  in-card save bar (Save / Save & More / Cancel).
+  in-card save bar (Save / Save & More / Cancel). In an overlay
+  (drawer/modal presentation) the same form renders
+  single-column fluid: declared section grids collapse and the
+  container drops its max-width, via the fragment layout's
+  overlay rules. The drawer width is declared per slice:
+  `ui.presentation.drawer_width` (sm|md|lg|xl, default lg).
 - **P4 Dashboard** — declared widgets in a masonry grid: profile
   card, dual counters, mini-tables, week strip, calendar;
   designed empty states, never blank panels.

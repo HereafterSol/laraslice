@@ -116,6 +116,7 @@ abstract class BaseSliceWebController extends Controller
                 'summaryCards' => $summaryCards,
                 'summaryData' => $summaryData,
                 'presentation' => $this->presentationModes(),
+                'drawerSize' => $this->presentationDrawerSize(),
                 'reportUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('report'))
                     ? route($this->resolveRouteName('report'), $this->routeParameters())
                     : null,
@@ -798,6 +799,21 @@ abstract class BaseSliceWebController extends Controller
         } catch (\Throwable) {
             return $default;
         }
+    }
+
+    /**
+     * Declared overlay drawer width (ui.presentation.drawer_width:
+     * sm|md|lg|xl, default lg — content/form drawers need more
+     * room than the component's compact default).
+     */
+    protected function presentationDrawerSize(): string
+    {
+        $declared = $this->ownManifest()['ui']['presentation']
+            ?? $this->getSliceUiConfig()['presentation']
+            ?? [];
+        $size = is_array($declared) ? ($declared['drawer_width'] ?? 'lg') : 'lg';
+
+        return in_array($size, ['sm', 'md', 'lg', 'xl'], true) ? $size : 'lg';
     }
 
     protected function presentationModes(): array

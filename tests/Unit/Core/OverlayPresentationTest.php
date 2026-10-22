@@ -24,6 +24,19 @@ class OverlayPresentationTest extends TestCase
         $this->assertSame(['create' => 'drawer', 'edit' => 'modal', 'show' => 'page'], $c->modes());
     }
 
+    public function test_drawer_size_resolves_declared_width_and_defaults_to_lg(): void
+    {
+        $c = new PresentationProbeController;
+        $c->fakeUi = ['presentation' => ['create' => 'drawer', 'drawer_width' => 'xl']];
+        $this->assertSame('xl', $c->drawerSize());
+
+        $c->fakeUi = ['presentation' => ['create' => 'drawer', 'drawer_width' => 'huge']];
+        $this->assertSame('lg', $c->drawerSize());
+
+        $c->fakeUi = [];
+        $this->assertSame('lg', $c->drawerSize());
+    }
+
     public function test_presentation_modes_default_to_page(): void
     {
         $c = new PresentationProbeController;
@@ -53,6 +66,11 @@ class PresentationProbeController extends BaseSliceWebController
     public function modes(): array
     {
         return $this->presentationModes();
+    }
+
+    public function drawerSize(): string
+    {
+        return $this->presentationDrawerSize();
     }
 
     public function layoutData(Request $request): array
