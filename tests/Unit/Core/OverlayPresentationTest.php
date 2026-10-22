@@ -55,6 +55,15 @@ class OverlayPresentationTest extends TestCase
         $this->assertStringNotContainsString('fetch(form.action', $generator);
     }
 
+    public function test_generated_form_sections_are_collapsible(): void
+    {
+        // C8: generated form section cards carry the collapse
+        // toggle (Alpine state + chevron + x-show on the content).
+        $generator = file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
+        $this->assertStringContainsString('lsSectionOpen', $generator);
+        $this->assertStringContainsString('aria-label="Toggle section"', $generator);
+    }
+
     public function test_overlay_request_gets_fragment_layout(): void
     {
         $c = new PresentationProbeController;

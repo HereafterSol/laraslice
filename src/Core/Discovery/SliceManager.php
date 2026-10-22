@@ -501,6 +501,26 @@ class SliceManager
                             $vChanged = true;
                         }
                     }
+                    if ($base === 'index.blade.php') {
+                        // (e) Controller-preference for directory view
+                        // settings: old blades recompute tableViews /
+                        // defaultView / inlineEdit from a manifest file
+                        // read whose relative path silently misses in
+                        // compiled views, clobbering the values the
+                        // controller passes from the real manifest —
+                        // declared views and inline editing vanished.
+                        $prefer = [
+                            '$tableViews = $dirUi[\'views\'] ?? [\'table\'];' => '$tableViews = $tableViews ?? $dirUi[\'views\'] ?? [\'table\'];',
+                            '$defaultView = $dirUi[\'default_view\'] ?? \'table\';' => '$defaultView = $defaultView ?? $dirUi[\'default_view\'] ?? \'table\';',
+                            '$inlineEdit = $dirUi[\'inline_edit\'] ?? [];' => '$inlineEdit = $inlineEdit ?? $dirUi[\'inline_edit\'] ?? [];',
+                        ];
+                        foreach ($prefer as $stale => $current) {
+                            if (str_contains($vContent, $stale)) {
+                                $vContent = str_replace($stale, $current, $vContent);
+                                $vChanged = true;
+                            }
+                        }
+                    }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
                         // (d) Declared-view toolbar buttons (matrix /
                         // report / bulk entry) — the controller passes

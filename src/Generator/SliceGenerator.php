@@ -309,15 +309,18 @@ class SliceGenerator
         if (count($formInputs) <= 6) {
             $inputsStr = implode("\n\n", $formInputs);
             $formSectionsHtml = <<<HTML
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
+            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
                 <div class="flex items-center gap-2">
                     <x-lucide-info class="size-4 text-primary" />
                     <x-ui.card-title class="text-base font-bold text-foreground">General Information</x-ui.card-title>
                 </div>
                 <x-ui.card-description class="text-xs">Configure {$studlyName} operational parameters</x-ui.card-description>
+                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
+                    <x-lucide-chevron-down class="size-4 transition-transform" />
+                </button>
             </x-ui.card-header>
-            <x-ui.card-content class="p-6">
+            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
 {$inputsStr}
                 </div>
@@ -331,30 +334,36 @@ HTML;
             $secondaryStr = implode("\n\n", $secondaryInputs);
 
             $formSectionsHtml = <<<HTML
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
+            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
                 <div class="flex items-center gap-2">
                     <x-lucide-layers class="size-4 text-primary" />
                     <x-ui.card-title class="text-base font-bold text-foreground">Core Parameters</x-ui.card-title>
                 </div>
                 <x-ui.card-description class="text-xs">Primary identification and record attributes</x-ui.card-description>
+                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
+                    <x-lucide-chevron-down class="size-4 transition-transform" />
+                </button>
             </x-ui.card-header>
-            <x-ui.card-content class="p-6">
+            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
 {$primaryStr}
                 </div>
             </x-ui.card-content>
         </x-ui.card>
 
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
+            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
                 <div class="flex items-center gap-2">
                     <x-lucide-sliders class="size-4 text-primary" />
                     <x-ui.card-title class="text-base font-bold text-foreground">Additional Details</x-ui.card-title>
                 </div>
                 <x-ui.card-description class="text-xs">Extended parameters and operational terms</x-ui.card-description>
+                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
+                    <x-lucide-chevron-down class="size-4 transition-transform" />
+                </button>
             </x-ui.card-header>
-            <x-ui.card-content class="p-6">
+            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
 {$secondaryStr}
                 </div>
@@ -430,15 +439,18 @@ HTML;
 
 ", $cardInputs);
                 $customCards[] = <<<CARD
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
+            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
                 <div class="flex items-center gap-2">
                     <x-lucide-{$sIcon} class="size-4 text-primary" />
                     <x-ui.card-title class="text-base font-bold text-foreground">{$sTitle}</x-ui.card-title>
                 </div>
                 <x-ui.card-description class="text-xs">{$sDesc}</x-ui.card-description>
+                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
+                    <x-lucide-chevron-down class="size-4 transition-transform" />
+                </button>
             </x-ui.card-header>
-            <x-ui.card-content class="p-6">
+            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
                 <div class="{$gridClass}" data-ls-section-grid>
 {$inputsCombined}
                 </div>
