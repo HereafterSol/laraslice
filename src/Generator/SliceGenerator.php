@@ -1319,6 +1319,8 @@ $bladeIndex = <<<BLADE
         </div>
         @endif
 
+        @include('laraslice::directory.actions')
+
         <!-- Quick Filter Tabs (from ui.directory.quick_filters) -->
         @if(!empty(\$quickFilters))
         <div>
@@ -1326,6 +1328,8 @@ $bladeIndex = <<<BLADE
             <x-ui.filter-tabs
                 :tabs="\$qf['options'] ?? []"
                 :param="\$qf['handle']"
+                :activeTab="\$activeFilters[\$qf['handle']] ?? null"
+                :default="\$filterDefaults[\$qf['handle']] ?? null"
             />
             @endforeach
         </div>
@@ -1355,6 +1359,7 @@ $bladeIndex = <<<BLADE
                 <form method="GET" class="flex flex-1 flex-col overflow-y-auto">
                     <div class="flex flex-1 flex-col gap-4 px-4 py-4">
                 @foreach(\$sidebarFilters as \$sf)
+                @if((\$sf['ui'] ?? true) === false) @continue @endif
                 @php \$sfHandle = \$sf['handle'] ?? ''; \$sfLabel = \$sf['label'] ?? \Illuminate\Support\Str::headline(\$sfHandle); @endphp
                 @if((\$sf['type'] ?? 'select') === 'date_range')
                 <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

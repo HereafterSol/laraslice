@@ -437,6 +437,31 @@ one active timer per user across the log table, a second
 start refused; stop computes `total_hours`/`total_minutes`
 when the log table carries them).
 
+**The fidelity stage (porting).** A port is functional by
+default; REPLICATION is a separate stage. Flow: (1) EXTRACT the
+source app's rendered pages (toolbar actions, filter selects
+WITH their default values, inputs, tabs, table columns) into a
+per-slice **UI spec** (`porting/ui-spec/<slice>.ui.yaml` — a
+porting-time artifact, never loaded at runtime); (2) give every
+spec item a decision — declare / standard-replaces / skip /
+accepted-difference; (3) TRANSLATE decisions into the manifest
+(the single runtime heart — the spec never duplicates it);
+(4) re-extract and diff as the verifier. Fidelity vocabulary:
+filter `default:` on quick/sidebar filters (applies only when
+the request never mentions the handle; `!value` excludes;
+`$user` = current user; the All tab clears via the `__all__`
+sentinel); declared quick-filter `options:` (value/label) beat
+`options_from: distinct:`; `ui.directory.actions[]` — context
+buttons beside Add (`kind: filter` with criteria, `kind: route`,
+`kind: url`); `type: relation_exists` sidebar filters
+(`relation` + `key`) for pivot-backed dimensions like assignees
+(criteria-only with `ui: false`, or a drawer select when the
+relation is `users`); column `label_table`/`label_column` when
+the label table breaks the FK naming convention; the `date`
+formatter. Do NOT add summary cards the source list does not
+have, and match the source's column set — extra columns are
+deltas too.
+
 **Components:** BlatUI first — see `docs/UI-COMPONENT-MAPPING.md`
 (`data-table`, `stat`, `tabs`, `chart`, `kanban`, `gantt`,
 `scheduler`, `repeater`, `rich-text-editor`, `avatar-group`,

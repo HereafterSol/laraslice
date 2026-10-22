@@ -55,21 +55,56 @@ abstract class BaseSliceWebController extends Controller
         // filter object. Before this, filter tabs/sidebar declarations
         // rendered (or didn't) but never narrowed a single row.
         $relationshipOptions = $this->resolveRelationshipOptions($createForm);
+        $filterDefaults = [];
         if ($filter instanceof BaseFilter) {
             $criteria = [];
+            $queryKeys = array_keys($request->query());
             foreach (array_merge($quickFilters, $sidebarFilters) as $declared) {
                 $handle = $declared['handle'] ?? null;
                 if (! is_string($handle) || $handle === '') {
                     continue;
                 }
+                if (array_key_exists('default', $declared) && $declared['default'] !== null && $declared['default'] !== '') {
+                    $filterDefaults[$handle] = $declared['default'] === '$user' ? auth()->id() : $declared['default'];
+                }
+                // Relation-exists filters (fidelity): the criterion
+                // targets a RELATED record (assignees via a pivot),
+                // not a column on this table. Translated here into
+                // the __exists:<relation>.<key> criteria key the
+                // base service applies as whereHas.
+                if (($declared['type'] ?? null) === 'relation_exists' && ! empty($declared['relation'])) {
+                    $existsKey = '__exists:'.$declared['relation'].'.'.($declared['key'] ?? 'id');
+                    $existsValue = null;
+                    if ($request->filled($handle) && $request->input($handle) !== '__all__') {
+                        $existsValue = $request->input($handle) === '$user' ? auth()->id() : $request->input($handle);
+                    } elseif (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
+                        $existsValue = $filterDefaults[$handle];
+                    }
+                    if ($existsValue !== null) {
+                        $criteria[$existsKey] = $existsValue;
+                    }
+                    continue;
+                }
                 if ($request->filled($handle)) {
-                    $criteria[$handle] = $request->input($handle);
+                    // '__all__' is the explicit clear sentinel the
+                    // filter tabs send: no criterion, and the
+                    // declared default stays off for this request.
+                    if ($request->input($handle) !== '__all__') {
+                        $criteria[$handle] = $request->input($handle);
+                    }
                 }
                 foreach (['from', 'to'] as $suffix) {
                     $rangeKey = $handle.'_'.$suffix;
                     if ($request->filled($rangeKey)) {
                         $criteria[$rangeKey] = $request->input($rangeKey);
                     }
+                }
+                // Declared DEFAULT (fidelity stage): applies only
+                // when the request never mentioned the handle —
+                // any interaction (a tab click always carries the
+                // key, even empty or '__all__') suppresses it.
+                if (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
+                    $criteria[$handle] = $filterDefaults[$handle];
                 }
             }
             if ($criteria !== []) {
@@ -91,6 +126,18 @@ abstract class BaseSliceWebController extends Controller
         // Resolve sidebar filter select options (distinct values or
         // related-record labels) into the same value/label shape.
         foreach ($sidebarFilters as &$sf) {
+            if (($sf['type'] ?? null) === 'relation_exists' && ($sf['relation'] ?? null) === 'users') {
+                try {
+                    $sf['options'] = \Illuminate\Support\Facades\DB::table('users')
+                        ->orderBy('name')
+                        ->get(['id', 'name'])
+                        ->map(fn ($u) => ['value' => $u->id, 'label' => (string) $u->name])
+                        ->toArray();
+                } catch (\Throwable $e) {
+                    $sf['options'] = [];
+                }
+                continue;
+            }
             $from = $sf['options_from'] ?? null;
             if (is_string($from) && str_starts_with($from, 'distinct:')) {
                 $sf['options'] = $this->getDistinctFilterOptions(substr($from, 9));
@@ -102,6 +149,40 @@ abstract class BaseSliceWebController extends Controller
             }
         }
         unset($sf);
+
+        // Declared context actions (fidelity stage): the buttons a
+        // source page carries beside Add — a filtered view of the
+        // same list (My Tasks), a sibling route, or a plain URL.
+        $directoryActions = [];
+        foreach (($uiConfig['directory']['actions'] ?? []) as $action) {
+            if (! is_array($action) || empty($action['label'])) {
+                continue;
+            }
+            $kind = (string) ($action['kind'] ?? 'url');
+            $href = null;
+            if ($kind === 'filter') {
+                $params = [];
+                foreach ((array) ($action['criteria'] ?? []) as $k => $v) {
+                    $params[$k] = $v === '$user' ? auth()->id() : $v;
+                }
+                $href = $request->url().($params === [] ? '' : '?'.http_build_query($params));
+            } elseif ($kind === 'route' && ! empty($action['route'])) {
+                $href = \Illuminate\Support\Facades\Route::has((string) $action['route'])
+                    ? route((string) $action['route'], $this->routeParameters())
+                    : null;
+            } elseif (! empty($action['url'])) {
+                $href = url((string) $action['url']);
+            }
+            if ($href === null) {
+                continue;
+            }
+            $directoryActions[] = [
+                'label' => (string) $action['label'],
+                'href' => $href,
+                'icon' => isset($action['icon']) ? (string) $action['icon'] : null,
+                'variant' => (string) ($action['variant'] ?? 'outline'),
+            ];
+        }
 
         $viewData = array_merge(
             $relationshipOptions,
@@ -134,6 +215,8 @@ abstract class BaseSliceWebController extends Controller
                     : null,
                 'quickFilters' => $quickFilters,
                 'sidebarFilters' => $sidebarFilters,
+                'filterDefaults' => $filterDefaults,
+                'directoryActions' => $directoryActions,
                 'activeFilters' => $filter instanceof BaseFilter ? $filter->getCriteria() : [],
                 'uiPresentationCreate' => $uiConfig['presentation']['create'] ?? 'page',
                 // Directory UI values come from the controller's own

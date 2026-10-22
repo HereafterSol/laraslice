@@ -2,11 +2,15 @@
     'tabs' => [],
     'activeTab' => null,
     'param' => 'status',
+    'default' => null,
     'class' => '',
 ])
 
 @php
-    $current = $activeTab ?? request()->query($param, '');
+    $current = $activeTab ?? request()->query($param, $default ?? '');
+    if ($current === '__all__') {
+        $current = '';
+    }
 @endphp
 
 <div {{ $attributes->merge(['class' => 'flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border/40 overflow-x-auto no-scrollbar ' . $class]) }}>
@@ -19,7 +23,14 @@
             
             $queryParams = request()->query();
             if ($val === '' || $val === null) {
-                unset($queryParams[$param]);
+                // With a declared default in play, "All" must clear
+                // it explicitly ('__all__' sentinel); otherwise the
+                // param simply drops out.
+                if (($default ?? null) !== null && $default !== '') {
+                    $queryParams[$param] = '__all__';
+                } else {
+                    unset($queryParams[$param]);
+                }
             } else {
                 $queryParams[$param] = $val;
             }
