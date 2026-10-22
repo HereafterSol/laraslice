@@ -123,6 +123,9 @@ abstract class BaseSliceWebController extends Controller
                 'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
                     ? route($this->resolveRouteName('matrix'), $this->routeParameters())
                     : null,
+                'bulkEntryUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('bulk_entry'))
+                    ? route($this->resolveRouteName('bulk_entry'), $this->routeParameters())
+                    : null,
                 // Relative path: the template is consumed by a
                 // same-origin fetch, and route()'s absolute form
                 // would pin APP_URL's host into the page.
@@ -272,6 +275,269 @@ abstract class BaseSliceWebController extends Controller
                 : url('/'),
             'routePrefix' => $this->getRoutePrefix(),
         ]);
+    }
+
+
+    /**
+     * Bulk entry (G8): one-date grid for slices declaring
+     * ui.directory.bulk_entry — rows are the row key's relationship
+     * options, columns the declared fields, existing records for
+     * the date prefilled. The standard pattern behind screens like
+     * Mark Attendance. SliceManager registers the routes centrally.
+     */
+    public function bulkEntry(Request $request)
+    {
+        $this->authorizeSlice('view');
+
+        $manifest = $this->ownManifest();
+        $decl = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($manifest);
+        if ($decl === null) {
+            abort(404);
+        }
+        $date = (string) $request->query('date', date('Y-m-d'));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || strtotime($date) === false) {
+            $date = date('Y-m-d');
+        }
+
+        $formClass = $this->getFormClass();
+        $options = $this->resolveRelationshipOptions(new $formClass);
+        $rowKey = $decl['row_key'];
+        $base = str_ends_with($rowKey, '_id') ? substr($rowKey, 0, -3) : $rowKey;
+        $labelMap = [];
+        foreach ([$rowKey, \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)).'Options', \Illuminate\Support\Str::camel($base).'Options', \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)).'Options'] as $candidateKey) {
+            if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
+                $labelMap = $options[$candidateKey];
+                break;
+            }
+        }
+
+        $existing = [];
+        $filterClass = $this->getFilterClass();
+        $filter = new $filterClass([]);
+        if ($filter instanceof BaseFilter) {
+            $filter->withLimit(5000);
+            $filter->setCriteria([
+                $decl['date_field'].'_from' => $date.' 00:00:00',
+                $decl['date_field'].'_to' => $date.' 23:59:59',
+            ]);
+            foreach ($this->getService()->getList($filter)->items as $item) {
+                $attrs = method_exists($item, 'getAttributes') ? $item->getAttributes() : (is_array($item) ? $item : get_object_vars($item));
+                $k = $attrs[$rowKey] ?? null;
+                if ($k !== null && ! isset($existing[$k])) {
+                    $existing[$k] = $attrs;
+                }
+            }
+        }
+
+        $rows = [];
+        foreach ($labelMap as $key => $label) {
+            $values = [];
+            foreach ($decl['fields'] as $f) {
+                $raw = $existing[$key][$f['handle']] ?? null;
+                $values[$f['handle']] = $raw === null || $raw === ''
+                    ? ''
+                    : (($f['input'] === 'time' || $f['input'] === 'datetime') ? date('H:i', strtotime((string) $raw)) : (string) $raw);
+            }
+            $rows[] = ['key' => $key, 'label' => (string) $label, 'values' => $values, 'exists' => isset($existing[$key])];
+        }
+
+        $own = $this->ownViewName('bulk-entry');
+        $view = view()->exists($own) ? $own : 'laraslice::directory.bulk-entry';
+
+        return view($view, [
+            'bulk' => $decl,
+            'rows' => $rows,
+            'date' => $date,
+            'storeUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('bulk_entry_store'))
+                ? route($this->resolveRouteName('bulk_entry_store'), $this->routeParameters())
+                : url()->current(),
+            'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+                ? route($this->resolveRouteName('index'), $this->routeParameters())
+                : url('/'),
+            'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
+                ? route($this->resolveRouteName('matrix'), $this->routeParameters())
+                : null,
+            'routePrefix' => $this->getRoutePrefix(),
+        ]);
+    }
+
+    /**
+     * Save a bulk-entry grid: one record per row for the date.
+     * Rows whose date field is left empty are skipped (an existing
+     * record is left untouched — clearing is a delete, done from
+     * the record itself). Datetime fields are composed from the
+     * entry date + the submitted time.
+     */
+    public function bulkEntryStore(Request $request)
+    {
+        $this->authorizeSlice('create');
+
+        $manifest = $this->ownManifest();
+        $decl = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($manifest);
+        if ($decl === null) {
+            abort(404);
+        }
+        $data = $request->validate([
+            'date' => ['required', 'date_format:Y-m-d'],
+            'entries' => ['array'],
+            'entries.*' => ['array'],
+        ]);
+        $date = $data['date'];
+
+        $service = $this->getService();
+        $ref = new \ReflectionMethod($service, 'getModelClass');
+        $ref->setAccessible(true);
+        $modelClass = $ref->invoke($service);
+        if (! is_string($modelClass) || ! class_exists($modelClass)) {
+            abort(500, 'Bulk entry: model class not resolvable.');
+        }
+
+        $saved = 0;
+        foreach (($data['entries'] ?? []) as $rowKeyValue => $submitted) {
+            if (! is_array($submitted)) {
+                continue;
+            }
+            $values = [];
+            $hasDateValue = false;
+            foreach ($decl['fields'] as $f) {
+                $v = $submitted[$f['handle']] ?? null;
+                if ($v === null || $v === '') {
+                    continue;
+                }
+                if ($f['input'] === 'time' || $f['input'] === 'datetime' || $f['handle'] === $decl['date_field']) {
+                    $values[$f['handle']] = $date.' '.(preg_match('/^\d{2}:\d{2}$/', (string) $v) ? $v.':00' : $v);
+                    if ($f['handle'] === $decl['date_field']) {
+                        $hasDateValue = true;
+                    }
+                } else {
+                    $values[$f['handle']] = $v;
+                }
+            }
+            if (! $hasDateValue || $values === []) {
+                continue;
+            }
+            $model = $modelClass::query()
+                ->where($decl['row_key'], $rowKeyValue)
+                ->whereDate($decl['date_field'], $date)
+                ->first() ?? new $modelClass;
+            $model->forceFill(array_merge($values, [$decl['row_key'] => $rowKeyValue]));
+            $model->save();
+            $saved++;
+        }
+
+        return redirect()
+            ->route($this->resolveRouteName('bulk_entry'), $this->routeParameters(['date' => $date]))
+            ->with('success', "Saved {$saved} record(s) for {$date}.");
+    }
+
+
+    /**
+     * Timer state for the show page (G8): the declared timer's
+     * totals + the current user's active session on this record
+     * (or anywhere, so the page can say why Start is refused).
+     */
+    protected function timerState(array $manifest, mixed $record): ?array
+    {
+        $decl = \LaraSlice\Support\DirectoryUi::timerFromManifest($manifest);
+        if ($decl === null || ! is_object($record) || ! method_exists($record, $decl['relation'])) {
+            return null;
+        }
+        $userId = auth()->id();
+        $relation = $record->{$decl['relation']}();
+        $logClass = get_class($relation->getRelated());
+        $base = $logClass::query()->where($decl['user_field'], $userId);
+
+        $activeHere = (clone $base)
+            ->where($relation->getForeignKeyName(), $record->getKey())
+            ->whereNull($decl['end_field'])
+            ->first();
+        $activeAnywhere = $activeHere ?? (clone $base)->whereNull($decl['end_field'])->first();
+
+        $totalMinutes = 0;
+        foreach ($record->{$decl['relation']}()->whereNotNull($decl['end_field'])->get() as $log) {
+            $start = strtotime((string) $log->{$decl['start_field']});
+            $end = strtotime((string) $log->{$decl['end_field']});
+            if ($start !== false && $end !== false && $end >= $start) {
+                $totalMinutes += (int) (($end - $start) / 60);
+            }
+        }
+
+        return [
+            'decl' => $decl,
+            'activeHere' => $activeHere,
+            'activeElsewhere' => $activeAnywhere && ! $activeHere,
+            'totalMinutes' => $totalMinutes,
+            'startUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('timer_start'))
+                ? route($this->resolveRouteName('timer_start'), $this->routeParameters(['id' => $record->getKey()]))
+                : null,
+            'stopUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('timer_stop'))
+                ? route($this->resolveRouteName('timer_stop'), $this->routeParameters(['id' => $record->getKey()]))
+                : null,
+        ];
+    }
+
+    /**
+     * Start the declared timer on a record (G8). One active timer
+     * per user across the whole log table — the source
+     * application's rule.
+     */
+    public function timerStart(Request $request, string|int $id)
+    {
+        $this->authorizeSlice('create');
+        $decl = \LaraSlice\Support\DirectoryUi::timerFromManifest($this->ownManifest());
+        $record = $this->getService()->findModel($id);
+        if ($decl === null || $record === null || ! method_exists($record, $decl['relation'])) {
+            abort(404);
+        }
+        $relation = $record->{$decl['relation']}();
+        $logClass = get_class($relation->getRelated());
+        $active = $logClass::query()
+            ->where($decl['user_field'], auth()->id())
+            ->whereNull($decl['end_field'])
+            ->first();
+        if ($active !== null) {
+            return back()->with('error', 'Timer is already running for a task.');
+        }
+        $relation->create([
+            $decl['user_field'] => auth()->id(),
+            $decl['start_field'] => now(),
+        ]);
+
+        return back()->with('success', 'Timer started successfully.');
+    }
+
+    /** Stop the current user's active timer on a record (G8). */
+    public function timerStop(Request $request, string|int $id)
+    {
+        $this->authorizeSlice('create');
+        $decl = \LaraSlice\Support\DirectoryUi::timerFromManifest($this->ownManifest());
+        $record = $this->getService()->findModel($id);
+        if ($decl === null || $record === null || ! method_exists($record, $decl['relation'])) {
+            abort(404);
+        }
+        $log = $record->{$decl['relation']}()
+            ->where($decl['user_field'], auth()->id())
+            ->whereNull($decl['end_field'])
+            ->first();
+        if ($log === null) {
+            return back()->with('error', 'No running timer for this record.');
+        }
+        $end = now();
+        $log->{$decl['end_field']} = $end;
+        // total_hours / total_minutes are the log vocabulary of
+        // the source domain — fill them when the table has them.
+        // The start value may be an uncast string on the model.
+        $startedAt = \Illuminate\Support\Carbon::parse($log->{$decl['start_field']});
+        $schema = $log->getConnection()->getSchemaBuilder();
+        if ($schema->hasColumn($log->getTable(), 'total_minutes')) {
+            $log->total_minutes = (string) (int) $startedAt->diffInMinutes($end);
+        }
+        if ($schema->hasColumn($log->getTable(), 'total_hours')) {
+            $log->total_hours = (string) (int) $startedAt->diffInHours($end);
+        }
+        $log->save();
+
+        return back()->with('success', 'Timer stopped successfully.');
     }
 
     public function create()
@@ -475,6 +741,7 @@ abstract class BaseSliceWebController extends Controller
                 // over the record's relations.
                 'showStats' => \LaraSlice\Support\DirectoryUi::showStatsFromManifest($ownManifest, $record),
                 'showWidgets' => \LaraSlice\Support\DirectoryUi::showWidgetsFromManifest($ownManifest, $record),
+                'timerState' => $this->timerState($ownManifest, $record),
                 ...$this->overlayLayoutData(request()),
                 'documentUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('document'))
                     ? route($this->resolveRouteName('document'), $this->routeParameters(['id' => $id]))

@@ -82,6 +82,16 @@ project workspace.
   the declaring slice. Bespoke settings pages (SMTP, Theme,
   AI) appear in the same rail as links. The hub is the
   settings home at `/admin/settings`.
+- **P10 Bulk entry** — `ui.directory.bulk_entry` declares a
+  one-date grid: rows are the row key's relationship options,
+  columns the declared fields (time/datetime/text/select),
+  served at `{index}/bulk-entry?date=` with one Save for the
+  whole grid. `row_key`/`date_field` default to the matrix
+  declaration's. Existing records for the date prefill and are
+  updated in place; rows with an empty date field are skipped
+  (never deleted). The standard pattern behind Mark
+  Attendance-style screens; a slice overrides the template
+  with its own `bulk-entry.blade.php`.
 
 ## Components
 
@@ -107,3 +117,5 @@ back to the filter declarations incl. `distinct:`) → S-UI 3
 foundation, regenerate demo slices (`slice:repair --re-infer-ui`
 and template refresh), verify side-by-side against the
 reference ERP. The Studio follows the same tokens.
+
+**P11 — Record timer (`ui.show.timer`).** A detail page can carry a start/stop work timer declared as `ui.show.timer: { relation, start_field = start_time, end_field = end_time, user_field = user_id, title }`. The show page renders the standard timer card (total time logged, running state with a live elapsed ticker, Start/Stop) and the declared POST endpoints `/{id}/timer/start|stop` write session rows through the named hasMany relation. Rules mirror the source application: **one active timer per user across the whole log table** — starting a second is refused with "Timer is already running for a task."; stopping stamps the end time and computes `total_hours`/`total_minutes` when the log table carries those columns. Breaks/sub-timers are deliberately out of scope.

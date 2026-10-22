@@ -677,6 +677,102 @@ final class DirectoryUi
         ];
     }
 
+
+
+    /**
+     * Resolve a declared record timer (G8): a start/stop work
+     * timer rendered on the show page, writing session rows to a
+     * related log model. Declared as ui.show.timer:
+     * { relation, start_field?, end_field?, user_field?, title? }.
+     * One active timer per user across the whole log table —
+     * starting a second one is refused (the source application's
+     * rule). Stop computes total_hours/total_minutes when the log
+     * table carries those columns.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{relation: string, start_field: string, end_field: string, user_field: string, title: string}|null
+     */
+    public static function timerFromManifest(array $manifest): ?array
+    {
+        $decl = $manifest['ui']['show']['timer'] ?? null;
+        if (! is_array($decl) || empty($decl['relation'])) {
+            return null;
+        }
+
+        return [
+            'relation' => (string) $decl['relation'],
+            'start_field' => (string) ($decl['start_field'] ?? 'start_time'),
+            'end_field' => (string) ($decl['end_field'] ?? 'end_time'),
+            'user_field' => (string) ($decl['user_field'] ?? 'user_id'),
+            'title' => (string) ($decl['title'] ?? 'Timer'),
+        ];
+    }
+
+    /**
+     * Resolve a declared bulk-entry view (G8): a one-date grid over a
+     * row source (the row key's relationship options) with per-row
+     * editable fields — the standard pattern behind screens like
+     * Mark Attendance. Declared as ui.directory.bulk_entry:
+     * { row_key?, date_field?, fields: [handle | {handle, input?,
+     * options?}], title? }. row_key/date_field default to the
+     * matrix declaration's when present.
+     *
+     * Field inputs: time | datetime | text | select. A datetime
+     * field renders as a time input whose value is composed with
+     * the entry date on save. Labels default to the directory
+     * column labels.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{title: string, row_key: string, date_field: string, fields: list<array{handle: string, label: string, input: string, options: list<string>}>}|null
+     */
+    public static function bulkEntryFromManifest(array $manifest): ?array
+    {
+        $decl = $manifest['ui']['directory']['bulk_entry'] ?? null;
+        if (! is_array($decl)) {
+            return null;
+        }
+        $matrix = $manifest['ui']['directory']['matrix'] ?? [];
+        $rowKey = (string) ($decl['row_key'] ?? $matrix['row_key'] ?? '');
+        $dateField = (string) ($decl['date_field'] ?? $matrix['date_field'] ?? '');
+        if ($rowKey === '' || $dateField === '' || empty($decl['fields']) || ! is_array($decl['fields'])) {
+            return null;
+        }
+
+        $labels = [];
+        foreach (($manifest['ui']['directory']['columns'] ?? []) as $col) {
+            if (is_array($col) && ! empty($col['key'])) {
+                $labels[(string) $col['key']] = (string) ($col['label'] ?? \Illuminate\Support\Str::headline((string) $col['key']));
+            }
+        }
+
+        $fields = [];
+        foreach ($decl['fields'] as $f) {
+            if (is_string($f)) {
+                $f = ['handle' => $f];
+            }
+            if (! is_array($f) || empty($f['handle'])) {
+                continue;
+            }
+            $handle = (string) $f['handle'];
+            $fields[] = [
+                'handle' => $handle,
+                'label' => (string) ($f['label'] ?? $labels[$handle] ?? \Illuminate\Support\Str::headline($handle)),
+                'input' => (string) ($f['input'] ?? 'text'),
+                'options' => array_values(array_map('strval', (array) ($f['options'] ?? []))),
+            ];
+        }
+        if ($fields === []) {
+            return null;
+        }
+
+        return [
+            'title' => (string) ($decl['title'] ?? 'Bulk Entry'),
+            'row_key' => $rowKey,
+            'date_field' => $dateField,
+            'fields' => $fields,
+        ];
+    }
+
     /**
      * Resolve a declared report view (G2): records grouped by a field
      * with computed aggregates — the standard pattern behind tabular
