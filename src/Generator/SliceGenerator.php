@@ -1204,6 +1204,12 @@ $bladeIndex = <<<BLADE
                 <span>Matrix</span>
             </x-ui.button>
             @endisset
+            @isset(\$bulkEntryUrl)
+            <x-ui.button href="{{ \$bulkEntryUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
+                <x-lucide-clipboard-check class="size-3.5" />
+                <span>Bulk Entry</span>
+            </x-ui.button>
+            @endisset
             @if(\$can['create'] ?? true)
             @if((\$presentation['create'] ?? 'page') !== 'page')
             <button type="button" data-overlay-url="{{ route('{$routeNamePrefix}.create') }}" data-overlay-mode="{{ \$presentation['create'] }}" data-overlay-title="Add {$studlyName}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-colors cursor-pointer">
@@ -1544,6 +1550,20 @@ BLADE;
         </div>
     @endif
 
+    @if (\$errors->any())
+        <div class="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm shadow-xs" role="alert">
+            <div class="font-semibold flex items-center gap-2">
+                <x-lucide-alert-circle class="size-4 shrink-0" />
+                <span>Please fix the following:</span>
+            </div>
+            <ul class="list-disc pl-9 mt-1 space-y-0.5">
+                @foreach (\$errors->all() as \$error)
+                    <li>{{ \$error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <form action="{{ \$isNew ? route('{$routeNamePrefix}.store') : route('{$routeNamePrefix}.update', \$form->id) }}" method="POST" class="space-y-6">
         @csrf
         @if(!\$isNew) @method('PUT') @endif
@@ -1717,6 +1737,7 @@ BLADE;
 
     <!-- Tab 1: Overview & Parameters -->
     <div x-show="activeTab === 'overview'" x-transition class="space-y-6">
+    @include('laraslice::partials.timer-card')
     <!-- Tier 2: KPI Metric Strip — declared ui.show.stats (F3c) replace the generic cards -->
     @if(!empty(\$showStats ?? []))
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">

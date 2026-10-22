@@ -196,7 +196,9 @@ class SliceManager
         $matrix = is_array($slice->raw['ui']['directory']['matrix'] ?? null);
         $report = is_array($slice->raw['ui']['directory']['report'] ?? null);
         $inline = ! empty($slice->raw['ui']['directory']['inline_edit'] ?? []);
-        if (! $document && ! $matrix && ! $report && ! $inline) {
+        $bulkEntry = is_array($slice->raw['ui']['directory']['bulk_entry'] ?? null);
+        $timer = is_array($slice->raw['ui']['show']['timer'] ?? null);
+        if (! $document && ! $matrix && ! $report && ! $inline && ! $bulkEntry && ! $timer) {
             return;
         }
         try {
@@ -236,6 +238,22 @@ class SliceManager
                 Route::middleware($middleware)
                     ->get($uriPrefix.'/report', [$controllerClass, 'report'])
                     ->name($namePrefix.'.report');
+            }
+            if ($bulkEntry && ! Route::has($namePrefix.'.bulk_entry')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/bulk-entry', [$controllerClass, 'bulkEntry'])
+                    ->name($namePrefix.'.bulk_entry');
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/bulk-entry', [$controllerClass, 'bulkEntryStore'])
+                    ->name($namePrefix.'.bulk_entry_store');
+            }
+            if ($timer && ! Route::has($namePrefix.'.timer_start')) {
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/{id}/timer/start', [$controllerClass, 'timerStart'])
+                    ->name($namePrefix.'.timer_start');
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/{id}/timer/stop', [$controllerClass, 'timerStop'])
+                    ->name($namePrefix.'.timer_stop');
             }
             if ($inline && ! Route::has($namePrefix.'.inline')) {
                 Route::middleware($middleware)
