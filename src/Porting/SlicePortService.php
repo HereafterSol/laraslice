@@ -161,6 +161,35 @@ class SlicePortService
     /**
      * Inspect a legacy application directory and return comprehensive schema & slice mapping.
      */
+    /**
+     * Tables a port table-prefix never applies to: framework
+     * auth/merge tables always land in the host's own tables
+     * (the ETL guards treat them the same way).
+     */
+    public static function prefixExemptTables(): array
+    {
+        return ['users', 'roles', 'permissions', 'permission_role', 'role_user'];
+    }
+
+    /**
+     * The TARGET table name for a ported table under the opt-in
+     * porting table prefix (config laraslice.porting.table_prefix,
+     * set by slice:port --table-prefix=). No prefix configured,
+     * an exempt table, or an already-prefixed name returns the
+     * table unchanged, so unprefixed ports behave exactly as
+     * before. Model and slice names are never prefixed — only
+     * physical tables.
+     */
+    public static function targetTableName(string $table, ?string $prefix = null): string
+    {
+        $prefix = $prefix ?? (string) config('laraslice.porting.table_prefix', '');
+        if ($prefix === '' || in_array($table, self::prefixExemptTables(), true) || str_starts_with($table, $prefix)) {
+            return $table;
+        }
+
+        return $prefix.$table;
+    }
+
     public function inspect(string $sourcePath, string $domain = 'Adjudication'): array
     {
         $cleanPath = rtrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $sourcePath), DIRECTORY_SEPARATOR);
@@ -581,7 +610,7 @@ class SlicePortService
                     'app' => $app,
                     'super_domain' => $superDomain,
                     'domain' => $module,
-                    'table' => $primaryTable,
+                    'table' => self::targetTableName($primaryTable),
                     'multitenant' => $multitenant,
                     'tenant_key' => $tenantKey,
                     'description' => $info['description'] ?? "Vertical slice for {$sliceName}",
@@ -632,7 +661,7 @@ class SlicePortService
                     'slice' => $sliceName,
                     'module' => $module,
                     'app' => $app,
-                    'table' => $primaryTable,
+                    'table' => self::targetTableName($primaryTable),
                     'child_tables' => $scaffoldedChildren,
                     'path' => $sliceDir,
                 ];
@@ -661,6 +690,9 @@ class SlicePortService
         string $tenantKey
     ): void {
         $childModelName = Str::studly(Str::singular($childTable));
+        // Physical table is the (possibly prefixed) target name;
+        // the model class keeps the clean source-derived name.
+        $targetChildTable = self::targetTableName($childTable);
         $timestamp = date('Y_m_d_His', time() + 2);
 
         // 1. Generate child migration
@@ -699,11 +731,11 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        if (Schema::hasTable('{$childTable}')) {
+        if (Schema::hasTable('{$targetChildTable}')) {
             return;
         }
 
-        Schema::create('{$childTable}', function (Blueprint \$table) {
+        Schema::create('{$targetChildTable}', function (Blueprint \$table) {
             \$table->id();{$tenantCol}{$migBody}
             \$table->timestamps();
         });
@@ -711,13 +743,13 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::dropIfExists('{$childTable}');
+        Schema::dropIfExists('{$targetChildTable}');
     }
 };
 PHP;
 
         File::ensureDirectoryExists($sliceDir . '/Migrations');
-        File::put($sliceDir . "/Migrations/{$timestamp}_create_{$childTable}_table.php", $migrationContent);
+        File::put($sliceDir . "/Migrations/{$timestamp}_create_{$targetChildTable}_table.php", $migrationContent);
 
         // 2. Generate child model
         $tenantTraitUse = $multitenant ? "\nuse LaraSlice\\Core\\Tenancy\\Traits\\HasTenant;" : '';
@@ -733,7 +765,7 @@ use Illuminate\Database\Eloquent\Model;{$tenantTraitUse}
 
 class {$childModelName} extends Model
 {
-{$tenantTrait}    protected \$table = '{$childTable}';
+{$tenantTrait}    protected \$table = '{$targetChildTable}';
     protected \$guarded = [];
 
     public function {$parentModelName}(): \Illuminate\Database\Eloquent\Relations\BelongsTo
@@ -818,7 +850,7 @@ PHP;
 
             $yaml['models'][] = [
                 'handle' => $childHandle,
-                'table' => $childTable,
+                'table' => self::targetTableName($childTable),
                 'root' => false,
                 'fields' => $fields,
                 'relations' => [
@@ -1800,7 +1832,7 @@ PHP;
                 'type' => 'hasMany',
                 'model' => Str::snake(Str::singular($childTable)),
                 'foreign_key' => $fk,
-                'table' => $childTable,
+                'table' => self::targetTableName($childTable),
                 'fields' => $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey),
             ];
         }

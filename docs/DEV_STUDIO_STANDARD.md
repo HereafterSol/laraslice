@@ -118,7 +118,7 @@ Every Studio action must map to a documented CLI command with the same inputs an
 | Run Migrations | `php artisan migrate` (or `--migrate` on apply) |
 | Seed demo | `php artisan slice:seed <Slice> --count=10` |
 | Validate YAML | `php artisan slice:validate <path>` |
-| Port source | `php artisan slice:port <path> --dry-run` |
+| Port source | `php artisan slice:port <path> --dry-run` (add `--table-prefix=<p>` when the target already owns colliding tables; auth tables are never prefixed) |
 
 **Rule:** Studio shows the plan (and hash) before execute. CLI and Studio write the same files + manifest. No Studio-only behavior.
 

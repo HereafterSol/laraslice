@@ -129,12 +129,17 @@ class SliceDataPortService
                     continue;
                 }
 
-                if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                $targetTable = SlicePortService::targetTableName($table);
+
+                if (! \Illuminate\Support\Facades\Schema::hasTable($targetTable)) {
                     $results[$table] = ['status' => 'not_in_target', 'rows' => 0];
                     continue;
                 }
 
-                $imported = $this->importSingleTable($table, $sourcePdo, $driver, $progressCallback);
+                $imported = $this->importSingleTable($table, $targetTable, $sourcePdo, $driver, $progressCallback);
+                if ($targetTable !== $table) {
+                    $imported['target_table'] = $targetTable;
+                }
                 $results[$table] = $imported;
                 $totalRowsImported += $imported['rows'] ?? 0;
             }
@@ -142,7 +147,7 @@ class SliceDataPortService
             // Identity remap: merged users received fresh target ids,
             // so imported user references still carry source-space ids.
             // Rewrite them by email before constraints come back on.
-            $identityRemap = $this->remapUserIdentities($tables, $sourcePdo, $driver);
+            $identityRemap = $this->remapUserIdentities(array_map(fn ($t) => SlicePortService::targetTableName($t), $tables), $sourcePdo, $driver);
 
             \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
 
@@ -303,7 +308,7 @@ class SliceDataPortService
     /**
      * Import a single table with chunked streaming.
      */
-    private function importSingleTable(string $table, $sourcePdo, string $driver, ?callable $progressCallback): array
+    private function importSingleTable(string $table, string $targetTable, $sourcePdo, string $driver, ?callable $progressCallback): array
     {
         // GUARD: framework auth tables are never wipe+replaced. A blind delete()
         // here destroys super-admin/super-dev roles and studio.* permissions,
@@ -323,7 +328,7 @@ class SliceDataPortService
 
         // Merge tables: existing rows are never deleted or modified
         if (isset($this->mergeTables[$table])) {
-            return $this->importMergeTable($table, $this->mergeTables[$table], $sourcePdo, $driver, $progressCallback);
+            return $this->importMergeTable($table, $this->mergeTables[$table], $sourcePdo, $driver, $progressCallback, $targetTable);
         }
 
         try {
@@ -335,7 +340,7 @@ class SliceDataPortService
             }
 
             // Get target columns to prevent inserting into non-existent columns
-            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($targetTable);
 
             if ($driver === 'mysql') {
                 $sourceColumns = $sourcePdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN);
@@ -351,7 +356,7 @@ class SliceDataPortService
             }
 
             // Clear target table
-            \Illuminate\Support\Facades\DB::table($table)->delete();
+            \Illuminate\Support\Facades\DB::table($targetTable)->delete();
 
             $chunkSize = 250;
             $offset = 0;
@@ -379,7 +384,7 @@ class SliceDataPortService
                 // (source may not have all target columns, e.g. tasks.title)
                 $targetNotNull = [];
                 try {
-                    $columns = \Illuminate\Support\Facades\Schema::getColumns($table);
+                    $columns = \Illuminate\Support\Facades\Schema::getColumns($targetTable);
                     foreach ($columns as $col) {
                         $name = $col['name'] ?? null;
                         if ($name && !in_array($name, $validColumns, true)) {
@@ -411,7 +416,7 @@ class SliceDataPortService
                     }, $sanitized);
                 }
 
-                \Illuminate\Support\Facades\DB::table($table)->insert($sanitized);
+                \Illuminate\Support\Facades\DB::table($targetTable)->insert($sanitized);
                 $tableImported += count($rows);
                 $offset += $chunkSize;
 
@@ -599,8 +604,10 @@ class SliceDataPortService
                     continue;
                 }
 
-                // Check if target table exists
-                if (! Schema::hasTable($table)) {
+                // Check if target table exists (prefixed name when a
+                // port table prefix is configured)
+                $targetTable = SlicePortService::targetTableName($table);
+                if (! Schema::hasTable($targetTable)) {
                     continue;
                 }
 
@@ -638,7 +645,7 @@ class SliceDataPortService
                     }
 
                     // Get target column listing to prevent inserting into non-existent columns
-                    $targetColumns = Schema::getColumnListing($table);
+                    $targetColumns = Schema::getColumnListing($targetTable);
                     $sourceColsStmt = $sourcePdo->query("SHOW COLUMNS FROM `{$table}`");
                     $sourceColumns = $sourceColsStmt->fetchAll(PDO::FETCH_COLUMN);
                     $validColumns = array_values(array_intersect($sourceColumns, $targetColumns));
@@ -650,7 +657,7 @@ class SliceDataPortService
                     $colsSql = implode(', ', array_map(fn($c) => "`{$c}`", $validColumns));
 
                     // Clear target table before streaming (DELETE avoids FK truncation lock)
-                    DB::table($table)->delete();
+                    DB::table($targetTable)->delete();
 
                     // Chunked read from source and insert into target
                     $chunkSize = 250;
@@ -677,7 +684,7 @@ class SliceDataPortService
                             return $row;
                         }, $rows);
 
-                        DB::table($table)->insertOrIgnore($sanitized);
+                        DB::table($targetTable)->insertOrIgnore($sanitized);
                         $tableImported += count($rows);
                         $offset += $chunkSize;
                     }
@@ -744,10 +751,12 @@ class SliceDataPortService
         string $keyColumn,
         $sourcePdo,
         string $driver,
-        ?callable $progressCallback
+        ?callable $progressCallback,
+        ?string $targetTable = null
     ): array {
+        $targetTable = $targetTable ?? $table;
         try {
-            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($targetTable);
 
             $sourceColumns = $this->getSourceColumns($sourcePdo, $driver, $table);
 
@@ -765,7 +774,7 @@ class SliceDataPortService
             $countStmt = $sourcePdo->query("SELECT COUNT(*) FROM `{$table}`");
             $rowCount = (int) $countStmt->fetchColumn();
 
-            $existingKeys = \Illuminate\Support\Facades\DB::table($table)->pluck($keyColumn)->all();
+            $existingKeys = \Illuminate\Support\Facades\DB::table($targetTable)->pluck($keyColumn)->all();
             $existingLookup = array_flip(array_map('strtolower', array_map('strval', $existingKeys)));
 
             $chunkSize = 250;
@@ -797,7 +806,7 @@ class SliceDataPortService
                 }
 
                 if (! empty($toInsert)) {
-                    \Illuminate\Support\Facades\DB::table($table)->insert($toInsert);
+                    \Illuminate\Support\Facades\DB::table($targetTable)->insert($toInsert);
                     $imported += count($toInsert);
                 }
 

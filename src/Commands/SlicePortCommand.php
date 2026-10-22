@@ -26,6 +26,7 @@ class SlicePortCommand extends Command
                             {--scaffold : Automatically scaffold physical vertical slices into app/Slices}
                             {--dry-run : Preview table-to-slice mapping without writing files}
                             {--strip-prefix= : Comma-separated table prefixes to strip from slice names (e.g. llx_,wp_). Defaults from config LARASLICE_PORT_STRIP_PREFIXES}
+                            {--table-prefix= : Prefix applied to every ported TARGET table (e.g. ws_) so this port coexists with tables an earlier port or the host already owns. Slice and model names stay clean; framework auth tables are never prefixed}
                             {--source-connection= : Legacy DB connection name from config/database.php (overrides --source-* options)}
                             {--source-host= : Legacy database host (default: 127.0.0.1)}
                             {--source-port= : Legacy database port (default: 3306)}
@@ -177,6 +178,13 @@ class SlicePortCommand extends Command
         if (is_string($stripOpt) && $stripOpt !== '') {
             $list = array_values(array_filter(array_map('trim', explode(',', $stripOpt))));
             config(['laraslice.porting.strip_table_prefixes' => $list]);
+        }
+
+        // Apply --table-prefix to config before inspect/scaffold/ETL
+        $tablePrefix = $this->option('table-prefix');
+        if (is_string($tablePrefix) && $tablePrefix !== '') {
+            config(['laraslice.porting.table_prefix' => $tablePrefix]);
+            $this->info("✓ Target table prefix: {$tablePrefix} (ported tables land as {$tablePrefix}<table>; auth tables exempt)");
         }
 
         $mode = $this->option('mode');
