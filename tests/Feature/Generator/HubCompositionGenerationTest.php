@@ -60,4 +60,25 @@ class HubCompositionGenerationTest extends TestCase
         $form = file_get_contents($path.'/Resources/views/form.blade.php');
         $this->assertStringContainsString('Sticky Bottom Form Actions Bar', $form);
     }
+
+    public function test_form_and_index_carry_overlay_markers(): void
+    {
+        $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Permit', [
+            ['name' => 'title', 'type' => 'string', 'label' => 'Title'],
+            ['name' => 'code', 'type' => 'string', 'label' => 'Code'],
+        ], false, ['table' => 'permits', 'ui' => [
+            'presentation' => ['create' => 'drawer', 'drawer_width' => 'xl'],
+            'forms' => ['sections' => [[
+                'key' => 'general', 'title' => 'General', 'columns' => 2,
+                'fields' => [['handle' => 'title'], ['handle' => 'code']],
+            ]]],
+        ]]);
+
+        $form = file_get_contents($path.'/Resources/views/form.blade.php');
+        $this->assertStringContainsString('data-ls-form-root', $form);
+        $this->assertStringContainsString('data-ls-section-grid', $form);
+
+        $index = file_get_contents($path.'/Resources/views/index.blade.php');
+        $this->assertStringContainsString(':size="$drawerSize', $index);
+    }
 }

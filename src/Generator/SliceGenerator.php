@@ -318,7 +318,7 @@ class SliceGenerator
                 <x-ui.card-description class="text-xs">Configure {$studlyName} operational parameters</x-ui.card-description>
             </x-ui.card-header>
             <x-ui.card-content class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
 {$inputsStr}
                 </div>
             </x-ui.card-content>
@@ -340,7 +340,7 @@ HTML;
                 <x-ui.card-description class="text-xs">Primary identification and record attributes</x-ui.card-description>
             </x-ui.card-header>
             <x-ui.card-content class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
 {$primaryStr}
                 </div>
             </x-ui.card-content>
@@ -355,7 +355,7 @@ HTML;
                 <x-ui.card-description class="text-xs">Extended parameters and operational terms</x-ui.card-description>
             </x-ui.card-header>
             <x-ui.card-content class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
 {$secondaryStr}
                 </div>
             </x-ui.card-content>
@@ -439,7 +439,7 @@ HTML;
                 <x-ui.card-description class="text-xs">{$sDesc}</x-ui.card-description>
             </x-ui.card-header>
             <x-ui.card-content class="p-6">
-                <div class="{$gridClass}">
+                <div class="{$gridClass}" data-ls-section-grid>
 {$inputsCombined}
                 </div>
             </x-ui.card-content>
@@ -1419,7 +1419,7 @@ $bladeIndex = <<<BLADE
         @php
             \$dirUi = \$manifest['ui']['directory'] ?? [];
             // Controller-passed values (own manifest) win; the
-            // file-read $dirUi is only a fallback — its relative
+            // file-read \$dirUi is only a fallback — its relative
             // path silently misses in compiled views.
             \$tableViews = \$tableViews ?? \$dirUi['views'] ?? ['table'];
             if (! is_array(\$tableViews) || \$tableViews === []) {
@@ -1475,7 +1475,7 @@ $bladeIndex = <<<BLADE
 @if(in_array('drawer', \$presentation ?? [], true))
 <x-ui.drawer direction="right">
     <x-ui.drawer-trigger id="ls-overlay-drawer-trigger" class="hidden"><span></span></x-ui.drawer-trigger>
-    <x-ui.drawer-content>
+    <x-ui.drawer-content :size="\$drawerSize ?? 'lg'">
         <x-ui.drawer-header><x-ui.drawer-title id="ls-overlay-drawer-title">Details</x-ui.drawer-title></x-ui.drawer-header>
         <div id="ls-overlay-drawer-body" class="overflow-y-auto px-4 pb-6"></div>
     </x-ui.drawer-content>
@@ -1523,7 +1523,7 @@ BLADE;
 @extends(\$overlayLayout ?? 'layouts.app')
 
 @section('content')
-<div class="w-full max-w-5xl mx-auto space-y-6">
+<div class="w-full max-w-5xl mx-auto space-y-6" data-ls-form-root>
     <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <a href="{{ route('{$routeNamePrefix}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
         <span>/</span>
