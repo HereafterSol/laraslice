@@ -31,6 +31,19 @@ class SliceManager
     /** @var array<int, string> files changed by the current repairSlice() call */
     protected array $repairedFiles = [];
 
+    /**
+     * Registry name collisions found during discovery: slices whose
+     * raw names are identical (the later registration wins the key)
+     * or whose names differ only by spaces/underscores/dashes/case
+     * (both register, but normalized lookups are ambiguous).
+     *
+     * @var array<int, array{type: string, key: string, slices: array<int, array{name: string, path: string}>}>
+     */
+    protected array $nameCollisions = [];
+
+    /** @var array<string, SliceManifest> first holder of each normalized name key */
+    protected array $normalizedNameHolders = [];
+
     protected bool $repairDryRun = false;
 
     public function __construct(Application $app)
@@ -43,13 +56,15 @@ class SliceManager
         $this->slices = [];
         $this->navigationCache = [];
         $this->resolvedModels = [];
+        $this->nameCollisions = [];
+        $this->normalizedNameHolders = [];
         if ($this->isCached()) {
             $cached = include $this->getCachedSlicesPath();
             if (is_array($cached)) {
                 foreach ($cached as $name => $manifestPath) {
                     if (file_exists($manifestPath)) {
                         $manifest = new SliceManifest($manifestPath);
-                        $this->slices[$manifest->name] = $manifest;
+                        $this->registerManifest($manifest);
                         if ($manifest->active) {
                             $this->bootSlice($manifest);
                         }
@@ -91,7 +106,7 @@ class SliceManager
         $manifestFile = $this->findManifest($path);
         if ($manifestFile) {
             $manifest = new SliceManifest($manifestFile);
-            $this->slices[$manifest->name] = $manifest;
+            $this->registerManifest($manifest);
 
             if ($manifest->active) {
                 $this->bootSlice($manifest);
@@ -985,6 +1000,55 @@ PHP;
         return $this->slices;
     }
 
+    /**
+     * Register one discovered manifest, recording name collisions.
+     * Raw keys keep their historic semantics (a later registration
+     * with the same raw name wins the key); normalized collisions
+     * keep both slices but are recorded so tooling can surface the
+     * ambiguity instead of resolving it by scan order.
+     */
+    protected function registerManifest(SliceManifest $manifest): void
+    {
+        $existing = $this->slices[$manifest->name] ?? null;
+        if ($existing !== null && $existing->path !== $manifest->path) {
+            $this->nameCollisions[] = [
+                'type' => 'duplicate-name',
+                'key' => $manifest->name,
+                'slices' => [
+                    ['name' => $existing->name, 'path' => $existing->path],
+                    ['name' => $manifest->name, 'path' => $manifest->path],
+                ],
+            ];
+        }
+
+        $norm = strtolower(str_replace([' ', '_', '-'], '', $manifest->name));
+        $holder = $this->normalizedNameHolders[$norm] ?? null;
+        if ($holder !== null && $holder->name !== $manifest->name) {
+            $this->nameCollisions[] = [
+                'type' => 'normalized-name',
+                'key' => $norm,
+                'slices' => [
+                    ['name' => $holder->name, 'path' => $holder->path],
+                    ['name' => $manifest->name, 'path' => $manifest->path],
+                ],
+            ];
+        } elseif ($holder === null) {
+            $this->normalizedNameHolders[$norm] = $manifest;
+        }
+
+        $this->slices[$manifest->name] = $manifest;
+    }
+
+    /**
+     * Name collisions recorded during discovery (see registerManifest).
+     *
+     * @return array<int, array{type: string, key: string, slices: array<int, array{name: string, path: string}>}>
+     */
+    public function nameCollisions(): array
+    {
+        return $this->nameCollisions;
+    }
+
     public function getSlices(): array
     {
         return $this->slices;
@@ -1033,11 +1097,46 @@ PHP;
         ];
 
         foreach ($passes as $pass) {
+            $matches = [];
             foreach ($this->slices as $slice) {
                 if ($pass($slice)) {
-                    return $slice;
+                    $matches[] = $slice;
                 }
             }
+            if ($matches === []) {
+                continue;
+            }
+            if (count($matches) === 1) {
+                return $matches[0];
+            }
+
+            // Ambiguous pass (twin names like 'Email Templates' vs
+            // 'EmailTemplates' both normalize identically): pick the
+            // winner DETERMINISTICALLY instead of by scan order, so
+            // the same query resolves to the same slice on every
+            // machine. Preference: exact raw name, then a path
+            // basename matching the query, then the shorter path,
+            // then path order.
+            usort($matches, static function (SliceManifest $a, SliceManifest $b) use ($name, $norm, $normalize): int {
+                $exactA = $a->name === $name ? 0 : 1;
+                $exactB = $b->name === $name ? 0 : 1;
+                if ($exactA !== $exactB) {
+                    return $exactA <=> $exactB;
+                }
+                $baseA = $normalize(basename($a->path)) === $norm ? 0 : 1;
+                $baseB = $normalize(basename($b->path)) === $norm ? 0 : 1;
+                if ($baseA !== $baseB) {
+                    return $baseA <=> $baseB;
+                }
+                $len = strlen($a->path) <=> strlen($b->path);
+                if ($len !== 0) {
+                    return $len;
+                }
+
+                return strcmp($a->path, $b->path);
+            });
+
+            return $matches[0];
         }
 
         return null;
