@@ -427,7 +427,10 @@ settings in ONE searchable hub, declared via `settings:` in
 the slice manifest and aggregated by the framework) · P10
 Bulk entry (`ui.directory.bulk_entry` — one-date grid over
 the row key's relationship options with per-row fields, at
-`{index}/bulk-entry`; the Mark Attendance pattern) · P11
+`{index}/bulk-entry`; the Mark Attendance pattern. `range: true`
+plus `holidays {slice, date_field}` extends it to bulk-mark
+across a date range, skipping holidays — and weekends with
+`skip_weekends: true` — as declared) · P11
 Record timer (`ui.show.timer` — standard timer card on the
 detail page writing session rows via a hasMany relation;
 one active timer per user across the log table, a second

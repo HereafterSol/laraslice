@@ -57,6 +57,7 @@ class DataTableRows
                     $row[$key] = match ($fmt) {
                         'code_badge' => static::codeBadge($val),
                         'composite_user' => static::resolveCompositeUser($item, $key, $val, $column),
+                        'user_stack' => static::resolveUserStack($item, $key, $val, $column),
                         'status_pill' => static::statusPill((string) ($val ?: data_get($item, 'user.status') ?: 'active')),
                         'money_breakdown' => static::moneyBreakdown(
                             $val,
@@ -184,11 +185,112 @@ class DataTableRows
 
         return static::compositeUser($name, $subtitle, $avatarUrl, $viewUrl);
     }
+    /**
+     * Resolve an avatar stack (assignees / members) from a
+     * collection-ish value: models, arrays, id lists, or a
+     * comma-separated name string. Ids are batch-resolved
+     * against the users table when possible.
+     */
+    public static function resolveUserStack(mixed $item, string $key, mixed $val, array $column): string
+    {
+        $raw = $val;
+        if ($raw === null || $raw === '') {
+            $raw = data_get($item, $column['relation'] ?? $key);
+        }
+
+        $entries = [];
+        if ($raw instanceof \Illuminate\Support\Collection) {
+            $raw = $raw->all();
+        }
+        if (is_string($raw) && str_contains($raw, ',')) {
+            $raw = array_map('trim', explode(',', $raw));
+        }
+        if (is_scalar($raw) && $raw !== '') {
+            $raw = [$raw];
+        }
+        if (is_array($raw)) {
+            $ids = [];
+            foreach ($raw as $entry) {
+                if (is_numeric($entry)) {
+                    $ids[] = (int) $entry;
+                }
+            }
+            $byId = [];
+            if ($ids !== []) {
+                try {
+                    foreach (DB::table('users')->whereIn('id', $ids)->get(['id', 'name', 'email']) as $u) {
+                        $byId[(int) $u->id] = ['name' => $u->name, 'email' => $u->email];
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+            foreach ($raw as $entry) {
+                if (is_numeric($entry)) {
+                    $found = $byId[(int) $entry] ?? null;
+                    $entries[] = ['name' => $found['name'] ?? ('User #'.$entry), 'email' => $found['email'] ?? null, 'avatar_url' => null];
+                } elseif (is_string($entry)) {
+                    $entries[] = ['name' => $entry, 'email' => null, 'avatar_url' => null];
+                } else {
+                    $entries[] = [
+                        'name' => data_get($entry, 'name') ?? 'Unknown',
+                        'email' => data_get($entry, 'email'),
+                        'avatar_url' => data_get($entry, 'avatar_url') ?? data_get($entry, 'image'),
+                    ];
+                }
+            }
+        }
+
+        return static::userStack($entries);
+    }
+
+    /**
+     * Render up to four overlapping avatar circles plus a +N
+     * overflow chip; the full name list rides the title attr.
+     */
+    public static function userStack(array $entries): string
+    {
+        if ($entries === []) {
+            return '<span class="text-muted-foreground">—</span>';
+        }
+
+        $names = array_map(fn ($e) => (string) ($e['name'] ?? 'Unknown'), $entries);
+        $title = htmlspecialchars(implode(', ', $names), ENT_QUOTES, 'UTF-8');
+        $shown = array_slice($entries, 0, 4);
+        $extra = count($entries) - count($shown);
+
+        $html = '<div class="flex items-center -space-x-2" title="'.$title.'">';
+        foreach ($shown as $entry) {
+            $name = htmlspecialchars((string) ($entry['name'] ?? 'Unknown'), ENT_QUOTES, 'UTF-8');
+            $avatarUrl = $entry['avatar_url'] ?? null;
+            if ($avatarUrl) {
+                $html .= '<img src="'.htmlspecialchars((string) $avatarUrl, ENT_QUOTES, 'UTF-8').'" alt="'.$name.'" class="size-8 rounded-full object-cover shrink-0 ring-2 ring-card relative hover:z-10" />';
+            } else {
+                $initials = static::initialsOf((string) ($entry['name'] ?? '?'));
+                $html .= '<div class="size-8 rounded-full bg-primary/10 text-primary font-semibold text-[11px] flex items-center justify-center shrink-0 ring-2 ring-card relative hover:z-10">'.$initials.'</div>';
+            }
+        }
+        if ($extra > 0) {
+            $html .= '<div class="size-8 rounded-full bg-muted text-muted-foreground font-semibold text-[11px] flex items-center justify-center shrink-0 ring-2 ring-card relative hover:z-10">+'. $extra .'</div>';
+        }
+
+        return $html.'</div>';
+    }
+
+    /** First + last word initials (e.g. 'Oswald Lemke' -> 'OL'). */
+    public static function initialsOf(string $name): string
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $first = strtoupper(substr($parts[0] ?? '?', 0, 1));
+        $last = count($parts) > 1 ? strtoupper(substr((string) end($parts), 0, 1)) : strtoupper(substr($parts[0] ?? '?', 1, 1));
+
+        return $first.$last;
+    }
+
     public static function compositeUser(?string $name, ?string $subtitle = null, ?string $avatarUrl = null, ?string $viewUrl = null): string
     {
         $name = htmlspecialchars($name ?: 'Unknown', ENT_QUOTES, 'UTF-8');
         $subtitle = $subtitle ? htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') : '';
-        $initials = strtoupper(substr($name, 0, 2));
+        $initials = static::initialsOf($name);
 
         $avatarHtml = $avatarUrl
             ? '<img src="'.htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8').'" alt="'.$name.'" class="size-8 rounded-full object-cover shrink-0 ring-1 ring-border" />'
