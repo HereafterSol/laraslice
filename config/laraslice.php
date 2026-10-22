@@ -196,5 +196,10 @@ return [
         // Comma-separated or array of table prefixes stripped from slice names (Dolibarr llx_, WP wp_)
         'strip_table_prefixes' => array_values(array_filter(array_map('trim', explode(',', (string) env('LARASLICE_PORT_STRIP_PREFIXES', 'llx_,wp_'))))),
         'source_connection' => env('LARASLICE_PORT_SOURCE_CONNECTION'),
+        // Opt-in target table prefix for source-driven ports (slice:port --table-prefix=):
+        // every ported table lands as {prefix}{table} so a port can coexist with
+        // tables an earlier port or the host app already owns. Framework
+        // auth/merge tables (users, roles, permissions, ...) are never prefixed.
+        'table_prefix' => (string) env('LARASLICE_PORT_TABLE_PREFIX', ''),
     ],
 ];

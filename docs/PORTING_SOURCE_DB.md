@@ -35,3 +35,5 @@ php artisan slice:port ... --strip-prefix=llx_
 ```
 
 Defaults: `llx_`, `wp_`. Config: `LARASLICE_PORT_STRIP_PREFIXES=llx_,wp_`.
+
+Target-side isolation is the mirror option: `--table-prefix=ws_` lands every ported table as `ws_<table>` (auth tables exempt) so ports can coexist — see the SKILL's "Target table prefixing" section.

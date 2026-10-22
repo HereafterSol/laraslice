@@ -96,7 +96,7 @@ final class RbacProtectionTest extends TestCase
         foreach (['roles', 'permissions', 'permission_role', 'role_user'] as $table) {
             $method = new \ReflectionMethod($service, 'importSingleTable');
             $method->setAccessible(true);
-            $result = $method->invoke($service, $table, $sourcePdo, 'sqlite', null);
+            $result = $method->invoke($service, $table, $table, $sourcePdo, 'sqlite', null);
 
             $this->assertSame(
                 'skipped_system_auth',
@@ -121,7 +121,7 @@ final class RbacProtectionTest extends TestCase
         $service = new SliceDataPortService;
         $method = new \ReflectionMethod($service, 'importSingleTable');
         $method->setAccessible(true);
-        $result = $method->invoke($service, 'users', $sourcePdo, 'sqlite', null);
+        $result = $method->invoke($service, 'users', 'users', $sourcePdo, 'sqlite', null);
         $this->assertSame('merged', $result['status']);
         // Only the genuinely new user is inserted; the existing dev account is untouched
         $this->assertSame(1, $result['rows']);
@@ -149,7 +149,7 @@ final class RbacProtectionTest extends TestCase
         $service = (new SliceDataPortService)->setImportAuth(true);
         $method = new \ReflectionMethod($service, 'importSingleTable');
         $method->setAccessible(true);
-        $result = $method->invoke($service, 'roles', $sourcePdo, 'sqlite', null);
+        $result = $method->invoke($service, 'roles', 'roles', $sourcePdo, 'sqlite', null);
 
         $this->assertSame('normalized_merge', $result['status']);
         $this->assertSame(2, $result['rows']);
@@ -198,7 +198,7 @@ final class RbacProtectionTest extends TestCase
         $service = (new SliceDataPortService)->setImportAuth(true);
         $method = new \ReflectionMethod($service, 'importSingleTable');
         $method->setAccessible(true);
-        $method->invoke($service, 'roles', $sourcePdo, 'sqlite', null);
+        $method->invoke($service, 'roles', 'roles', $sourcePdo, 'sqlite', null);
 
         $this->assertTrue(DB::table('roles')->where('slug', 'legacy-super-admin')->exists());
         $this->assertTrue(DB::table('roles')->where('slug', 'legacy-super-dev')->exists());

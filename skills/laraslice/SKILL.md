@@ -1588,6 +1588,10 @@ php artisan slice:port /path/to/dolibarr --strip-prefix=llx_ --dry-run --no-inte
 
 `--dry-run` and `--no-interaction` default `--mode=system-base` and do not prompt.
 
+### Target table prefixing (coexisting ports)
+
+`--table-prefix=ws_` (config `laraslice.porting.table_prefix`, env `LARASLICE_PORT_TABLE_PREFIX`) makes every ported TARGET table land as `{prefix}{table}` — migrations, model `$table`, manifest tables, repeater declarations, and the ETL writes — so a second port of the same (or a colliding) source coexists with tables an earlier port or the host app already owns. Slice and model names stay clean. Framework auth/merge tables (`users`, `roles`, `permissions`, `permission_role`, `role_user`) are NEVER prefixed: they always merge into the host's own tables, and the identity remap rewrites user references inside the prefixed tables. Default off; unprefixed ports behave exactly as before. Applies to source-driven ports (`slice:port` inspect → scaffold → ETL); plan/blueprint files name their tables explicitly.
+
 ### Product examples (this branch)
 
 | File | Use |
