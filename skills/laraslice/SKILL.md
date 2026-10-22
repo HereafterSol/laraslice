@@ -424,7 +424,10 @@ standard dashboard; designed empty state) · P5 Report, P6 Document, P7 Matrix
 `ui.directory.matrix`) · P8 Views (`ui.directory.views`
 list/board/calendar) · P9 Settings hub (every feature's
 settings in ONE searchable hub, declared via `settings:` in
-the slice manifest and aggregated by the framework).
+the slice manifest and aggregated by the framework) · P10
+Bulk entry (`ui.directory.bulk_entry` — one-date grid over
+the row key's relationship options with per-row fields, at
+`{index}/bulk-entry`; the Mark Attendance pattern).
 
 **Components:** BlatUI first — see `docs/UI-COMPONENT-MAPPING.md`
 (`data-table`, `stat`, `tabs`, `chart`, `kanban`, `gantt`,
