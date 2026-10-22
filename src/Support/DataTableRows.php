@@ -45,8 +45,11 @@ class DataTableRows
                 $val = data_get($item, $key);
                 $row[$key . '__raw'] = is_scalar($val) ? (string)$val : '';
 
-                // 1. If column has a custom callback formatter
-                if (isset($column['formatter']) && is_callable($column['formatter'])) {
+                // 1. If column has a custom callback formatter.
+                // Strings are formatter NAMES, never callables: a
+                // name that happens to match a PHP function ('date')
+                // must not be invoked as one.
+                if (isset($column['formatter']) && ! is_string($column['formatter']) && is_callable($column['formatter'])) {
                     $row[$key] = $column['formatter']($val, $item);
                     continue;
                 }
@@ -71,6 +74,7 @@ class DataTableRows
                             (string) ($column['badge_from'] ?? 'priority')
                         ),
                         'progress_bar' => static::progressBar((float) $val),
+                        'date' => static::formatDateValue($val, 'date'),
                         'date_time' => static::formatDateValue($val, 'datetime'),
                         'date_overdue' => static::dateOverdue($val),
                         default => static::display($val),
@@ -493,10 +497,15 @@ class DataTableRows
             }
 
             $base = substr($key, 0, -3);
-            $candidateTables = match ($base) {
-                'department' => ['teams', 'departments', 'department'],
-                default => [Str::plural($base), $base],
-            };
+            // A declared label_table wins: real schemas name tables
+            // the FK convention cannot guess (board_column_id ->
+            // taskboard_columns).
+            $candidateTables = ! empty($column['label_table'])
+                ? [(string) $column['label_table']]
+                : match ($base) {
+                    'department' => ['teams', 'departments', 'department'],
+                    default => [Str::plural($base), $base],
+                };
 
             $targetTable = null;
             $labelCol = null;
@@ -510,7 +519,10 @@ class DataTableRows
                     }
                 } elseif (Schema::hasTable($tbl)) {
                     $cols = Schema::getColumnListing($tbl);
-                    foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
+                    if (! empty($column['label_column']) && in_array((string) $column['label_column'], $cols, true)) {
+                        $labelCol = (string) $column['label_column'];
+                    }
+                    foreach ($labelCol === null ? ['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] : [] as $candidate) {
                         if (in_array($candidate, $cols, true)) {
                             $labelCol = $candidate;
                             break;
