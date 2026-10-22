@@ -167,6 +167,25 @@ class SliceRepairCommand extends Command
 
             $fields = $manifest['fields'] ?? [];
             if (empty($fields)) {
+                // Ported manifests store fields under models[] —
+                // collect them (deduped by handle) or every such
+                // slice is silently skipped.
+                $seen = [];
+                foreach ((array) ($manifest['models'] ?? []) as $model) {
+                    foreach ((array) ($model['fields'] ?? []) as $mf) {
+                        if (! is_array($mf)) {
+                            continue;
+                        }
+                        $h = (string) ($mf['handle'] ?? $mf['name'] ?? '');
+                        if ($h === '' || isset($seen[$h])) {
+                            continue;
+                        }
+                        $seen[$h] = true;
+                        $fields[] = $mf;
+                    }
+                }
+            }
+            if (empty($fields)) {
                 continue;
             }
 
