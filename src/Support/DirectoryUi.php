@@ -14,8 +14,7 @@ final class DirectoryUi
     /** @var list<string> */
     public const HTML_FORMATTERS = [
         'code_badge', 'composite_user', 'user_stack', 'status_pill', 'money_breakdown',
-        'progress_bar', 'badge', 'text_with_badge', 'date_overdue',
-    ];
+        'progress_bar', 'badge', 'text_with_badge', 'date_overdue', 'timer'];
 
     /**
      * Merge ui.directory.columns from the live slice manifest over $fallback.
@@ -62,6 +61,7 @@ final class DirectoryUi
                 'key' => $key,
                 'label' => $label,
                 'sortable' => $c['sortable'] ?? true,
+                'alwaysVisible' => ! empty($c['always_visible']),
                 'formatter' => $fmt,
                 'html' => in_array($fmt, self::HTML_FORMATTERS, true),
                 'badge_from' => $c['badge_from'] ?? null,
@@ -727,6 +727,56 @@ final class DirectoryUi
      * @param  array<string, mixed>  $manifest
      * @return array{title: string, row_key: string, date_field: string, fields: list<array{handle: string, label: string, input: string, options: list<string>}>}|null
      */
+    /**
+     * Declared CSV import (P13): ui.directory.import =
+     * {format: csv, key?: <field for upsert>, columns: {CSV header:
+     * field}}. The Mind declares the pipeline + dedupe rule in
+     * plain words; the Heart declares the executable map here.
+     */
+    public static function importFromManifest(array $manifest): ?array
+    {
+        $decl = $manifest['ui']['directory']['import'] ?? null;
+        if (! is_array($decl) || empty($decl['columns']) || ! is_array($decl['columns'])) {
+            return null;
+        }
+        $columns = [];
+        foreach ($decl['columns'] as $header => $field) {
+            if (is_string($header) && is_string($field) && $field !== '') {
+                $columns[$header] = $field;
+            }
+        }
+        if ($columns === []) {
+            return null;
+        }
+
+        return [
+            'format' => (string) ($decl['format'] ?? 'csv'),
+            'key' => isset($decl['key']) && is_string($decl['key']) && $decl['key'] !== '' ? $decl['key'] : null,
+            'columns' => $columns,
+        ];
+    }
+
+    /**
+     * Declared invite/provisioning (P14): ui.directory.invite =
+     * {link: user_id, name_field: full_name, role?: Employee}.
+     * Lists records whose link field is empty; provisioning
+     * creates the user, assigns the role club, links the record,
+     * and sends the activation (password-reset) email.
+     */
+    public static function inviteFromManifest(array $manifest): ?array
+    {
+        $decl = $manifest['ui']['directory']['invite'] ?? null;
+        if (! is_array($decl) || empty($decl['link'])) {
+            return null;
+        }
+
+        return [
+            'link' => (string) $decl['link'],
+            'name_field' => (string) ($decl['name_field'] ?? 'name'),
+            'role' => isset($decl['role']) && is_string($decl['role']) ? $decl['role'] : null,
+        ];
+    }
+
     public static function bulkEntryFromManifest(array $manifest): ?array
     {
         $decl = $manifest['ui']['directory']['bulk_entry'] ?? null;

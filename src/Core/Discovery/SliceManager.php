@@ -225,7 +225,10 @@ class SliceManager
         $inline = ! empty($slice->raw['ui']['directory']['inline_edit'] ?? []);
         $bulkEntry = is_array($slice->raw['ui']['directory']['bulk_entry'] ?? null);
         $timer = is_array($slice->raw['ui']['show']['timer'] ?? null);
-        if (! $document && ! $matrix && ! $report && ! $inline && ! $bulkEntry && ! $timer) {
+        $import = is_array($slice->raw['ui']['directory']['import'] ?? null);
+        $seed = is_array($slice->raw['ui']['directory']['reference_sets'] ?? null);
+        $invite = is_array($slice->raw['ui']['directory']['invite'] ?? null);
+        if (! $document && ! $matrix && ! $report && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite) {
             return;
         }
         try {
@@ -281,6 +284,30 @@ class SliceManager
                 Route::middleware($middleware)
                     ->post($uriPrefix.'/{id}/timer/stop', [$controllerClass, 'timerStop'])
                     ->name($namePrefix.'.timer_stop');
+            }
+            if ($import && ! Route::has($namePrefix.'.import')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/import', [$controllerClass, 'importForm'])
+                    ->name($namePrefix.'.import');
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/import', [$controllerClass, 'importStore'])
+                    ->name($namePrefix.'.import_store');
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/import/template', [$controllerClass, 'importTemplate'])
+                    ->name($namePrefix.'.import_template');
+            }
+            if ($seed && ! Route::has($namePrefix.'.seed_action')) {
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/actions/seed', [$controllerClass, 'seedAction'])
+                    ->name($namePrefix.'.seed_action');
+            }
+            if ($invite && ! Route::has($namePrefix.'.invite')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/invite', [$controllerClass, 'inviteForm'])
+                    ->name($namePrefix.'.invite');
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/invite', [$controllerClass, 'inviteStore'])
+                    ->name($namePrefix.'.invite_store');
             }
             if ($inline && ! Route::has($namePrefix.'.inline')) {
                 Route::middleware($middleware)
@@ -583,6 +610,45 @@ class SliceManager
                             $vContent = str_replace(
                                 '<span>Bulk Entry</span>',
                                 '<span>{{ $bulkEntryLabel ?? \'Bulk Entry\' }}</span>',
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php') {
+                        // (l) P13: the declared Import button joins
+                        // the toolbar next to bulk entry.
+                        if (! str_contains($vContent, '$importUrl') && str_contains($vContent, '@isset($bulkEntryUrl)')) {
+                            $vContent = str_replace(
+                                '@isset($bulkEntryUrl)',
+                                "@isset(\$importUrl)\n                        <x-ui.button href=\"{{ \$importUrl }}\" as=\"a\" variant=\"secondary\" class=\"border border-border\">\n                            <x-lucide-upload class=\"size-4\" /> <span>Import</span>\n                        </x-ui.button>\n                        @endisset\n                        @isset(\$bulkEntryUrl)",
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php') {
+                        // (m) The declared-filters drawer is a
+                        // package partial now; blades from older
+                        // generations that never composed it get
+                        // the include before the data table.
+                        if (! str_contains($vContent, 'filters-drawer')
+                            && ! str_contains($vContent, 'Declared Filters (ui.directory.sidebar_filters)')
+                            && str_contains($vContent, '<x-ui.data-table')) {
+                            $vContent = preg_replace(
+                                '/<x-ui\.data-table/',
+                                "@include('laraslice::directory.filters-drawer')\n        <x-ui.data-table",
+                                $vContent,
+                                1
+                            );
+                            $vChanged = true;
+                        }
+                        // (n) Strip-placed declared ranges render
+                        // beside the directory actions.
+                        if (! str_contains($vContent, 'strip-filters') && str_contains($vContent, "@include('laraslice::directory.actions')")) {
+                            $vContent = str_replace(
+                                "@include('laraslice::directory.actions')",
+                                "@include('laraslice::directory.actions')\n        @include('laraslice::directory.strip-filters')",
                                 $vContent
                             );
                             $vChanged = true;

@@ -503,9 +503,12 @@ if (typeof window.blatDataTable === 'undefined') {
                 // identity/status columns plus the first ones up to 7 — the rest
                 // stay one click away in the Columns menu instead of squeezing
                 // the table off-screen.
-                if (this.cols.length > 8) {
+                if (this.cols.length > 10) {
                     const keep = new Set();
                     if (this.cols[0]) keep.add(this.cols[0].key);
+                    for (const c of this.cols) {
+                        if (c.alwaysVisible) keep.add(c.key);
+                    }
                     for (const c of this.cols) {
                         if (c.key === this.statusKey || /(^|_)(name|title|subject|code|number|amount|total|price)$/.test(c.key)) keep.add(c.key);
                     }

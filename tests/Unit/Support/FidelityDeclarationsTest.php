@@ -40,7 +40,10 @@ class FidelityDeclarationsTest extends TestCase
         $gen = file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
         $this->assertStringContainsString('filterDefaults', $gen);
         $this->assertStringContainsString("laraslice::directory.actions", $gen);
-        $this->assertStringContainsString("sf['ui']", $gen);
+        // The drawer loop (with its ui:false guard) lives in the
+        // package partial since stage 3.
+        $drawerPartial = file_get_contents(dirname(__DIR__, 3).'/src/Wizard/views/directory/filters-drawer.blade.php');
+        $this->assertStringContainsString("sf['ui']", $drawerPartial);
 
         $mgr = file_get_contents(dirname(__DIR__, 3).'/src/Core/Discovery/SliceManager.php');
         $this->assertStringContainsString('(f) Fidelity defaults', $mgr);
@@ -58,8 +61,11 @@ class FidelityDeclarationsTest extends TestCase
         $this->assertStringContainsString('(k) Fidelity', $mgr);
 
         $gen = file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
-        $this->assertStringContainsString('number_range', $gen);
         $this->assertStringContainsString('bulkEntryLabel', $gen);
+        // The drawer fields (incl. number_range) moved into the
+        // package partial in stage 3 — one maintenance point.
+        $drawer = file_get_contents(dirname(__DIR__, 3).'/src/Wizard/views/directory/filters-drawer.blade.php');
+        $this->assertStringContainsString('number_range', $drawer);
         $this->assertStringContainsString("!== 'calendar'", $gen);
 
         $ctl = file_get_contents(dirname(__DIR__, 3).'/src/Core/Base/BaseSliceWebController.php');

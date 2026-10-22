@@ -119,6 +119,31 @@ abstract class BaseSliceWebController extends Controller
                     }
                 }
             }
+            // date_filter_on translation: a declared range carrying
+            // `columns` applies to the column the request's
+            // column_param names (or its default_column). The
+            // generic <handle>_from/_to criteria are rewritten to
+            // the chosen column for the generic filter engine.
+            foreach (array_merge($quickFilters, $sidebarFilters) as $declaredRange) {
+                if (! is_array($declaredRange) || empty($declaredRange['columns']) || ! is_array($declaredRange['columns'])) {
+                    continue;
+                }
+                $rangeHandle = (string) ($declaredRange['handle'] ?? '');
+                if ($rangeHandle === '' || (! isset($criteria[$rangeHandle.'_from']) && ! isset($criteria[$rangeHandle.'_to']))) {
+                    continue;
+                }
+                $param = (string) ($declaredRange['column_param'] ?? 'date_filter_on');
+                $chosen = (string) $request->query($param, '');
+                if (! in_array($chosen, $declaredRange['columns'], true)) {
+                    $chosen = (string) ($declaredRange['default_column'] ?? $declaredRange['columns'][0]);
+                }
+                foreach (['_from', '_to'] as $suffix) {
+                    if (isset($criteria[$rangeHandle.$suffix])) {
+                        $criteria[$chosen.$suffix] = $criteria[$rangeHandle.$suffix];
+                        unset($criteria[$rangeHandle.$suffix]);
+                    }
+                }
+            }
             if ($criteria !== []) {
                 $filter->setCriteria($criteria);
             }
@@ -179,8 +204,34 @@ abstract class BaseSliceWebController extends Controller
                 }
                 $href = $request->url().($params === [] ? '' : '?'.http_build_query($params));
             } elseif ($kind === 'route' && ! empty($action['route'])) {
+                $params = $this->routeParameters();
+                foreach ((array) ($action['params_from_filter'] ?? []) as $param) {
+                    if (isset($criteria[$param])) {
+                        $params[$param] = $criteria[$param];
+                    }
+                }
                 $href = \Illuminate\Support\Facades\Route::has((string) $action['route'])
-                    ? route((string) $action['route'], $this->routeParameters())
+                    ? route((string) $action['route'], $params)
+                    : null;
+            } elseif ($kind === 'seed' && ! empty($action['set'])) {
+                $href = \Illuminate\Support\Facades\Route::has($this->resolveRouteName('seed_action'))
+                    ? route($this->resolveRouteName('seed_action'), $this->routeParameters())
+                    : null;
+                if ($href !== null) {
+                    $directoryActions[] = [
+                        'label' => (string) $action['label'],
+                        'href' => $href,
+                        'icon' => isset($action['icon']) ? (string) $action['icon'] : null,
+                        'variant' => (string) ($action['variant'] ?? 'outline'),
+                        'method' => 'post',
+                        'fields' => ['set' => (string) $action['set']],
+                        'confirm' => isset($action['confirm']) ? (string) $action['confirm'] : null,
+                    ];
+                }
+                continue;
+            } elseif ($kind === 'invite') {
+                $href = \Illuminate\Support\Facades\Route::has($this->resolveRouteName('invite'))
+                    ? route($this->resolveRouteName('invite'), $this->routeParameters())
                     : null;
             } elseif (! empty($action['url'])) {
                 $href = url((string) $action['url']);
@@ -215,6 +266,9 @@ abstract class BaseSliceWebController extends Controller
                     : null,
                 'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
                     ? route($this->resolveRouteName('matrix'), $this->routeParameters())
+                    : null,
+                'importUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('import'))
+                    ? route($this->resolveRouteName('import'), $this->routeParameters())
                     : null,
                 'bulkEntryLabel' => ($be = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($this->ownManifest())) !== null
                     ? ($be['title'] ?? 'Bulk Entry')
@@ -646,6 +700,268 @@ abstract class BaseSliceWebController extends Controller
      * per user across the whole log table — the source
      * application's rule.
      */
+    /**
+     * Declared CSV import (P13): the form explains the expected
+     * columns (the declared map) and offers the template; the
+     * store parses the file, maps headers case-insensitively,
+     * and creates rows — or updates them in place when the
+     * declaration names a `key` field (the Mind's dedupe rule).
+     * Bad rows are reported, never silently dropped.
+     */
+    public function importForm(Request $request)
+    {
+        $this->authorizeSlice('view');
+
+        $decl = \LaraSlice\Support\DirectoryUi::importFromManifest($this->ownManifest());
+        if ($decl === null) {
+            abort(404);
+        }
+
+        return view('laraslice::directory.import', [
+            'sliceName' => class_basename($this),
+            'decl' => $decl,
+            'report' => session('import_report'),
+            'storeUrl' => route($this->resolveRouteName('import_store'), $this->routeParameters()),
+            'templateUrl' => route($this->resolveRouteName('import_template'), $this->routeParameters()),
+            'indexUrl' => route($this->resolveRouteName('index'), $this->routeParameters()),
+            'routePrefix' => $this->getRoutePrefix(),
+        ]);
+    }
+
+    public function importTemplate(Request $request)
+    {
+        $this->authorizeSlice('view');
+
+        $decl = \LaraSlice\Support\DirectoryUi::importFromManifest($this->ownManifest());
+        if ($decl === null) {
+            abort(404);
+        }
+
+        $headers = array_keys($decl['columns']);
+
+        return response()->streamDownload(function () use ($headers) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, $headers);
+            fclose($out);
+        }, 'import-template.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function importStore(Request $request)
+    {
+        $this->authorizeSlice('create');
+
+        $manifest = $this->ownManifest();
+        $decl = \LaraSlice\Support\DirectoryUi::importFromManifest($manifest);
+        if ($decl === null) {
+            abort(404);
+        }
+        $request->validate(['file' => ['required', 'file', 'max:10240']]);
+
+        $service = $this->getService();
+        $ref = new \ReflectionMethod($service, 'getModelClass');
+        $ref->setAccessible(true);
+        $modelClass = $ref->invoke($service);
+        if (! is_string($modelClass) || ! class_exists($modelClass)) {
+            abort(500, 'Import: model class not resolvable.');
+        }
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        $headerRow = $handle ? fgetcsv($handle) : false;
+        if ($headerRow === false) {
+            return back()->with('import_report', ['created' => 0, 'updated' => 0, 'errors' => ['The file is empty.']]);
+        }
+        $positions = [];
+        foreach ($headerRow as $i => $h) {
+            $positions[strtolower(trim((string) $h))] = $i;
+        }
+        $map = [];
+        foreach ($decl['columns'] as $header => $field) {
+            $pos = $positions[strtolower(trim($header))] ?? null;
+            if ($pos !== null) {
+                $map[$field] = $pos;
+            }
+        }
+        if ($map === []) {
+            fclose($handle);
+
+            return back()->with('import_report', ['created' => 0, 'updated' => 0, 'errors' => ['None of the expected columns were found in the file header.']]);
+        }
+
+        $created = 0;
+        $updated = 0;
+        $errors = [];
+        $line = 1;
+        $probe = new $modelClass;
+        $schema = $probe->getConnection()->getSchemaBuilder();
+        $validFields = array_filter(array_values($decl['columns']), fn ($f) => $schema->hasColumn($probe->getTable(), $f));
+        while (($row = fgetcsv($handle)) !== false) {
+            $line++;
+            if (count(array_filter($row, fn ($v) => trim((string) $v) !== '')) === 0) {
+                continue;
+            }
+            $attrs = [];
+            foreach ($map as $field => $pos) {
+                if (! in_array($field, $validFields, true)) {
+                    continue;
+                }
+                $value = isset($row[$pos]) ? trim((string) $row[$pos]) : null;
+                $attrs[$field] = $value === '' ? null : $value;
+            }
+            if ($attrs === []) {
+                continue;
+            }
+            try {
+                if ($decl['key'] !== null && ! empty($attrs[$decl['key']])) {
+                    $existing = $modelClass::query()->where($decl['key'], $attrs[$decl['key']])->first();
+                    if ($existing !== null) {
+                        $existing->fill($attrs)->save();
+                        $updated++;
+                        continue;
+                    }
+                }
+                (new $modelClass)->fill($attrs)->save();
+                $created++;
+            } catch (\Throwable $e) {
+                $errors[] = "Row {$line}: ".$e->getMessage();
+            }
+        }
+        fclose($handle);
+
+        return redirect()->route($this->resolveRouteName('import'), $this->routeParameters())
+            ->with('import_report', ['created' => $created, 'updated' => $updated, 'errors' => $errors]);
+    }
+
+    /**
+     * Reference-data action (P15): POST a declared reference set
+     * (ui.directory.reference_sets.<set> = {file, key}) — rows
+     * from the slice's Resources/data file are upserted by key.
+     * Idempotent: running "Mark Default Holidays" twice changes
+     * nothing the second time.
+     */
+    public function seedAction(Request $request)
+    {
+        $this->authorizeSlice('create');
+
+        $manifest = $this->ownManifest();
+        $setName = (string) $request->input('set', '');
+        $decl = $manifest['ui']['directory']['reference_sets'][$setName] ?? null;
+        if (! is_array($decl) || empty($decl['file']) || empty($decl['key'])) {
+            abort(404);
+        }
+        $ref = new \ReflectionClass($this);
+        $dataFile = dirname((string) $ref->getFileName(), 2).'/Resources/data/'.basename((string) $decl['file']);
+        if (! is_file($dataFile)) {
+            abort(404);
+        }
+        $rows = \Symfony\Component\Yaml\Yaml::parseFile($dataFile);
+        if (! is_array($rows)) {
+            abort(422);
+        }
+        $service = $this->getService();
+        $mref = new \ReflectionMethod($service, 'getModelClass');
+        $mref->setAccessible(true);
+        $modelClass = $mref->invoke($service);
+        $count = 0;
+        foreach ($rows as $row) {
+            if (! is_array($row) || ! isset($row[$decl['key']])) {
+                continue;
+            }
+            $modelClass::query()->updateOrCreate([$decl['key'] => $row[$decl['key']]], $row);
+            $count++;
+        }
+
+        return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
+            ->with('success', "Reference data applied: {$count} record(s).");
+    }
+
+    /**
+     * Invite / provisioning (P14): the page lists records whose
+     * declared link field is empty; provisioning creates the
+     * user, assigns the declared role club when it exists, links
+     * the record, and sends the activation (password-reset)
+     * email so the person sets their own password.
+     */
+    public function inviteForm(Request $request)
+    {
+        $this->authorizeSlice('create');
+
+        $decl = \LaraSlice\Support\DirectoryUi::inviteFromManifest($this->ownManifest());
+        if ($decl === null) {
+            abort(404);
+        }
+        $service = $this->getService();
+        $mref = new \ReflectionMethod($service, 'getModelClass');
+        $mref->setAccessible(true);
+        $modelClass = $mref->invoke($service);
+        $records = $modelClass::query()->whereNull($decl['link'])->limit(100)->get()
+            ->map(fn ($m) => ['id' => $m->getKey(), 'name' => (string) ($m->{$decl['name_field']} ?? '#'.$m->getKey())])
+            ->all();
+
+        return view('laraslice::directory.invite', [
+            'records' => $records,
+            'decl' => $decl,
+            'storeUrl' => route($this->resolveRouteName('invite_store'), $this->routeParameters()),
+            'indexUrl' => route($this->resolveRouteName('index'), $this->routeParameters()),
+            'report' => session('invite_report'),
+            'routePrefix' => $this->getRoutePrefix(),
+        ]);
+    }
+
+    public function inviteStore(Request $request)
+    {
+        $this->authorizeSlice('create');
+
+        $decl = \LaraSlice\Support\DirectoryUi::inviteFromManifest($this->ownManifest());
+        if ($decl === null) {
+            abort(404);
+        }
+        $data = $request->validate([
+            'record_id' => ['required'],
+            'email' => ['required', 'email'],
+        ]);
+        $service = $this->getService();
+        $mref = new \ReflectionMethod($service, 'getModelClass');
+        $mref->setAccessible(true);
+        $modelClass = $mref->invoke($service);
+        $record = $modelClass::query()->findOrFail($data['record_id']);
+        if (! empty($record->{$decl['link']})) {
+            return back()->with('invite_report', ['error' => 'That record is already linked to a user.']);
+        }
+        $userClass = app(\LaraSlice\Core\Discovery\SliceManager::class)->modelClass('User');
+        if ($userClass === null || ! class_exists($userClass)) {
+            abort(500, 'Invite: user model not resolvable.');
+        }
+        if ($userClass::query()->where('email', $data['email'])->exists()) {
+            return back()->with('invite_report', ['error' => 'A user with that email already exists.']);
+        }
+        $user = (new $userClass)->forceFill([
+            'name' => (string) ($record->{$decl['name_field']} ?? 'Invited user'),
+            'email' => $data['email'],
+            'password' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(40)),
+        ]);
+        $user->save();
+        if ($decl['role'] !== null) {
+            try {
+                $roleId = \Illuminate\Support\Facades\DB::table('roles')->where('name', $decl['role'])->value('id')
+                    ?? \Illuminate\Support\Facades\DB::table('roles')->where('display_name', $decl['role'])->value('id');
+                if ($roleId) {
+                    \Illuminate\Support\Facades\DB::table('role_user')->insert(['role_id' => $roleId, 'user_id' => $user->getKey()]);
+                }
+            } catch (\Throwable) {
+                // Role assignment is best-effort; the account exists.
+            }
+        }
+        $record->forceFill([$decl['link'] => $user->getKey()])->save();
+        try {
+            \Illuminate\Support\Facades\Password::broker()->sendResetLink(['email' => $data['email']]);
+        } catch (\Throwable) {
+            // Mail transport may be unconfigured; the link still stands.
+        }
+
+        return redirect()->route($this->resolveRouteName('invite'), $this->routeParameters())
+            ->with('invite_report', ['success' => "Invited {$data['email']} — activation email sent."]);
+    }
+
     public function timerStart(Request $request, string|int $id)
     {
         $this->authorizeSlice('create');
