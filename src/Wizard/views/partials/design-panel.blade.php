@@ -11,7 +11,7 @@
     initialPortPlan: @js($portPlan ?? null)
 })">
 
-    <header class="flex flex-wrap items-center gap-2.5 border-b border-border pb-4">
+    <header class="sticky top-0 z-30 -mx-1 px-1 py-2 bg-background/95 backdrop-blur flex flex-wrap items-center gap-2.5 border-b border-border">
         <!-- Controls: single Start-from picker + overflow for secondary actions -->
         <div class="flex flex-wrap items-center gap-2.5">
             <!-- Unified Start from… picker (Presets + Examples) -->
@@ -111,6 +111,14 @@
                     📝 YAML
                 </button>
             </div>
+
+            <!-- YAML validation chip: live js-yaml parse + shape check of the current source -->
+            <span x-show="source && source.trim()" x-cloak class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
+                  :class="yamlStatus.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-rose-500/30 bg-rose-500/10 text-rose-500'"
+                  :title="yamlStatus.message">
+                <span class="size-1.5 rounded-full" :class="yamlStatus.ok ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                <span x-text="yamlStatus.ok ? 'YAML valid' : 'YAML error'"></span>
+            </span>
 
             <!-- Secondary actions: inline on md+, overflow menu on small screens -->
             <div class="relative" x-data="{ headerOverflow: false }">
@@ -5858,6 +5866,22 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             if (!str) return '';
             return str.replace(/[\_\-\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : '')
                       .replace(/^(.)/, c => c.toUpperCase());
+        },
+
+        get yamlStatus() {
+            const raw = this.source || '';
+            if (!raw.trim()) return { ok: true, message: 'No YAML yet' };
+            if (typeof jsyaml === 'undefined') return { ok: true, message: 'YAML parser unavailable' };
+            try {
+                const doc = jsyaml.load(raw);
+                if (!doc || typeof doc !== 'object') return { ok: false, message: 'YAML parsed but is not a mapping' };
+                const hasShape = !!(doc.name || doc.handle || (Array.isArray(doc.slices) && doc.slices.length) || (Array.isArray(doc.models) && doc.models.length));
+                return hasShape
+                    ? { ok: true, message: 'YAML parses and declares a slice or domain' }
+                    : { ok: false, message: 'YAML parses but declares no name, models, or slices' };
+            } catch (e) {
+                return { ok: false, message: 'YAML error: ' + (e.message || 'parse failure') };
+            }
         },
 
         parseYamlToBlueprint(yamlText) {

@@ -1,5 +1,6 @@
 <div x-data="portingStudio()" class="bg-background">
     <!-- Panel chrome lives in the Dev Studio shell; the panel keeps only its action row + tabs. -->
+    <div class="sticky top-0 z-30 bg-background/95 backdrop-blur -mx-1 px-1">
     <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
         <p class="max-w-3xl text-xs text-muted-foreground">Reverse-engineer a legacy app into vertical slices. After Analyze → Apply, ongoing customization (fields, UI, personas, bulk actions, history) continues in <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button>.</p>
         <button @click="analyze()" :disabled="analyzing" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 md:px-4 md:text-sm">
@@ -16,7 +17,7 @@
                 </template>
             </select>
             <!-- Desktop: tab bar -->
-            <div class="hidden md:flex gap-1 overflow-x-auto">
+            <div class="hidden md:flex gap-1 overflow-x-auto pb-1">
                 <template x-for="tab in tabs" :key="tab.id">
                     <button @click="activeTab = tab.id" :class="activeTab === tab.id ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground hover:text-foreground hover:bg-muted'" class="shrink-0 px-3 py-1.5 rounded-md text-xs transition whitespace-nowrap" x-text="tab.label"></button>
                 </template>

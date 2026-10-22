@@ -83,7 +83,19 @@ chrome (panels ship no titles/breadcrumbs of their own), and the Studio
 Home intent picker is the front door for new work. A follow-up **Studio
 Polish** program (type scale, toolbar grouping, Manage rail/header rework,
 Port tab overflow, YAML validation chip in Design) applies §2–§9 of this
-standard to the unified shell.
+standard to the unified shell. **DONE (22 Oct 2026)**: Design toolbar is
+sticky with a live YAML validation chip (js-yaml parse + shape check of
+the current source); Manage rail group headers carry name + status on
+one row and counts on a second (names no longer truncate away), the
+field editor table keeps its designed column widths (min-width +
+horizontal scroll, 13px), and destructive slice actions sit behind one
+Danger menu; Port's action row + tab bar are sticky and scroll-safe.
+The pass also repaired two structural defects: a duplicated wrapper
+div had nested the Create forms column inside its own sidebar (the
+wizard rendered squeezed into the rail), and a stray closing div had
+pushed the entire Port body outside its Alpine component scope (tab
+contents never bound). Panel blades must keep balanced <div> depth —
+`StudioPolishTest` pins it.
 
 **Acceptance:** one URL loads the shell, all modes reachable without reload;
 deep link `?mode=design` works; initial payload measured (§9); each handoff
