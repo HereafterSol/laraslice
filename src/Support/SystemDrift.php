@@ -161,12 +161,28 @@ class SystemDrift
     /** @param list<string> $registry */
     private static function slugDeclared(string $slug, array $registry): bool
     {
+        return self::resolveDeclaredSlug($slug, $registry) !== null;
+    }
+
+    /**
+     * The registry's own spelling of a requirement: the first
+     * candidate form actually declared (leaf.create for a
+     * leaves.create requirement). Wildcard candidates do not
+     * resolve — a requirement is a concrete permission.
+     *
+     * @param list<string> $registry
+     */
+    private static function resolveDeclaredSlug(string $slug, array $registry): ?string
+    {
         foreach (self::slugCandidates($slug) as $candidate) {
+            if (str_ends_with($candidate, '.*')) {
+                continue;
+            }
             if (in_array($candidate, $registry, true)) {
-                return true;
+                return $candidate;
             }
         }
-        return false;
+        return null;
     }
 
     /** @return list<string> */
@@ -183,6 +199,15 @@ class SystemDrift
         foreach (array_unique($forms) as $form) {
             $out[] = "{$form}.{$action}";
             $out[] = "{$form}.*";
+        }
+        // A full-view grant satisfies a view-own REQUIREMENT
+        // (it is strictly broader) — the reverse is not true,
+        // which is why this widening lives only here, on the
+        // requirement side.
+        if ($action === 'view-own') {
+            foreach (array_unique($forms) as $form) {
+                $out[] = "{$form}.view";
+            }
         }
         return $out;
     }
@@ -215,8 +240,10 @@ class SystemDrift
             return [array_values(array_filter($registry, fn ($slug) => str_starts_with($slug, $prefix))), null];
         }
         if (str_ends_with($pattern, '.view-own')) {
-            $base = substr($pattern, 0, -strlen('.view-own'));
-            return [[$base.'.view'], "scoped to the viewer's own records"];
+            // The requirement is the construct slug itself; a
+            // broader full-view grant also satisfies it via the
+            // candidate widening in slugCandidates().
+            return [[$pattern], "scoped to the viewer's own records"];
         }
         if (str_ends_with($pattern, '.apply')) {
             $base = substr($pattern, 0, -strlen('.apply'));
@@ -234,5 +261,75 @@ class SystemDrift
     private static function finding(string $kind, string $severity, string $message): array
     {
         return ['kind' => $kind, 'severity' => $severity, 'message' => $message];
+    }
+
+    /**
+     * Plan the reconciliation between the Mind's club promises
+     * and the roles' grants: one action per (role, slug) —
+     * 'grant' when the permission exists, 'create-and-grant'
+     * for framework-construct slugs (view-own forms) that the
+     * registry does not carry yet, and 'unresolvable' for
+     * patterns naming nothing. Pure: the command executes.
+     *
+     * @param array<string, mixed> $mind
+     * @param array<string, list<string>> $roleGrants
+     * @param list<string> $registry
+     * @return list<array{club: string, role: ?string, slug: string, action: string, pattern: string}>
+     */
+    public static function planReconciliation(array $mind, array $roleGrants, array $registry): array
+    {
+        $actions = [];
+        $roleByNorm = [];
+        foreach (array_keys($roleGrants) as $role) {
+            $roleByNorm[self::norm($role)] = $role;
+        }
+        foreach (($mind['roles']['clubs'] ?? []) as $club) {
+            $clubName = (string) ($club['name'] ?? '');
+            $patterns = $club['permissions'] ?? [];
+            if (in_array('*', $patterns, true)) {
+                continue;
+            }
+            $role = $club['maps_to'] ?? ($roleByNorm[self::norm($clubName)] ?? null);
+            foreach ($patterns as $pattern) {
+                $pattern = (string) $pattern;
+                // A view-own promise reconciles to the view-own
+                // CONSTRUCT slug itself (task.view-own), never to
+                // the full view — granting the full view would
+                // silently widen own-scope to all records.
+                if (str_ends_with($pattern, '.view-own')) {
+                    if ($role === null) {
+                        $actions[] = ['club' => $clubName, 'role' => null, 'slug' => $pattern, 'action' => 'unmapped-club', 'pattern' => $pattern];
+                        continue;
+                    }
+                    if (self::grantsSatisfy($roleGrants[$role] ?? [], $pattern)) {
+                        continue;
+                    }
+                    $actions[] = ['club' => $clubName, 'role' => $role, 'slug' => $pattern,
+                        'action' => in_array($pattern, $registry, true) ? 'grant' : 'create-and-grant', 'pattern' => $pattern];
+                    continue;
+                }
+                [$required] = self::requiredPermissions($pattern, $registry);
+                if ($required === []) {
+                    $actions[] = ['club' => $clubName, 'role' => $role, 'slug' => $pattern, 'action' => 'unresolvable', 'pattern' => $pattern];
+                    continue;
+                }
+                foreach ($required as $slug) {
+                    if ($role === null) {
+                        $actions[] = ['club' => $clubName, 'role' => null, 'slug' => $slug, 'action' => 'unmapped-club', 'pattern' => $pattern];
+                        continue;
+                    }
+                    if (self::grantsSatisfy($roleGrants[$role] ?? [], $slug)) {
+                        continue; // already kept
+                    }
+                    // Resolve to the DECLARED slug form (leaf.create,
+                    // not the leaves.create requirement spelling) so
+                    // the executor grants the real permission row.
+                    $declared = self::resolveDeclaredSlug($slug, $registry);
+                    $actions[] = ['club' => $clubName, 'role' => $role, 'slug' => $declared ?? $slug,
+                        'action' => $declared !== null ? 'grant' : 'create-and-grant', 'pattern' => $pattern];
+                }
+            }
+        }
+        return $actions;
     }
 }

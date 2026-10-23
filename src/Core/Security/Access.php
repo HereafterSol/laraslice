@@ -112,6 +112,15 @@ final class Access
         }
 
         foreach ((array) $abilities as $ability) {
+            // Per-person overrides (PermissionOverrides): a
+            // revoke wins over the club grant for this ability;
+            // a grant adds to it.
+            if (PermissionOverrides::revokes($user, (string) $ability)) {
+                continue;
+            }
+            if (PermissionOverrides::grants($user, (string) $ability)) {
+                return true;
+            }
             if (method_exists($user, 'hasPermission')) {
                 if ($user->hasPermission($ability)) {
                     return true;

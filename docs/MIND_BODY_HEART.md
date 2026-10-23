@@ -154,7 +154,16 @@ Rules:
   runtime state (health, backups, sync, audit, security).
 - **CLI** — `slice:port` extracts draft Mind + Bodies from a
   source system; the delta audit verifies Bodies against both
-  applications; `slice:links` checks the Hearts.
+  applications; `slice:links` checks the Hearts. `slice:drift`
+  audits the Mind's club promises and the Bodies' access
+  declarations against the roles' actual grants (zero errors is
+  a release gate); `slice:drift --fix` reconciles them —
+  granting mapped roles (`maps_to`) what their clubs promise,
+  creating `view-own` permission rows when missing, and never
+  widening a view-own promise into a full view. Per-person
+  overrides live in the `user_permissions` table (grant/revoke)
+  and are enforced by the runtime's access layer on top of the
+  club grants; a revoke beats the club grant.
 - **Manuals and the AI API are generated outputs** — user manuals
   from the Mind's journeys + the Bodies; AI access is the CLI/MCP
   surface over the same three files. Never hand-maintain them.
