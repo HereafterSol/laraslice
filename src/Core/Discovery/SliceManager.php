@@ -696,6 +696,21 @@ class SliceManager
                             $vChanged = true;
                         }
                     }
+                    if ($base === 'show.blade.php') {
+                        // (q) Show-page identity: records whose
+                        // display name lives in full_name (people)
+                        // or heading/subject fall back to it before
+                        // the generic '<Slice> #id'.
+                        $labelNeedle = '$record->title ?? $record->name ??';
+                        if (str_contains($vContent, $labelNeedle) && ! str_contains($vContent, '$record->full_name')) {
+                            $vContent = str_replace(
+                                $labelNeedle,
+                                '$record->title ?? $record->name ?? $record->full_name ?? $record->heading ?? $record->subject ??',
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
                         // (d) Declared-view toolbar buttons (matrix /
                         // report / bulk entry) — the controller passes

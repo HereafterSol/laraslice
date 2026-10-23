@@ -1617,7 +1617,7 @@ BLADE;
 @section('content')
 @php
     \$id = \$record->id ?? 1;
-    \$label = \$record->title ?? \$record->name ?? ('{$studlyName} #' . \$id);
+    \$label = \$record->title ?? \$record->name ?? \$record->full_name ?? \$record->heading ?? \$record->subject ?? ('{$studlyName} #' . \$id);
     \$subtitle = \$record->subtitle ?? \$record->email ?? \$record->code ?? ('{$studlyName} Record');
     \$initials = strtoupper(substr(\$label, 0, 2));
     \$workflow = method_exists(\$record, 'getWorkflowDefinition') ? \$record->getWorkflowDefinition() : null;
