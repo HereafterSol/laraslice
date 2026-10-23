@@ -176,7 +176,16 @@ final class FieldDefinitionNormalizer
                 ! empty($options) && ! str_ends_with($name, '_id') ? 'in:'.implode(',', array_keys($options)) : null,
             ]));
 
-            $schema = "Field::make('{$name}', '{$types[$type]['input']}')->label(".var_export($label, true).')';
+            // Form hygiene (Body v2 rules): the input for a
+            // date-domain column is a date input even when the
+            // storage type is datetime — people pick days, not
+            // timestamps, for leave_date / start_date / *_on.
+            $input = $types[$type]['input'];
+            if (in_array($type, ['datetime', 'timestamp'], true) && preg_match('/(_date|_on)$/', $name)) {
+                $input = 'date';
+            }
+
+            $schema = "Field::make('{$name}', '{$input}')->label(".var_export($label, true).')';
             if ($required) {
                 $schema .= '->required()';
             }
@@ -187,19 +196,34 @@ final class FieldDefinitionNormalizer
                 $schema .= '->options('.var_export($options, true).')';
             }
 
+            // Visibility flags SURVIVE normalization (they were
+            // silently dropped, which made manifest show_in_form
+            // edits no-ops). System/audit columns (added_by,
+            // approved_*, event_id, *_by) default to hidden from
+            // forms; an explicit show_in_form in the manifest
+            // still wins — the Heart is edited deliberately.
+            $hidden = ! empty($definition['hidden']);
+            $showInForm = isset($definition['show_in_form'])
+                ? (bool) $definition['show_in_form']
+                : ! $hidden && ! self::isSystemField($name);
+
             $definitions[$name] = [
                 'name' => $name,
                 'label' => $label,
                 'rules' => $rules,
                 'type' => $type,
                 'schema' => $schema,
-                'form' => $this->renderFormField($name, $label, ! empty($options) ? 'select' : $types[$type]['input'], $required, $default, $options),
+                'form' => $this->renderFormField($name, $label, ! empty($options) ? 'select' : $input, $required, $default, $options),
                 'migration' => $columnExpression.';',
                 'default' => $default,
                 'nullable' => $nullable,
                 'options' => $options,
                 'encrypted' => $encrypted,
                 'relation' => is_array($definition['relation'] ?? null) ? $definition['relation'] : null,
+                'hidden' => $hidden,
+                'show_in_form' => $showInForm,
+                'show_in_list' => isset($definition['show_in_list']) ? (bool) $definition['show_in_list'] : ! $hidden,
+                'system' => self::isSystemField($name),
             ];
         }
 
@@ -315,5 +339,17 @@ BLADE;
                     @error('{$name}') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
                 </div>
 BLADE;
+    }
+
+    /**
+     * Audit/system columns that exist for the record's
+     * bookkeeping, never for a person to type: author stamps
+     * (*_by), approval stamps, and cross-system event links.
+     * Mirrors the Body v2 system_fields rule.
+     */
+    public static function isSystemField(string $name): bool
+    {
+        return in_array($name, ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id'], true)
+            || str_ends_with($name, '_by');
     }
 }

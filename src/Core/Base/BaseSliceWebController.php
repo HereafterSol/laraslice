@@ -144,6 +144,15 @@ abstract class BaseSliceWebController extends Controller
                     }
                 }
             }
+            // Own-scope (Body v2 access): a view-own-only grant
+            // narrows the list to the viewer's own records on
+            // the slice's owner column.
+            if ($this->sliceViewScope() === 'own') {
+                $ownerField = $this->ownScopeOwnerField();
+                if ($ownerField !== null) {
+                    $criteria[$ownerField] = auth()->id();
+                }
+            }
             if ($criteria !== []) {
                 $filter->setCriteria($criteria);
             }
@@ -1220,6 +1229,14 @@ abstract class BaseSliceWebController extends Controller
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
         }
 
+        // Own-scope: another person's record is not viewable.
+        if ($this->sliceViewScope() === 'own') {
+            $ownerField = $this->ownScopeOwnerField();
+            if ($ownerField !== null && (int) ($record->{$ownerField} ?? 0) !== (int) auth()->id()) {
+                abort(404);
+            }
+        }
+
         $showView = $this->ownViewName('show');
         $ownManifest = $this->ownManifest();
         if (view()->exists($showView)) {
@@ -1387,6 +1404,7 @@ abstract class BaseSliceWebController extends Controller
         // A create must never target an existing record through a smuggled id
         $form = $formClass::fromArray($request->except(['id']));
         $this->captureRepeaterMarkers($request, $form);
+        $this->applyWorkflowInitialState($form);
 
         $id = $this->getService()->save($form);
         try {
@@ -1506,6 +1524,39 @@ abstract class BaseSliceWebController extends Controller
      *
      * @return array<string, mixed>
      */
+    /**
+     * The column that owns a record for own-scope access: the
+     * manifest's declared owner_field, else user_id when the
+     * slice has one. Null means the slice cannot be own-scoped.
+     */
+    protected function ownScopeOwnerField(): ?string
+    {
+        $manifest = $this->ownManifest();
+        if (! empty($manifest['owner_field'])) {
+            return (string) $manifest['owner_field'];
+        }
+        return isset($manifest['fields']['user_id']) ? 'user_id' : null;
+    }
+
+    /**
+     * Workflow hygiene (Body v2): a created record enters its
+     * workflow at the declared initial state when the request
+     * left the state field empty — the state is server-set,
+     * never an accident of an empty input.
+     */
+    protected function applyWorkflowInitialState(object $form): void
+    {
+        $workflow = $this->ownManifest()['workflow'] ?? null;
+        if (! is_array($workflow) || empty($workflow['enabled'])) {
+            return;
+        }
+        $field = (string) ($workflow['state_field'] ?? 'status');
+        $initial = $workflow['initial_state'] ?? null;
+        if ($initial !== null && property_exists($form, $field) && empty($form->{$field})) {
+            $form->{$field} = $initial;
+        }
+    }
+
     protected function ownManifest(): array
     {
         try {
