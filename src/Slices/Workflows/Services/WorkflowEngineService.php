@@ -211,6 +211,10 @@ class WorkflowEngineService
                 $model->onWorkflowTransitioned($transition, $log);
             }
 
+            // 6. Broadcast the transition (approval notifications
+            // and host integrations subscribe to this).
+            event(new \LaraSlice\Core\Workflow\Events\WorkflowTransitioned($model, $transition, $log, $currentUser?->id));
+
             return $log;
         });
     }
