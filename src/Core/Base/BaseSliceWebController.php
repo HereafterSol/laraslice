@@ -1694,21 +1694,33 @@ abstract class BaseSliceWebController extends Controller
                     continue;
                 }
                 try {
+                    // A card may scope itself with a where map
+                    // ({column: value}) — status strips such as
+                    // Total / Open / Closed / Pending counts — and
+                    // may store under its own key when several
+                    // cards share one column.
+                    $scoped = $query->clone();
+                    if (! empty($card['where']) && is_array($card['where'])) {
+                        foreach ($card['where'] as $whereColumn => $whereValue) {
+                            $scoped->where($whereColumn, $whereValue);
+                        }
+                    }
                     $value = match ($aggregate) {
-                        'sum' => $query->clone()->sum($handle),
-                        'avg' => $query->clone()->avg($handle),
-                        'max' => $query->clone()->max($handle),
-                        'min' => $query->clone()->min($handle),
-                        default => $query->clone()->count(),
+                        'sum' => $scoped->sum($handle),
+                        'avg' => $scoped->avg($handle),
+                        'max' => $scoped->max($handle),
+                        'min' => $scoped->min($handle),
+                        default => $scoped->count(),
                     };
+                    $dataKey = (string) ($card['key'] ?? $handle);
                     // Format money values
                     if (($card['formatter'] ?? '') === 'money') {
-                        $data[$handle] = '$' . number_format((float) $value, 2);
+                        $data[$dataKey] = '$' . number_format((float) $value, 2);
                     } else {
-                        $data[$handle] = is_numeric($value) ? number_format($value) : $value;
+                        $data[$dataKey] = is_numeric($value) ? number_format($value) : $value;
                     }
                 } catch (\Throwable $e) {
-                    $data[$handle] = '—';
+                    $data[(string) ($card['key'] ?? $handle)] = '—';
                 }
             }
         } catch (\Throwable $e) {

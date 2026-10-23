@@ -673,6 +673,29 @@ class SliceManager
                             // Manifest unreadable — leave the blade.
                         }
                     }
+                    if ($base === 'index.blade.php') {
+                        // (p) Summary-card values resolve by the
+                        // card's key when one is declared (several
+                        // cards may share a column).
+                        $summaryNeedle = '$summaryData[$card[\'handle\']]';
+                        if (str_contains($vContent, $summaryNeedle)) {
+                            $vContent = str_replace(
+                                $summaryNeedle,
+                                '$summaryData[$card[\'key\'] ?? $card[\'handle\']]',
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                        $summaryNeedle2 = '$summaryData[$card[\'handle\'] ?? \'\']';
+                        if (str_contains($vContent, $summaryNeedle2)) {
+                            $vContent = str_replace(
+                                $summaryNeedle2,
+                                '$summaryData[$card[\'key\'] ?? $card[\'handle\'] ?? \'\']',
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                    }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
                         // (d) Declared-view toolbar buttons (matrix /
                         // report / bulk entry) — the controller passes

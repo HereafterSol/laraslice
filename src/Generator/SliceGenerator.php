@@ -1318,7 +1318,7 @@ $bladeIndex = <<<BLADE
             @foreach(\$kpiCards as \$card)
             <div class="rounded-lg border border-border bg-card px-4 py-3 shadow-2xs">
                 <p class="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{{ \$card['label'] ?? (\$card['handle'] ?? 'Stat') }}</p>
-                <p class="text-xl font-semibold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
+                <p class="text-xl font-semibold text-foreground mt-1 tabular-nums">{{ \$summaryData[\$card['key'] ?? \$card['handle'] ?? ''] ?? (\$card['handle'] === 'total' ? (\$summaryData['total'] ?? '—') : '—') }}</p>
             </div>
             @endforeach
         </div>
