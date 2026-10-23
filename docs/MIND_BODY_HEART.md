@@ -99,3 +99,17 @@ values, not comments. `php artisan slice:plan:draft` drafts a
 Mind plus a Body per slice from the discovered slices (R6);
 drafts are marked [draft] and existing files are never
 overwritten.
+
+## Operate mode (Studio)
+
+The sixth mode reports the running system against the Mind's
+`operations:` declarations: health checks (database, slices,
+storage, Mind presence, audit trail, runtime), backups — the
+declared policy is shown and "Run backup now" produces real
+artifacts honoring the declared includes — the recent audit
+trail, and an access review (R5) listing every user's roles
+with flags on system-wide roles, multiple roles, and missing
+roles. "Generate manual" (R4) downloads an operator manual
+assembled from the Mind and the slice inventory. Operate
+never changes runtime behavior; it is the Maintain loop's
+home (R3).
