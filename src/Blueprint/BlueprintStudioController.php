@@ -1731,6 +1731,19 @@ final class BlueprintStudioController extends Controller
     /**
      * Lazy panel HTML. Phase 1 serves Port only.
      */
+    /** Operate mode actions: run a backup, generate the manual (R4). */
+    public function operateBackup(Request $request): mixed
+    {
+        $created = \LaraSlice\Support\SystemOperate::runBackup();
+
+        return response()->json(['created' => $created, 'backups' => \LaraSlice\Support\SystemOperate::backups()]);
+    }
+
+    public function operateManual(Request $request): mixed
+    {
+        return response()->json(['markdown' => \LaraSlice\Support\SystemOperate::manualMarkdown()]);
+    }
+
     /** Plan mode: diff-before-save for the Mind (system.yaml). */
     public function planPreview(Request $request): mixed
     {
@@ -1763,6 +1776,19 @@ final class BlueprintStudioController extends Controller
                 'mind' => $mind,
                 'mindPath' => \LaraSlice\Support\SystemMind::path(),
                 'form' => $mind !== null ? \LaraSlice\Support\SystemMind::toForm($mind) : ['purpose' => '', 'roles' => '', 'journeys' => '', 'operations' => ''],
+            ]);
+        }
+
+        if ($mode === 'operate') {
+            $mind = \LaraSlice\Support\SystemMind::load();
+
+            return view('laraslice::partials.operate-panel', [
+                'health' => \LaraSlice\Support\SystemOperate::health(),
+                'backups' => \LaraSlice\Support\SystemOperate::backups(),
+                'backupPolicy' => $mind['operations']['backups'] ?? null,
+                'sync' => $mind['operations']['sync'] ?? null,
+                'audit' => \LaraSlice\Support\SystemOperate::recentAudit(),
+                'access' => \LaraSlice\Support\SystemOperate::accessReview(),
             ]);
         }
 

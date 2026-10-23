@@ -203,6 +203,8 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::middleware($guard)->group(function () {
                         Route::post('/studio/plan/preview', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'planPreview'])->name('laraslice.studio.plan_preview');
                         Route::post('/studio/plan/save', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'planSave'])->name('laraslice.studio.plan_save');
+                        Route::post('/studio/operate/backup', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'operateBackup'])->name('laraslice.studio.operate_backup');
+                        Route::post('/studio/operate/manual', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'operateManual'])->name('laraslice.studio.operate_manual');
                     });
                 });
             });
