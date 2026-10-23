@@ -70,4 +70,26 @@ class SystemDriftTest extends TestCase
         $findings = SystemDrift::audit($mind, $grants, $registry);
         $this->assertSame([], $findings);
     }
+
+    public function test_reconciliation_plans_view_own_constructs_never_full_view(): void
+    {
+        $mind = ['roles' => ['clubs' => [
+            ['name' => 'Employee', 'maps_to' => 'Standard User', 'permissions' => ['task.view-own', 'leaves.apply']],
+        ]]];
+        $grants = ['Standard User' => ['leaf.view-own']];
+        $registry = ['leaf.view', 'leaf.create', 'leaf.view-own', 'task.view'];
+
+        $plan = SystemDrift::planReconciliation($mind, $grants, $registry);
+        $bySlug = [];
+        foreach ($plan as $a) {
+            $bySlug[$a['slug']] = $a['action'];
+        }
+        // view-own: the construct is created + granted; the
+        // full task.view must NOT be granted (that would widen
+        // own-scope to everyone''s records).
+        $this->assertSame('create-and-grant', $bySlug['task.view-own'] ?? null);
+        $this->assertArrayNotHasKey('task.view', $bySlug);
+        // leaves.apply -> leaf.create exists -> plain grant.
+        $this->assertSame('grant', $bySlug['leaf.create'] ?? null);
+    }
 }
