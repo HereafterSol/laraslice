@@ -10,7 +10,7 @@
                 <button type="button" @click="setMode('home')" class="text-left" title="Studio Home (⌘0)">
                     <h1 class="text-lg font-bold leading-tight text-foreground">Dev Studio</h1>
                     <p class="text-[11px] leading-tight text-muted-foreground">
-                        One surface. Four modes.<span x-show="sliceCount > 0" x-cloak> · <span x-text="sliceCount"></span> slices</span>
+                        One surface. Five modes.<span x-show="sliceCount > 0" x-cloak> · <span x-text="sliceCount"></span> slices</span>
                     </p>
                 </button>
             </div>
@@ -128,6 +128,11 @@
                 <div id="one-studio-schema" x-show="schemaLoaded"></div>
             </div>
         </div>
+        {{-- PLAN: lazy-mounted panel (the Mind) --}}
+        <div x-show="mode === 'plan'" x-cloak>
+            <div x-show="!planLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Plan…</div>
+            <div id="one-studio-plan" x-show="planLoaded"></div>
+        </div>
         {{-- CREATE + MANAGE share one mounted wizard panel; the shell mode drives its tab. --}}
         <div x-show="mode === 'create' || mode === 'manage'" x-cloak>
             <div x-show="!wizardLoaded" class="py-12 text-center text-sm text-muted-foreground">Loading Studio…</div>
@@ -138,13 +143,14 @@
 
 <script>
 function oneStudioShell(initialMode, hasSlices, sliceCount) {
-    const allowed = ['home', 'port', 'design', 'create', 'manage'];
+    const allowed = ['home', 'port', 'design', 'create', 'manage', 'plan'];
     const start = allowed.includes(initialMode) ? initialMode : 'home';
     return {
         mode: start,
         hasSlices: !!hasSlices,
         sliceCount: sliceCount || 0,
         portLoaded: false,
+        planLoaded: false,
         designLoaded: false,
         wizardLoaded: false,
         schemaLoaded: false,
@@ -156,6 +162,7 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
             { id: 'design', key: '2', icon: '📐', label: 'Design' },
             { id: 'create', key: '3', icon: '🧩', label: 'Create' },
             { id: 'manage', key: '4', icon: '🛠️', label: 'Manage' },
+            { id: 'plan', key: '5', icon: '🧭', label: 'Plan' },
         ],
         init() {
             window.__oneStudioSetMode = (id) => this.setMode(id);
@@ -167,6 +174,9 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
             }
             if (this.mode === 'create' || this.mode === 'manage') {
                 this.mountWizard(this.mode);
+            }
+            if (this.mode === 'plan') {
+                this.mountPlan();
             }
             document.addEventListener('keydown', (e) => {
                 if (!(e.metaKey || e.ctrlKey)) return;
@@ -191,6 +201,9 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
             }
             if (id === 'create' || id === 'manage') {
                 this.mountWizard(id);
+            }
+            if (id === 'plan') {
+                this.mountPlan();
             }
         },
         startFromText() {
@@ -239,6 +252,28 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
             if (window.Alpine && typeof window.Alpine.initTree === 'function') {
                 window.Alpine.initTree(el);
             }
+        },
+        async mountPlan() {
+            if (this.planLoaded) return;
+            const el = document.getElementById('one-studio-plan');
+            if (!el) return;
+            const res = await fetch(@js(route('laraslice.studio.panel', ['mode' => 'plan'])), {
+                headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) {
+                el.innerHTML = '<p class="text-sm text-destructive">Could not load Plan.</p>';
+                this.planLoaded = true;
+                return;
+            }
+            const html = await res.text();
+            el.innerHTML = html;
+            el.querySelectorAll('script').forEach((oldScript) => {
+                const s = document.createElement('script');
+                if (oldScript.src) { s.src = oldScript.src; } else { s.textContent = oldScript.textContent; }
+                oldScript.replaceWith(s);
+            });
+            this.planLoaded = true;
+            this.$nextTick(() => { if (window.Alpine) window.Alpine.initTree(el); });
         },
         async mountPort() {
             if (this.portLoaded) return;

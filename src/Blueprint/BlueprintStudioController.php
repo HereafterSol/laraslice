@@ -1731,8 +1731,41 @@ final class BlueprintStudioController extends Controller
     /**
      * Lazy panel HTML. Phase 1 serves Port only.
      */
+    /** Plan mode: diff-before-save for the Mind (system.yaml). */
+    public function planPreview(Request $request): mixed
+    {
+        $mind = \LaraSlice\Support\SystemMind::load() ?? ['system' => ['name' => config('app.name')]];
+        $updated = \LaraSlice\Support\SystemMind::applyForm($mind, $request->only(['purpose', 'roles', 'journeys', 'operations']));
+        $before = \LaraSlice\Support\SystemMind::path() !== null ? (string) file_get_contents(\LaraSlice\Support\SystemMind::path()) : '';
+
+        return response()->json(['diff' => \LaraSlice\Support\SystemMind::diff($before, \LaraSlice\Support\SystemMind::render($updated))]);
+    }
+
+    public function planSave(Request $request): mixed
+    {
+        $mind = \LaraSlice\Support\SystemMind::load() ?? ['system' => ['name' => config('app.name')]];
+        $updated = \LaraSlice\Support\SystemMind::applyForm($mind, $request->only(['purpose', 'roles', 'journeys', 'operations']));
+        $path = \LaraSlice\Support\SystemMind::path() ?? \LaraSlice\Support\SystemMind::defaultPath();
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0775, true);
+        }
+        file_put_contents($path, \LaraSlice\Support\SystemMind::render($updated));
+
+        return response()->json(['saved' => true, 'path' => $path]);
+    }
+
     public function panel(string $mode, Request $request): mixed
     {
+        if ($mode === 'plan') {
+            $mind = \LaraSlice\Support\SystemMind::load();
+
+            return view('laraslice::partials.plan-panel', [
+                'mind' => $mind,
+                'mindPath' => \LaraSlice\Support\SystemMind::path(),
+                'form' => $mind !== null ? \LaraSlice\Support\SystemMind::toForm($mind) : ['purpose' => '', 'roles' => '', 'journeys' => '', 'operations' => ''],
+            ]);
+        }
+
         if ($mode === 'port') {
             return view('laraslice::partials.port-panel');
         }

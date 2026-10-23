@@ -84,3 +84,18 @@ Rules:
 - **Manuals and the AI API are generated outputs** — user manuals
   from the Mind's journeys + the Bodies; AI access is the CLI/MCP
   surface over the same three files. Never hand-maintain them.
+
+## Plan mode (Studio)
+
+The Studio's fifth mode, **Plan**, is where the Mind is read and
+edited: actors, journeys, operations, and role overrides render
+as plain-language cards, and purpose / role clubs / journeys /
+operations edit as simple line-based forms. Saving is
+diff-before-save (preview renders a unified diff of the YAML;
+confirming writes `porting/system.yaml`). Sections the form
+does not touch are preserved, except YAML comments — a Plan
+save re-renders the file and drops comments, so keep prose in
+values, not comments. `php artisan slice:plan:draft` drafts a
+Mind plus a Body per slice from the discovered slices (R6);
+drafts are marked [draft] and existing files are never
+overwritten.
