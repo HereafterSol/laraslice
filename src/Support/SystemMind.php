@@ -207,22 +207,16 @@ class SystemMind
 
         $modules = [];
         foreach ($manager->discoveredSlices() as $slice) {
-            $manifest = $slice->toArray();
+            // The full Heart lives in the manifest's raw array;
+            // toArray() is only the identity summary.
+            $manifest = is_array($slice->raw ?? null) && $slice->raw !== [] ? $slice->raw : $slice->toArray();
             $name = (string) ($manifest['name'] ?? 'Slice');
             $modules[] = (string) ($manifest['title'] ?? $name);
             $file = $dir.'/'.strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', (string) $name)).'.ui.yaml';
             if (is_file($file)) {
                 continue;
             }
-            $columns = [];
-            foreach ($manifest['ui']['directory']['columns'] ?? [] as $col) {
-                if (is_array($col) && ! empty($col['label'])) {
-                    $columns[] = (string) $col['label'];
-                }
-            }
-            $body = "# Body (draft) — {$name} · drafted by the porter (R6), awaiting review\n";
-            $body .= '# List columns observed: '.($columns === [] ? '(none declared)' : implode(', ', $columns))."\n";
-            $body .= "# Decisions: [draft] — confirm columns, filters, and actions in Plan mode.\n";
+            $body = self::draftBodyV2($manifest, $name);
             file_put_contents($file, $body);
             $result['bodies']++;
         }
@@ -259,5 +253,92 @@ class SystemMind
         }
 
         return $result;
+    }
+
+    /**
+     * Draft a Body in the v2 schema (docs/MIND_BODY_HEART.md):
+     * list facts from the manifest's directory declarations,
+     * a form section classified from the manifest's fields
+     * (system/audit columns separated, relations as pickers,
+     * workflow state wired to its initial), and an access
+     * skeleton marked [draft] for review in Plan mode.
+     *
+     * @param array<string, mixed> $manifest
+     */
+    public static function draftBodyV2(array $manifest, string $name): string
+    {
+        $title = (string) ($manifest['title'] ?? $name);
+        $slug = strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', $name));
+        $lines = [];
+        $lines[] = "# Body v2 (draft) — {$name} · drafted by slice:plan:draft, awaiting review";
+        $lines[] = "slice: {$slug}";
+        $lines[] = "labels: {singular: '[draft]', plural: {$title}}";
+        $lines[] = 'pages:';
+
+        // List page from the directory declarations.
+        $lines[] = '  list:';
+        $columns = $manifest['ui']['directory']['columns'] ?? [];
+        if ($columns === []) {
+            $lines[] = '    columns: []  # [draft] none declared';
+        } else {
+            $lines[] = '    columns:';
+            foreach ($columns as $col) {
+                if (is_array($col) && ! empty($col['label'])) {
+                    $lines[] = "      - {item: '".str_replace("'", '', (string) $col['label'])."', decision: undecided}";
+                }
+            }
+        }
+
+        // Form page: classify the manifest's fields.
+        $systemPatterns = '/(_by|_at|_id$|^id$)/';
+        $systemNames = ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'created_at', 'updated_at', 'deleted_at'];
+        $workflow = $manifest['workflow'] ?? null;
+        $stateField = is_array($workflow) ? ($workflow['state_field'] ?? null) : null;
+        $formFields = [];
+        $systemFields = [];
+        foreach (($manifest['fields'] ?? []) as $fieldName => $field) {
+            $fieldName = (string) $fieldName;
+            if (in_array($fieldName, $systemNames, true) || preg_match('/_(by|at)$/', $fieldName)) {
+                $systemFields[] = $fieldName;
+                continue;
+            }
+            if ($stateField !== null && $fieldName === $stateField) {
+                $formFields[] = "      {$fieldName}: {input: workflow-state, default: workflow-initial, editable: false}";
+                continue;
+            }
+            $type = is_array($field) ? (string) ($field['type'] ?? 'string') : 'string';
+            if (str_ends_with($fieldName, '_id')) {
+                $relation = (string) ($field['relation'] ?? $field['target'] ?? str_replace('_id', '', $fieldName));
+                $formFields[] = "      {$fieldName}: {input: picker, relation: {$relation}}";
+            } elseif (in_array($type, ['date'], true)) {
+                $formFields[] = "      {$fieldName}: {input: date}";
+            } elseif (in_array($type, ['datetime', 'timestamp'], true) && preg_match('/(_date|_on)$/', $fieldName)) {
+                $formFields[] = "      {$fieldName}: {input: date}  # [draft] storage is datetime; the domain reads it as a date — confirm";
+            } elseif ($type === 'boolean') {
+                $formFields[] = "      {$fieldName}: {input: checkbox}";
+            } elseif ($type === 'text') {
+                $formFields[] = "      {$fieldName}: {input: textarea}";
+            } else {
+                $formFields[] = "      {$fieldName}: {input: text}";
+            }
+        }
+        $lines[] = '  form:';
+        $lines[] = '    fields:';
+        foreach ($formFields as $line) {
+            $lines[] = $line;
+        }
+        if ($systemFields !== []) {
+            $lines[] = '    system_fields: ['.implode(', ', $systemFields).']';
+        }
+
+        // Access skeleton + workflow line.
+        $lines[] = 'access:';
+        $lines[] = "  Super Admin: {actions: [view, create, edit, delete], scope: all}";
+        $lines[] = "  Standard User: {actions: [view], scope: '[draft]'}  # [draft] confirm per club in Plan mode";
+        if (is_array($workflow) && ! empty($workflow['initial_state'])) {
+            $lines[] = "workflow: {state_field: {$stateField}, initial: {$workflow['initial_state']}, on_create: apply-initial}";
+        }
+
+        return implode("\n", $lines)."\n";
     }
 }

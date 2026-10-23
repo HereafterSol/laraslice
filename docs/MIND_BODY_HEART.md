@@ -72,6 +72,80 @@ Rules:
    both. Porting and planning are the same three files at
    different moments of a system's life.
 
+## The Body (`porting/ui-spec/<slice>.ui.yaml`) — schema v2
+
+One Body per slice. It is the reviewable evidence of what each
+page of the slice looks like and does, and what each club may do
+with it. Bodies are written in the source system's words (its UI
+nouns, its labels), never in storage words. Every item carries a
+`decision` (`undecided` at extraction, then `keep`, `drop`,
+`rename`, or `add`); audits check the Heart and the running app
+against the decided Body.
+
+```yaml
+slice: leaves
+labels: {singular: Leave, plural: Leaves}   # the UI's own nouns
+pages:
+  list:
+    path_source: /account/leaves
+    path_port: /erp/erp/hr/leaves
+    toolbar: [{item: 'New Leave', decision: keep}]
+    filters: [{item: status, decision: keep, placement: drawer}]
+    columns:
+      - {item: Employee, decision: keep, value: user.name}  # value = what must render non-empty
+  form:                       # the create/edit surface — v2 addition
+    presentation: drawer      # page | drawer | modal (create), page | drawer | modal (edit)
+    sections:
+      - {title: Leave, fields: [user_id, leave_type_id, leave_date, duration, reason]}
+    fields:
+      user_id:        {input: picker, relation: users, label: 'Choose Employee'}
+      leave_type_id:  {input: select, relation: leave_types}
+      leave_date:     {input: date}                 # date even if storage is datetime
+      duration:       {input: select, options: [full, first_half, second_half]}
+      reason:         {input: textarea, required: false}
+      status:         {input: workflow-state, default: workflow-initial, editable: false}
+    system_fields: [added_by, last_updated_by, approved_by, approved_at, event_id]
+      # storage/audit columns that exist in the Heart but must
+      # never render on a form; generation hides them by default
+  detail:
+    composition: [header-counters, tabs]
+    tabs: [Profile, Activity]
+access:                       # per club — checked against the Hearts + roles
+  Super Admin:  {actions: [view, create, edit, delete, approve], scope: all}
+  Admin:        {actions: [view, create, edit, approve], scope: all}
+  Employee:     {actions: [view, create], scope: own}   # own = records whose user_id is the viewer
+workflow: {state_field: status, initial: pending, on_create: apply-initial}
+```
+
+Rules:
+
+1. **A Body is incomplete without `pages.form` and `access`.**
+   A list-only Body is a draft, and audits must say so.
+2. **System fields are declared, then hidden.** Any column the
+   user should never type (`*_by` audit stamps, `approved_*`,
+   `event_id`, timestamps) is listed under `system_fields`;
+   form generation hides them by default, and the form audit
+   fails if one renders.
+3. **Defaults have sources.** A field's default is one of
+   `workflow-initial`, a literal, `current-user`, or
+   `today` — never an accident of an empty input. A workflow
+   slice's state field defaults to the workflow's initial
+   state, applied by the server on create.
+4. **Relations are pickers.** A field whose value is another
+   record declares `input: picker` (or `select`) with its
+   `relation`; rendering a raw numeric ID input for a person
+   or a named record is a defect the form audit flags.
+5. **Access is part of the surface.** `scope: own` means the
+   runtime filters the list (and guards detail routes) to the
+   viewer's own records for that club. The drift audit
+   compares `access` against the Hearts' declared permissions
+   and the roles' actual grants — a club the Mind promises
+   access and no role grants is drift, reported before release.
+6. **Values are auditable.** A list column may declare
+   `value:` (the relation path that must render). An audit
+   that finds the column rendering empty for every row has
+   found a defect, even when the header matches.
+
 ## Where each surface reads them
 
 - **Dev Studio** — Plan mode reads/writes the Mind; Design mode
