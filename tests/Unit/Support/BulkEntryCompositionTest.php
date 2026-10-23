@@ -27,6 +27,22 @@ class BulkEntryCompositionTest extends TestCase
         ];
     }
 
+    public function test_value_label_options_split_into_values_and_labels(): void
+    {
+        $decl = DirectoryUi::bulkEntryFromManifest(['ui' => ['directory' => ['bulk_entry' => [
+            'row_key' => 'user_id',
+            'date_field' => 'date',
+            'fields' => [
+                ['handle' => 'employee_shift_id', 'input' => 'select', 'options' => [
+                    ['value' => '2', 'label' => 'General Shift'],
+                    ['value' => '4', 'label' => 'Day Shift'],
+                ]],
+            ],
+        ]]]]);
+        $this->assertSame(['2', '4'], $decl['fields'][0]['options']);
+        $this->assertSame(['2' => 'General Shift', '4' => 'Day Shift'], $decl['fields'][0]['option_labels']);
+    }
+
     public function test_bulk_entry_inherits_row_key_and_date_field_from_matrix(): void
     {
         $decl = DirectoryUi::bulkEntryFromManifest($this->manifest([

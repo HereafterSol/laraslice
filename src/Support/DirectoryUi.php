@@ -806,11 +806,27 @@ final class DirectoryUi
                 continue;
             }
             $handle = (string) $f['handle'];
+            // Options are flat values; a {value, label} entry also
+            // contributes its label (id-valued selects, e.g. shift
+            // pickers in a bulk-assign grid).
+            $options = [];
+            $optionLabels = [];
+            foreach ((array) ($f['options'] ?? []) as $opt) {
+                if (is_array($opt) && isset($opt['value'])) {
+                    $options[] = (string) $opt['value'];
+                    if (isset($opt['label'])) {
+                        $optionLabels[(string) $opt['value']] = (string) $opt['label'];
+                    }
+                } else {
+                    $options[] = (string) $opt;
+                }
+            }
             $fields[] = [
                 'handle' => $handle,
                 'label' => (string) ($f['label'] ?? $labels[$handle] ?? \Illuminate\Support\Str::headline($handle)),
                 'input' => (string) ($f['input'] ?? 'text'),
-                'options' => array_values(array_map('strval', (array) ($f['options'] ?? []))),
+                'options' => $options,
+                'option_labels' => $optionLabels,
             ];
         }
         if ($fields === []) {
