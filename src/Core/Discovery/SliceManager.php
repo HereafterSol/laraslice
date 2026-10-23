@@ -654,6 +654,25 @@ class SliceManager
                             $vChanged = true;
                         }
                     }
+                    if ($base === 'index.blade.php') {
+                        // (o) Fidelity: a declared
+                        // ui.directory.create_label replaces the
+                        // generated 'Add <Slice>' strings (sources
+                        // vary: 'Create Estimate', 'Add Payment').
+                        try {
+                            $manifestData = ManifestRepository::read($slice->path.'/slice.yaml');
+                            $createLabel = $manifestData['ui']['directory']['create_label'] ?? null;
+                            if (is_string($createLabel) && $createLabel !== '') {
+                                $generated = 'Add '.\Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slice->name));
+                                if ($generated !== $createLabel && str_contains($vContent, $generated)) {
+                                    $vContent = str_replace($generated, $createLabel, $vContent);
+                                    $vChanged = true;
+                                }
+                            }
+                        } catch (\Throwable $e) {
+                            // Manifest unreadable — leave the blade.
+                        }
+                    }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
                         // (d) Declared-view toolbar buttons (matrix /
                         // report / bulk entry) — the controller passes

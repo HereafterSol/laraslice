@@ -183,6 +183,21 @@ abstract class BaseSliceWebController extends Controller
                 $base = str_ends_with($field, '_id') ? substr($field, 0, -3) : $field;
                 $map = $relationshipOptions[\Illuminate\Support\Str::camel($base).'Options'] ?? [];
                 $sf['options'] = collect($map)->map(fn ($label, $value) => ['value' => $value, 'label' => (string) $label])->values()->toArray();
+            } elseif (! empty($sf['options']) && is_array($sf['options'])) {
+                // Declared static options: normalize the map form
+                // ({value: label}) and the scalar-list form into
+                // the drawer's {value, label} list shape.
+                $normalized = [];
+                foreach ($sf['options'] as $k => $v) {
+                    if (is_array($v) && isset($v['value'])) {
+                        $normalized[] = ['value' => $v['value'], 'label' => (string) ($v['label'] ?? $v['value'])];
+                    } elseif (is_string($k)) {
+                        $normalized[] = ['value' => $k, 'label' => (string) $v];
+                    } else {
+                        $normalized[] = ['value' => $v, 'label' => \Illuminate\Support\Str::headline((string) $v)];
+                    }
+                }
+                $sf['options'] = $normalized;
             }
         }
         unset($sf);
