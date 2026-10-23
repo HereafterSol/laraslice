@@ -42,12 +42,47 @@ trait AuthorizesSliceActions
         $base = $this->getPermissionBase();
         $plural = Str::plural($base);
 
-        return array_values(array_unique([
+        $candidates = [
             "{$base}.{$action}",
             "{$plural}.{$action}",
             "{$base}.*",
             "{$plural}.*",
-        ]));
+        ];
+
+        // Own-scope view (Body v2 access): holding ONLY the
+        // view-own form authorizes the view, and the listing
+        // narrows to the viewer's own records (see
+        // sliceViewScope). Creating/editing are never implied.
+        if ($action === 'view') {
+            $candidates[] = "{$base}.view-own";
+            $candidates[] = "{$plural}.view-own";
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    /**
+     * How the current user may view this slice: 'all' records,
+     * only their 'own' records, or 'none'. Super users and full
+     * view grants resolve to 'all'; a view-own-only grant
+     * resolves to 'own' and the base controller enforces the
+     * narrowing on lists and detail routes.
+     */
+    protected function sliceViewScope(): string
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return 'none';
+        }
+        $base = $this->getPermissionBase();
+        $plural = Str::plural($base);
+        if (Access::allows($user, ["{$base}.view", "{$plural}.view", "{$base}.*", "{$plural}.*"])) {
+            return 'all';
+        }
+        if (Access::allows($user, ["{$base}.view-own", "{$plural}.view-own"])) {
+            return 'own';
+        }
+        return 'none';
     }
 
     /**
