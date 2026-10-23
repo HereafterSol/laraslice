@@ -1080,6 +1080,25 @@ abstract class BaseSliceWebController extends Controller
         try {
             $props = is_object($form) ? get_object_vars($form) : (is_array($form) ? $form : []);
 
+            // Manifest-declared relations on fields that break
+            // the *_id naming convention (a source column like
+            // award_to pointing at users): synthesize the
+            // relation's conventional prop so its options resolve
+            // under the usual keys (usersOptions, ...) and blades
+            // can render a picker for the field.
+            try {
+                foreach (($this->ownManifest()['fields'] ?? []) as $fieldName => $fieldDef) {
+                    $relation = is_array($fieldDef) ? ($fieldDef['relation'] ?? null) : null;
+                    if (is_string($relation) && $relation !== '' && ! str_ends_with((string) $fieldName, '_id')) {
+                        $pseudo = $relation.'_id';
+                        if (! array_key_exists($pseudo, $props)) {
+                            $props[$pseudo] = is_object($form) ? ($form->{$fieldName} ?? null) : ($form[$fieldName] ?? null);
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+            }
+
             foreach ($props as $propName => $propVal) {
                 if (! str_ends_with($propName, '_id') || $propName === 'parent_id') {
                     continue;
@@ -1405,6 +1424,7 @@ abstract class BaseSliceWebController extends Controller
         $form = $formClass::fromArray($request->except(['id']));
         $this->captureRepeaterMarkers($request, $form);
         $this->applyWorkflowInitialState($form);
+        $this->applyOwnScopeOnCreate($form);
 
         $id = $this->getService()->save($form);
         try {
@@ -1506,6 +1526,20 @@ abstract class BaseSliceWebController extends Controller
      */
     protected function getPermissionBase(): string
     {
+        // The Heart wins: when the slice's manifest declares
+        // permissions, their base IS the permission base. The
+        // route-prefix derivation below misfires on prefixed
+        // routes (hr_holidays -> hr_holiday) whose Hearts declare
+        // clean bases (holiday.*) — every non-super user 403s.
+        try {
+            foreach (($this->ownManifest()['permissions'] ?? []) as $perm) {
+                if (is_string($perm) && str_contains($perm, '.')) {
+                    return substr($perm, 0, (int) strpos($perm, '.'));
+                }
+            }
+        } catch (\Throwable) {
+        }
+
         $prefix = rtrim($this->getRoutePrefix(), '.');
         if (str_contains($prefix, '.')) {
             $parts = explode('.', $prefix);
@@ -1536,6 +1570,24 @@ abstract class BaseSliceWebController extends Controller
             return (string) $manifest['owner_field'];
         }
         return isset($manifest['fields']['user_id']) ? 'user_id' : null;
+    }
+
+    /**
+     * Own-scope create: a view-own user creating a record
+     * creates it for THEMSELVES — the owner column is forced
+     * to the creator regardless of what the form submitted
+     * (an employee applying for leave applies for herself,
+     * even if the shared form carries a person picker).
+     */
+    protected function applyOwnScopeOnCreate(object $form): void
+    {
+        if ($this->sliceViewScope() !== 'own') {
+            return;
+        }
+        $ownerField = $this->ownScopeOwnerField();
+        if ($ownerField !== null && property_exists($form, $ownerField)) {
+            $form->{$ownerField} = auth()->id();
+        }
     }
 
     /**
