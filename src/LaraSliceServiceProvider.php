@@ -186,6 +186,13 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         $this->registerRateLimiters();
 
+        // Workflow approval notifications (database channel, inert
+        // until the host app migrates the notifications table).
+        Event::listen(
+            \LaraSlice\Core\Workflow\Events\WorkflowTransitioned::class,
+            \LaraSlice\Core\Workflow\Listeners\NotifyWorkflowTransition::class
+        );
+
         // Schema checks are cached per process; forget them whenever the schema changes
         Event::listen(MigrationsEnded::class, fn () => SchemaCache::flush());
 
