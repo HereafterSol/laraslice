@@ -46,4 +46,29 @@ class SystemMindTest extends TestCase
         $this->assertStringContainsString('Two.', $diff);
         $this->assertSame('', SystemMind::diff('x', 'x'));
     }
+
+    public function test_draft_body_v2_classifies_fields_and_wires_workflow(): void
+    {
+        $manifest = [
+            'name' => 'Leaves',
+            'title' => 'Leaves',
+            'ui' => ['directory' => ['columns' => [['label' => 'Employee'], ['label' => 'Leave Date']]]],
+            'fields' => [
+                'user_id' => ['type' => 'integer'],
+                'leave_date' => ['type' => 'datetime'],
+                'reason' => ['type' => 'text'],
+                'status' => ['type' => 'string'],
+                'approved_by' => ['type' => 'integer'],
+                'approved_at' => ['type' => 'datetime'],
+                'added_by' => ['type' => 'integer'],
+            ],
+            'workflow' => ['state_field' => 'status', 'initial_state' => 'pending'],
+        ];
+        $body = \LaraSlice\Support\SystemMind::draftBodyV2($manifest, 'Leaves');
+        $this->assertStringContainsString('user_id: {input: picker, relation: user}', $body);
+        $this->assertStringContainsString('status: {input: workflow-state, default: workflow-initial, editable: false}', $body);
+        $this->assertStringContainsString('system_fields: [approved_by, approved_at, added_by]', $body);
+        $this->assertStringContainsString('workflow: {state_field: status, initial: pending, on_create: apply-initial}', $body);
+        $this->assertStringContainsString('leave_date: {input: date}', $body);
+    }
 }
