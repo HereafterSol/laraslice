@@ -34,6 +34,7 @@ use LaraSlice\Commands\SliceListCommand;
 use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SlicePortCommand;
+use LaraSlice\Commands\SlicePlanDraftCommand;
 use LaraSlice\Commands\SliceRepairCommand;
 use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceSeedCommand;
@@ -158,6 +159,7 @@ class LaraSliceServiceProvider extends ServiceProvider
             SlicePortCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
+                SlicePlanDraftCommand::class,
                 SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,
@@ -194,10 +196,14 @@ class LaraSliceServiceProvider extends ServiceProvider
             $studio = AuthorizeStudio::class;
             $guard = GuardStudioWrites::class;
 
-            Route::prefix('laraslice')->middleware($wizardMiddleware)->group(function () use ($studio) {
-                Route::middleware("{$studio}:studio.access")->group(function () {
+            Route::prefix('laraslice')->middleware($wizardMiddleware)->group(function () use ($studio, $guard) {
+                Route::middleware("{$studio}:studio.access")->group(function () use ($guard) {
                     Route::get('/studio', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'shell'])->name('laraslice.studio');
                     Route::get('/studio/panel/{mode}', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'panel'])->name('laraslice.studio.panel');
+                    Route::middleware($guard)->group(function () {
+                        Route::post('/studio/plan/preview', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'planPreview'])->name('laraslice.studio.plan_preview');
+                        Route::post('/studio/plan/save', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'planSave'])->name('laraslice.studio.plan_save');
+                    });
                 });
             });
 
