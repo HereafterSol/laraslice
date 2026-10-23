@@ -42,12 +42,12 @@ class DeclaredPatternsTest extends TestCase
     {
         $root = dirname(__DIR__, 3);
         $ctl = file_get_contents($root.'/src/Core/Base/BaseSliceWebController.php');
-        foreach (['importForm', 'importStore', 'seedAction', 'inviteForm', 'inviteStore', 'date_filter_on translation', 'params_from_filter', 'importUrl', 'Declared static options'] as $marker) {
+        foreach (['importForm', 'importStore', 'seedAction', 'inviteForm', 'inviteStore', 'date_filter_on translation', 'params_from_filter', 'importUrl', 'Declared static options', 'where map'] as $marker) {
             $this->assertStringContainsString($marker, $ctl, "controller marker: {$marker}");
         }
 
         $mgr = file_get_contents($root.'/src/Core/Discovery/SliceManager.php');
-        foreach (["'.import'", "'.seed_action'", "'.invite'", '(l) P13', '(m) The declared-filters drawer', '(n) Strip-placed', '(o) Fidelity'] as $marker) {
+        foreach (["'.import'", "'.seed_action'", "'.invite'", '(l) P13', '(m) The declared-filters drawer', '(n) Strip-placed', '(o) Fidelity', '(p) Summary-card'] as $marker) {
             $this->assertStringContainsString($marker, $mgr, "manager marker: {$marker}");
         }
 
