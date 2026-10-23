@@ -79,7 +79,7 @@
                             <select name="entries[{{ $row['key'] }}][{{ $field['handle'] }}]" class="h-8 rounded-lg border border-border bg-background px-2 text-xs w-full max-w-44">
                                 <option value="">—</option>
                                 @foreach ($field['options'] as $opt)
-                                <option value="{{ $opt }}" @selected(($row['values'][$field['handle']] ?? '') === $opt)>{{ \Illuminate\Support\Str::headline($opt) }}</option>
+                                <option value="{{ $opt }}" @selected((string) ($row['values'][$field['handle']] ?? '') === (string) $opt)>{{ $field['option_labels'][$opt] ?? \Illuminate\Support\Str::headline($opt) }}</option>
                                 @endforeach
                             </select>
                             @elseif ($field['input'] === 'time' || $field['input'] === 'datetime')
