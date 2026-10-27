@@ -8,7 +8,7 @@ When analyzing a **source** path, LaraSlice must discover schema from:
 2. Laravel `database/migrations` under the source path
 3. SQL dumps (`CREATE TABLE`) under the source tree
 
-It must **not** silently list tables from the **target** application database. That produced false “36 tables” results when porting Dolibarr against a LaraSlice SQLite install.
+It must **not** silently list tables from the **target** application database. That produced false “36 tables” results when porting a non-Laravel legacy app against a LaraSlice SQLite install.
 
 ## CLI
 

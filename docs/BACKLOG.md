@@ -2,7 +2,7 @@
 
 Living backlog for the **framework** (not per-port gate status). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
 
-**Release baseline:** [v2.0.1](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1) · Changes: [CHANGES-v2.0.1.md](../CHANGES-v2.0.1.md)
+**Release baseline:** [v2.0.1](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1) · Changes: [CHANGES-v2.0.1.md](../CHANGES-v2.0.1.md) · [NAMING.md](NAMING.md)
 
 ---
 

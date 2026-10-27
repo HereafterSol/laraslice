@@ -7,7 +7,7 @@ Readers confuse two different questions:
 
 This page keeps them separate so marketing, AI agents, and project owners quote the right truth.
 
-**Founder intent:** Worksuite is the **deliberate stress test** for the foundation — we *want* a deep ERP port to prove the approach. That ambition does not replace gates; it **requires** them. See [VISION.md](VISION.md).
+**Founder intent:** A **production ERP monolith** is the deliberate stress test for the foundation — we *want* a deep port to prove the approach. That ambition does not replace gates; it **requires** them. See [VISION.md](VISION.md). Public docs: [NAMING.md](NAMING.md).
 
 ---
 
@@ -35,7 +35,7 @@ Every port keeps **`porting/REPLICA-STATUS.md`** at the application root (not in
 | --- | --- | --- |
 | **S** | Does schema match (columns accounted for)? | 242/358 tables, missing columns on matched tables |
 | **D** | Does data match on **joins**, not counts? | ETL order, skipped `role_user`, test rows |
-| **F** | Does **furniture** match (labels, columns, cards)? | Generic LaraSlice chrome vs Worksuite widgets |
+| **F** | Does **furniture** match (labels, columns, cards)? | LaraSlice chrome vs source legacy UI widgets |
 | **T** | Do **journeys** work with DB asserts both sides? | HTTP 200 without user row; AJAX-only source forms |
 | **V** | Does **composition** match paired screenshots (by eye)? | Shell, hub tabs, invoice blocks |
 
@@ -57,7 +57,7 @@ Every port keeps **`porting/REPLICA-STATUS.md`** at the application root (not in
 
 | Tree | Package | Role |
 | --- | --- | --- |
-| `laragon/www/erp` | — | Source Worksuite |
+| `laragon/www/erp` | — | Source ERP (benchmark) |
 | `laragon/www/erp-replica` | 2.0.0 Part C | Measured **partial** (lowest gate **T**) |
 | `laragon/www/erp-port-v201` | 2.0.1 | Fresh re-port programme — **canonical successor** |
 | `laragon/www/flagship-erp-app` | demo / Part B | Different status file — not Part C replica |

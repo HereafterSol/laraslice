@@ -4,7 +4,7 @@
 **Owner:** Hereafter Solutions (H. Sol)  
 **Status:** Living document — update when strategy, gates, or runtime roadmap changes.
 
-Related: [RUNTIMES.md](RUNTIMES.md) (portability family) · [MIND_BODY_HEART.md](MIND_BODY_HEART.md) (trilogy) · [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) (framework vs one port) · [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) (gates) · [BACKLOG.md](BACKLOG.md) (framework work queue) · [SDLC.md](SDLC.md) (lifecycle)
+Related: [RUNTIMES.md](RUNTIMES.md) · [MIND_BODY_HEART.md](MIND_BODY_HEART.md) · [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) · [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) · [BACKLOG.md](BACKLOG.md) · [SDLC.md](SDLC.md) · [NAMING.md](NAMING.md)
 
 ---
 
@@ -28,22 +28,22 @@ Permanence is **earned**, not declared. See **Built to last** in [RUNTIMES.md](R
 
 ---
 
-## Worksuite ERP: our crucible, not our marketing lie
+## Benchmark ERP: our crucible, not our marketing lie
 
-**Worksuite** (`laragon/www/erp`) is the **primary foundation stress test**, not a slide-deck example.
+Our **production Laravel ERP monolith** (team path: `laragon/www/erp`, dev URL **:7001**) is the **primary foundation stress test**, not a slide-deck example.
 
 | Why ERP | What it proves |
 | --- | --- |
 | Depth (hundreds of tables, RBAC, workflows, documents) | Generator, porter, ETL, tenancy, aggregates |
 | Real companies in production | Furniture + journeys matter; “CRUD exists” is insufficient |
-| Worksuite’s *product* discipline (modules, settings hub, personas) | Our **Mind** navigation and **PORTING_FOUNDATION_RULES** align with how mature ERPs think |
+| Mature ERP product discipline (modules, settings hub, personas) | Our **Mind** navigation and **PORTING_FOUNDATION_RULES** align with how serious suites are structured |
 
 **Important distinction** (see [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md)):
 
 - **Framework strength** = trilogy + VSA + gates + Studio can *host* a port programme.
-- **Worksuite parity** = measured only in `porting/REPLICA-STATUS.md` (lowest gate wins).
+- **Source parity** = measured only in `porting/REPLICA-STATUS.md` (lowest gate wins).
 
-Wanting a **full Worksuite port** is **correct strategy** for the foundation. Saying the port is **done** before gates pass is **incorrect messaging**. The Replica Protocol exists so the crucible **cannot lie to us**.
+Wanting a **full benchmark port** is **correct strategy** for the foundation. Saying the port is **done** before gates pass is **incorrect messaging**. The Replica Protocol exists so the crucible **cannot lie to us**.
 
 **Current programme trees:**
 
@@ -68,7 +68,7 @@ Wanting a **full Worksuite port** is **correct strategy** for the foundation. Sa
 
 **VSA + DDD (pragmatic):** Slices are **bounded contexts**, not tables. Aggregates, settings hub, and hidden child tables are **architecture**, not optional UX polish. The early “one table = one slice” phase was a **porter bug class**, not a reason to abandon VSA.
 
-**Soul:** Design system + density + JEV in Mind — keeps UI identity out of a fourth competing file tree. Good for multi-runtime **if** Body stays pattern-based (P1–P16), not React component names.
+**Soul:** Design system + density + JEV in Mind — keeps UI identity out of a fourth competing file tree. Good for multi-runtime **if** Body stays pattern-based (P1–P16), not framework-specific component names.
 
 ---
 
@@ -78,21 +78,21 @@ Wanting a **full Worksuite port** is **correct strategy** for the foundation. Sa
 
 1. **Problem choice** — Runtime lock-in and illegible systems are real; AI accelerates both discovery and rebuild. Declarations + gates are a credible defense.
 2. **Trilogy separation** — Intent (Mind) vs surface (Body) vs runtime (Heart) matches how enterprises and regulators think.
-3. **Replica Protocol** — Turning Worksuite into **S→D→F→T→V** is how you avoid the AI graveyard pattern (“shipped a demo, called it ERP”).
+3. **Replica Protocol** — Running the benchmark through **S→D→F→T→V** is how you avoid shipping a demo and calling it ERP.
 4. **Studio six modes** — Plan/Port/Operate as first-class matches software houses, not only solo devs.
 5. **Permanence principles** in RUNTIMES — Correctly name failure modes (feature vs standard, lock-in, tacit knowledge).
 
 ### What will hurt you if ignored
 
-1. **Parity lag vs vision lag** — Multi-runtime roadmap is **credible only after** LaraSlice passes Worksuite gates on **2.0.1** with clean import and `slice:drift` → 0 errors. Sequence: **crucible first**, NodeSlice second.
+1. **Parity lag vs vision lag** — Multi-runtime roadmap is **credible only after** LaraSlice passes benchmark gates on **2.0.1** with clean import and `slice:drift` → 0 errors. Sequence: **crucible first**, NodeSlice second.
 2. **Warning noise** — Hundreds of drift warnings train teams to ignore drift. Tighten Body defaults for hidden slices or automate club trimming.
-3. **Doc / status schizophrenia** — Multiple port trees without one “canonical” status file confuses humans and AI. **erp-port-v201** is the forward root; old trees are **baseline evidence**, not “the product.”
+3. **Doc / status schizophrenia** — Multiple port trees without one canonical status file confuses humans and AI. **erp-port-v201** is the forward root; old trees are **baseline evidence**, not “the product.”
 4. **Runtime-neutral leaks** — Every Laravel-only shortcut in Heart YAML delays the whole family. Review gate: “Could NodeSlice honor this declaration?”
-5. **Adoption** — Standards win on **one killer reference port**, not manifestos. Worksuite at **honest partial** is still valuable; **honest PASS** on agreed scope is the milestone that unlocks the narrative.
+5. **Adoption** — Standards win on **one killer reference port**, not manifestos. **Honest partial** is still valuable; **honest PASS** on agreed scope unlocks the narrative.
 
 ### IoT / robotics horizon
 
-Coherent **as domain shape** (devices, telemetry, commands, fleets = slices + journeys). **Not** a 2026 deliverable. Record as horizon in RUNTIMES; do not dilute ERP crucible resources.
+Coherent **as domain shape** (devices, telemetry, commands, fleets = slices + journeys). **Not** a near-term deliverable. Record as horizon in RUNTIMES; do not dilute ERP crucible resources.
 
 ---
 
@@ -100,7 +100,7 @@ Coherent **as domain shape** (devices, telemetry, commands, fleets = slices + jo
 
 ```text
 Foundation (LaraSlice 2.0.x)
-  → Worksuite port programme (gates, erp-port-v201)
+  → Benchmark ERP port programme (gates, erp-port-v201)
   → Flagship / demos for adoption
   → Second runtime (one sibling, not twelve in parallel)
   → Expand family table in RUNTIMES.md as each ships
@@ -114,19 +114,20 @@ Foundation (LaraSlice 2.0.x)
 
 | Trigger | Action |
 | --- | --- |
-| New canonical port root or major gate PASS | Update **Worksuite crucible** table + date |
+| New canonical port root or major gate PASS | Update **benchmark crucible** table + date |
 | Runtime family: first commit on a sibling | Change RUNTIMES row from Roadmap → Alpha |
 | Strategy shift (e.g. IoT pilot) | Add subsection with **honest status** |
-| Muse / founder alignment session | Append **Decision log** below |
+| Founder alignment session | Append **Decision log** below |
 
 ### Decision log
 
 | Date | Decision |
 | --- | --- |
-| 2026-10-27 | Worksuite is the **foundation stress test**; parity quoted only from `REPLICA-STATUS.md`. Vision doc created; `message/plan.md` (legacy v1.4 audit) removed. erp-port-v201 forward; `ErpSettings` registry rename; drift 54 errors remains open. |
+| 2026-10-27 | Production ERP monolith is the **foundation stress test**; parity quoted only from `REPLICA-STATUS.md`. Vision doc created. erp-port-v201 forward; `ErpSettings` registry rename; drift 54 errors open. |
+| 2026-10-27 | [NAMING.md](NAMING.md): no competitor product names in public framework docs. |
 
 ---
 
 ## One sentence for the team
 
-**We are building a permanent, AI-legible standard; LaraSlice on Laravel is the proof machine; Worksuite is the exam; gates are the grade.**
+**We are building a permanent, AI-legible standard; LaraSlice on Laravel is the proof machine; the benchmark ERP is the exam; gates are the grade.**

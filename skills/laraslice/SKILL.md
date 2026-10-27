@@ -5,7 +5,7 @@ description: Architectural standards, CLI commands, Declarative Schemas, multi-t
 
 # LaraSlice Framework & AI Assistant Skill
 
-> **Release baseline:** Prefer **`hereafter/laraslice` v2.0.1+** ([Verification Patch](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1)) for ports and replicas. Use `--import-auth` on data import, run `slice:drift` (zero errors) before parity claims, and maintain `porting/REPLICA-STATUS.md` per §22 (lowest gate = status). **Do not confuse framework architecture with a finished replica:** `docs/ARCHITECTURE-VS-PORT-TRUTH.md`. **Vision & Worksuite crucible:** `docs/VISION.md`. Framework backlog: `docs/BACKLOG.md` in the package repo.
+> **Release baseline:** Prefer **`hereafter/laraslice` v2.0.1+** ([Verification Patch](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1)) for ports and replicas. Use `--import-auth` on data import, run `slice:drift` (zero errors) before parity claims, and maintain `porting/REPLICA-STATUS.md` per §22 (lowest gate = status). **Do not confuse framework architecture with a finished replica:** `docs/ARCHITECTURE-VS-PORT-TRUTH.md`. **Vision & benchmark crucible:** `docs/VISION.md`. **Naming:** `docs/NAMING.md` (no competitor product names in public docs). Framework backlog: `docs/BACKLOG.md` in the package repo.
 
 
 This skill provides comprehensive instructions for AI agents and developers working on **LaraSlice** applications. It covers the Three-Layer Packaging Model (ADR-001), Vertical Slice Architecture, Pure BlatUI tokens, Declarative Schema Builder, multi-table aggregate patterns, cross-slice communication, and deep integration with **Laravel Boost**.
@@ -144,7 +144,7 @@ When Slice A needs data from Slice B (e.g. `Invoices` needs `Users`):
 ## 4. Multi-Table Slices vs Domain Suites (Real-World Architecture)
 
 ### A. Domain Slices with Cross-Slice Relationships (e.g. CRM: Companies & Contacts)
-In real-world enterprise applications (Salesforce, HubSpot, Stripe), entities like **Companies** and **Contacts** are **autonomous, first-class vertical slices** within a shared **Domain Group**:
+In real-world enterprise applications (large SaaS and billing platforms), entities like **Companies** and **Contacts** are **autonomous, first-class vertical slices** within a shared **Domain Group**:
 
 ```text
 📁 app/Slices/Crm/
@@ -2623,7 +2623,7 @@ LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 
 ---
 
-## Porting non-Laravel sources (e.g. Dolibarr)
+## Porting non-Laravel sources (legacy PHP / SQL dumps)
 
 `slice:port` / Porting Studio accept **any project tree**, not only Laravel.
 
@@ -2633,20 +2633,20 @@ LARASLICE_MFA_ENABLED=false   # default true — never disable in production
 |---------------|-----------|
 | Live DB via `--source-*` | **Preferred** — real tables + row counts |
 | `database/migrations` | Laravel projects |
-| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | Dolibarr, WordPress dumps, mysqldump |
+| `*.sql` dumps under `install/`, `sql/`, `schema/`, … | Legacy app installers, mysqldump exports |
 | Target app DB | **Never by default** (was a bug). Opt-in: `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` |
 
-### Required for non-Laravel (Dolibarr)
+### Required for non-Laravel legacy apps
 
 Point at the **legacy database** (or ship SQL schema files in the tree):
 
 ```bash
-# Clone or path to Dolibarr code
-php artisan slice:port /path/to/dolibarr \
+# Path to legacy codebase
+php artisan slice:port /path/to/legacy-app \
   --domain=ERP \
   --source-host=127.0.0.1 \
   --source-port=3306 \
-  --source-database=dolibarr \
+  --source-database=legacy_erp \
   --source-username=root \
   --source-password=secret \
   --dry-run

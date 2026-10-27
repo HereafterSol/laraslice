@@ -60,7 +60,7 @@ v2.0.0 turns the scaffold into a foundation. Everything below was proven live ag
 - **The 100% Replica Protocol.** Porting is gated, not vibes: schema parity, join-verified data truth, furniture parity, task conformance, and visual conformance read from paired screenshots — every port keeps a `REPLICA-STATUS.md` and quotes its lowest gate.
 - **Foundation hardening.** Own-scope data access with per-person overrides, form hygiene by default, drift audit + reconciliation (`slice:drift`), a fleet-wide idempotent `slice:repair`, document forms with real line-item arithmetic, workflow notifications, and declared patterns for import, invite, seed actions, clock punch, keyed-rows settings, and a server-rendered conversation surface.
 
-Full notes: [CHANGELOG.md](CHANGELOG.md) · [Vision](docs/VISION.md) · Concepts: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md) · Protocol: [docs/REPLICA-PROTOCOL.md](docs/REPLICA-PROTOCOL.md) · Lifecycle: [docs/SDLC.md](docs/SDLC.md) · Portability: [docs/RUNTIMES.md](docs/RUNTIMES.md) · Backlog: [docs/BACKLOG.md](docs/BACKLOG.md)
+Full notes: [CHANGELOG.md](CHANGELOG.md) · [Vision](docs/VISION.md) · [Naming](docs/NAMING.md) · Concepts: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md) · Protocol: [docs/REPLICA-PROTOCOL.md](docs/REPLICA-PROTOCOL.md) · Lifecycle: [docs/SDLC.md](docs/SDLC.md) · Portability: [docs/RUNTIMES.md](docs/RUNTIMES.md) · Backlog: [docs/BACKLOG.md](docs/BACKLOG.md)
 
 ## 🌿 Vision, Mission & Philosophy
 
