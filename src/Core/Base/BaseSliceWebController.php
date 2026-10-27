@@ -1848,6 +1848,10 @@ abstract class BaseSliceWebController extends Controller
                 // Layout kit step 3: declared show composition
                 // (ui.show.composition) for the view's branches.
                 'showComposition' => \LaraSlice\Support\DirectoryUi::showCompositionFromManifest($ownManifest),
+                // Hub tab curation: the declared fields-tab label
+                // (ui.show.tabs type: fields) — show views render it
+                // in place of the hard-coded 'Overview' when declared.
+                'fieldsTabLabel' => \LaraSlice\Support\DirectoryUi::fieldsTabLabelFromManifest($ownManifest),
                 'timerState' => $this->timerState($ownManifest, $record),
                 ...$this->overlayLayoutData(request()),
                 'documentUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('document'))

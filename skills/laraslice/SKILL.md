@@ -230,6 +230,21 @@ foreign_pivot_key, related_pivot_key}` block — which derives
 namespaces from each slice's actual directory path and falls back to a
 filesystem scan so slices shadowed by a duplicate name still resolve.
 
+**Tab curation.** Declared tabs order and label the strip, but the
+inferred sources (root-model `hasMany`, repeaters) append everything
+they find — curation needs suppression as well as ordering. Declare
+`ui.show.exclude_tabs` (a list of relation names or tab handles) to
+suppress inferred, declared, or repeater-derived tabs alike; matching
+is by relation OR effective handle, so excluding a handle kills only
+that presentation while excluding a relation kills all of them. A
+declared tab with `hidden: true` hides itself AND its inferred twin.
+The fields tab renders its DECLARED label (e.g. `Profile`); the
+generic `Overview` is only the fallback when no label is declared.
+A declared tab with `type: audit` (handle `activity`) renders the
+record's audit trail from the framework's audit log (actor, action,
+field diffs, timestamps), or a proper empty state when nothing has
+been recorded — it never silently vanishes from the strip.
+
 Hub headers can also declare **stats** in YAML (`ui.show.stats`):
 each entry names a `relation`, an `aggregate` (`count`, or `sum`/`avg`
 with a `column`), an optional `filter` map (equality or `whereIn` over
@@ -336,6 +351,20 @@ aggregates widgets from EVERY discovered slice — twin
 slices that share a name both contribute — and a slice's
 model resolves declared-root-first with a path-derived
 namespace, so a name-shadowed twin's model is its own.
+
+**Widget scoping (portal parity).** Every widget honors
+`scope: own` plus an `own:` clause — `{relation: …, key:
+id}` or `{field: …}` — narrowing its query to the
+signed-in user; a widget declared without it counts
+globally. On a portal-composition dashboard, counters
+over person-owned domains MUST declare `scope: own` with
+the slice's own-scope clause inline on the widget (tasks
+via their assignees relation, projects via `members`,
+deals via `agent_id`, leaves/tickets via their user
+field) — the source's portal numbers are the viewer's
+own, so an unscoped counter there is a parity defect,
+not a default. A viewer with no own records honestly
+sees 0; global views live in the directories.
 
 Inline-edit cells (25 Oct 2026): a column declared in
 `ui.directory.inline_edit` gets ONE editor in its cell — the
@@ -2243,7 +2272,11 @@ wrong company) is a Gate D failure even when counts match.
 every paired page diffed at the element level — headers,
 cards (declared only, never inferred), actions, counts,
 composition order — with deltas classified D/M/S and either
-fixed or carried as owner-approved deviations.
+fixed or carried as owner-approved deviations. Dashboards
+are paired PER PERSONA: counter values are compared for
+each role that lands on them, and person-domain counters
+must be own-scoped (see Dashboard widgets — Widget
+scoping).
 
 **Gate T — task conformance (real usage, mandatory).**
 Per domain, the core journeys are EXECUTED in both systems
@@ -2311,6 +2344,23 @@ tasks 82%" — because a developer planning around a false
    existing install). Name collisions resolve by twin
    namespacing — the incumbent keeps its name, the twin is
    qualified by its app; renames are reported, never silent.
+   Two flags decide whether the replica actually works:
+   `--import-auth` is **required for a working replica** — it
+   merges the source's roles/permissions and role assignments
+   (by slug; framework roles are never overwritten). Without
+   it the auth tables are skipped by design and imported users
+   arrive with **no role assignments**: the app looks complete
+   and every account is permission-less. The porter warns when
+   a data import runs without it; treat that warning as a
+   failed step, not a footnote. And when scaffolding and data
+   import run in one invocation, the order is scaffold →
+   migrate → import; an import that reports tables skipped
+   because their targets did not exist imported nothing —
+   migrate, then re-run it. Generated manifests always declare
+   their root model in `models:` (`root: true`) and generated
+   dashboard widgets are `counter`/`chart` definitions the
+   runtime actually renders — a widget type the dashboard does
+   not dispatch renders nothing and is never emitted.
 4. **Move the data, then prove it.** Run the ETL, then verify
    Gate D by joins against the source — never by the loader's
    own row counts.

@@ -126,6 +126,10 @@ class SliceManager
     {
         $cache = $this->manifestDataCache();
         if (isset($cache[$manifestPath]) && is_array($cache[$manifestPath]['data'] ?? null)) {
+            // Same-process writers (tests, Octane, queue workers) leave
+            // PHP's stat cache holding the pre-edit values; without a
+            // clear, the freshness guard blesses the stale entry.
+            clearstatcache(true, $manifestPath);
             $mtime = @filemtime($manifestPath);
             $size = @filesize($manifestPath);
             if ($mtime === ($cache[$manifestPath]['mtime'] ?? null) && $size === ($cache[$manifestPath]['size'] ?? null)) {
@@ -605,6 +609,77 @@ class SliceManager
     }
 
     /**
+     * (am) Honour the declared fields-tab label on show blades:
+     * the fields tab button hard-rendered 'Overview' (overview
+     * hub strip) / 'Overview & Details' (standard ribbon) even
+     * when the manifest declares `label: Profile` on its
+     * `type: fields` tab. The controller now passes
+     * $fieldsTabLabel (DirectoryUi::fieldsTabLabelFromManifest);
+     * blades render it when present and keep the legacy wording
+     * otherwise. Anchored on each button's own click handler so
+     * no other 'Overview' text is touched.
+     */
+    private function honourDeclaredFieldsTabLabel(string $content): ?string
+    {
+        if (str_contains($content, 'fieldsTabLabel')) {
+            return null;
+        }
+        $changed = false;
+        $overview = preg_replace(
+            '/(\$dispatch\(\'ls-show-tab\', \'overview\'\)[\s\S]{0,400}?)<span>Overview<\/span>/',
+            '$1<span>{{ $fieldsTabLabel ?? \'Overview\' }}</span>',
+            $content,
+            1
+        );
+        if ($overview !== null && $overview !== $content) {
+            $content = $overview;
+            $changed = true;
+        }
+        $standard = preg_replace(
+            '/(@click="activeTab = \'overview\';[\s\S]{0,400}?)<span>Overview & Details<\/span>/',
+            '$1<span>{{ $fieldsTabLabel ?? \'Overview & Details\' }}</span>',
+            $content,
+            1
+        );
+        if ($standard !== null && $standard !== $content) {
+            $content = $standard;
+            $changed = true;
+        }
+
+        return $changed ? $content : null;
+    }
+
+    /**
+     * (an) Audit tab panel on show blades: a declared
+     * `type: audit` hub tab now resolves in DirectoryUi (entries
+     * from AuditLogger) but blades generated before that render
+     * panels only for relation tabs. Insert the audit panel loop
+     * — rendering the shared laraslice::partials.related-tab-audit
+     * partial — immediately before the workflow timeline block.
+     */
+    private function addAuditTabPanel(string $content): ?string
+    {
+        if (str_contains($content, 'related-tab-audit')) {
+            return null;
+        }
+        $needle = "    @if(\$workflow)\n    <!-- Tab 2: Workflow History & Decision Timeline -->";
+        $pos = strpos($content, $needle);
+        if ($pos === false) {
+            return null;
+        }
+        $panel = "    @foreach(\$relatedTabs ?? [] as \$rtab)\n"
+            ."        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'audit')\n"
+            ."        <div x-show=\"activeTab === '{{ \$rtab['handle'] }}'\" x-transition class=\"space-y-4\">\n"
+            ."            @include('laraslice::partials.related-tab-audit', ['rtab' => \$rtab])\n"
+            ."        </div>\n"
+            ."        @endif\n"
+            ."    @endforeach\n"
+            ."\n";
+
+        return substr($content, 0, $pos).$panel.substr($content, $pos);
+    }
+
+    /**
      * (ak) Show-page widget placements: the overview widgets
      * region renders MAIN-placement widgets only (with the
      * stats/list card branches), and RAIL-placement widgets
@@ -779,7 +854,7 @@ BLADE;
         }
         $insert = "                @include('laraslice::directory.actions')\n"
             ."                @isset(\$importUrl)\n"
-            ."                <x-ui.button href=\"{{ \$importUrl }}\" as=\"a\" variant=\"secondary\" size=\"sm\" class=\"border border-border gap-1.5\">\n"
+                            ."            <x-ui.button href=\"{{ \$importUrl }}\" as=\"a\" variant=\"secondary\" class=\"border border-border\">\n"
             ."                    <x-lucide-upload class=\"size-3.5\" /> <span>Import</span>\n"
             ."                </x-ui.button>\n"
             ."                @endisset\n";
@@ -2020,6 +2095,20 @@ BLADE;
                             $vContent = $placed;
                             $vChanged = true;
                         }
+                        // (am) Declared fields-tab label wins
+                        // over the hard-rendered 'Overview'.
+                        $tabLabelled = $this->honourDeclaredFieldsTabLabel($vContent);
+                        if ($tabLabelled !== null) {
+                            $vContent = $tabLabelled;
+                            $vChanged = true;
+                        }
+                        // (an) Audit tab panel for declared
+                        // type: audit hub tabs.
+                        $auditPaneled = $this->addAuditTabPanel($vContent);
+                        if ($auditPaneled !== null) {
+                            $vContent = $auditPaneled;
+                            $vChanged = true;
+                        }
                     }
                     // (ac) Page-top composition (list contract
                     // v3): title-only top bar; actions move to
@@ -2130,7 +2219,11 @@ BLADE;
                             '$inlineEdit = $dirUi[\'inline_edit\'] ?? [];' => '$inlineEdit = $inlineEdit ?? $dirUi[\'inline_edit\'] ?? [];',
                         ];
                         foreach ($prefer as $stale => $current) {
-                            if (str_contains($vContent, $stale)) {
+                            // The guarded form CONTAINS the stale text
+                            // as a suffix, so presence of $stale alone
+                            // re-wraps on every run — repair must be a
+                            // fixed point (idempotency is asserted).
+                            if (str_contains($vContent, $stale) && ! str_contains($vContent, $current)) {
                                 $vContent = str_replace($stale, $current, $vContent);
                                 $vChanged = true;
                             }
@@ -2442,10 +2535,15 @@ BLADE;
                             ."                <span>Matrix</span>\n"
                             ."            </x-ui.button>\n"
                             ."            @endisset\n"
+                            ."            @isset(\$importUrl)\n"
+                            ."            <x-ui.button href=\"{{ \$importUrl }}\" as=\"a\" variant=\"secondary\" class=\"border border-border\">\n"
+                            ."                <x-lucide-upload class=\"size-4\" /> <span>Import</span>\n"
+                            ."            </x-ui.button>\n"
+                            ."            @endisset\n"
                             ."            @isset(\$bulkEntryUrl)\n"
                             ."            <x-ui.button href=\"{{ \$bulkEntryUrl }}\" as=\"a\" size=\"sm\" variant=\"outline\" class=\"gap-1.5 font-semibold\">\n"
                             ."                <x-lucide-clipboard-check class=\"size-3.5\" />\n"
-                            ."                <span>Bulk Entry</span>\n"
+                            ."                <span>{{ \$bulkEntryLabel ?? 'Bulk Entry' }}</span>\n"
                             ."            </x-ui.button>\n"
                             ."            @endisset\n";
                         $lines = explode("\n", $vContent);

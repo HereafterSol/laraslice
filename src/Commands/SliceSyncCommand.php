@@ -33,7 +33,7 @@ class SliceSyncCommand extends Command
         $force = (bool) $this->option('force');
 
         $manager->clearCache();
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
 
         // Every discovered manifest, twins included: the
         // name-keyed index (getAllSlices) holds one manifest
@@ -150,7 +150,7 @@ class SliceSyncCommand extends Command
 
         // Re-cache slice state
         $manager->clearCache();
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
 
         // Ensure GitOps YAML twin exists for every slice
         foreach ($manager->getAllSlices() as $slice) {

@@ -91,7 +91,7 @@ class PackageWiringTest extends TestCase
     {
         $this->actingAs($this->makeSuperAdmin());
 
-        $this->get('/laraslice/wizard/schema-studio')
+        $this->get('/laraslice/studio?mode=design&view=schema')
             ->assertOk()
             ->assertSee('<meta name="csrf-token"', false);
     }

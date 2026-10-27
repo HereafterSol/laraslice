@@ -1556,7 +1556,7 @@ REL;
 
         // 2. Process Deleted Fields
         $validatedDeletedFields = [];
-        $protectedColumns = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'];
+        $protectedColumns = ['id', 'title', 'status', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by'];
         if (! empty($deletedFields)) {
             foreach ($deletedFields as $delCol) {
                 $delCol = Str::snake(trim((string) $delCol));

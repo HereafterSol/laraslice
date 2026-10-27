@@ -8,6 +8,7 @@ use LaraSlice\Blueprint\BlueprintApplier;
 use LaraSlice\Blueprint\BlueprintLoader;
 use LaraSlice\Blueprint\BlueprintPlanner;
 use LaraSlice\Blueprint\BlueprintValidator;
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Tests\TestCase;
@@ -65,7 +66,7 @@ class NavigationUpdateTest extends TestCase
         [$names, $uris] = $this->loadRoutes($path.'/Routes/web.php');
 
         $this->assertSame(array_unique($names), $names, 'route names must stay unique for route:cache');
-        $this->assertContains('invoices.index', $names);
+        $this->assertContains('billing_invoices.index', $names, 'G6: domain-nested route names are path-qualified and stay stable across URL moves');
         $this->assertContains('accounts/invoices', $uris);
         $this->assertNotContains('finance/invoices/create', $uris, 'the intermediate prefix is gone');
 
@@ -95,11 +96,10 @@ class NavigationUpdateTest extends TestCase
     public function test_children_and_unspecified_settings_are_kept(): void
     {
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Invoice');
-        $manifestFile = $path.'/slice.json';
-        $manifest = json_decode(file_get_contents($manifestFile), true);
+        $manifest = ManifestRepository::readFromSliceDir($path);
         $manifest['navigation']['children'] = [['label' => 'Overdue', 'route' => 'invoices.index']];
         $manifest['navigation']['icon'] = 'receipt';
-        file_put_contents($manifestFile, json_encode($manifest));
+        ManifestRepository::writeYaml($path, $manifest);
 
         $nav = (new SliceModifier($this->slicesPath, 'App\\Slices'))->updateNavigation('Invoice', ['title' => 'Bills']);
 
@@ -114,7 +114,7 @@ class NavigationUpdateTest extends TestCase
 
         (new SliceModifier($this->slicesPath, 'App\\Slices'))->updateNavigation('Invoice', ['icon' => 'receipt', 'order' => 3]);
 
-        $history = json_decode(file_get_contents($path.'/slice.json'), true)['version_history'];
+        $history = ManifestRepository::readFromSliceDir($path)['version_history'];
         $last = end($history)['description'];
         $this->assertStringContainsString("Icon changed to 'receipt'", $last);
         $this->assertStringContainsString('Menu order set to 3', $last);

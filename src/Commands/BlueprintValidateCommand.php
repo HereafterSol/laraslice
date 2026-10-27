@@ -12,7 +12,7 @@ use Throwable;
 final class BlueprintValidateCommand extends Command
 {
     protected $signature = 'slice:blueprint:validate 
-                            {target : Slice name (e.g. Employees) or path to a .json, .yaml, or .yml slice blueprint}
+                            {path : Slice name (e.g. Employees) or path to a .json, .yaml, or .yml slice blueprint}
                             {--part= : Validate only an isolated sub-part (ui, directory, forms)}
                             {--fix : Automatically generate and inject missing ui: configurations}';
 
@@ -22,7 +22,7 @@ final class BlueprintValidateCommand extends Command
 
     public function handle(BlueprintLoader $loader, BlueprintValidator $validator): int
     {
-        $target = (string) $this->argument('target');
+        $target = (string) $this->argument('path');
         $part = $this->option('part');
         $autoFix = (bool) $this->option('fix');
 

@@ -1439,6 +1439,21 @@ final class BlueprintStudioController extends Controller
                 ? "Porting finished: {$createdCount} slice(s) written to disk."
                 : "Porting finished with {$errorCount} error(s); {$createdCount} slice(s) written.";
 
+            // Never let a data import look silently successful: tables
+            // whose target did not exist imported nothing, and an import
+            // without the auth opt-in leaves users with no roles.
+            $dataImport = $result['data_import'] ?? null;
+            if (is_array($dataImport)) {
+                $missing = $dataImport['missing_target_tables'] ?? [];
+                if (is_array($missing) && $missing !== []) {
+                    $message .= ' WARNING: data import skipped ' . count($missing) . ' table(s) whose target tables do not exist ('
+                        . implode(', ', $missing) . ') — those rows were NOT imported; run migrations and re-run the import.';
+                }
+                if (! empty($dataImport['auth_warning'])) {
+                    $message .= ' WARNING: ' . $dataImport['auth_warning'];
+                }
+            }
+
             return response()->json([
                 'success' => $ok,
                 'message' => $message,

@@ -24,6 +24,7 @@ navigation:
       label: 'Theme Customizer'
       route: settings.theme
       icon: palette
+  group: Settings
 permissions:
   - settings.view
   - settings.edit

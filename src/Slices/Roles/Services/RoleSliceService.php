@@ -76,12 +76,16 @@ class RoleSliceService extends BaseSliceService
         /** @var Role $model */
         $scopes = request()->input('permission_scopes', []);
         
+        // The permission_type_id pivot column is optional (see the
+        // Roles form view): only attach it where the schema has it.
+        $hasScopeColumn = \Illuminate\Support\Facades\Schema::hasColumn('permission_role', 'permission_type_id');
+
         if (!empty($scopes) && is_array($scopes)) {
             $syncData = [];
             foreach ($scopes as $pId => $scopeId) {
                 $sId = (int) $scopeId;
                 if ($sId !== 5) { // 5 is 'none'
-                    $syncData[(int) $pId] = ['permission_type_id' => $sId];
+                    $syncData[(int) $pId] = $hasScopeColumn ? ['permission_type_id' => $sId] : [];
                 }
             }
             if (method_exists($model, 'permissions')) {
@@ -99,7 +103,7 @@ class RoleSliceService extends BaseSliceService
         if (method_exists($model, 'permissions')) {
             $syncData = [];
             foreach ((array)$permList as $pId) {
-                $syncData[(int)$pId] = ['permission_type_id' => 4]; // Default 'all'
+                $syncData[(int)$pId] = $hasScopeColumn ? ['permission_type_id' => 4] : []; // Default 'all'
             }
             $model->permissions()->sync($syncData);
         }

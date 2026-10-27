@@ -61,6 +61,39 @@ class SliceDataPortService
     }
 
     /**
+     * Loud, operator-facing warning when a data import ran without the
+     * auth opt-in: the legacy auth tables were skipped, so imported
+     * users carry NO role assignments — the replica looks complete
+     * while every account lacks permissions. Returns null when auth
+     * was imported or no auth table was skipped in this run.
+     *
+     * @param  array<string, mixed>  $results  per-table import results
+     */
+    public function authSkipWarning(array $results): ?string
+    {
+        if ($this->importAuth) {
+            return null;
+        }
+
+        $skipped = [];
+        foreach ($results as $table => $result) {
+            if (is_array($result) && ($result['status'] ?? null) === 'skipped_system_auth') {
+                $skipped[] = (string) $table;
+            }
+        }
+
+        if ($skipped === []) {
+            return null;
+        }
+
+        return 'Auth tables skipped ('.implode(', ', $skipped).'): legacy roles/permissions were NOT imported '
+            .'because auth import is off. Imported users have no role assignments, so the ported app looks '
+            .'complete but every user lacks permissions. Re-run the port with auth import enabled '
+            .'(--import-auth — roles/permissions are merged by slug and framework roles are never overwritten) '
+            .'to import role assignments.';
+    }
+
+    /**
      * Import data for the ported slices (slice-aware).
      * Uses the slice mapping to determine which tables to import,
      * instead of a hardcoded priority list.
@@ -132,7 +165,7 @@ class SliceDataPortService
                 $targetTable = SlicePortService::targetTableName($table);
 
                 if (! \Illuminate\Support\Facades\Schema::hasTable($targetTable)) {
-                    $results[$table] = ['status' => 'not_in_target', 'rows' => 0];
+                    $results[$table] = ['status' => 'not_in_target', 'rows' => 0, 'target_table' => $targetTable];
                     continue;
                 }
 
@@ -155,12 +188,24 @@ class SliceDataPortService
             $results['_error'] = $e->getMessage();
         }
 
+        $missingTargetTables = [];
+        foreach ($results as $table => $result) {
+            if (is_array($result) && ($result['status'] ?? null) === 'not_in_target') {
+                $missingTargetTables[] = $result['target_table'] ?? SlicePortService::targetTableName((string) $table);
+            }
+        }
+
         return [
             'results' => $results,
             'total_rows' => $totalRowsImported,
             'skipped_tables' => $skippedTables,
+            // Tables that could not be imported because the TARGET table
+            // does not exist yet (migrations not run) — surfaced loudly,
+            // never folded into a silent 0-row "success".
+            'missing_target_tables' => array_values(array_unique($missingTargetTables)),
             'tables_imported' => count(array_filter($results, fn($r) => ($r['rows'] ?? 0) > 0)),
             'identity_remap' => $identityRemap ?? [],
+            'auth_warning' => $this->authSkipWarning($results),
             'auth_reconciliation' => $this->reconcileAuthAfterImport(),
         ];
     }
@@ -583,6 +628,7 @@ class SliceDataPortService
         $results = [];
         $totalRowsImported = 0;
         $skippedTables = [];
+        $missingTargetTables = [];
         $driver = 'mysql';
 
         try {
@@ -605,9 +651,20 @@ class SliceDataPortService
                 }
 
                 // Check if target table exists (prefixed name when a
-                // port table prefix is configured)
+                // port table prefix is configured). A missing target is
+                // RECORDED, never silently skipped: when scaffolding and
+                // data import run in one invocation and migrations have
+                // not run yet, every table lands here — the operator must
+                // see exactly which tables imported nothing and why.
                 $targetTable = SlicePortService::targetTableName($table);
                 if (! Schema::hasTable($targetTable)) {
+                    $results[$table] = [
+                        'status' => 'missing_target_table',
+                        'rows' => 0,
+                        'target_table' => $targetTable,
+                        'note' => 'Target table does not exist — run the target migrations before importing data.',
+                    ];
+                    $missingTargetTables[] = $targetTable;
                     continue;
                 }
 
@@ -651,6 +708,7 @@ class SliceDataPortService
                     $validColumns = array_values(array_intersect($sourceColumns, $targetColumns));
 
                     if (empty($validColumns)) {
+                        $results[$table] = ['status' => 'no_matching_columns', 'rows' => 0];
                         continue;
                     }
 
@@ -710,6 +768,12 @@ class SliceDataPortService
             'details' => $results,
             'skipped_tables' => array_values(array_unique($skippedTables)),
             'skipped_tables_note' => 'These source tables are not in the ETL priority list and were not imported. Extend SliceDataPortService::$priorityTables or import them manually.',
+            // Tables whose TARGET table did not exist at import time
+            // (migrations not yet run). Their rows were NOT imported —
+            // callers must surface this list loudly; a 0-row import is
+            // never a silent success.
+            'missing_target_tables' => array_values(array_unique($missingTargetTables)),
+            'auth_warning' => $this->authSkipWarning($results),
             'auth_reconciliation' => $this->reconcileAuthAfterImport(),
         ];
     }

@@ -41,26 +41,52 @@ class GeneratedViewPermissionsTest extends TestCase
         DB::table('tickets')->insert(['title' => 'Printer offline', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
     }
 
+    /** Row payload of the rendered directory page (rows ship as JSON for the client-side table). */
+    private function directoryRows(string $html): array
+    {
+        $this->assertMatchesRegularExpression("/rows: JSON\\.parse\\('(.*?)'\\)/s", $html);
+        preg_match("/rows: JSON\\.parse\\('(.*?)'\\)/s", $html, $m);
+
+        // The payload is a JS single-quoted string holding JSON whose
+        // quotes are \\u0022 escapes: unescape for JS first, then decode.
+        $raw = str_replace('\\\\', "\x00", $m[1]);
+        $raw = preg_replace_callback('/\\\\u([0-9a-fA-F]{4})/', fn ($mm) => mb_chr(hexdec($mm[1])), $raw);
+        $raw = str_replace("\\'", "'", $raw);
+        $raw = str_replace("\x00", '\\\\', $raw);
+
+        return json_decode($raw, true) ?: [];
+    }
+
     public function test_a_view_and_create_user_sees_no_edit_or_delete(): void
     {
         $this->makeTicketSlice();
         $agent = $this->makeUserWithPermissions(['ticket.view', 'ticket.create']);
 
-        $this->actingAs($agent)->get('/tickets')->assertOk()
+        $response = $this->actingAs($agent)->get('/tickets')->assertOk()
             ->assertSee('Printer offline')
-            ->assertSee('Create Ticket')
-            ->assertDontSee('Seed Demo Data')
-            ->assertDontSee('lucide-pencil', false)
-            ->assertDontSee('Delete this record?');
+            ->assertSee('Add Ticket')
+            ->assertDontSee('Seed Demo');
+
+        // The controls are client-rendered from the row payload: a user
+        // without edit/delete permission must receive no edit/delete URL.
+        $rows = $this->directoryRows($response->getContent());
+        $this->assertNotEmpty($rows);
+        $this->assertNotNull($rows[0]['show_url']);
+        $this->assertNull($rows[0]['edit_url']);
+        $this->assertNull($rows[0]['delete_url']);
     }
 
     public function test_a_super_admin_sees_every_control(): void
     {
         $this->makeTicketSlice();
 
-        $this->actingAs($this->makeSuperAdmin())->get('/tickets')->assertOk()
-            ->assertSee('Create Ticket')
-            ->assertSee('Seed Demo Data')
-            ->assertSee('Delete this record?');
+        $response = $this->actingAs($this->makeSuperAdmin())->get('/tickets')->assertOk()
+            ->assertSee('Add Ticket')
+            ->assertSee('Are you sure you want to delete this Ticket?');
+
+        $rows = $this->directoryRows($response->getContent());
+        $this->assertNotEmpty($rows);
+        $this->assertNotNull($rows[0]['edit_url']);
+        $this->assertNotNull($rows[0]['delete_url']);
     }
 }

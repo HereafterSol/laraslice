@@ -20,7 +20,7 @@ class SliceRepairCommand extends Command
 
     public function handle(SliceManager $manager): int
     {
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
 
         $name = $this->argument('slice');
         // Repair iterates every DISCOVERED manifest, not just the
@@ -211,7 +211,12 @@ class SliceRepairCommand extends Command
                 $tenantKey,
                 [],
                 is_array($workflow) ? $workflow : null,
-                $sourcePath
+                $sourcePath,
+                // Preserve portal parity on re-inference: a manifest that
+                // declares access.own_scope gets its dashboard counters
+                // re-emitted own-scoped with the clause inline, instead
+                // of silently losing the scoping on every repair run.
+                is_array($manifest['access']['own_scope'] ?? null) ? $manifest['access']['own_scope'] : null
             );
 
             // buildUiFromInspectedFields returns { directory: {...}, dashboard, forms, show, ... }

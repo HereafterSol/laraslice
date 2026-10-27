@@ -27,7 +27,7 @@ class SliceRegenFormCommand extends Command
 
     public function handle(SliceManager $manager, FormRegenerator $regenerator): int
     {
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
 
         $manifest = null;
         if ($path = $this->option('path')) {

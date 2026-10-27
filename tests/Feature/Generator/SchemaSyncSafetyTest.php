@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Tests\Feature\Generator;
 
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
 use PHPUnit\Framework\TestCase;
@@ -76,11 +77,11 @@ class SchemaSyncSafetyTest extends TestCase
 
     public function test_rollback_refuses_migration_paths_outside_the_slice(): void
     {
-        $manifestFile = $this->slicePath.'/slice.json';
-        $manifest = json_decode(file_get_contents($manifestFile), true);
+        $manifestFile = $this->slicePath.'/slice.yaml';
+        $manifest = ManifestRepository::read($manifestFile);
         $manifest['version'] = '1.0.1';
         $manifest['version_history'][] = ['version' => '1.0.1', 'migration' => '../../../evil.php', 'description' => 'x'];
-        file_put_contents($manifestFile, json_encode($manifest));
+        ManifestRepository::write($manifestFile, $manifest);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('invalid migration file');
@@ -89,11 +90,11 @@ class SchemaSyncSafetyTest extends TestCase
 
     public function test_a_failing_down_stops_the_rollback_and_keeps_the_manifest(): void
     {
-        $manifestFile = $this->slicePath.'/slice.json';
-        $manifest = json_decode(file_get_contents($manifestFile), true);
+        $manifestFile = $this->slicePath.'/slice.yaml';
+        $manifest = ManifestRepository::read($manifestFile);
         $manifest['version'] = '1.0.1';
         $manifest['version_history'][] = ['version' => '1.0.1', 'migration' => '2026_01_01_000000_broken.php', 'description' => 'broken'];
-        file_put_contents($manifestFile, json_encode($manifest));
+        ManifestRepository::write($manifestFile, $manifest);
         file_put_contents($this->slicePath.'/Migrations/2026_01_01_000000_broken.php', "<?php\nreturn new class { public function down(): void { throw new \\RuntimeException('cannot drop'); } };\n");
         $before = file_get_contents($manifestFile);
 

@@ -5,9 +5,14 @@
     $roleId = $form->id ?? null;
     $isSuperAdmin = ($form->slug ?? '') === 'super-admin';
 
-    // Load active permission scopes from permission_role table
+    // Load active permission scopes from permission_role table.
+    // The permission_type_id pivot column is an optional scope layer:
+    // the framework's own migrations do not create it (scoped grants
+    // are separate slugs, e.g. leaf.view-own), so installs without the
+    // column simply render every grant unscoped instead of crashing.
     $assignedScopes = [];
-    if (!empty($roleId) && \Illuminate\Support\Facades\Schema::hasTable('permission_role')) {
+    if (!empty($roleId) && \Illuminate\Support\Facades\Schema::hasTable('permission_role')
+        && \Illuminate\Support\Facades\Schema::hasColumn('permission_role', 'permission_type_id')) {
         $assignedScopes = \Illuminate\Support\Facades\DB::table('permission_role')
             ->where('role_id', $roleId)
             ->pluck('permission_type_id', 'permission_id')
@@ -27,7 +32,11 @@
     $domains = [];
     foreach ($allPerms as $p) {
         $dom = $p->domain ?: 'System';
-        $mod = $p->group ?: ($p->module_name ? ucwords($p->module_name) : 'General');
+        $mod = $p->group ?: 'General';
+        // "Custom" = not synced from a slice manifest. The permissions
+        // table carries no is_custom column; source is the marker
+        // (syncPermissions stamps manifest permissions 'laraslice').
+        $isCustom = ($p->source ?? null) !== 'laraslice';
         
         if (!isset($domains[$dom])) {
             $domains[$dom] = [];
@@ -40,13 +49,13 @@
         }
 
         $slug = strtolower($p->slug);
-        if (!$p->is_custom && (str_contains($slug, 'view_') || str_contains($slug, '.view') || str_contains($slug, 'show_'))) {
+        if (!$isCustom && (str_contains($slug, 'view_') || str_contains($slug, '.view') || str_contains($slug, 'show_'))) {
             $domains[$dom][$mod]['crud']['view'] = $p;
-        } elseif (!$p->is_custom && (str_contains($slug, 'add_') || str_contains($slug, '.create') || str_contains($slug, 'create_'))) {
+        } elseif (!$isCustom && (str_contains($slug, 'add_') || str_contains($slug, '.create') || str_contains($slug, 'create_'))) {
             $domains[$dom][$mod]['crud']['create'] = $p;
-        } elseif (!$p->is_custom && (str_contains($slug, 'edit_') || str_contains($slug, '.edit') || str_contains($slug, 'update_'))) {
+        } elseif (!$isCustom && (str_contains($slug, 'edit_') || str_contains($slug, '.edit') || str_contains($slug, 'update_'))) {
             $domains[$dom][$mod]['crud']['update'] = $p;
-        } elseif (!$p->is_custom && (str_contains($slug, 'delete_') || str_contains($slug, '.delete') || str_contains($slug, 'destroy_'))) {
+        } elseif (!$isCustom && (str_contains($slug, 'delete_') || str_contains($slug, '.delete') || str_contains($slug, 'destroy_'))) {
             $domains[$dom][$mod]['crud']['delete'] = $p;
         } else {
             $domains[$dom][$mod]['custom'][] = $p;
@@ -372,11 +381,11 @@
                                                                     @php $cpVal = $getScope($cp->id); @endphp
                                                                     <div class="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-border/60 bg-muted/10">
                                                                         <div class="min-w-0 pr-2">
-                                                                            <span class="text-xs font-medium text-foreground block truncate" title="{{ $cp->display_name ?: $cp->name }}">
-                                                                                {{ $cp->display_name ?: ucwords(str_replace('_', ' ', $cp->name)) }}
+                                                                            <span class="text-xs font-medium text-foreground block truncate" title="{{ $cp->name }}">
+                                                                                {{ $cp->name }}
                                                                             </span>
                                                                             <span class="text-[10px] font-mono text-muted-foreground block truncate">
-                                                                                {{ $cp->name }}
+                                                                                {{ $cp->slug }}
                                                                             </span>
                                                                         </div>
                                                                         <select 

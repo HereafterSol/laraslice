@@ -15,7 +15,7 @@ class SliceCacheCommand extends Command
     {
         $this->info('Discovering slices...');
         $manager->clearCache();
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
 
         $count = $manager->cacheSlices();
         $discovered = count($manager->discoveredSlices());

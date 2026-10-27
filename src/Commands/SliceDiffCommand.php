@@ -21,7 +21,7 @@ final class SliceDiffCommand extends Command
 
     public function handle(SliceManager $manager): int
     {
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
         $slice = $manager->getSlice($this->argument('slice'));
         if (! $slice) {
             $this->error('Slice not found: '.$this->argument('slice'));

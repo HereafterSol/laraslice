@@ -13,10 +13,10 @@ class CopilotSettingsTest extends TestCase
     {
         $admin = $this->makeSuperAdmin();
 
-        $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()->assertSee(self::BUBBLE, false);
+        $this->actingAs($admin)->get('/laraslice/studio?mode=design&view=schema')->assertOk()->assertSee(self::BUBBLE, false);
 
         Setting::set('ai.floating_bubble', 'false', 'ai');
-        $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()->assertDontSee(self::BUBBLE, false);
+        $this->actingAs($admin)->get('/laraslice/studio?mode=design&view=schema')->assertOk()->assertDontSee(self::BUBBLE, false);
     }
 
     public function test_bubble_says_whether_a_provider_key_is_configured(): void
@@ -24,12 +24,12 @@ class CopilotSettingsTest extends TestCase
         config(['laraslice.ai.providers.opencode.key' => null]);
         $admin = $this->makeSuperAdmin();
 
-        $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()
+        $this->actingAs($admin)->get('/laraslice/studio?mode=design&view=schema')->assertOk()
             ->assertSee('Built-in answers')
             ->assertDontSee('OpenCode Free');
 
         config(['laraslice.ai.providers.opencode.key' => 'test-key']);
-        $this->actingAs($admin)->get('/laraslice/wizard/schema-studio')->assertOk()
+        $this->actingAs($admin)->get('/laraslice/studio?mode=design&view=schema')->assertOk()
             ->assertDontSee('Built-in answers')
             ->assertSee('Powered by');
     }
@@ -38,7 +38,7 @@ class CopilotSettingsTest extends TestCase
     {
         $studioOnly = $this->makeUserWithPermissions(['studio.access']);
 
-        $this->actingAs($studioOnly)->get('/laraslice/wizard/schema-studio')->assertOk()->assertDontSee(self::BUBBLE, false);
+        $this->actingAs($studioOnly)->get('/laraslice/studio?mode=design&view=schema')->assertOk()->assertDontSee(self::BUBBLE, false);
     }
 
     public function test_disabling_telemetry_stops_database_answers(): void

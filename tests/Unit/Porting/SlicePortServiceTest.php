@@ -234,4 +234,93 @@ PHP;
         $html2 = \LaraSlice\Support\DataTableRows::dateOverdue(null);
         $this->assertStringContainsString('—', $html2);
     }
+
+    public function test_dashboard_widgets_use_renderable_types_never_stat(): void
+    {
+        // Regression (fresh-port verification of v2.0.0): the porter emitted
+        // dashboard widgets with type 'stat' (and 'board_preview'), but
+        // DashboardUi's dispatch has no such types — unknown types resolve
+        // to null, so a fresh port's dashboard silently rendered nothing.
+        // Count widgets must be 'counter'; the by-status widget a 'chart'.
+        $service = new SlicePortService;
+        $ui = $service->buildUiFromInspectedFields('Tasks', [
+            ['handle' => 'id', 'type' => 'bigint'],
+            ['handle' => 'title', 'type' => 'string'],
+            ['handle' => 'status', 'type' => 'string'],
+        ], 'company_id', [], null);
+
+        $widgets = $ui['dashboard']['widgets'] ?? [];
+        $this->assertNotEmpty($widgets);
+        $types = array_column($widgets, 'type');
+        $this->assertNotContains('stat', $types, 'porter must never emit the unrenderable stat widget type');
+        $this->assertNotContains('board_preview', $types, 'porter must never emit the unrenderable board_preview widget type');
+
+        $byHandle = [];
+        foreach ($widgets as $w) {
+            $byHandle[$w['handle'] ?? ''] = $w;
+        }
+        $this->assertSame('counter', $byHandle['total']['type'] ?? null);
+        $this->assertSame('counter', $byHandle['open']['type'] ?? null);
+        $this->assertSame('chart', $byHandle['by_status']['type'] ?? null);
+        $this->assertSame('status', $byHandle['by_status']['group_by'] ?? null);
+        // Without declared own-scope info, counters stay unscoped.
+        $this->assertArrayNotHasKey('scope', $byHandle['total']);
+    }
+
+    public function test_dashboard_counters_carry_declared_own_scope_inline(): void
+    {
+        // Portal-parity rule: when the slice's declared access.own_scope
+        // clauses are available at emission time, the emitted counters
+        // carry scope: own with the (first) clause inline — the shape
+        // DashboardUi and the flagship dashboards consume.
+        $service = new SlicePortService;
+        $ui = $service->buildUiFromInspectedFields('Projects', [
+            ['handle' => 'id', 'type' => 'bigint'],
+            ['handle' => 'name', 'type' => 'string'],
+            ['handle' => 'status', 'type' => 'string'],
+        ], 'company_id', [], null, null, [['relation' => 'members', 'key' => 'id']]);
+
+        $byHandle = [];
+        foreach ($ui['dashboard']['widgets'] ?? [] as $w) {
+            $byHandle[$w['handle'] ?? ''] = $w;
+        }
+        foreach (['total', 'open'] as $handle) {
+            $this->assertSame('own', $byHandle[$handle]['scope'] ?? null, "{$handle} counter must be own-scoped");
+            $this->assertSame(['relation' => 'members', 'key' => 'id'], $byHandle[$handle]['own'] ?? null);
+        }
+    }
+
+    public function test_scaffolded_port_declares_root_model_and_renderable_widgets(): void
+    {
+        // End-to-end porter path: inspect the fixture, scaffold slices,
+        // and read back the written manifest. It must declare the root
+        // model (with child models non-root) and dashboard widgets of
+        // types DashboardUi can actually render.
+        $service = new SlicePortService;
+        $inspection = $service->inspect($this->fixtureDir, 'Accounting');
+        $result = $service->scaffoldSlices($inspection, 'ERP');
+
+        $this->assertArrayHasKey('Invoices', $result['created']);
+        $sliceDir = $result['created']['Invoices']['path'];
+        $manifest = \Symfony\Component\Yaml\Yaml::parseFile($sliceDir.'/slice.yaml');
+
+        $models = (array) ($manifest['models'] ?? []);
+        $this->assertNotEmpty($models, 'ported manifest must declare models');
+        $roots = array_values(array_filter($models, static fn ($m) => is_array($m) && ($m['root'] ?? false) === true));
+        $this->assertCount(1, $roots, 'ported manifest must declare exactly one root model');
+        $this->assertSame('invoice', $roots[0]['handle']);
+        $this->assertSame('invoices', $roots[0]['table']);
+
+        $childHandles = [];
+        foreach ($models as $m) {
+            if (($m['root'] ?? false) !== true) {
+                $childHandles[] = $m['handle'] ?? null;
+            }
+        }
+        $this->assertContains('invoice_item', $childHandles, 'child models stay declared as non-root');
+
+        $types = array_column((array) ($manifest['ui']['dashboard']['widgets'] ?? []), 'type');
+        $this->assertContains('counter', $types);
+        $this->assertNotContains('stat', $types);
+    }
 }

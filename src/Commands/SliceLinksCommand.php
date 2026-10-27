@@ -34,7 +34,7 @@ final class SliceLinksCommand extends Command
 
     public function handle(SliceManager $manager): int
     {
-        $manager->discover();
+        $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
         $routes = Route::getRoutes();
         $problems = [];
         $checked = 0;
