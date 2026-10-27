@@ -17,18 +17,24 @@
     'exportFilename' => 'export',
     'workflowTransitions' => [], // [['slug'=>'approve','label'=>'Approve','requires_remarks'=>true], ...]
     'workflowBulkUrl' => null,   // route for POST bulk transition
+    'bulkDeleteUrl' => null,     // L4: POST endpoint for the native bulk delete
     'workflowSlice' => null,
     'views' => ['table'],        // YAML ui.directory.views: table | board | calendar
     'defaultView' => 'table',    // YAML ui.directory.default_view
     'statusKey' => 'status',     // column key used for board columns
     'inlineEdit' => [],          // YAML ui.directory.inline_edit e.g. ['status']
     'inlineUpdateUrl' => null,   // POST endpoint template (.../{id}/inline with __ID__) for plain inline edits
+    'columnsMenu' => true,       // YAML ui.directory.columns_menu: the Columns toggle in the toolbar
     'dateKey' => null,           // preferred date column for calendar view
     'density' => 'comfortable',  // comfortable | compact (ERP high-density grids)
+    'externalBar' => null,       // null = auto: on ERP pages the filter bar is pushed under the topbar (source composition)
 ])
 
 @php
     $searchPlaceholder ??= __('Start typing to search...');
+    $lsPath = request()->path();
+    $externalBar ??= $lsPath === 'erp' || str_starts_with($lsPath, 'erp/')
+        || str_starts_with($lsPath, 'hr/') || str_starts_with($lsPath, 'crm/');
     $actionsLabel ??= __('Action');
 
     $htmlFormatters = ['composite_user', 'user_stack', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue', 'badge'];
@@ -61,6 +67,7 @@
         exportFilename: @js($exportFilename),
         workflowTransitions: @js($workflowTransitions ?? []),
         workflowBulkUrl: @js($workflowBulkUrl),
+        bulkDeleteUrl: @js($bulkDeleteUrl ?? null),
         workflowSlice: @js($workflowSlice),
         csrf: @js(csrf_token()),
         views: @js(array_values($views ?: ['table'])),
@@ -79,12 +86,41 @@
     @export-table.window="exportCsv()"
     @filter-changed.window="setFilter($event.detail.key, $event.detail.val)"
     @filter-reset.window="clearFilters()"
+    @table-search.window="q = $event.detail"
+    @table-clear-filters.window="clearFilters()"
+    x-effect="$dispatch('table-filters-count', activeFiltersCount); $dispatch('table-sidebar-count', sidebarFilterCount)"
     {{ $attributes->twMerge('w-full space-y-3') }}
 >
+    @if($externalBar)
+        {{-- Source composition: the filter bar is pushed into the
+             layout's strip directly under the topbar; the table's own
+             controls (bulk / views / columns) stay with the table. --}}
+        @push('filterbar')
+            @include('components.ui.data-table-filterbar')
+        @endpush
+        {{-- Source composition (owner-caught, 25 Oct 2026): ONE
+             row above the table — page actions on the left, the
+             view switcher + columns on the right. This row used
+             to stack the controls above the actions band, which
+             cost a full row of dead space and split what the
+             original keeps together. --}}
+        <div class="flex items-center gap-2 flex-wrap">
+            @if(isset($belowToolbar) && $belowToolbar->isNotEmpty())
+                {{ $belowToolbar }}
+            @endif
+            <div class="ml-auto flex items-center gap-2">
+                @include('components.ui.data-table-controls')
+            </div>
+        </div>
+    @else
     <!-- Sticky Top Filter Bar (Matches ERP Screenshot 1, 3 & 4) -->
     <div class="sticky top-0 z-20 bg-background/95 backdrop-blur-md py-2 border-b border-border/60 transition-all flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <!-- Left: Quick Filters & Search -->
         <div class="flex items-center gap-2.5 flex-1 flex-wrap">
+            @isset($toolbarLead)
+                {{ $toolbarLead }}
+            @endisset
+
             @isset($quickFilters)
                 {{ $quickFilters }}
             @endisset
@@ -123,95 +159,21 @@
             </button>
         </div>
 
-        <!-- Right: Bulk Actions OR Y Filters Button & Table Actions -->
+        <!-- Right: table controls. The Filters button is NOT here:
+             it is emitted into the quick-filters slot by the
+             generator (data-ls-filters-btn) so it travels with the
+             filter bar in both compositions. -->
         <div class="flex items-center gap-2">
-            <!-- Reactive Bulk Actions Strip -->
-            <template x-if="selected.length > 0">
-                <div class="flex items-center gap-2 px-3 py-1 rounded-xl bg-primary/10 border border-primary/20 text-xs transition-all animate-in fade-in">
-                    <span class="font-bold text-primary" x-text="selected.length + ' selected'"></span>
-                    <select 
-                        x-model="bulkAction" 
-                        class="px-2 py-1 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                        <option value="none">No Action</option>
-                        <option value="delete">Delete Selected</option>
-                        <option value="export">Export Selected</option>
-                        <template x-for="wt in workflowTransitions" :key="wt.slug">
-                            <option :value="'wf:' + wt.slug" x-text="(wt.label || wt.slug)"></option>
-                        </template>
-                    </select>
-                    <button 
-                        type="button" 
-                        @click="applyBulkAction()" 
-                        class="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
-                    >
-                        Apply
-                    </button>
-                    <button 
-                        type="button" 
-                        @click="selected = []" 
-                        class="text-muted-foreground hover:text-foreground text-xs underline cursor-pointer ml-1"
-                    >
-                        Clear
-                    </button>
-                </div>
-            </template>
-
-            <!-- Y Filters Button (Matches Screenshot 1 & 3) -->
-            @isset($sidebarFilters)
-                <button 
-                    type="button" 
-                    @click="$dispatch('open-sheet-table-filter-drawer')"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-foreground hover:bg-muted text-xs font-medium shadow-2xs transition-colors cursor-pointer"
-                    :class="sidebarFilterCount > 0 ? 'border-primary/50 text-primary font-semibold' : ''"
-                >
-                    <x-lucide-filter class="size-3.5" ::class="sidebarFilterCount > 0 ? 'text-primary' : 'text-muted-foreground'" />
-                    <span>Filters</span>
-                    <span 
-                        x-show="sidebarFilterCount > 0" 
-                        x-cloak 
-                        class="size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center ml-0.5"
-                        x-text="sidebarFilterCount"
-                    ></span>
-                </button>
-            @endisset
-
-
-            <!-- YAML-driven view switcher (table / board / calendar) -->
-            <template x-if="views && views.length > 1">
-                <div class="inline-flex items-center rounded-xl border border-border bg-card p-0.5 shadow-2xs">
-                    <template x-for="v in views" :key="v">
-                        <button type="button" @click="viewMode = v"
-                            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold capitalize transition-colors cursor-pointer"
-                            :class="viewMode === v ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'"
-                            x-text="v"></button>
-                    </template>
-                </div>
-            </template>
-
-            <!-- Column visibility: sensible defaults, user-adjustable, persisted per page -->
-            <div class="relative" @click.outside="colMenuOpen = false">
-                <button type="button" @click="colMenuOpen = !colMenuOpen"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-border bg-card text-[11px] font-semibold text-muted-foreground hover:text-foreground shadow-2xs transition-colors cursor-pointer">
-                    <x-lucide-sliders-horizontal class="size-3.5" />
-                    <span>Columns</span>
-                    <span x-show="hiddenCols.length" x-cloak class="size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center" x-text="hiddenCols.length"></span>
-                </button>
-                <div x-show="colMenuOpen" x-cloak class="absolute right-0 mt-1.5 w-52 rounded-xl border border-border bg-card shadow-lg p-1.5 z-30 max-h-72 overflow-y-auto">
-                    <template x-for="c in cols" :key="c.key">
-                        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/60 cursor-pointer text-xs">
-                            <input type="checkbox" class="rounded border-border" :checked="colVisible(c.key)" @change="toggleCol(c.key)" />
-                            <span x-text="c.label"></span>
-                        </label>
-                    </template>
-                </div>
-            </div>
-
-            @isset($tableActions)
-                {{ $tableActions }}
-            @endisset
+            @include('components.ui.data-table-controls')
         </div>
     </div>
+    @endif
+
+    @if(!$externalBar && isset($belowToolbar) && $belowToolbar->isNotEmpty())
+        <div class="flex items-center gap-2 flex-wrap border-b border-border/60 px-4 py-2.5 bg-muted/10">
+            {{ $belowToolbar }}
+        </div>
+    @endif
 
     <!-- Board view (YAML ui.directory.views includes board) -->
     <div x-show="viewMode === 'board'" x-cloak class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pt-2">
@@ -344,7 +306,7 @@
                 <template x-for="item in paged" :key="item.r['{{ $rowKey }}'] ?? item.i">
                     <tr class="hover:bg-muted/40 data-[state=selected]:bg-muted/30 border-b border-border/40 transition-colors" :data-state="selected.includes(item.i) ? 'selected' : null">
                         @if ($selectable)
-                            <td class="w-10 px-3 py-2.5 align-middle">
+                            <td class="w-10 {{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle">
                                 <button type="button" role="checkbox" aria-label="{{ __('Select row') }}" @click="toggleRow(item.i)" :aria-checked="selected.includes(item.i)" :data-state="selected.includes(item.i) ? 'checked' : 'unchecked'"
                                     class="border-input data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex size-4 items-center justify-center rounded-[4px] border shadow-xs outline-none focus-visible:ring-[3px]">
                                     <x-lucide-check class="size-3.5" x-show="selected.includes(item.i)" x-cloak aria-hidden="true" />
@@ -352,27 +314,19 @@
                             </td>
                         @endif
                         @foreach ($cols as $col)
-                            @if (($col['key'] ?? '') === ($statusKey ?? 'status') && in_array($statusKey ?? 'status', $inlineEdit ?: [], true))
-                                {{-- Show status_pill HTML; only show transition select when workflow transitions exist --}}
+                            @if (in_array($col['key'] ?? '', $inlineEdit ?: [], true))
+                                {{-- Inline-edit cell: the declared progress bar
+                                         (its own row key) renders ABOVE the editor; the
+                                         plain inline select is the cell's one editor —
+                                         the field's declared options post to the slice's
+                                         inline endpoint. Without an inline URL the
+                                         formatted value (pill) is the read-only form. --}}
                                 <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle whitespace-nowrap {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')">
+                                    <div x-show="item.r['{{ $col['key'] }}__progress']" x-cloak class="mb-1" x-html="item.r['{{ $col['key'] }}__progress']"></div>
                                     <div class="flex items-center gap-2 min-w-0">
-                                        <span class="shrink-0" x-show="(workflowTransitions || []).length > 0 || !inlineUpdateUrl" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
+                                        <span class="shrink-0" x-show="!inlineUpdateUrl" x-html="item.r['{{ $col['key'] }}'] || ''"></span>
                                         <select
-                                            x-show="(workflowTransitions || []).length > 0"
-                                            x-cloak
-                                            class="h-8 min-w-[6.5rem] max-w-[9rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                                            :value="item.r['{{ $col['key'] }}__raw'] || ''"
-                                            @change="applyInlineTransition(item.r, $event.target.value)"
-                                        >
-                                            <option value="">Transition…</option>
-                                            <template x-for="wt in workflowTransitions" :key="wt.slug">
-                                                <option :value="wt.slug" x-text="wt.label || wt.slug"></option>
-                                            </template>
-                                        </select>
-                                        {{-- Plain inline edit (P1 status select): no workflow engine — the
-                                             field's declared options post to the slice's inline endpoint. --}}
-                                        <select
-                                            x-show="(workflowTransitions || []).length === 0 && inlineUpdateUrl"
+                                            x-show="inlineUpdateUrl"
                                             x-cloak
                                             class="h-8 min-w-[6.5rem] max-w-[9rem] rounded-lg border border-border bg-background px-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
                                             :value="item.r['{{ $col['key'] }}__raw'] || ''"
@@ -390,14 +344,14 @@
                                     </div>
                                 </td>
                             @elseif (!empty($col['html']))
-                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle max-w-[340px] whitespace-normal {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')" x-html="item.r['{{ $col['key'] }}']"></td>
+                                <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle max-w-[340px] whitespace-normal {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')"><div x-show="item.r['{{ $col['key'] }}__progress']" x-cloak class="mb-1" x-html="item.r['{{ $col['key'] }}__progress']"></div><span x-html="item.r['{{ $col['key'] }}']"></span></td>
                             @else
                                 <td class="{{ ($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5' }} align-middle text-foreground {{ $col['class'] }}" x-show="colVisible('{{ $col['key'] }}')"><span class="ls-cell-clamp" :title="item.r['{{ $col['key'] }}']" x-text="item.r['{{ $col['key'] }}']"></span></td>
                             @endif
                         @endforeach
                         @isset($actions)
                             <td @class([
-                                'px-3 py-2.5 align-middle whitespace-nowrap text-end w-14',
+                                (($density ?? 'comfortable') === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5') . ' align-middle whitespace-nowrap text-end w-14',
                                 'sticky end-0 border-s bg-card' => $stickyActions,
                             ])>
                                 <div class="flex items-center justify-end">{{ $actions }}</div>
@@ -440,6 +394,9 @@
             <span class="font-medium text-muted-foreground" x-text="@js(__('Page :page of :pages')).replace(':pages', pageCount).replace(':page', page)"></span>
             <div class="flex items-center gap-1">
                 <x-ui.button variant="outline" size="sm" class="h-7 px-2.5 text-xs" x-bind:disabled="page === 1" @click="prev()">{{ __('Previous') }}</x-ui.button>
+                <template x-for="p in pageList" :key="'pg' + p">
+                    <button type="button" @click="if (typeof p === 'number') page = p" class="h-7 min-w-7 px-2 rounded-md text-xs font-semibold border transition-colors" :class="p === page ? 'bg-primary text-primary-foreground border-primary' : (typeof p === 'number' ? 'border-border bg-card hover:bg-muted cursor-pointer' : 'border-transparent bg-transparent text-muted-foreground')" x-text="p"></button>
+                </template>
                 <x-ui.button variant="outline" size="sm" class="h-7 px-2.5 text-xs" x-bind:disabled="page === pageCount" @click="next()">{{ __('Next') }}</x-ui.button>
             </div>
         </div>
@@ -466,11 +423,16 @@ if (typeof window.blatDataTable === 'undefined') {
             filters: {},
             workflowTransitions: cfg.workflowTransitions || [],
             workflowBulkUrl: cfg.workflowBulkUrl || null,
+            bulkDeleteUrl: cfg.bulkDeleteUrl || null,
             workflowSlice: cfg.workflowSlice || null,
             csrf: cfg.csrf || '',
             rowKey: cfg.rowKey || 'id',
             views: (cfg.views && cfg.views.length) ? cfg.views : ['table'],
-            viewMode: cfg.defaultView || (cfg.views && cfg.views[0]) || 'table',
+            // The declared default may name a NON-component view
+            // (e.g. 'matrix' — a separate server page): fall back
+            // to the first component view rather than rendering
+            // every panel hidden (blank list).
+            viewMode: (cfg.views && cfg.views.includes(cfg.defaultView)) ? cfg.defaultView : ((cfg.views && cfg.views[0]) || 'table'),
             statusKey: cfg.statusKey || 'status',
             get boardColumns() {
                 const key = this.statusKey;
@@ -704,6 +666,14 @@ if (typeof window.blatDataTable === 'undefined') {
                 return arr;
             },
             get pageCount() { return Math.max(1, Math.ceil(this.sorted.length / this.pageSize)) },
+            get pageList() {
+                const total = this.pageCount, cur = this.page;
+                if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+                const keep = [...new Set([1, 2, cur - 1, cur, cur + 1, total - 1, total])].filter(n => n >= 1 && n <= total).sort((a, b) => a - b);
+                const out = [];
+                for (let i = 0; i < keep.length; i++) { if (i > 0 && keep[i] - keep[i - 1] > 1) out.push('…'); out.push(keep[i]); }
+                return out;
+            },
             get paged() { const s = (this.page - 1) * this.pageSize; return this.sorted.slice(s, s + this.pageSize) },
             get pageIndices() { return this.paged.map(p => p.i) },
             get allPageSelected() { const idx = this.pageIndices; return idx.length > 0 && idx.every(i => this.selected.includes(i)) },
@@ -745,8 +715,22 @@ if (typeof window.blatDataTable === 'undefined') {
                 }
                 if (this.bulkAction === 'delete') {
                     if (confirm('Are you sure you want to delete ' + this.selected.length + ' selected record(s)?')) {
-                        this.$dispatch('bulk-delete', { indices: this.selected, ids: this.selectedRecordIds() });
-                        alert('Bulk deletion applied for ' + this.selected.length + ' record(s).');
+                        const ids = this.selectedRecordIds();
+                        if (this.bulkDeleteUrl) {
+                            // L4: real server-side delete via a form
+                            // post (the endpoint redirects back with
+                            // a flash). The old dispatch-only branch
+                            // deleted nothing while claiming success.
+                            const f = document.createElement('form');
+                            f.method = 'POST'; f.action = this.bulkDeleteUrl;
+                            const t = document.createElement('input');
+                            t.type = 'hidden'; t.name = '_token'; t.value = this.csrf;
+                            f.appendChild(t);
+                            ids.forEach(id => { const i = document.createElement('input'); i.type = 'hidden'; i.name = 'ids[]'; i.value = id; f.appendChild(i); });
+                            document.body.appendChild(f); f.submit();
+                            return;
+                        }
+                        this.$dispatch('bulk-delete', { indices: this.selected, ids });
                         this.selected = [];
                         this.emitSelection();
                     }

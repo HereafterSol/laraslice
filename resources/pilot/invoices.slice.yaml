@@ -12,55 +12,51 @@ navigation:
   order: 40
   visible: true
   roles:
-  - admin
-  - client
+    - admin
+    - client
 ui:
   directory:
     views:
-    - table
-    - calendar
+      - table
+      - calendar
     default_view: table
     inline_edit:
-    - status
+      - status
     bulk_actions:
-    - handle: delete
-      label: Delete
-      type: native
-    - handle: export
-      label: Export
-      type: native
+      - handle: delete
+        label: Delete
+        type: native
+      - handle: export
+        label: Export
+        type: native
     row_actions:
       display: hybrid
     columns:
-    - key: invoice_number
-      label: Invoice
-      formatter: code_badge
-      sortable: true
-      inferred_from: editColumn
-    - key: amount
-      label: Amount
-      formatter: money_breakdown
-      breakdown:
-        total: amount
-        paid: paid_amount
-        unpaid: due_amount
-      inferred_from: editColumn
-    - key: invoice_status_code
-      label: Status
-      formatter: status_pill
-    - key: invoiced_at
-      label: Issued
-      formatter: date_time
-    - key: due_at
-      label: Due
-      formatter: date_overdue
-      inferred_from: name
+      - key: invoice_number
+        label: Invoice
+        formatter: code_badge
+        sortable: true
+      - key: amount
+        label: Amount
+        formatter: money_breakdown
+        breakdown:
+          paid: amount
+          unpaid: amount
+      - key: invoice_status_code
+        label: Status
+        formatter: status_pill
+      - key: invoiced_at
+        label: Issued
+        formatter: date_time
+      - key: due_at
+        label: Due
+        formatter: date_time
   dashboard:
     enabled: true
     widgets:
-    - type: stat
-      handle: outstanding
-      label: Outstanding
+      - type: stat
+        handle: outstanding
+        label: Outstanding
 fields:
   invoice_number:
     name: invoice_number
@@ -72,8 +68,6 @@ fields:
   invoice_status_code:
     name: invoice_status_code
     type: string
-    input: select
-    options_from: distinct:invoice_status_code
   invoiced_at:
     name: invoiced_at
     type: date

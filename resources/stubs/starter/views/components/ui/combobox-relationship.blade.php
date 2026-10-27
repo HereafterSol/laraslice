@@ -277,7 +277,6 @@ if (!window.LaraSliceDrawer) {
                                    x-model="fields['{{ $primaryCol }}']"
                                    placeholder="Enter {{ strtolower(\Illuminate\Support\Str::headline($primaryCol)) }}..."
                                    autofocus
-                                   required
                                    class="w-full px-3 py-2 text-xs bg-background border border-input rounded-lg shadow-2xs focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
                         </div>
                         @endif

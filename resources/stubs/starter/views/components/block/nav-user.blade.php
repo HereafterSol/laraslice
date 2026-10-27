@@ -47,6 +47,13 @@
         </div>
 
         <div class="space-y-0.5 text-xs font-medium">
+            @if ($inviteUrl = \LaraSlice\Support\InviteTarget::url())
+            <a href="{{ $inviteUrl }}"
+               class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition">
+                <x-lucide-mail-plus class="size-3.5 text-primary" />
+                <span>Invite member</span>
+            </a>
+            @endif
             <a href="{{ Route::has('settings.theme') ? route('settings.theme') : url('/admin/settings/theme') }}" 
                class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition">
                 <x-lucide-sparkles class="size-3.5 text-primary" />

@@ -12,54 +12,51 @@ navigation:
   order: 30
   visible: true
   roles:
-  - admin
-  - employee
-  - client
+    - admin
+    - employee
+    - client
 ui:
   directory:
     views:
-    - table
-    - board
-    - calendar
+      - table
+      - board
+      - calendar
     default_view: board
     inline_edit:
-    - status
+      - status
     bulk_actions:
-    - handle: delete
-      label: Delete
-      type: native
-    - handle: export
-      label: Export
-      type: native
-    - handle: complete
-      label: Complete
-      type: workflow
+      - handle: delete
+        label: Delete
+        type: native
+      - handle: export
+        label: Export
+        type: native
+      - handle: complete
+        label: Complete
+        type: workflow
     row_actions:
       display: hybrid
     columns:
-    - key: title
-      label: Task
-      formatter: text_with_badge
-      badge_from: priority
-      sortable: true
-      inferred_from: editColumn
-    - key: status
-      label: Status
-      formatter: status_pill
-      inferred_from: name
-    - key: priority
-      label: Priority
-      formatter: text
-    - key: due_date
-      label: Due
-      formatter: date_overdue
-      inferred_from: editColumn
+      - key: title
+        label: Task
+        formatter: text_with_badge
+        badge_from: priority
+        sortable: true
+      - key: status
+        label: Status
+        formatter: status_pill
+      - key: priority
+        label: Priority
+        formatter: text
+      - key: due_date
+        label: Due
+        formatter: date_time
   dashboard:
     enabled: true
     widgets:
-    - type: stat
-      handle: open
-      label: Open tasks
+      - type: stat
+        handle: open
+        label: Open tasks
 fields:
   title:
     name: title
@@ -68,8 +65,6 @@ fields:
   status:
     name: status
     type: string
-    input: select
-    options_from: distinct:status
   priority:
     name: priority
     type: string

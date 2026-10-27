@@ -13,7 +13,7 @@
     }
 @endphp
 
-<div {{ $attributes->merge(['class' => 'flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border/40 overflow-x-auto no-scrollbar ' . $class]) }}>
+<div {{ $attributes->merge(['class' => 'inline-flex max-w-full items-center gap-1.5 p-1 bg-muted/40 rounded-xl border border-border/40 overflow-x-auto no-scrollbar ' . $class]) }}>
     @foreach ($tabs as $tab)
         @php
             $val = $tab['value'] ?? ($tab['id'] ?? '');

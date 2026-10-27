@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://packagist.org/packages/hereafter/laraslice"><img src="https://img.shields.io/badge/composer-hereafter%2Flaraslice-orange.svg" alt="Composer Package"></a>
-  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v1.7.0-amber.svg" alt="Latest Version"></a>
+  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v2.0.0-amber.svg" alt="Latest Version"></a>
   <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-red.svg" alt="Laravel Version"></a>
   <a href="https://php.net"><img src="https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-blue.svg" alt="PHP Version"></a>
   <a href="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml"><img src="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
@@ -37,6 +37,19 @@ Every LaraSlice system is described by three plain files anyone can read:
 - **Heart** (`slice.yaml`, one per slice) — *what runs*: data, fields, relations, UI declarations, workflows, settings. The only runtime truth; the Mind and Body are checked against it, never the reverse.
 
 The **soul** — your design identity (design system, density, refinement) — is declared in the Mind and realized by the Heart's runtime. Porting drafts all three files from the old system; a fresh project writes the Mind first and generates the rest. Full guide: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md).
+
+## 🆕 What's new in v2.0.0 — The Foundation Release
+
+v2.0.0 turns the scaffold into a foundation. Everything below was proven live against a running port of a production ERP, compared page-by-page with its source:
+
+- **Mind · Body · Heart** (above) becomes the working model: intent, declared surface, and runtime truth — drafted automatically when porting, written first when planning.
+- **Standard UI/UX system.** Lists, forms, hubs, documents, matrices, reports, dashboards, and settings behave properly *by declaration* — the basics work by default, specialized screens are standard YAML patterns (P1–P16), never per-page hacks or per-slice CSS.
+- **The layout kit.** A screenshot-read audit found that token-level styling could not see composition, so the kit became a layout kit: the source's shell model on ported trees, a single fused filter band on directories, a declared **hub composition** (`ui.show.composition: overview` — record title in the topbar, fused tab strip, widgets-led overview), and **portal dashboards** (welcome header with live clock + attendance punch, profile card, dual-figure stat cards, own-scope tables, a month-grid calendar).
+- **Dev Studio: six modes.** Plan (the Mind, with diff-before-save) and Operate (health, backups, access review, operator manuals) join Port, Design, Create, and Manage — modes are destinations, so from-zero, brief-first, legacy-port, and team workflows are all first-class.
+- **The 100% Replica Protocol.** Porting is gated, not vibes: schema parity, join-verified data truth, furniture parity, task conformance, and visual conformance read from paired screenshots — every port keeps a `REPLICA-STATUS.md` and quotes its lowest gate.
+- **Foundation hardening.** Own-scope data access with per-person overrides, form hygiene by default, drift audit + reconciliation (`slice:drift`), a fleet-wide idempotent `slice:repair`, document forms with real line-item arithmetic, workflow notifications, and declared patterns for import, invite, seed actions, clock punch, keyed-rows settings, and a server-rendered conversation surface.
+
+Full notes: [CHANGELOG.md](CHANGELOG.md) · Concepts: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md) · Protocol: [docs/REPLICA-PROTOCOL.md](docs/REPLICA-PROTOCOL.md) · Lifecycle: [docs/SDLC.md](docs/SDLC.md) · Portability: [docs/RUNTIMES.md](docs/RUNTIMES.md)
 
 ## 🌿 Vision, Mission & Philosophy
 
@@ -110,12 +123,16 @@ LaraSlice operates on a pragmatic **Three-Layer Hybrid Model** ([ADR-001](docs/a
 | **High-Performance Discovery** | `php artisan slice:cache` creates a compiled manifest map for production environments, eliminating filesystem scanning overhead on boot. |
 | **BlatUI Frontend** | Pure Blade + Alpine.js + Tailwind CSS v4 design system. 156+ accessible shadcn-styled components. Zero Metronic dependencies. |
 | **Flutter Mobile Generator** | Scaffolds native Flutter Dart models, client services, and CRUD UI views with one command (`php artisan slice:export-flutter`). |
-| **Declarative Blueprint Studio** | Visual designer and round-trip `slice.yaml` editor with Statamic-style field widths (`33%`, `50%`, `100%`) and real-time UI mockups. |
+| **Declarative Blueprint Studio** | Visual designer and round-trip `slice.yaml` editor with visual field widths (`33%`, `50%`, `100%`) and real-time UI mockups. |
 | **Native AI & MCP Server** | Built-in Model Context Protocol server (`/.well-known/mcp`) allowing AI coding agents to inspect schemas and co-author slices. |
 | **Slice YAML v0.1** *(new in 1.7.0)* | Declarative manifest spec with closed vocabularies (8 field types, 10 UI formatters). YAML describes intent; the fixed component library (BlatUI, shadcn-based) decides rendering. Machine-readable JSON Schema + `php artisan slice:validate`. |
 | **Formatter Pipeline** *(new in 1.7.0)* | Directory columns carry `formatter` metadata YAML → pixels: status pills, progress bars, money breakdowns, overdue dates, code badges — rendered from `slice.yaml` with no per-page code. |
-| **Legacy Porting** *(new in 1.7.0)* | `php artisan slice:port` reverse-engineers legacy systems into slices: Laravel monoliths (migrations), non-Laravel PHP (SQL dumps, e.g. Dolibarr), or live databases. Hard-fails on ambiguous source DB instead of guessing. |
+| **Legacy Porting** *(new in 1.7.0)* | `php artisan slice:port` reverse-engineers legacy systems into slices: Laravel monoliths (migrations), non-Laravel PHP (SQL dumps), or live databases. Hard-fails on ambiguous source DB instead of guessing. |
 | **Dev Studio Standard** *(new in 1.7.0)* | Unified Dev Studio + CLI contract (`docs/DEV_STUDIO_STANDARD.md`) — the design system every future Slice runtime (NetSlice, PythonSlice, JavaSlice, FlutterSlice) inherits. |
+| **Standard UI/UX System** *(new in 2.0.0)* | The basics work by default: directories with fused filter chrome, overlay/page forms, hubs, documents with line-item arithmetic, matrices, reports, and settings hubs — all declared in the Heart, rendered by one standard layer. |
+| **Layout Kit & Hub Composition** *(new in 2.0.0)* | Ported trees render under a replica shell + single-band directory chrome; `ui.show.composition: overview` gives detail pages the source's hub composition; portal dashboards compose a personal workspace (profile, dual-figure stats, own-scope tables, calendar). |
+| **100% Replica Protocol** *(new in 2.0.0)* | Five porting gates — schema, data (join-verified), furniture, tasks, visual (screenshot-read) — with a per-port `REPLICA-STATUS.md`. A token probe is not a visual gate. |
+| **Studio: Plan & Operate** *(new in 2.0.0)* | The ONE Studio grows to six modes: Plan drafts and edits the Mind with diff-before-save; Operate runs health checks, backups, access reviews, and operator-manual generation. |
 
 ---
 
@@ -178,6 +195,8 @@ cd my-app
 
 ## ⚡ Quick Start
 
+**Two doors, one system.** After installing, you can start through the **Studio door** — open the Dev Studio, write the Mind in Plan mode, scaffold slices in Create, shape them in Design — or through the **AI door** — hand your AI assistant the shipped skill (`npx skills add HereafterSol/laraslice`) and brief it with the Mind; it drafts, scaffolds, and verifies by the same declarations. Both doors produce the same Mind · Body · Heart files, and teams mix them freely. From-zero and brief-first starts are first-class; porting an existing system is simply the third door (see the Replica Protocol). Full guide: the framework skill, §24.
+
 ### 1. Installation & Setup
 ```bash
 composer require hereafter/laraslice
@@ -213,10 +232,14 @@ To clear the cache during development:
 php artisan slice:clear
 ```
 
-### 4. Interactive Visual Studios
-LaraSlice includes two interactive developer studios:
-- **Slice Studio & Field Manager**: `http://localhost:8000/laraslice/wizard` (scaffold presets, field managers, live audit trail viewer).
-- **Blueprint Studio**: `http://localhost:8000/laraslice/wizard/blueprint` (declarative `slice.yaml` designer, Statamic-style field widths, and instant component preview).
+### 4. The Dev Studio — six modes, one surface
+The ONE Studio (`http://localhost:8000/laraslice/wizard`) is organized as destinations, not steps:
+- **Plan** — the Mind made visible: purpose, actors, journeys, and operations as cards, editable in plain-language forms with diff-before-save; `slice:plan:draft` drafts a Mind + Bodies from discovery.
+- **Port** — reverse-engineer a legacy system into slices (anatomy capture, twin-port namespacing, per-slice porting notes).
+- **Design** — the declarative `slice.yaml` / Body designer with field widths and instant component preview.
+- **Create** — scaffold slices and domain suites from presets, blueprints, or a brief.
+- **Manage** — lifecycle: seed, toggle, wipe, destroy, repair — mirrored by the CLI.
+- **Operate** — health checks, backups against the Mind's declared policy, the audit trail, an access review that flags risky grants, and one-click operator-manual generation.
 
 ### 5. Domain Lifecycle & Data Management CLI
 Manage slice lifecycle, seeding, and teardown directly from the command line:
@@ -364,9 +387,9 @@ This copies the core slice from the framework into `app/Slices/Users`. Once publ
 - **Generation Gap Pattern**: Scaffolding separates base definitions in `Generated/Base*.php` from hand-written subclasses in `Models/`.
 - **Upstream Starter Remote**: If the LaraSlice team adds new features to starter slices (e.g. 2FA), simply pull from the starter remote (`git fetch upstream && git merge upstream/main`).
 
-### 3. How does LaraSlice compare to October CMS or Laravel Breeze?
-- **vs. October CMS**: October CMS relies on runtime monkey-patching (`UserModel::extend()`), which breaks IDE auto-completion and static analysis (PHPStan). LaraSlice enforces compile-time type safety via clean DTO contracts and Bounded Contexts.
-- **vs. Laravel Breeze**: Breeze dumps flat code into monolithic `app/Http/Controllers/` and `app/Models/`. LaraSlice encapsulates complete vertical slices (`Contracts/`, `Models/`, `Migrations/`, `Views/`, `Routes/`, and Flutter clients) under cohesive bounded contexts.
+### 3. How does LaraSlice compare to conventional plugin models and flat scaffolding?
+- **vs. plugin/monolith models**: runtime extension and monkey-patching break IDE auto-completion and static analysis (PHPStan) and tangle debugging. LaraSlice enforces compile-time type safety via clean DTO contracts and Bounded Contexts, with every surface declared in YAML instead of hooked at runtime.
+- **vs. flat scaffolding**: starter scaffolding dumps code into monolithic `app/Http/Controllers/` and `app/Models/`. LaraSlice encapsulates complete vertical slices (`Contracts/`, `Models/`, `Migrations/`, `Views/`, `Routes/`, and Flutter clients) under cohesive bounded contexts.
 
 ---
 

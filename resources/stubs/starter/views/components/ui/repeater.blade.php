@@ -7,10 +7,15 @@
     'maxItems' => 50,
     'addButtonText' => 'Add Item',
     'class' => '',
+    // Document arithmetic (D3): ['quantity' => .., 'unit_price' => .., 'amount' => ..,
+    // 'type_field' => .., 'tax_amount' => ..] — mirrors Support\DocumentMath live;
+    // the server recomputes authoritatively on save.
+    'document' => null,
 ])
 
 <div x-data="{
     items: {{ json_encode(!empty($initialItems) ? $initialItems : [[]]) }},
+    doc: {{ json_encode($document) }},
     addItem() {
         if (this.items.length < {{ $maxItems }}) {
             this.items.push({});
@@ -20,7 +25,31 @@
         if (this.items.length > {{ $minItems }}) {
             this.items.splice(idx, 1);
         }
-    }
+    },
+    lineAmount(item) {
+        if (!this.doc) return 0;
+        const q = parseFloat(item[this.doc.quantity]) || 0;
+        const p = parseFloat(item[this.doc.unit_price]) || 0;
+        return Math.round(q * p * 100) / 100;
+    },
+    rowType(item) {
+        return this.doc && this.doc.type_field ? String(item[this.doc.type_field] || 'item').toLowerCase() : 'item';
+    },
+    subtotal() {
+        return this.items.reduce((s, it) => {
+            const t = this.rowType(it);
+            return t === 'tax' ? s : s + (t === 'discount' ? -1 : 1) * this.lineAmount(it);
+        }, 0);
+    },
+    grandTotal() {
+        return this.items.reduce((s, it) => {
+            const t = this.rowType(it);
+            let v = (t === 'discount' ? -1 : 1) * this.lineAmount(it);
+            if (t === 'item' && this.doc && this.doc.tax_amount) v += parseFloat(it[this.doc.tax_amount]) || 0;
+            return s + v;
+        }, 0);
+    },
+    money(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 }" class="w-full space-y-3 {{ $class }}">
     <div class="flex items-center justify-between">
         <label class="text-xs font-semibold text-foreground tracking-tight flex items-center gap-2">
@@ -73,6 +102,11 @@
                                        value="1"
                                        x-model="item.{{ $f['name'] }}"
                                        class="mt-1.5 h-4 w-4 rounded border-input text-primary focus:ring-primary">
+                            @elseif (($document ?? null) && (($document['amount'] ?? null) === $f['name']))
+                                {{-- Computed line amount: displayed live, submitted via the hidden twin; the server recomputes it regardless --}}
+                                <input type="text" readonly :value="money(lineAmount(item))"
+                                       class="w-full px-2.5 py-1.5 text-xs bg-muted/40 border border-input rounded-lg shadow-2xs" tabindex="-1">
+                                <input type="hidden" :name="'{{ $name }}[' + index + '][{{ $f['name'] }}]'" :value="lineAmount(item)">
                             @else
                                 <input type="{{ match ($fType) { 'integer', 'bigInteger', 'foreign_id', 'decimal', 'float' => 'number', 'date' => 'date', 'datetime', 'timestamp' => 'datetime-local', 'email' => 'email', default => 'text' } }}"
                                        @if (in_array($fType, ['decimal', 'float'], true)) step="any" @elseif (in_array($fType, ['integer', 'bigInteger', 'foreign_id'], true)) step="1" @endif
@@ -101,4 +135,20 @@
             No items added yet. Click "{{ $addButtonText }}" above to add the first row.
         </div>
     </div>
+
+    @if ($document)
+        {{-- Document totals (live mirror of the server-side computation) --}}
+        <div class="flex justify-end pt-1">
+            <div class="w-64 space-y-1.5 text-xs">
+                <div class="flex items-center justify-between text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span class="font-mono text-foreground" x-text="money(subtotal())"></span>
+                </div>
+                <div class="flex items-center justify-between border-t border-border pt-1.5 font-bold">
+                    <span>Total</span>
+                    <span class="font-mono" x-text="money(grandTotal())"></span>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

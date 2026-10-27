@@ -58,7 +58,7 @@
                     </div>
                     <div>
                         <span class="font-extrabold text-white text-base tracking-tight">LaraSlice</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v1.7.0</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v2.0.0</span>
                     </div>
                 </a>
             </div>
@@ -69,7 +69,7 @@
                 <a href="#anatomy" class="hover:text-amber-400 transition">Slice Anatomy</a>
                 <a href="#three-layers" class="hover:text-amber-400 transition">3-Layer Model</a>
                 <a href="#faq" class="hover:text-amber-400 transition">Developer FAQ</a>
-                <a href="changelog.html" class="text-amber-400 hover:text-amber-300 transition font-bold flex items-center gap-1.5"><span>Changelog</span><span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v1.7.0</span></a>
+                <a href="changelog.html" class="text-amber-400 hover:text-amber-300 transition font-bold flex items-center gap-1.5"><span>Changelog</span><span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v2.0.0</span></a>
             </nav>
 
             <div class="flex items-center gap-3">
@@ -171,7 +171,7 @@
                 <p class="text-slate-400 text-sm leading-relaxed">The one file that runs. Data, fields, relations, UI declarations, workflows, and settings per slice — the executable truth every runtime (Laravel today, more tomorrow) maps to its own stack and design system. The soul — your design identity — is declared in the Mind and realized here.</p>
             </div>
         </div>
-        <p class="text-center text-slate-500 text-sm mt-8">Porting an old system? The porter drafts all three from it. Starting fresh? Write the Mind, derive the Body, generate the Hearts. <span class="text-slate-300 font-semibold">Same three files, at every moment of a system's life.</span></p>
+        <p class="text-center text-slate-500 text-sm mt-8">Porting an old system? The porter drafts all three from it. Starting fresh? Write the Mind, derive the Body, generate the Hearts. <span class="text-slate-300 font-semibold">Same three files, at every moment of a system's life</span> — and, by design, on any runtime: the declarations are the asset, each stack maps them to its own. <a href="RUNTIMES.md" class="text-amber-400 hover:text-amber-300 font-semibold">The portability vision →</a></p>
     </section>
 
     <!-- SECTION 1: 3 WAYS TO GENERATE SLICES (UI / CLI / AI) -->
@@ -204,7 +204,7 @@
                         </p>
                     </div>
                     <ul class="text-xs text-slate-400 space-y-1.5 font-medium">
-                        <li class="flex items-center gap-2 text-slate-300">✓ High-density Statamic-style field grid</li>
+                        <li class="flex items-center gap-2 text-slate-300">✓ High-density visual field grid</li>
                         <li class="flex items-center gap-2 text-slate-300">✓ Aggregate root child entity manager</li>
                         <li class="flex items-center gap-2 text-slate-300">✓ Real-time LaraSlice directory tree</li>
                     </ul>
@@ -589,6 +589,47 @@
     </section>
 
     <!-- SECTION 5: DEVELOPER FAQ ACCORDION -->
+    <!-- SECTION: v2.0.0 FOUNDATION RELEASE -->
+    <section id="v2" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
+        <div class="text-center max-w-3xl mx-auto mb-12">
+            <span class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold">NEW IN v2.0.0</span>
+            <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight mt-4 mb-4">The Foundation <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">Release</span></h2>
+            <p class="text-slate-400 leading-relaxed">Everything below was proven live against a running port of a production ERP — compared page-by-page with its source, by a human reading screenshots, not by a script measuring styles.</p>
+        </div>
+        <div class="grid md:grid-cols-3 gap-6">
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🧱</div>
+                <h3 class="text-white font-bold text-lg mb-1">Standard UI/UX System</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Lists, forms, hubs, documents, matrices, reports, dashboards, and settings behave properly <em>by declaration</em>. The basics work by default; specialized screens are standard YAML patterns — never per-page hacks or per-slice CSS.</p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🖼️</div>
+                <h3 class="text-white font-bold text-lg mb-1">The Layout Kit</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Ported trees render under the source's shell model with one fused filter band. Detail pages declare <code class="text-amber-400">ui.show.composition: overview</code> for the hub composition, and dashboards can compose a personal portal: welcome header, live clock + attendance punch, profile, dual-figure stats, own-scope tables, a month-grid calendar.</p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">✅</div>
+                <h3 class="text-white font-bold text-lg mb-1">The 100% Replica Protocol</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Porting is gated: schema parity, join-verified data truth, furniture parity, task conformance, and visual conformance read from paired screenshots. Every port keeps a <code class="text-amber-400">REPLICA-STATUS.md</code> and quotes its lowest gate. <a href="REPLICA-PROTOCOL.md" class="text-amber-400 hover:text-amber-300 font-semibold">Read the protocol →</a></p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🧭</div>
+                <h3 class="text-white font-bold text-lg mb-1">Studio: Six Modes</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Plan and Operate join Port, Design, Create, and Manage in the ONE Studio. Plan makes the Mind readable and editable with diff-before-save; Operate runs health checks, backups, access reviews, and operator manuals. Modes are destinations — from-zero, brief-first, legacy-port, and team paths are all first-class. <a href="SDLC.md" class="text-amber-400 hover:text-amber-300 font-semibold">The full SDLC, phase by phase →</a></p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🤖</div>
+                <h3 class="text-white font-bold text-lg mb-1">Built for AI Collaboration</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">The manifest is the interface: YAML an AI can read, write, and diff; a shipped AI skill that teaches the same protocol humans follow; an MCP server and Copilot gated by the same permissions as the UI. An AI's work is verified by the same gates as a human's.</p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🛡️</div>
+                <h3 class="text-white font-bold text-lg mb-1">Foundation Hardening</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Own-scope data access with per-person overrides, form hygiene by default, a drift audit that reconciles promises against grants, fleet-wide idempotent repair, workflow notifications, and document forms with real line-item arithmetic. <a href="changelog.html" class="text-amber-400 hover:text-amber-300 font-semibold">Full changelog →</a></p>
+            </div>
+        </div>
+    </section>
+
     <section id="faq" class="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto border-t border-slate-800/80">
         <div class="text-center mb-16">
             <div class="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest mb-2">Team Guidance</div>
@@ -615,11 +656,11 @@
             <!-- FAQ 2 -->
             <div class="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
                 <button type="button" @click="faqOpen = (faqOpen === 2 ? null : 2)" class="w-full px-6 py-4 text-left flex items-center justify-between gap-4 font-bold text-sm text-white hover:text-amber-400 transition cursor-pointer">
-                    <span>2. How does LaraSlice compare to October CMS plugin model?</span>
+                    <span>2. How does LaraSlice compare to conventional plugin and monolith models?</span>
                     <span class="font-mono text-base" x-text="faqOpen === 2 ? '−' : '+'">+</span>
                 </button>
                 <div x-show="faqOpen === 2" class="px-6 pb-5 text-xs sm:text-sm text-slate-400 leading-relaxed border-t border-slate-800/60 pt-4" style="display: none;">
-                    October CMS relies heavily on dynamic runtime monkey-patching (<code>UserModel::extend()</code>), which can lead to brittle runtime conflicts and difficult debugging. LaraSlice uses <strong>Domain-Driven Design (DDD) Vertical Slices</strong>: slices communicate strictly via typed DTO contracts and domain events. If you need full ownership of a vendor slice, you publish it via <code>php artisan slice:publish Acme/Shop</code>.
+                    Conventional plugin models lean on runtime extension and monkey-patching, which can lead to brittle runtime conflicts and difficult debugging. LaraSlice uses <strong>Domain-Driven Design (DDD) Vertical Slices</strong>: slices communicate strictly via typed DTO contracts and domain events, and every surface is declared in YAML instead of hooked at runtime. If you need full ownership of a vendor slice, you publish it via <code>php artisan slice:publish Acme/Shop</code>.
                 </div>
             </div>
 

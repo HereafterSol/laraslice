@@ -15,23 +15,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-10-27
+
+**The Foundation Release — Mind · Body · Heart, the Standard UI/UX system, and the Replica Protocol**
+
+Proven live against a running port of a production ERP, compared page-by-page with its source throughout the program.
+
+### Added
+- **Mind · Body · Heart** — `system.yaml` (intent), `*.ui.yaml` per slice (declared surface), `slice.yaml` (sole runtime truth). `slice:plan:draft` drafts a Mind and Bodies from discovery, marked as drafts, never overwriting.
+- **Studio: six modes** — Plan (the Mind readable and editable with diff-before-save) and Operate (health checks, backups per the Mind's policy, access review, operator-manual generation) join Port, Design, Create, and Manage as destinations in the ONE Studio.
+- **Standard UI/UX system** — directories, overlay/page forms, hubs, documents with line-item arithmetic, matrices (roster + legend + fused filters), named and comparison reports, keyed-rows settings sections, and dashboards behave by declaration; specialized screens are standard YAML patterns, never per-slice CSS.
+- **Layout kit** — ported trees render under the source's shell model; strip-placed filters fuse into the one directory band; `ui.show.composition: overview` gives detail pages the hub composition (record title in the topbar, fused tab strip, widgets-led overview, details card); portal dashboards (`laraslice.dashboard.composition`) compose a personal workspace: welcome header with live clock and attendance punch, profile card, dual-figure stat cards, own-scope `table` widgets, and a `calendar` month grid. Dashboard filters accept an operator form and the `@today` token; widgets carry a declared order.
+- **100% Replica Protocol** — five porting gates (schema parity, join-verified data truth, furniture, task conformance, visual conformance read from paired screenshots) with a per-port `REPLICA-STATUS.md`; the guidance ships in the framework skill (concepts map included).
+- **Declared patterns** — relation-multi form fields (multi-selects resolved from the root model's relation, synced by the base service), planned-vs-actual `bars` show widgets, a `lines` directory cell formatter, import with upsert, invite, seed actions, clock punch, declared record actions, and a server-rendered conversation surface.
+- **Workflow notifications** — a `WorkflowTransitioned` event with a built-in assignee/owner listener.
+- **Account-backed create** as a standard pattern: one form writes account + details + directory records transactionally (demonstrated by employee hiring in the reference port).
+
+### Changed
+- Own-scope data access is a foundation behavior: view-own grants narrow lists and guard detail routes; per-person grant/revoke overrides sit on top of role clubs; enforcement reads the Heart's declared permissions first.
+- Form hygiene is on by default fleet-wide (system columns never render; workflow initial state applied on create); `slice:drift` audits Mind/Body promises against actual grants and `--fix` reconciles; `slice:repair` retrofits patterns into generated slices idempotently.
+
+### Fixed
+- Generator template integrity (row-action emission), lossless `slice:cache` (name-shadowed slices no longer dropped), registry-wide `slice:sync` and settings aggregation, repair passes no longer invent routes, deterministic `modelClass()` resolution with recorded ambiguity, charts render server-side with no host-side JS dependency, and blueprint apply works end-to-end in YAML.
+
 ## [1.8.0] - 2026-10-20
 
-**ONE Studio + YAML-Only Manifests + Default UI**
+**ONE Studio + YAML-only manifests + Default UI**
 
-- **ONE Studio** — the four developer studios are unified into one shell at `/laraslice/studio`: Port, Design, Create, and Manage as destinations (not steps), Schema as a Design sub-view, and a Studio Home that asks "What are you starting from?" (BRD/AI brief, legacy port, from-zero design). Legacy studio URLs redirect into the shell; all POST endpoints unchanged.
-- **YAML-only manifests (breaking)** — JSON manifest reads are removed; JSON-only slices throw with a migration hint. `slice:migrate-json-to-yaml [--dry-run] [--delete]` is the upgrade path. Studio saves are preview-first (YAML diff modal + version history), and `slice:diff` brings the same diff to the CLI.
-- **Default UI program** — generated and ported apps now present correctly with zero hand-tuning, verified side-by-side against a port of a production ERP: long text clamps instead of stretching tables; foreign keys resolve to real labels everywhere (including `*_name` label columns such as `type_name`); declared option labels replace raw values in listings, detail pages, and forms; dates render human-readably; tables with many columns default to the essential ones plus a Columns menu; detail pages are built from the manifest instead of dumping raw attributes.
-- **Porter** — supporting slices (details, documents, files, schedules, items, histories, attachments, templates) no longer flood the sidebar by default, and MySQL `enum(...)` vocabularies are extracted into manifest options at introspection instead of being dropped.
-- **Examples** — all 10 shipped example blueprints pass `slice:validate`.
-
-Upgrade notes: run `slice:migrate-json-to-yaml` before upgrading installs that still carry `slice.json`; refresh published UI components with `slice:repair --publish-ui`.
+### Added
+- The ONE Studio: the developer studios unified into one shell (Port, Design, Create, Manage modes) with a YAML diff preview before any overwrite — no silent writes.
+- `slice.yaml` is the only manifest format; JSON read fallback removed (`slice:migrate-json-to-yaml` is the upgrade path).
+- Default UI program: generated and ported applications present correctly with zero hand-tuning — directory formatters, quick filters, and composition defaults resolved from the live manifest at request time.
 
 ## [1.7.0] - 2026-10-20
 
 **Slice YAML v0.1 + Formatter Pipeline + Non-Laravel Porting**
 
-This release turns ported schemas into rich, demo-grade UI by describing presentation in YAML — and proves it by porting two real systems end-to-end: **a production Laravel ERP** (85 slices, 1,630 rows imported) and **a large non-Laravel PHP ERP** (407 tables discovered from SQL dumps). Established admin-builder approaches informed the design; the YAML-first, AI-writable manifest is LaraSlice's differentiator.
+This release turns ported schemas into rich, demo-grade UI by describing presentation in YAML — and proves it by porting two real systems end-to-end: a **production Laravel ERP** (85 slices, 1,630 rows imported) and a **non-Laravel PHP ERP** (407 tables discovered from SQL dumps). Conventional PHP-builder approaches informed the design; the YAML-first, AI-writable manifest is LaraSlice's differentiator.
 
 ### Added
 - **Slice YAML v0.1 spec** — `docs/SLICE_YAML_V0.1.md` + machine-readable JSON Schema (`schemas/slice-v0.1.json`) with closed vocabularies: 8 field types, 10 directory formatters, `input` widget enum. No HTML in YAML, ever.
@@ -40,7 +60,7 @@ This release turns ported schemas into rich, demo-grade UI by describing present
 - **Phase 2 DataTable parser** (`DataTableUiParser`) — Statically classifies source `*DataTable.php` closures into the v0.1 formatter vocabulary (no closure execution, no HTML scraping). Wired into `slice:repair --re-infer-ui --source`.
 - **Request-time directory UI resolution** (`LaraSlice\Support\DirectoryUi`) — Index views resolve column formatters from the live slice manifest at request time; works for path-repo, vendor, and published installs (replaces repair-time absolute-path baking).
 - **Workflow bulk actions** — Declared in YAML (`ui.directory.actions.bulk`), enforced by RBAC, with Studio editors for quick filters, sidebar filters, summary cards, row/bulk actions, and form sections.
-- **Non-Laravel porting** — `slice:port` now discovers schemas from `CREATE TABLE` SQL dumps (a non-Laravel ERP's `install/mysql`, etc.), strips table prefixes (`--strip-prefix=llx_`, defaults `llx_`/`wp_`), and ports MySQL sources via `--source-*` connection options.
+- **Non-Laravel porting** — `slice:port` now discovers schemas from `CREATE TABLE` SQL dumps (a source system's `install/mysql` dump, etc.), strips table prefixes (`--strip-prefix=llx_`, defaults `llx_`/`wp_`), and ports MySQL sources via `--source-*` connection options.
 - **Porting safety: no silent wrong-database** — If no source schema is found, `slice:port` hard-fails with five numbered fix options instead of falling back to the target app DB. Opt-in fallback only via `LARASLICE_PORT_ALLOW_APP_DB_FALLBACK=true` (discouraged).
 - **Runnable examples** — `blueprints/examples/kitchen-sink.slice.yaml` (all 10 formatters) plus CRM (Companies, Contacts, Deals), HR (Employees, Leave Requests), and Shop (Products, Orders) suites. All validate against v0.1 and apply via Blueprint Studio or CLI.
 - **Dev Studio Standard** — `docs/DEV_STUDIO_STANDARD.md`: the unified Dev Studio + CLI contract (parity table, Generate = files + migrate + seed, single "Start from…" picker, mobile rules) that future Slice runtimes (NetSlice, PythonSlice, JavaSlice, FlutterSlice) inherit.

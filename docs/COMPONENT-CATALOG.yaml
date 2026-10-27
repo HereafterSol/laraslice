@@ -1,0 +1,1186 @@
+# COMPONENT CATALOG — BlatUI kit (kit #1)
+# GENERATED from the demo app's component library (resources/views/components/ui)
+# by the P0 catalog pass, 23 Oct 2026. Regenerate after library changes;
+# do not hand-edit component entries — curate only the page_structure map.
+# 389 components. props = keys declared via @props (empty = attribute/slot-driven).
+
+page_structure:
+  breadcrumb: ['breadcrumb', 'breadcrumb-list', 'breadcrumb-item', 'breadcrumb-link', 'breadcrumb-page', 'breadcrumb-separator']
+  title: ['(typography only — page title renders as heading text in the shell header)']
+  toolbar_actions_grid_pagination: ['data-table (in components/, the directory workhorse)']
+  identity_highlights_sections: ['card', 'card-header', 'card-title', 'card-description', 'card-content', 'avatar', 'badge', 'separator']
+  tabs: ['tabs', 'tabs-list', 'tabs-trigger', 'tabs-content']
+  facets_selects: ['select', 'native-select (where present)', 'filter-tabs (in components/)']
+  drawer_filters: ['sheet', 'sheet-content', 'sheet-header', 'sheet-title (filters drawer)']
+  dialogs: ['dialog', 'alert-dialog']
+  actions: ['button', 'button-group', 'dropdown-menu']
+  feedback: ['alert', 'badge', 'progress', 'skeleton']
+
+components:
+  - name: accent
+    family: accent
+    props: [color, foreground]
+  - name: accordion-content
+    family: accordion
+    props: []
+  - name: accordion-item
+    family: accordion
+    props: [value]
+  - name: accordion-trigger
+    family: accordion
+    props: [icon, iconPosition]
+  - name: accordion
+    family: accordion
+    props: [type, collapsible, value]
+  - name: add-to-cart
+    family: add
+    props: [label, addedLabel, size, icon]
+  - name: ai-copilot-bubble
+    family: ai
+    props: []
+  - name: alert-action
+    family: alert
+    props: []
+  - name: alert-description
+    family: alert
+    props: []
+  - name: alert-dialog-action
+    family: alert
+    props: []
+  - name: alert-dialog-cancel
+    family: alert
+    props: []
+  - name: alert-dialog-content
+    family: alert
+    props: []
+  - name: alert-dialog-description
+    family: alert
+    props: []
+  - name: alert-dialog-footer
+    family: alert
+    props: []
+  - name: alert-dialog-header
+    family: alert
+    props: []
+  - name: alert-dialog-title
+    family: alert
+    props: []
+  - name: alert-dialog-trigger
+    family: alert
+    props: [for]
+  - name: alert-dialog
+    family: alert
+    props: [open, id]
+  - name: alert-title
+    family: alert
+    props: []
+  - name: alert
+    family: alert
+    props: [variant, tone]
+  - name: animated-beam
+    family: animated
+    props: [from, to, curvature, duration]
+  - name: aspect-ratio
+    family: aspect
+    props: [ratio]
+  - name: audio-player
+    family: audio
+    props: [src, title, artist, autoplay]
+  - name: aurora
+    family: aurora
+    props: [colors, blur, speed]
+  - name: autocomplete
+    family: autocomplete
+    props: [name, options, value, placeholder, empty, size, disabled, multiple, icon, width]
+  - name: autosize-textarea
+    family: autosize
+    props: [name, placeholder, minRows, maxRows, size, disabled, id, value]
+  - name: avatar-fallback
+    family: avatar
+    props: []
+  - name: avatar-group
+    family: avatar
+    props: [avatars, src, name, max, size]
+  - name: avatar-image
+    family: avatar
+    props: [src, alt]
+  - name: avatar
+    family: avatar
+    props: []
+  - name: back-to-top
+    family: back
+    props: [threshold, variant, demo]
+  - name: badge
+    family: badge
+    props: [variant, tone, size, href]
+  - name: banner
+    family: banner
+    props: [tone, dismissible, id, persist]
+  - name: bento-grid
+    family: bento
+    props: [columns]
+  - name: bento-item
+    family: bento
+    props: [title, description, icon, colSpan, rowSpan]
+  - name: border-beam
+    family: border
+    props: [duration, color, size]
+  - name: bottom-navigation-item
+    family: bottom
+    props: [icon, label, href, active, badge]
+  - name: bottom-navigation
+    family: bottom
+    props: [ariaLabel]
+  - name: brand
+    family: brand
+    props: [name, href, logo, alt]
+  - name: breadcrumb-ellipsis
+    family: breadcrumb
+    props: []
+  - name: breadcrumb-item
+    family: breadcrumb
+    props: []
+  - name: breadcrumb-link
+    family: breadcrumb
+    props: [href]
+  - name: breadcrumb-list
+    family: breadcrumb
+    props: []
+  - name: breadcrumb-page
+    family: breadcrumb
+    props: []
+  - name: breadcrumb-separator
+    family: breadcrumb
+    props: []
+  - name: breadcrumb
+    family: breadcrumb
+    props: []
+  - name: button-group-separator
+    family: button
+    props: []
+  - name: button-group-text
+    family: button
+    props: []
+  - name: button-group
+    family: button
+    props: [orientation]
+  - name: button
+    family: button
+    props: [variant, size, href, type, as, color, colorForeground]
+  - name: calendar
+    family: calendar
+    props: [mode, value, name, locale, numberOfMonths, defaultMonth, weekStart, captionLayout, showWeekNumber, disabled, min, max, minDays, maxDays, required, startMonth, endMonth, disableNavigation, modifiers, modifiersClass, buttonVariant, showOutsideDays, minDate, maxDate, outOfRange, prevMonthLabel, nextMonthLabel, todayLabel, selectedLabel, calendarId]
+  - name: card-action
+    family: card
+    props: []
+  - name: card-content
+    family: card
+    props: []
+  - name: card-description
+    family: card
+    props: []
+  - name: card-footer
+    family: card
+    props: []
+  - name: card-header
+    family: card
+    props: []
+  - name: card-title
+    family: card
+    props: []
+  - name: card
+    family: card
+    props: [variant]
+  - name: carousel-content
+    family: carousel
+    props: []
+  - name: carousel-item
+    family: carousel
+    props: []
+  - name: carousel-next
+    family: carousel
+    props: []
+  - name: carousel-previous
+    family: carousel
+    props: []
+  - name: carousel
+    family: carousel
+    props: [orientation, swipe]
+  - name: chart-container
+    family: chart
+    props: [config, id]
+  - name: chart-tooltip-content
+    family: chart
+    props: []
+  - name: chart
+    family: chart
+    props: [type, series, options, colors, config, labels, height, label]
+  - name: chat-message
+    family: chat
+    props: [role, name, time, avatar, typing]
+  - name: chat
+    family: chat
+    props: []
+  - name: checkbox
+    family: checkbox
+    props: [id, name, value, checked, disabled, indeterminate, native]
+  - name: citation
+    family: citation
+    props: [index, title, url, snippet]
+  - name: code-block
+    family: code
+    props: [filename]
+  - name: collapsible-content
+    family: collapsible
+    props: []
+  - name: collapsible-trigger
+    family: collapsible
+    props: []
+  - name: collapsible
+    family: collapsible
+    props: [open]
+  - name: color-picker
+    family: color
+    props: [name, value, swatches, disabled, inline, id]
+  - name: combobox-relationship
+    family: combobox
+    props: [label, options, selected, placeholder, quickAddUrl, quickAddTitle, required, class]
+  - name: combobox
+    family: combobox
+    props: [name, options, value, placeholder, searchPlaceholder, empty, width, searchable, disabled, multiple, trigger, size, icon, indicator, id]
+  - name: command-dialog
+    family: command
+    props: [title, description]
+  - name: command-empty
+    family: command
+    props: []
+  - name: command-group
+    family: command
+    props: [heading]
+  - name: command-input
+    family: command
+    props: [placeholder]
+  - name: command-item
+    family: command
+    props: [value, href, disabled]
+  - name: command-list
+    family: command
+    props: []
+  - name: command-separator
+    family: command
+    props: []
+  - name: command-shortcut
+    family: command
+    props: []
+  - name: command
+    family: command
+    props: []
+  - name: comparison-slider
+    family: comparison
+    props: [before, after, beforeLabel, afterLabel, beforeAlt, afterAlt, value]
+  - name: comparison-table
+    family: comparison
+    props: [tiers, rows, feature, values, highlight, featureLabel]
+  - name: confetti
+    family: confetti
+    props: [count, spread, colors, direction, spreadArc, fullscreen]
+  - name: container
+    family: container
+    props: [size]
+  - name: context-menu-checkbox-item
+    family: context
+    props: [checked, disabled, closeOnSelect]
+  - name: context-menu-content
+    family: context
+    props: []
+  - name: context-menu-group
+    family: context
+    props: []
+  - name: context-menu-item
+    family: context
+    props: [href, variant, inset, disabled]
+  - name: context-menu-label
+    family: context
+    props: [inset]
+  - name: context-menu-radio-group
+    family: context
+    props: [value]
+  - name: context-menu-radio-item
+    family: context
+    props: [value, closeOnSelect]
+  - name: context-menu-separator
+    family: context
+    props: []
+  - name: context-menu-shortcut
+    family: context
+    props: []
+  - name: context-menu-sub-content
+    family: context
+    props: []
+  - name: context-menu-sub-trigger
+    family: context
+    props: [inset]
+  - name: context-menu-sub
+    family: context
+    props: []
+  - name: context-menu-trigger
+    family: context
+    props: []
+  - name: context-menu
+    family: context
+    props: []
+  - name: cookie-consent
+    family: cookie
+    props: [position, customizable, demo]
+  - name: copy-button
+    family: copy
+    props: [value, label]
+  - name: countdown
+    family: countdown
+    props: [to, expired, labels]
+  - name: data-table
+    family: data
+    props: [columns, key, label, sortable, class, rows, name, email, searchable, searchKey, searchPlaceholder, selectable, pageSize, rowKey]
+  - name: date-picker
+    family: date
+    props: [mode, name, value, placeholder, numberOfMonths, captionLayout, weekStart, defaultMonth, min, max, minNights, maxNights, outOfRange, showOutsideDays, width, presets]
+  - name: datetime-picker
+    family: datetime
+    props: [mode, name, value, placeholder, hourCycle, timeVariant, seconds, minuteStep, captionLayout, min, max, minNights, maxNights, outOfRange, weekStart, numberOfMonths, defaultMonth, showOutsideDays, width]
+  - name: description-item
+    family: description
+    props: [term]
+  - name: description-list
+    family: description
+    props: [layout, bordered]
+  - name: dialog-close
+    family: dialog
+    props: []
+  - name: dialog-content
+    family: dialog
+    props: [showClose, fullscreen, position, closeOnOverlay]
+  - name: dialog-description
+    family: dialog
+    props: []
+  - name: dialog-footer
+    family: dialog
+    props: []
+  - name: dialog-header
+    family: dialog
+    props: []
+  - name: dialog-title
+    family: dialog
+    props: []
+  - name: dialog-trigger
+    family: dialog
+    props: [for]
+  - name: dialog
+    family: dialog
+    props: [open, id]
+  - name: diff-viewer
+    family: diff
+    props: [old, new, mode, filename]
+  - name: dock-item
+    family: dock
+    props: [icon, label, href, active]
+  - name: dock
+    family: dock
+    props: [magnify, distance]
+  - name: dot-pattern
+    family: dot
+    props: [size, gap, mask]
+  - name: drawer-close
+    family: drawer
+    props: []
+  - name: drawer-content
+    family: drawer
+    props: [direction, closeOnOverlay, size]
+  - name: drawer-description
+    family: drawer
+    props: []
+  - name: drawer-footer
+    family: drawer
+    props: []
+  - name: drawer-header
+    family: drawer
+    props: []
+  - name: drawer-title
+    family: drawer
+    props: []
+  - name: drawer-trigger
+    family: drawer
+    props: []
+  - name: drawer
+    family: drawer
+    props: [direction]
+  - name: dropdown-menu-checkbox-item
+    family: dropdown
+    props: [checked, disabled, closeOnSelect]
+  - name: dropdown-menu-content
+    family: dropdown
+    props: [align, side, sideOffset]
+  - name: dropdown-menu-group
+    family: dropdown
+    props: []
+  - name: dropdown-menu-item
+    family: dropdown
+    props: [href, variant, inset, disabled, closeOnSelect, type]
+  - name: dropdown-menu-label
+    family: dropdown
+    props: [inset]
+  - name: dropdown-menu-radio-group
+    family: dropdown
+    props: [value]
+  - name: dropdown-menu-radio-item
+    family: dropdown
+    props: [value, closeOnSelect]
+  - name: dropdown-menu-separator
+    family: dropdown
+    props: []
+  - name: dropdown-menu-shortcut
+    family: dropdown
+    props: []
+  - name: dropdown-menu-sub-content
+    family: dropdown
+    props: []
+  - name: dropdown-menu-sub-trigger
+    family: dropdown
+    props: [inset]
+  - name: dropdown-menu-sub
+    family: dropdown
+    props: []
+  - name: dropdown-menu-trigger
+    family: dropdown
+    props: []
+  - name: dropdown-menu
+    family: dropdown
+    props: []
+  - name: editable
+    family: editable
+    props: [name, value, as, placeholder, label, size, id]
+  - name: empty-content
+    family: empty
+    props: []
+  - name: empty-description
+    family: empty
+    props: []
+  - name: empty-header
+    family: empty
+    props: []
+  - name: empty-media
+    family: empty
+    props: [variant]
+  - name: empty-title
+    family: empty
+    props: []
+  - name: empty
+    family: empty
+    props: []
+  - name: field-content
+    family: field
+    props: []
+  - name: field-description
+    family: field
+    props: []
+  - name: field-error
+    family: field
+    props: [messages]
+  - name: field-group
+    family: field
+    props: []
+  - name: field-label
+    family: field
+    props: [for]
+  - name: field-legend
+    family: field
+    props: [variant]
+  - name: field-separator
+    family: field
+    props: []
+  - name: field-set
+    family: field
+    props: []
+  - name: field-title
+    family: field
+    props: []
+  - name: field
+    family: field
+    props: [orientation]
+  - name: file-upload
+    family: file
+    props: [name, multiple, accept, maxSizeLabel, value, id, disabled]
+  - name: filter-tabs
+    family: filter
+    props: [tabs, activeTab, param, default, class]
+  - name: flip-card
+    family: flip
+    props: [trigger, height]
+  - name: gallery
+    family: gallery
+    props: [images, columns, rounded]
+  - name: gantt
+    family: gantt
+    props: [tasks, name, start, end, progress, color, start, end, unit, today]
+  - name: gauge
+    family: gauge
+    props: [value, max, label, display]
+  - name: gradient-text
+    family: gradient
+    props: [from, via, to, preset, animate, as]
+  - name: grid-pattern
+    family: grid
+    props: [gap, lineWidth, mask]
+  - name: heatmap
+    family: heatmap
+    props: [data, levels]
+  - name: hover-card-content
+    family: hover
+    props: [align, side, sideOffset]
+  - name: hover-card-trigger
+    family: hover
+    props: []
+  - name: hover-card
+    family: hover
+    props: [openDelay, closeDelay]
+  - name: icon
+    family: icon
+    props: [name]
+  - name: image
+    family: image
+    props: [src, alt, ratio, placeholder, rounded, fit]
+  - name: import-modal
+    family: import
+    props: [title, sliceName, sampleColumns, sampleRows]
+  - name: infinite-scroll
+    family: infinite
+    props: [threshold]
+  - name: input-group-addon
+    family: input
+    props: [align]
+  - name: input-group-button
+    family: input
+    props: [size, variant, type]
+  - name: input-group-input
+    family: input
+    props: [type]
+  - name: input-group-text
+    family: input
+    props: []
+  - name: input-group
+    family: input
+    props: []
+  - name: input-mask
+    family: input
+    props: [mask, value, id, name, placeholder, inputmode]
+  - name: input-otp-group
+    family: input
+    props: []
+  - name: input-otp-separator
+    family: input
+    props: []
+  - name: input-otp-slot
+    family: input
+    props: [index]
+  - name: input-otp
+    family: input
+    props: [name, maxlength, value, disabled, alphanumeric, ariaLabel]
+  - name: input
+    family: input
+    props: [type, size, toggle, color]
+  - name: item-actions
+    family: item
+    props: []
+  - name: item-content
+    family: item
+    props: []
+  - name: item-description
+    family: item
+    props: []
+  - name: item-group
+    family: item
+    props: []
+  - name: item-media
+    family: item
+    props: [variant]
+  - name: item-separator
+    family: item
+    props: []
+  - name: item-title
+    family: item
+    props: []
+  - name: item
+    family: item
+    props: [variant, size, href]
+  - name: json-viewer-node
+    family: json
+    props: []
+  - name: json-viewer
+    family: json
+    props: [data, expanded, rootLabel]
+  - name: kanban
+    family: kanban
+    props: [id, title, cards, id, title, tags, meta, columns]
+  - name: kbd-group
+    family: kbd
+    props: []
+  - name: kbd
+    family: kbd
+    props: []
+  - name: knob
+    family: knob
+    props: [name, value, min, max, step, size, label, disabled]
+  - name: label
+    family: label
+    props: []
+  - name: link
+    family: link
+    props: [href, variant, external]
+  - name: loading-overlay
+    family: loading
+    props: [show, message, blur]
+  - name: map
+    family: map
+    props: [lat, lon, zoom, label, marker, height, ratio]
+  - name: markdown-editor
+    family: markdown
+    props: [name, value, placeholder, rows, id]
+  - name: marquee
+    family: marquee
+    props: [direction, duration, gap, pauseOnHover, fade]
+  - name: masonry
+    family: masonry
+    props: [columns, gap]
+  - name: mention-input
+    family: mention
+    props: [name, mentions, trigger, placeholder, rows, disabled, id]
+  - name: menu-checkbox-item
+    family: menu
+    props: [dataSlot, checked, disabled, closeOnSelect]
+  - name: menu-group
+    family: menu
+    props: [dataSlot, labelSlot, compact]
+  - name: menu-item
+    family: menu
+    props: [dataSlot, classes]
+  - name: menu-label
+    family: menu
+    props: [dataSlot, classes, inset]
+  - name: menu-radio-item
+    family: menu
+    props: [dataSlot, value, closeOnSelect]
+  - name: menu-separator
+    family: menu
+    props: [dataSlot]
+  - name: menu-shortcut
+    family: menu
+    props: [dataSlot]
+  - name: menubar-checkbox-item
+    family: menubar
+    props: [checked, disabled, closeOnSelect]
+  - name: menubar-content
+    family: menubar
+    props: [align, side, sideOffset]
+  - name: menubar-group
+    family: menubar
+    props: []
+  - name: menubar-item
+    family: menubar
+    props: [href, variant, inset, disabled]
+  - name: menubar-label
+    family: menubar
+    props: [inset]
+  - name: menubar-menu
+    family: menubar
+    props: []
+  - name: menubar-radio-group
+    family: menubar
+    props: [value]
+  - name: menubar-radio-item
+    family: menubar
+    props: [value, closeOnSelect]
+  - name: menubar-separator
+    family: menubar
+    props: []
+  - name: menubar-shortcut
+    family: menubar
+    props: []
+  - name: menubar-sub-content
+    family: menubar
+    props: []
+  - name: menubar-sub-trigger
+    family: menubar
+    props: [inset]
+  - name: menubar-sub
+    family: menubar
+    props: []
+  - name: menubar-trigger
+    family: menubar
+    props: []
+  - name: menubar
+    family: menubar
+    props: []
+  - name: meteors
+    family: meteors
+    props: [count, color]
+  - name: meter
+    family: meter
+    props: [value, min, max, label, tone, low, high, optimum, showValue, unit]
+  - name: mini-cart
+    family: mini
+    props: [items, currency, open]
+  - name: navigation-menu-content
+    family: navigation
+    props: []
+  - name: navigation-menu-item
+    family: navigation
+    props: []
+  - name: navigation-menu-link
+    family: navigation
+    props: [href, active]
+  - name: navigation-menu-list
+    family: navigation
+    props: []
+  - name: navigation-menu-trigger
+    family: navigation
+    props: []
+  - name: navigation-menu
+    family: navigation
+    props: []
+  - name: notification-center
+    family: notification
+    props: [notifications, open, viewAllHref, viewAllLabel, navigate]
+  - name: number-input
+    family: number
+    props: [name, value, min, max, step, decimals, nullable, size, disabled, id, placeholder]
+  - name: number-ticker
+    family: number
+    props: [value, from, duration, decimals, prefix, suffix, separator]
+  - name: onboarding-tour
+    family: onboarding
+    props: [steps, open]
+  - name: org-chart-node
+    family: org
+    props: []
+  - name: org-chart
+    family: org
+    props: [root, data]
+  - name: page-architecture-plan
+    family: page
+    props: [ui, sliceName, domain, module, editable, id]
+  - name: page-header
+    family: page
+    props: [title, description, separator, as]
+  - name: pagination-content
+    family: pagination
+    props: []
+  - name: pagination-ellipsis
+    family: pagination
+    props: []
+  - name: pagination-item
+    family: pagination
+    props: []
+  - name: pagination-link
+    family: pagination
+    props: [href, isActive, size]
+  - name: pagination-next
+    family: pagination
+    props: [href, label, ariaLabel]
+  - name: pagination-previous
+    family: pagination
+    props: [href, label, ariaLabel]
+  - name: pagination
+    family: pagination
+    props: []
+  - name: parallax
+    family: parallax
+    props: [speed, axis]
+  - name: password-strength
+    family: password
+    props: [name, id, placeholder, showChecklist, minLength, size, label]
+  - name: phone-input
+    family: phone
+    props: [name, id, value, country, placeholder]
+  - name: popover-content
+    family: popover
+    props: [align, side, sideOffset, label]
+  - name: popover-trigger
+    family: popover
+    props: []
+  - name: popover
+    family: popover
+    props: []
+  - name: presence
+    family: presence
+    props: [status, size, pulse, label, showLabel]
+  - name: price
+    family: price
+    props: [amount, compareAt, currency, size, showDiscount]
+  - name: product-card
+    family: product
+    props: [href, imageAlt, price, compareAt, currency, badge, category, rating, reviews, wishlist]
+  - name: profile
+    family: profile
+    props: [name, avatar, initials, description, as, href, size, chevron]
+  - name: progress
+    family: progress
+    props: [value, indeterminate, ariaLabel, circular, size, thickness, showValue]
+  - name: prompt-input
+    family: prompt
+    props: [name, placeholder, attachable, disabled, id, rows, maxRows]
+  - name: qr-code
+    family: qr
+    props: [value, size, ecc, margin, alt]
+  - name: quote
+    family: quote
+    props: [author, role, avatar, cite]
+  - name: radio-group-item
+    family: radio
+    props: [value, id, disabled]
+  - name: radio-group
+    family: radio
+    props: [name, value]
+  - name: rating
+    family: rating
+    props: [name, value, max, readonly, size, icon, color, id]
+  - name: reasoning
+    family: reasoning
+    props: [open, label, duration, id]
+  - name: relation-manager
+    family: relation
+    props: [description, createUrl, createButtonText, columns, key, label, records, emptyMessage, class]
+  - name: repeater
+    family: repeater
+    props: [label, fields, name, label, type, required, options, initialItems, minItems, maxItems, addButtonText, class]
+  - name: resizable-handle
+    family: resizable
+    props: [withHandle]
+  - name: resizable-panel-group
+    family: resizable
+    props: [direction]
+  - name: resizable-panel
+    family: resizable
+    props: [primary]
+  - name: rich-text-editor
+    family: rich
+    props: [name, value, placeholder, id]
+  - name: row-actions
+    family: row
+    props: [viewUrl, editUrl, deleteUrl, deleteConfirm, viewOverlay, editOverlay]
+  - name: scheduler
+    family: scheduler
+    props: [events, day, start, end, days, startHour, endHour, view, label]
+  - name: scroll-area
+    family: scroll
+    props: []
+  - name: scrollspy
+    family: scrollspy
+    props: [items]
+  - name: searchable-select
+    family: searchable
+    props: [name, options, value, placeholder, searchPlaceholder, empty, required, disabled, multiple, id, includeAll, allLabel]
+  - name: segmented-control
+    family: segmented
+    props: [name, options, value, size, disabled]
+  - name: select-content
+    family: select
+    props: [align, side, sideOffset, indicator]
+  - name: select-group
+    family: select
+    props: []
+  - name: select-item
+    family: select
+    props: [value, disabled, indicator]
+  - name: select-label
+    family: select
+    props: []
+  - name: select-separator
+    family: select
+    props: []
+  - name: select-trigger
+    family: select
+    props: [size, ariaLabel]
+  - name: select-value
+    family: select
+    props: [placeholder]
+  - name: select
+    family: select
+    props: [name, value, native, size, multiple, options, placeholder, color, indicator]
+  - name: separator
+    family: separator
+    props: [orientation, decorative]
+  - name: server-table
+    family: server
+    props: [columns, key, label, sortable, align, class, width, rows, rowKey, sort, direction, sortMethod, actions, actionsView, actionsLabel, actionsMode, stickyActions, cellViews, selectable, selectModel, searchable, searchModel, searchPlaceholder, perPageModel, perPageOptions, perPageLabel, toggleableColumns, visibleColumns, toggleColumnMethod, columnsLabel, caption, captionVisible, emptyText, emptyIcon, responsive, variant, paginate]
+  - name: server-tree-table
+    family: server
+    props: [columns, key, label, sortable, align, class, width, rows, rowKey, childrenKey, parentKey, treeColumn, expanded, expandAll, expandedModel, reorderable, reorderMethod, reparent, sort, direction, sortMethod, actions, actionsView, actionsLabel, actionsMode, cellViews, searchable, searchModel, searchPlaceholder, perPageModel, perPageOptions, perPageLabel, caption, captionVisible, emptyText, emptyIcon, responsive, variant, paginate]
+  - name: sheet-content
+    family: sheet
+    props: [side, showClose, closeOnOverlay]
+  - name: sheet-description
+    family: sheet
+    props: []
+  - name: sheet-footer
+    family: sheet
+    props: []
+  - name: sheet-header
+    family: sheet
+    props: []
+  - name: sheet-title
+    family: sheet
+    props: []
+  - name: sheet-trigger
+    family: sheet
+    props: [for]
+  - name: sheet
+    family: sheet
+    props: [open, id]
+  - name: sidebar-content
+    family: sidebar
+    props: []
+  - name: sidebar-footer
+    family: sidebar
+    props: []
+  - name: sidebar-group-content
+    family: sidebar
+    props: []
+  - name: sidebar-group-label
+    family: sidebar
+    props: []
+  - name: sidebar-group
+    family: sidebar
+    props: []
+  - name: sidebar-header
+    family: sidebar
+    props: []
+  - name: sidebar-input
+    family: sidebar
+    props: []
+  - name: sidebar-inset
+    family: sidebar
+    props: []
+  - name: sidebar-menu-action
+    family: sidebar
+    props: [showOnHover]
+  - name: sidebar-menu-badge
+    family: sidebar
+    props: []
+  - name: sidebar-menu-button
+    family: sidebar
+    props: [href, isActive, variant, size, tooltip]
+  - name: sidebar-menu-item
+    family: sidebar
+    props: []
+  - name: sidebar-menu-sub-button
+    family: sidebar
+    props: [href, isActive, size]
+  - name: sidebar-menu-sub-item
+    family: sidebar
+    props: []
+  - name: sidebar-menu-sub
+    family: sidebar
+    props: []
+  - name: sidebar-menu
+    family: sidebar
+    props: []
+  - name: sidebar-provider
+    family: sidebar
+    props: [defaultOpen, mobileBreakpoint]
+  - name: sidebar-rail
+    family: sidebar
+    props: []
+  - name: sidebar-separator
+    family: sidebar
+    props: []
+  - name: sidebar-trigger
+    family: sidebar
+    props: [label]
+  - name: sidebar
+    family: sidebar
+    props: [side, variant, collapsible]
+  - name: signature-pad
+    family: signature
+    props: [name, height, penColor, id]
+  - name: skeleton
+    family: skeleton
+    props: []
+  - name: slider
+    family: slider
+    props: [name, min, max, step, value, range, orientation, disabled, ariaLabel]
+  - name: sonner-flash
+    family: sonner
+    props: []
+  - name: sonner
+    family: sonner
+    props: [position, expand]
+  - name: sparkline
+    family: sparkline
+    props: [data, width, height, area, strokeWidth, ariaLabel]
+  - name: speed-dial
+    family: speed
+    props: [actions, icon, label, href, direction, open, icon, label]
+  - name: spinner
+    family: spinner
+    props: [icon]
+  - name: spotlight-card
+    family: spotlight
+    props: [color, size]
+  - name: stack
+    family: stack
+    props: [direction, gap, align, justify, wrap]
+  - name: stat
+    family: stat
+    props: [label, value, change, trend, icon, caption, series]
+  - name: status-pill
+    family: status
+    props: [status, label, color, size, pulse]
+  - name: stepper-content
+    family: stepper
+    props: [step]
+  - name: stepper-description
+    family: stepper
+    props: []
+  - name: stepper-indicator
+    family: stepper
+    props: []
+  - name: stepper-item
+    family: stepper
+    props: [step, disabled]
+  - name: stepper-nav
+    family: stepper
+    props: []
+  - name: stepper-separator
+    family: stepper
+    props: []
+  - name: stepper-title
+    family: stepper
+    props: []
+  - name: stepper-trigger
+    family: stepper
+    props: []
+  - name: stepper
+    family: stepper
+    props: [value, orientation]
+  - name: streaming-text
+    family: streaming
+    props: [text, speed, startDelay, by, caret, autostart]
+  - name: switch
+    family: switch
+    props: [id, name, value, checked, disabled, size]
+  - name: table-body
+    family: table
+    props: []
+  - name: table-caption
+    family: table
+    props: []
+  - name: table-cell
+    family: table
+    props: []
+  - name: table-footer
+    family: table
+    props: []
+  - name: table-head
+    family: table
+    props: []
+  - name: table-header
+    family: table
+    props: []
+  - name: table-row
+    family: table
+    props: []
+  - name: table
+    family: table
+    props: [variant]
+  - name: tabs-content
+    family: tabs
+    props: [value]
+  - name: tabs-list
+    family: tabs
+    props: [variant]
+  - name: tabs-trigger
+    family: tabs
+    props: [value, disabled]
+  - name: tabs
+    family: tabs
+    props: [tabs, defaultTab, class]
+  - name: tags-input
+    family: tags
+    props: [name, value, placeholder, max, disabled, id]
+  - name: terminal
+    family: terminal
+    props: [title, buttons]
+  - name: text-reveal
+    family: text
+    props: [as]
+  - name: textarea
+    family: textarea
+    props: [size, color, rows, maxRows]
+  - name: tilt-card
+    family: tilt
+    props: [max, scale, glare]
+  - name: time-field
+    family: time
+    props: [name, value, variant, hourCycle, seconds, minuteStep, secondStep, min, max, disabled, id, part]
+  - name: timeline-item
+    family: timeline
+    props: [icon, time, title, active]
+  - name: timeline
+    family: timeline
+    props: []
+  - name: toggle-group-item
+    family: toggle
+    props: [value, disabled]
+  - name: toggle-group
+    family: toggle
+    props: [type, value, variant, size, orientation]
+  - name: toggle
+    family: toggle
+    props: [variant, size, pressed, disabled]
+  - name: tool-call
+    family: tool
+    props: [name, status, args, result, open, id]
+  - name: tooltip-content
+    family: tooltip
+    props: [side, align, sideOffset, arrow, state]
+  - name: tooltip-trigger
+    family: tooltip
+    props: []
+  - name: tooltip
+    family: tooltip
+    props: [delay]
+  - name: top-progress
+    family: top
+    props: [color, height, demo]
+  - name: tree-node
+    family: tree
+    props: [item, label, icon, children, expanded, level, first]
+  - name: tree-table-row
+    family: tree
+    props: [row, children, columns, path, depth]
+  - name: tree-table
+    family: tree
+    props: [columns, key, label, align, rows, name, size, children, copyable]
+  - name: tree
+    family: tree
+    props: [items, label, icon, children, expanded]
+  - name: typewriter
+    family: typewriter
+    props: [words, typeSpeed, deleteSpeed, pause, loop, cursor]
+  - name: typography
+    family: typography
+    props: [variant, as]
+  - name: variant-selector
+    family: variant
+    props: [name, options, value, type, label, disabled]
+  - name: video
+    family: video
+    props: [src, poster, aspect, controls, autoplay, loop, muted, rounded]
+  - name: visually-hidden
+    family: visually
+    props: [as, focusable]
+  - name: week-strip
+    family: week
+    props: [days]
+  - name: widget-card
+    family: widget
+    props: [title, icon, href, actionLabel]
