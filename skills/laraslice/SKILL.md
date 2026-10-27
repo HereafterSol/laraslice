@@ -5,7 +5,7 @@ description: Architectural standards, CLI commands, Declarative Schemas, multi-t
 
 # LaraSlice Framework & AI Assistant Skill
 
-> **Release baseline:** Prefer **`hereafter/laraslice` v2.0.1+** ([Verification Patch](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1)) for ports and replicas. Use `--import-auth` on data import, run `slice:drift` (zero errors) before parity claims, and maintain `porting/REPLICA-STATUS.md` per §22 (lowest gate = status). **Do not confuse framework architecture with a finished replica:** `docs/ARCHITECTURE-VS-PORT-TRUTH.md`. Framework backlog: `docs/BACKLOG.md` in the package repo.
+> **Release baseline:** Prefer **`hereafter/laraslice` v2.0.1+** ([Verification Patch](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1)) for ports and replicas. Use `--import-auth` on data import, run `slice:drift` (zero errors) before parity claims, and maintain `porting/REPLICA-STATUS.md` per §22 (lowest gate = status). **Do not confuse framework architecture with a finished replica:** `docs/ARCHITECTURE-VS-PORT-TRUTH.md`. **Vision & Worksuite crucible:** `docs/VISION.md`. Framework backlog: `docs/BACKLOG.md` in the package repo.
 
 
 This skill provides comprehensive instructions for AI agents and developers working on **LaraSlice** applications. It covers the Three-Layer Packaging Model (ADR-001), Vertical Slice Architecture, Pure BlatUI tokens, Declarative Schema Builder, multi-table aggregate patterns, cross-slice communication, and deep integration with **Laravel Boost**.

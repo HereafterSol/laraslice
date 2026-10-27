@@ -7,6 +7,8 @@ Readers confuse two different questions:
 
 This page keeps them separate so marketing, AI agents, and project owners quote the right truth.
 
+**Founder intent:** Worksuite is the **deliberate stress test** for the foundation — we *want* a deep ERP port to prove the approach. That ambition does not replace gates; it **requires** them. See [VISION.md](VISION.md).
+
 ---
 
 ## What the framework promises
