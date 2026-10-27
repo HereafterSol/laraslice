@@ -34,6 +34,14 @@ abstract class TestCase extends Orchestra
     {
         parent::setUp();
 
+        // The test slices path is one shared temp directory: clear any
+        // slices a previous test class generated (not every class cleans
+        // up after itself), so generation in this test starts empty.
+        $slicesPath = config('laraslice.slices_path');
+        if (is_string($slicesPath) && $slicesPath !== '' && is_dir($slicesPath)) {
+            $this->app['files']->deleteDirectory($slicesPath);
+        }
+
         $this->app['view']->addLocation(dirname(__DIR__).'/resources/stubs/starter/views');
     }
 

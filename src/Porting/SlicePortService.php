@@ -371,7 +371,15 @@ class SlicePortService
         }
 
         $dataImport = null;
+        $migrationRun = null;
         if ($importData) {
+            // Migrations BEFORE the ETL stream: when scaffolding and
+            // data import are requested in one invocation, the target
+            // tables must exist before rows are streamed into them.
+            // (Previously the import ran first and silently imported
+            // 0 rows into not-yet-migrated tables.)
+            $migrationRun = $this->runTargetMigrations();
+
             try {
                 $dataPortService = new SliceDataPortService;
                 $dataPortService->setImportAuth($importAuth);
@@ -400,6 +408,7 @@ class SlicePortService
             'bytes_migrated' => $bytesMigrated,
             'tables_count' => $inspection['total_tables'],
             'unmapped_pivots' => $inspection['unmapped_pivots'] ?? [],
+            'migrations' => $migrationRun,
             'data_import' => $dataImport,
         ];
     }
@@ -3241,6 +3250,94 @@ public function analyzeSourceNavigation(string $sourcePath): array
     }
 
     /**
+     * Run pending migrations for the target application: the standard
+     * migration paths first, then every slice Migrations folder under
+     * the slices path.
+     *
+     * Slice migration paths are registered with the migrator when slices
+     * are discovered, but a slice scaffolded seconds ago in the same
+     * process may not be registered yet — the explicit per-path pass
+     * guarantees its tables exist before any ETL import streams rows
+     * into them. Port flows must call this BEFORE importing data:
+     * importing into not-yet-migrated tables imports nothing.
+     *
+     * @return array{paths: array<int, string>, outputs: array<int, string>, errors: array<string, string>}
+     */
+    public function runTargetMigrations(): array
+    {
+        $outputs = [];
+        $errors = [];
+
+        // 1. Run standard migrate (host + package + already-registered slice paths)
+        try {
+            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            $out = trim((string) \Illuminate\Support\Facades\Artisan::output());
+            if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
+                $outputs[] = $out;
+            }
+        } catch (\Throwable $e) {
+            $errors['default'] = $e->getMessage();
+        }
+
+        // 2. Discover every slice Migrations folder under the slices path
+        $paths = [];
+        $slicesBasePath = (string) config('laraslice.slices_path', app_path('Slices'));
+        if (is_dir($slicesBasePath)) {
+            $rdi = new \RecursiveDirectoryIterator($slicesBasePath, \RecursiveDirectoryIterator::SKIP_DOTS);
+            $rii = new \RecursiveIteratorIterator($rdi, \RecursiveIteratorIterator::SELF_FIRST);
+            foreach ($rii as $item) {
+                if ($item->isDir() && strtolower($item->getFilename()) === 'migrations') {
+                    $mp = $item->getRealPath();
+                    if ($mp && ! in_array($mp, $paths, true)) {
+                        $paths[] = $mp;
+                    }
+                }
+            }
+        }
+
+        // 3. Explicitly migrate each discovered slice migration folder
+        foreach ($paths as $mp) {
+            $relative = str_replace([base_path().DIRECTORY_SEPARATOR, base_path().'/'], '', $mp);
+            $relative = str_replace('\\', '/', $relative);
+            // A folder outside base_path() has no valid relative form —
+            // go straight to --realpath (a bogus relative --path is a
+            // silent no-op in the migrator, not an error).
+            $useRealpath = $relative === str_replace('\\', '/', $mp);
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', array_filter([
+                    '--force' => true,
+                    '--realpath' => $useRealpath ? true : null,
+                    '--path' => $useRealpath ? $mp : $relative,
+                ]));
+                $out = trim((string) \Illuminate\Support\Facades\Artisan::output());
+                if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
+                    $outputs[] = $out;
+                }
+            } catch (\Throwable $pe) {
+                if ($useRealpath) {
+                    $errors[$relative] = $pe->getMessage();
+                    continue;
+                }
+                try {
+                    \Illuminate\Support\Facades\Artisan::call('migrate', [
+                        '--force' => true,
+                        '--realpath' => true,
+                        '--path' => $mp,
+                    ]);
+                    $out = trim((string) \Illuminate\Support\Facades\Artisan::output());
+                    if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
+                        $outputs[] = $out;
+                    }
+                } catch (\Throwable $e) {
+                    $errors[$relative] = $e->getMessage();
+                }
+            }
+        }
+
+        return ['paths' => $paths, 'outputs' => $outputs, 'errors' => $errors];
+    }
+
+    /**
      * Execute full vertical slice generation and migration directly from a structured Architecture Plan.
      */
     /**
@@ -3526,11 +3623,17 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
         }
 
-        // Run migrations
-        try {
-            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        } catch (\Throwable $e) {
-            $errors['migrations'] = $e->getMessage();
+        // Run migrations (standard paths + every scaffolded slice's
+        // Migrations folder) BEFORE the ETL below streams any rows:
+        // importing into not-yet-migrated tables silently imports
+        // nothing.
+        $migrationRun = $this->runTargetMigrations();
+        if (! empty($migrationRun['errors'])) {
+            $errors['migrations'] = implode('; ', array_map(
+                fn ($path, $message) => "[{$path}] {$message}",
+                array_keys($migrationRun['errors']),
+                array_values($migrationRun['errors'])
+            ));
         }
 
         // Run ETL data import if requested
@@ -4025,7 +4128,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
      * - email → text (with mailto in UI)
      * - *_id (FK) → text (resolves to related name in UI)
      */
-    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = [], ?array $workflow = null, ?string $sourcePath = null): array
+    public function buildUiFromInspectedFields(string $sliceName, array $fields, string $tenantKey = 'company_id', array $relations = [], ?array $workflow = null, ?string $sourcePath = null, ?array $ownScope = null): array
     {
         $columns = [];
         $formFields = [];
@@ -4239,32 +4342,63 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $views[] = 'calendar';
         }
 
-        // Dashboard widgets (YAML-centric) — KPI + list patterns from ERP demo
+        // Dashboard widgets (YAML-centric) — KPI + list patterns from ERP demo.
+        // Widget types must be ones DashboardUi can render: its dispatch
+        // covers counter/table/calendar/list/week/chart/today/clock/
+        // people_dates/profile/schedule and resolves anything else to
+        // null. The previous emission used 'stat' (and 'board_preview'),
+        // which exist nowhere in the dispatch — every widget on a fresh
+        // port was silently dropped and the dashboard rendered empty.
+        // Count widgets are 'counter'; the by-status breakdown is a
+        // 'chart' grouped by status.
+        //
+        // Portal parity: when the slice's declared access.own_scope
+        // clauses are available at emission time ($ownScope — the same
+        // list shape manifests declare under access.own_scope), the
+        // counters carry scope: own with the first clause inline, the
+        // shape DashboardUi and the flagship dashboards consume. When
+        // no own-scope info is available the counters stay unscoped.
+        $ownClause = null;
+        foreach ((array) $ownScope as $clause) {
+            if (! is_array($clause)) {
+                continue;
+            }
+            if (! empty($clause['field'])) {
+                $ownClause = ['field' => (string) $clause['field']];
+                break;
+            }
+            if (! empty($clause['relation'])) {
+                $ownClause = ['relation' => (string) $clause['relation'], 'key' => (string) ($clause['key'] ?? 'id')];
+                break;
+            }
+        }
+        $counterScope = $ownClause !== null ? ['scope' => 'own', 'own' => $ownClause] : [];
+
         $dashboard = [
             'enabled' => true,
             'widgets' => [
                 [
-                    'type' => 'stat',
+                    'type' => 'counter',
                     'handle' => 'total',
                     'label' => 'Total',
-                    'query' => 'count',
+                    'aggregate' => 'count',
                     'roles' => ['admin', 'employee', 'client'],
-                ],
+                ] + $counterScope,
             ],
         ];
         if ($hasStatus) {
             $dashboard['widgets'][] = [
-                'type' => 'stat',
+                'type' => 'counter',
                 'handle' => 'open',
                 'label' => 'Open',
-                'query' => 'count',
+                'aggregate' => 'count',
                 'filter' => ['status' => ['draft', 'pending', 'open', 'to_do', 'todo', 'doing', 'in_progress']],
                 'roles' => ['admin', 'employee', 'client'],
-            ];
+            ] + $counterScope;
             $dashboard['widgets'][] = [
-                'type' => 'board_preview',
+                'type' => 'chart',
                 'handle' => 'by_status',
-                'label' => 'By status',
+                'title' => 'By status',
                 'group_by' => 'status',
                 'roles' => ['admin', 'employee'],
             ];

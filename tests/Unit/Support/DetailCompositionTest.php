@@ -39,9 +39,14 @@ class DetailCompositionTest extends TestCase
 
         $tabs = DirectoryUi::relatedTabsFromManifest($manifest);
 
-        $this->assertSame(['items', 'payments'], array_column($tabs, 'relation'));
+        // Hub tab curation (27 Oct 2026): the declared audit tab
+        // now RESOLVES (it was silently dropped before) — it sits
+        // in declared position with an empty relation.
+        $this->assertSame(['items', '', 'payments'], array_column($tabs, 'relation'));
         $this->assertSame('Lines', $tabs[0]['label'], 'declared tab label wins over relation fallbacks');
-        $this->assertSame('Payments', $tabs[1]['label']);
+        $this->assertSame('audit', $tabs[1]['type']);
+        $this->assertSame('Activity', $tabs[1]['label']);
+        $this->assertSame('Payments', $tabs[2]['label']);
     }
 
     public function test_repeater_fields_become_tabs_when_nothing_else_declared(): void

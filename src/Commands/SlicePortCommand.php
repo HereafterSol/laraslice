@@ -166,6 +166,7 @@ class SlicePortCommand extends Command
             if (! empty($result['data_import'])) {
                 $di = $result['data_import'];
                 $this->info("✓ ETL Data Streaming: {$di['tables_imported']} tables imported, " . number_format($di['total_rows']) . " rows migrated!");
+                $this->surfaceDataImportWarnings($di);
             }
 
             $this->line('');
@@ -317,6 +318,13 @@ class SlicePortCommand extends Command
             }
         }
 
+        // When --scaffold is part of this same invocation, defer the
+        // data import until AFTER the slices are scaffolded and their
+        // migrations have run (see the post-scaffold block below).
+        // Importing inside execute() at this point would stream rows
+        // into tables that do not exist yet and import nothing.
+        $deferredImport = (bool) $this->option('scaffold') && $mode === 'full-data';
+
         try {
             $importAuth = (bool) $this->option('import-auth');
             if ($importAuth) {
@@ -324,7 +332,7 @@ class SlicePortCommand extends Command
             } else {
                 $this->line('<fg=gray>Auth tables protected: roles/permissions skipped, users merged by email.</>');
             }
-            $result = $portService->execute($source, $domain, $mode, $withFiles, $mode === 'full-data', $sourceConnection, $importAuth);
+            $result = $portService->execute($source, $domain, $mode, $withFiles, $mode === 'full-data' && ! $deferredImport, $sourceConnection, $importAuth);
         } catch (\Throwable $e) {
             $this->error("Porting execution failed: {$e->getMessage()}");
             return self::FAILURE;
@@ -332,6 +340,16 @@ class SlicePortCommand extends Command
 
         $this->info("✓ Domain blueprint synthesized: {$result['domain_blueprint']}");
         $this->info("✓ Vertical Slices mapped: " . implode(', ', $result['slices_generated']));
+
+        if (! empty($result['data_import']) && is_array($result['data_import'])) {
+            $di = $result['data_import'];
+            if (! empty($di['error'])) {
+                $this->error("Data import failed: {$di['error']}");
+            } else {
+                $this->info("✓ ETL Data Streaming: " . ($di['tables_imported'] ?? 0) . " tables imported, " . number_format($di['total_rows'] ?? 0) . " rows migrated!");
+                $this->surfaceDataImportWarnings($di);
+            }
+        }
 
         if (! empty($result['seeders_generated'])) {
             $this->info("✓ Master seeders generated: " . count($result['seeders_generated']) . " file(s)");
@@ -363,11 +381,24 @@ class SlicePortCommand extends Command
                 }
             }
 
-            // Handle --import-data with --scaffold (executeFromPlan is bypassed)
-            if ($this->option('import-data')) {
+            // Handle data import with --scaffold (executeFromPlan is bypassed).
+            // ORDER IS LOAD-BEARING: scaffold → migrate → import. The ETL
+            // used to run immediately after scaffolding, while the new
+            // slices' tables did not exist yet — it imported 0 rows and
+            // reported success.
+            if ($this->option('import-data') || $deferredImport) {
+                $this->comment("⚙️  Running migrations for scaffolded slices (before data import)...");
+                $migrationRun = $portService->runTargetMigrations();
+                if (! empty($migrationRun['errors'])) {
+                    foreach ($migrationRun['errors'] as $mp => $err) {
+                        $this->warn("  [migrations:{$mp}] {$err}");
+                    }
+                }
+
                 $this->comment("⚙️  Importing data via ETL...");
                 try {
                     $dataPortService = new \LaraSlice\Porting\SliceDataPortService;
+                    $dataPortService->setImportAuth($importAuth);
                     $dataImport = $dataPortService->importFromDatabase(
                         $sourceConnection['database'] ?? 'erp',
                         $sourceConnection['host'] ?? '127.0.0.1',
@@ -380,6 +411,7 @@ class SlicePortCommand extends Command
                     } else {
                         $this->warn("Data import completed with issues.");
                     }
+                    $this->surfaceDataImportWarnings($dataImport);
                 } catch (\Throwable $e) {
                     $this->error("Data import failed: " . $e->getMessage());
                 }
@@ -391,6 +423,28 @@ class SlicePortCommand extends Command
         $this->info("You can now open /laraslice/wizard in your browser to view the active modules and slices.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Surface the loud parts of a data-import result: tables whose
+     * target did not exist (their rows were NOT imported) and the
+     * auth-skip warning (data imported without role assignments).
+     * A port must never look silently successful when either happened.
+     *
+     * @param  array<string, mixed>  $dataImport
+     */
+    private function surfaceDataImportWarnings(array $dataImport): void
+    {
+        $missing = $dataImport['missing_target_tables'] ?? [];
+        if (is_array($missing) && $missing !== []) {
+            $this->warn('⚠ Data import skipped ' . count($missing) . ' table(s) whose target tables do not exist: '
+                . implode(', ', $missing)
+                . '. Those rows were NOT imported — run the target migrations and re-run the import.');
+        }
+
+        if (! empty($dataImport['auth_warning'])) {
+            $this->warn('⚠ ' . $dataImport['auth_warning']);
+        }
     }
 
     /**

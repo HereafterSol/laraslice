@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://packagist.org/packages/hereafter/laraslice"><img src="https://img.shields.io/badge/composer-hereafter%2Flaraslice-orange.svg" alt="Composer Package"></a>
-  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v2.0.0-amber.svg" alt="Latest Version"></a>
+  <a href="https://github.com/hereaftersol/laraslice"><img src="https://img.shields.io/badge/release-v2.0.1-amber.svg" alt="Latest Version"></a>
   <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-red.svg" alt="Laravel Version"></a>
   <a href="https://php.net"><img src="https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-blue.svg" alt="PHP Version"></a>
   <a href="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml"><img src="https://github.com/hereaftersol/laraslice/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
@@ -37,6 +37,15 @@ Every LaraSlice system is described by three plain files anyone can read:
 - **Heart** (`slice.yaml`, one per slice) — *what runs*: data, fields, relations, UI declarations, workflows, settings. The only runtime truth; the Mind and Body are checked against it, never the reverse.
 
 The **soul** — your design identity (design system, density, refinement) — is declared in the Mind and realized by the Heart's runtime. Porting drafts all three files from the old system; a fresh project writes the Mind first and generates the rest. Full guide: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md).
+
+## 🆕 What's new in v2.0.1 — The Verification Patch
+
+v2.0.1 is what an independent verification programme found in v2.0.0 — the full suite on a second platform, a fresh flagship install, and a from-scratch re-port of a production application — fixed:
+
+- **Porting that cannot fail silently.** Combined scaffold + import migrates before it imports and reports skipped tables by name; porting without auth import warns instead of leaving every user permission-less.
+- **Porter output that renders.** Generated manifests declare their root model; generated dashboard widgets are real `counter`/`chart` definitions, own-scoped where the slice declares its scope.
+- **Fully curatable hubs.** Tab exclusion declarations, audit tabs that render the record's trail, and declared fields-tab labels.
+- **Portal scoping, field-validated.** Own-scoped dashboard counters read the source's per-person figures exactly on an independent port. Full suite: 555 tests green on two platforms.
 
 ## 🆕 What's new in v2.0.0 — The Foundation Release
 

@@ -135,9 +135,17 @@ HTML;
 HTML;
                 }
 
-                $target = '<div class="flex items-center justify-end';
-                if (str_contains($content, $target)) {
-                    $content = str_replace($target, $snippet."\n\n            ".$target, $content);
+                // Anchor on the form's actions bar: current
+                // templates mark it with the sticky-bar comment;
+                // older generations used a justify-end actions div.
+                // Insert before the FIRST anchor only — a field must
+                // land exactly once in the form.
+                foreach (['<!-- Sticky Bottom Form Actions Bar -->', '<div class="flex items-center justify-end'] as $target) {
+                    $pos = strpos($content, $target);
+                    if ($pos !== false) {
+                        $content = substr_replace($content, $snippet."\n\n            ", $pos, 0);
+                        break;
+                    }
                 }
             }
 

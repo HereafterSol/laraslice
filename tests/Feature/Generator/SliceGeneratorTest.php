@@ -5,6 +5,7 @@ namespace LaraSlice\Tests\Feature\Generator;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
 use InvalidArgumentException;
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Generator\SliceGenerator;
 use PHPUnit\Framework\TestCase;
 
@@ -42,7 +43,8 @@ class SliceGeneratorTest extends TestCase
         $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Purchase Order');
 
         $this->assertDirectoryExists($path);
-        $this->assertFileExists($path.'/slice.json');
+        $this->assertFileExists($path.'/slice.yaml');
+        $this->assertFileDoesNotExist($path.'/slice.json', 'Phase 4: the manifest is YAML only, no JSON twin');
         $this->assertFileExists($path.'/Models/PurchaseOrder.php');
         $this->assertDirectoryExists($path.'/Migrations');
         $this->assertFileExists($path.'/Resources/views/index.blade.php');
@@ -73,7 +75,7 @@ class SliceGeneratorTest extends TestCase
         $model = file_get_contents($path.'/Models/PurchaseOrder.php');
         $service = file_get_contents($path.'/Services/PurchaseOrderSliceService.php');
         $schema = file_get_contents($path.'/Schemas/PurchaseOrderSchema.php');
-        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::readFromSliceDir($path);
 
         $this->assertStringContainsString("\$table->string('sku');", $migration);
         $this->assertStringContainsString("\$table->decimal('unit_price', 12, 2);", $migration);
@@ -113,7 +115,7 @@ class SliceGeneratorTest extends TestCase
             'api' => false,
         ]);
 
-        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::readFromSliceDir($path);
 
         $this->assertSame('Security audit entries', $manifest['description']);
         $this->assertSame('QA Team', $manifest['author']);
@@ -152,7 +154,7 @@ class SliceGeneratorTest extends TestCase
             'description' => 'Online orders module',
         ]);
 
-        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::readFromSliceDir($path);
         $webRoutes = file_get_contents($path.'/Routes/web.php');
         $apiRoutes = file_get_contents($path.'/Routes/api.php');
 
@@ -169,7 +171,7 @@ class SliceGeneratorTest extends TestCase
 
         // Web routes: domain prefix and legacy flat redirect. No alias group with the same URIs:
         // a compiled route cache would keep only one of the names.
-        $this->assertStringContainsString("Route::prefix('e-commerce/orders')->name('orders.')", $webRoutes);
+        $this->assertStringContainsString("Route::prefix('e-commerce/orders')->name('e_commerce_orders.')", $webRoutes);
         $this->assertStringNotContainsString("->name('e_commerce.orders.')", $webRoutes);
         $this->assertStringContainsString("Route::redirect('orders', '/e-commerce/orders');", $webRoutes);
         $this->assertStringContainsString("Route::redirect('orders/{any}', '/e-commerce/orders/{any}')", $webRoutes);
@@ -191,7 +193,7 @@ class SliceGeneratorTest extends TestCase
             ],
         ]);
 
-        $manifest = json_decode(file_get_contents($path.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::readFromSliceDir($path);
         $this->assertSame([
             'shipment.view',
             'shipment.create',
@@ -259,8 +261,8 @@ class SliceGeneratorTest extends TestCase
         $this->assertDirectoryExists($companyPath);
         $this->assertDirectoryExists($contactPath);
 
-        $this->assertStringContainsString('Crm'.DIRECTORY_SEPARATOR.'Companies', $companyPath);
-        $this->assertStringContainsString('Crm'.DIRECTORY_SEPARATOR.'Contacts', $contactPath);
+        $this->assertStringContainsString('CRM'.DIRECTORY_SEPARATOR.'Companies', $companyPath);
+        $this->assertStringContainsString('CRM'.DIRECTORY_SEPARATOR.'Contacts', $contactPath);
 
         $companyWebRoutes = file_get_contents($companyPath.'/Routes/web.php');
         $contactWebRoutes = file_get_contents($contactPath.'/Routes/web.php');
@@ -268,8 +270,8 @@ class SliceGeneratorTest extends TestCase
         $this->assertStringContainsString("Route::prefix('crm/companies')", $companyWebRoutes);
         $this->assertStringContainsString("Route::prefix('crm/contacts')", $contactWebRoutes);
 
-        $companyManifest = json_decode(file_get_contents($companyPath.'/slice.json'), true);
-        $contactManifest = json_decode(file_get_contents($contactPath.'/slice.json'), true);
+        $companyManifest = ManifestRepository::readFromSliceDir($companyPath);
+        $contactManifest = ManifestRepository::readFromSliceDir($contactPath);
 
         $this->assertSame('CRM', $companyManifest['domain']);
         $this->assertSame('CRM', $contactManifest['domain']);

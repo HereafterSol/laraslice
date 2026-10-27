@@ -225,7 +225,13 @@ class SystemMind
         if (! is_file($path)) {
             $clubs = [];
             if (Schema::hasTable('roles')) {
-                foreach (DB::table('roles')->pluck('display_name') as $role) {
+                // Stock installs carry `name` only; `display_name`
+                // exists solely on source-shaped schemas. Pluck
+                // whichever label column the table actually has —
+                // an unguarded display_name query fails the whole
+                // Mind draft on a stock slice:install database.
+                $labelColumn = Schema::hasColumn('roles', 'display_name') ? 'display_name' : 'name';
+                foreach (DB::table('roles')->pluck($labelColumn) as $role) {
                     $clubs[] = ['name' => (string) $role, 'permissions' => ['[draft]']];
                 }
             }

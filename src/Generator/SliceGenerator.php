@@ -592,6 +592,16 @@ CARD;
                     ];
                 }
             }
+            // Declared relations land on the root model entry below —
+            // the same arrays the model-method emission further down
+            // consumes from $options['relations'] (F3).
+            $manifestRelations = [];
+            foreach ((array) ($options['relations'] ?? []) as $declaredRelation) {
+                if (is_array($declaredRelation) && ! empty($declaredRelation['name'])) {
+                    $manifestRelations[] = $declaredRelation;
+                }
+            }
+
             $manifestData = [
                 'name' => $pluralName,
                 'title' => Str::title(Str::snake($pluralName, ' ')),
@@ -602,6 +612,28 @@ CARD;
                 'workflow' => $manifestWorkflow,
                 'roles' => ! empty($options['roles']) && is_array($options['roles']) ? $options['roles'] : (! empty($options['workflowConfig']['roles']) ? $options['workflowConfig']['roles'] : []),
                 'fields' => ManifestRepository::fieldMap($manifestFields),
+                // Every generated manifest declares its root model.
+                // Without a models[] root entry, manifest-driven
+                // features that resolve the root model from the
+                // manifest (dashboard counters, porter collision
+                // detection, repair field collection) are blind —
+                // a fresh port's slices carried no root model at
+                // all until one was hand-added. Callers may pass a
+                // full models list via options to override.
+                'models' => ! empty($options['models']) && is_array($options['models'])
+                    ? $options['models']
+                    : [[
+                        'handle' => Str::snake(Str::singular($tableName)),
+                        'table' => $tableName,
+                        'root' => true,
+                        'fields' => array_map(fn (array $field) => [
+                            'handle' => $field['name'],
+                            'label' => $field['label'],
+                            'type' => $field['type'],
+                            'required' => ! ($field['nullable'] ?? true),
+                        ], $manifestFields),
+                        'relations' => $manifestRelations,
+                    ]],
                 'permissions' => ! empty($options['permissions']) && is_array($options['permissions'])
                     ? $options['permissions']
                     : [
@@ -1361,10 +1393,12 @@ $bladeIndex = <<<BLADE
         ];
         // Runtime: load formatters via registered slice path (vendor + path installs)
         \$columns = \\LaraSlice\\Support\\DirectoryUi::columnsForSlice('{$studlyName}', \$columns);
+        \$canEdit = \$can['edit'] ?? true;
+        \$canDelete = \$can['delete'] ?? true;
         \$rows = \\LaraSlice\\Support\\DataTableRows::from(\$pagedList->items, \$columns, fn (\$item) => [
             'show_url'   => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.show') ? route('{$routeNamePrefix}.show', \$item->id) : null,
-            'edit_url'   => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.edit') ? route('{$routeNamePrefix}.edit', \$item->id) : null,
-            'delete_url' => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.destroy') ? route('{$routeNamePrefix}.destroy', \$item->id) : null,
+            'edit_url'   => \$canEdit && \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.edit') ? route('{$routeNamePrefix}.edit', \$item->id) : null,
+            'delete_url' => \$canDelete && \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.destroy') ? route('{$routeNamePrefix}.destroy', \$item->id) : null,
             'actions'    => \\LaraSlice\\Support\\RecordActions::urlsFor('{$routeNamePrefix}', \$item->id),
         ]);
     @endphp
@@ -1975,7 +2009,7 @@ BLADE;
             :class="activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
         >
             <x-lucide-file-text class="size-4" />
-            <span>Overview & Details</span>
+            <span>{{ \$fieldsTabLabel ?? 'Overview & Details' }}</span>
         </button>
 
         @if(\$workflow)
@@ -2029,7 +2063,7 @@ BLADE;
         <button type="button" @click="\$dispatch('ls-show-tab', 'overview'); window.history.replaceState(null, '', '?tab=overview')"
             class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer"
             :class="tab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'">
-            <span>Overview</span>
+            <span>{{ \$fieldsTabLabel ?? 'Overview' }}</span>
         </button>
         @foreach(\$relatedTabs ?? [] as \$rtab)
             @if(!empty(\$rtab['handle']))
@@ -2378,6 +2412,17 @@ BLADE;
         @endif
     @endforeach
 
+    {{-- Declared audit tabs (ui.show.tabs type: audit): the record's
+         audit trail via the shared partial — entries or empty state,
+         never a silently missing panel. --}}
+    @foreach(\$relatedTabs ?? [] as \$rtab)
+        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'audit')
+        <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
+            @include('laraslice::partials.related-tab-audit', ['rtab' => \$rtab])
+        </div>
+        @endif
+    @endforeach
+
     @if(\$workflow)
     <!-- Tab 2: Workflow History & Decision Timeline -->
     <div x-show="activeTab === 'workflow'" x-transition class="space-y-6">
@@ -2420,6 +2465,14 @@ BLADE;
 
             try {
                 if (function_exists('app') && app()->bound(SliceManager::class)) {
+                    // Generation is a mutation flow: invalidate discovery
+                    // so the next discover() in this process rescans and
+                    // sees the new slice (the contract every toggle /
+                    // destroy / sync path already follows). Without this,
+                    // same-process consumers (tests, Octane, Studio AJAX)
+                    // keep the pre-generation registry and the new slice
+                    // is invisible until the process restarts.
+                    app(SliceManager::class)->clearCache();
                     app(SliceManager::class)->syncPermissions();
                 }
             } catch (\Throwable) {

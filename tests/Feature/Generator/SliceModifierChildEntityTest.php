@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Tests\Feature\Generator;
 
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Generator\SliceModifier;
 use PHPUnit\Framework\TestCase;
 
@@ -21,11 +22,11 @@ class SliceModifierChildEntityTest extends TestCase
             mkdir($this->slicePath.DIRECTORY_SEPARATOR.$directory, 0755, true);
         }
 
-        file_put_contents($this->slicePath.'/slice.json', json_encode([
+        ManifestRepository::writeYaml($this->slicePath, [
             'name' => 'HumanResources',
             'tables' => ['human_resources'],
             'relations' => [],
-        ], JSON_THROW_ON_ERROR));
+        ]);
         file_put_contents($this->slicePath.'/Models/HumanResource.php', "<?php\nnamespace App\\Slices\\HumanResources\\Models;\nclass HumanResource extends \\Illuminate\\Database\\Eloquent\\Model { protected \$table = 'human_resources'; }\n");
         file_put_contents($this->slicePath.'/Routes/web.php', "<?php\nuse Illuminate\\Support\\Facades\\Route;\n");
         file_put_contents($this->slicePath.'/Routes/api.php', "<?php\nuse Illuminate\\Support\\Facades\\Route;\n");
@@ -69,7 +70,7 @@ class SliceModifierChildEntityTest extends TestCase
         $webRoutes = file_get_contents($this->slicePath.'/Routes/web.php');
         $childModel = file_get_contents($this->slicePath.'/Models/Department.php');
         $parentModel = file_get_contents($this->slicePath.'/Models/HumanResource.php');
-        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = ManifestRepository::readFromSliceDir($this->slicePath);
 
         $this->assertStringContainsString("Schema::create('departments'", $migration);
         $this->assertStringContainsString("foreignId('human_resource_id')->constrained('human_resources')", $migration);
@@ -100,7 +101,7 @@ class SliceModifierChildEntityTest extends TestCase
 
     public function test_invalid_child_definitions_do_not_write_migrations_or_change_the_manifest(): void
     {
-        $manifestBefore = file_get_contents($this->slicePath.'/slice.json');
+        $manifestBefore = file_get_contents($this->slicePath.'/slice.yaml');
 
         try {
             (new SliceModifier($this->slicesPath, 'App\\Slices'))->addChildTable(
@@ -114,7 +115,7 @@ class SliceModifierChildEntityTest extends TestCase
             $this->assertStringContainsString('Invalid, reserved, or duplicate', $exception->getMessage());
         }
 
-        $this->assertSame($manifestBefore, file_get_contents($this->slicePath.'/slice.json'));
+        $this->assertSame($manifestBefore, file_get_contents($this->slicePath.'/slice.yaml'));
         $this->assertSame([], glob($this->slicePath.'/Migrations/*') ?: []);
     }
 
@@ -147,12 +148,12 @@ class SliceModifierChildEntityTest extends TestCase
             mkdir($crmPath.DIRECTORY_SEPARATOR.$directory, 0755, true);
         }
 
-        file_put_contents($crmPath.'/slice.json', json_encode([
+        ManifestRepository::writeYaml($crmPath, [
             'name' => 'Companies',
             'domain' => 'CRM',
             'tables' => ['companies'],
             'relations' => [],
-        ], JSON_THROW_ON_ERROR));
+        ]);
         file_put_contents($crmPath.'/Models/Company.php', "<?php\nnamespace App\\Slices\\Companies\\Models;\nclass Company extends \\Illuminate\\Database\\Eloquent\\Model { protected \$table = 'companies'; }\n");
         file_put_contents($crmPath.'/Routes/web.php', "<?php\nuse Illuminate\\Support\\Facades\\Route;\nRoute::prefix('crm/companies')->name('companies.')->group(function(){});\n");
         file_put_contents($crmPath.'/Routes/api.php', "<?php\nuse Illuminate\\Support\\Facades\\Route;\nRoute::prefix('crm/companies')->group(function(){});\n");

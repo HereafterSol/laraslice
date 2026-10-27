@@ -3,6 +3,7 @@
 namespace LaraSlice\Tests\Feature\Generator;
 
 use Illuminate\Support\Facades\Schema;
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Tests\TestCase;
 
@@ -22,7 +23,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
             mkdir($this->slicePath.DIRECTORY_SEPARATOR.$directory, 0755, true);
         }
 
-        file_put_contents($this->slicePath.'/slice.json', json_encode([
+        ManifestRepository::writeYaml($this->slicePath, [
             'name' => 'ShopProducts',
             'version' => '1.0.0',
             'tables' => ['shop_products'],
@@ -42,7 +43,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
                     'date' => '2026-09-29 12:00:00',
                 ],
             ],
-        ], JSON_THROW_ON_ERROR));
+        ]);
 
         file_put_contents(
             $this->slicePath.'/Models/ShopProduct.php',
@@ -99,7 +100,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
         $this->assertStringContainsString("\$table->decimal('price', 10,2)", $migrationContent);
         $this->assertStringContainsString("\$table->dropColumn('old_unused_column');", $migrationContent);
 
-        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
+        $manifest = ManifestRepository::readFromSliceDir($this->slicePath);
         $this->assertSame('1.0.1', $manifest['version']);
         $this->assertArrayHasKey('sku', $manifest['fields']);
         $this->assertArrayHasKey('price', $manifest['fields']);
@@ -131,7 +132,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
 
         $this->assertTrue($result['success']);
 
-        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
+        $manifest = ManifestRepository::readFromSliceDir($this->slicePath);
         $this->assertCount(2, $manifest['relations']);
         $this->assertSame('belongsTo', $manifest['relations'][0]['type']);
         $this->assertSame('hasMany', $manifest['relations'][1]['type']);
@@ -153,7 +154,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
             newFields: [['name' => 'barcode', 'type' => 'string', 'nullable' => true]],
         );
 
-        $manifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
+        $manifest = ManifestRepository::readFromSliceDir($this->slicePath);
         $this->assertSame('1.0.1', $manifest['version']);
         $this->assertArrayHasKey('barcode', $manifest['fields']);
 
@@ -170,7 +171,7 @@ class SliceModifierStudioFeaturesTest extends TestCase
         $this->assertTrue($rollbackResult['success']);
         $this->assertSame('1.0.0', $rollbackResult['version']);
 
-        $updatedManifest = json_decode(file_get_contents($this->slicePath.'/slice.json'), true);
+        $updatedManifest = ManifestRepository::readFromSliceDir($this->slicePath);
         $this->assertSame('1.0.0', $updatedManifest['version']);
         $this->assertArrayNotHasKey('barcode', $updatedManifest['fields']);
     }

@@ -15,6 +15,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2026-10-27
+
+**Verification patch — every fix in this release was found by an independent verification programme run against the shipped 2.0.0: its full test suite on a second platform, a fresh install of the flagship package, and a from-scratch re-port of a production application.**
+
+### Fixed
+- **Data porting order.** A combined scaffold + data-import run now migrates before it imports; imports that skip tables whose targets do not exist report them loudly instead of returning success with zero rows.
+- **Auth import is no longer silent.** Porting data without auth import prints a warning naming the skipped auth tables and the remedy; role assignments are never dropped without a signal. The runbook states the flag is required for a working replica.
+- **Dashboard widgets emitted by the porter render.** Generated dashboards use `counter`/`chart` definitions the runtime dispatches (previously a non-existent type that rendered nothing), and generated manifests always declare their root model, so counters and model-bound features bind on fresh ports.
+- **Hub tab curation.** Manifests can suppress inferred or declared tabs (`ui.show.exclude_tabs`, per-tab `hidden: true`), declared audit (`activity`) tabs render the record's audit trail or an empty state instead of vanishing, and the fields tab honours its declared label.
+- **Portal dashboard scoping rule** documented and enforced by declaration: counters over person-owned domains declare `scope: own` with the slice's own-scope clause inline; Gate F pairs dashboards per persona.
+- Slice discovery is invalidated after generation; artisan entry commands run against a fresh registry; manifest reads defeat the PHP stat cache; `slice:repair` is a true fixed point.
+- Roles create/edit no longer reference unshipped schema columns; row actions and hub action surfaces are permission-gated for view-only users; schema sync can no longer drop the `title`/`status` columns.
+- Studio add-field edits reach the form view again; AI settings save route is no longer shadowed by the settings hub catch-all; `slice:blueprint:validate` argument renamed to `path`.
+- Flagship package: install config no longer carries a machine-specific slices path; the shipped seed honours every login the install guide promises; the portfolio of schema carried over from the source application is complete for the audited domains, with portal-scoped dashboard counters.
+
+### Tests
+- Full suite green on two platforms: 555 tests, 1919 assertions (baseline at 2.0.0: 535 tests with 47 reds, now zero).
+
 ## [2.0.0] - 2026-10-27
 
 **The Foundation Release — Mind · Body · Heart, the Standard UI/UX system, and the Replica Protocol**

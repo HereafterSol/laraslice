@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Support;
 
+use LaraSlice\Core\Audit\AuditLogger;
 use LaraSlice\Core\Discovery\SliceManager;
 use Symfony\Component\Yaml\Yaml;
 
@@ -347,6 +348,19 @@ final class DirectoryUi
      *  3. repeater (line-item) form fields — aggregate children are the
      *     record's most important related records.
      *
+     * Declared `type: audit` tabs (e.g. an Activity tab) are first-class
+     * too: they carry no relation; with a record they gain the record's
+     * audit-trail `entries` (AuditLogger, keyed by model class + id)
+     * and a `count` — an empty trail renders the panel's empty state,
+     * never a silently missing tab.
+     *
+     * Curation (hub tab curation, 27 Oct 2026): `ui.show.exclude_tabs`
+     * is a list of relation names and/or tab handles whose tabs must
+     * NOT render — the exclusion wins over every source above,
+     * declared tabs included. A declared tab carrying `hidden: true`
+     * is likewise suppressed, together with its inferred twin (the
+     * exclusion is registered under both its relation and its handle).
+     *
      * When a record is supplied and exposes the relation method, each tab
      * gains a `count` so the detail page reads as a hub, not a flat grid.
      * (F3: this replaces a generated-template fallback that read the
@@ -368,7 +382,15 @@ final class DirectoryUi
     {
         $tabs = [];
         $seen = [];
-        $add = static function (string $relation, ?string $label, ?string $handle = null, array $extras = []) use (&$tabs, &$seen): void {
+        $exclude = self::excludedTabKeys($manifest);
+        $add = static function (string $relation, ?string $label, ?string $handle = null, array $extras = []) use (&$tabs, &$seen, &$exclude): void {
+            // Curation: ui.show.exclude_tabs (and hidden declarations,
+            // which register here) suppress a tab by relation OR by
+            // handle — the exclusion wins over every tab source.
+            $effectiveHandle = $handle !== null && $handle !== '' ? $handle : $relation;
+            if (isset($exclude[$relation]) || isset($exclude[$effectiveHandle])) {
+                return;
+            }
             // Dedupe is by RELATION for plain tabs (a declared
             // tab, a hasMany relation and a repeater naming the
             // same relation are one tab). A RENDER-MODE tab
@@ -390,7 +412,23 @@ final class DirectoryUi
         };
 
         foreach (($manifest['ui']['show']['tabs'] ?? []) as $tab) {
-            if (is_array($tab) && ($tab['type'] ?? '') === 'relation') {
+            if (! is_array($tab)) {
+                continue;
+            }
+            if (! empty($tab['hidden'])) {
+                // A hidden declaration suppresses the tab AND its
+                // inferred twin: register the exclusion under both
+                // the relation and the handle before any source runs.
+                $hiddenRelation = (string) ($tab['relation'] ?? $tab['handle'] ?? '');
+                if ($hiddenRelation !== '') {
+                    $exclude[$hiddenRelation] = true;
+                }
+                if (! empty($tab['handle'])) {
+                    $exclude[(string) $tab['handle']] = true;
+                }
+                continue;
+            }
+            if (($tab['type'] ?? '') === 'relation') {
                 $extras = [];
                 foreach (['render', 'group_by', 'start_field', 'end_field', 'label_field'] as $k) {
                     if (! empty($tab[$k])) {
@@ -403,6 +441,22 @@ final class DirectoryUi
                     isset($tab['handle']) ? (string) $tab['handle'] : null,
                     $extras
                 );
+            } elseif (($tab['type'] ?? '') === 'audit') {
+                // Audit tabs carry no relation: they render the
+                // record's audit trail (entries attached below when
+                // a record is supplied) or its empty state — never
+                // silently nothing.
+                $handle = (string) ($tab['handle'] ?? 'activity');
+                if ($handle === '' || isset($seen['audit:'.$handle]) || isset($exclude[$handle])) {
+                    continue;
+                }
+                $seen['audit:'.$handle] = true;
+                $tabs[] = [
+                    'handle' => $handle,
+                    'label' => ! empty($tab['label']) ? (string) $tab['label'] : 'Activity',
+                    'type' => 'audit',
+                    'relation' => '',
+                ];
             }
         }
 
@@ -428,6 +482,13 @@ final class DirectoryUi
 
         if (is_object($record)) {
             foreach ($tabs as $i => $tab) {
+                if (($tab['type'] ?? '') === 'audit') {
+                    $entries = self::auditEntriesForRecord($record);
+                    $tabs[$i]['entries'] = $entries;
+                    $tabs[$i]['count'] = count($entries);
+
+                    continue;
+                }
                 $relation = $tab['relation'];
                 if (! method_exists($record, $relation)) {
                     continue;
@@ -452,6 +513,78 @@ final class DirectoryUi
         }
 
         return $tabs;
+    }
+
+    /**
+     * The tab-curation exclusion set: `ui.show.exclude_tabs` entries,
+     * keyed for lookup. Each entry names a relation or a tab handle
+     * whose tab must not render (see relatedTabsFromManifest).
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, true>
+     */
+    public static function excludedTabKeys(array $manifest): array
+    {
+        $set = [];
+        foreach ((array) ($manifest['ui']['show']['exclude_tabs'] ?? []) as $key) {
+            if (is_string($key) && $key !== '') {
+                $set[$key] = true;
+            }
+        }
+
+        return $set;
+    }
+
+    /**
+     * The declared label for the fields (record detail) tab — the
+     * `ui.show.tabs` entry of `type: fields`, e.g. `label: Profile`
+     * on people-shaped hubs. Null when no fields tab is declared
+     * (or it declares no label): callers fall back to their default
+     * wording ('Overview' on the overview hub strip).
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    public static function fieldsTabLabelFromManifest(array $manifest): ?string
+    {
+        foreach ((array) ($manifest['ui']['show']['tabs'] ?? []) as $tab) {
+            if (is_array($tab) && ($tab['type'] ?? '') === 'fields' && ! empty($tab['label'])) {
+                return (string) $tab['label'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The record's audit trail for an audit tab, from the framework's
+     * audit infrastructure (AuditLogger::forEntity — entries are
+     * recorded with entity_type = model class, entity_id = key).
+     * Best-effort by design: no audit table, no container or any
+     * query failure yields an empty list, and the tab renders its
+     * empty state instead of breaking the detail page.
+     *
+     * @return list<array{action: string, slice: string, actor: string, created_at: string, old_values: array|null, new_values: array|null}>
+     */
+    protected static function auditEntriesForRecord(object $record): array
+    {
+        try {
+            $key = method_exists($record, 'getKey') ? $record->getKey() : ($record->id ?? null);
+            if ($key === null || $key === '') {
+                return [];
+            }
+
+            return AuditLogger::forEntity(get_class($record), $key, 50)
+                ->map(static fn ($row): array => [
+                    'action' => (string) ($row->action ?? ''),
+                    'slice' => (string) ($row->slice ?? ''),
+                    'actor' => (string) ($row->actor_email ?? $row->actor_id ?? 'System'),
+                    'created_at' => (string) ($row->created_at ?? ''),
+                    'old_values' => is_array($row->old_values ?? null) ? $row->old_values : null,
+                    'new_values' => is_array($row->new_values ?? null) ? $row->new_values : null,
+                ])->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /** @var array<string, string>|null table name => owning slice name */
@@ -700,10 +833,23 @@ final class DirectoryUi
         }
         $out = ['extra' => null, 'tab' => ['slice' => $sliceName], 'raw' => []];
         try {
+            // Row action URLs obey the RELATED slice's own permissions:
+            // a viewer without its edit/delete slugs must not be handed
+            // the controls (the endpoints enforce it too, but listings
+            // show only the controls the user may use). When the related
+            // manifest declares no such slugs there is nothing to gate
+            // on and the URLs stay route-driven.
+            $tabManifest = self::manifestForSlice($sliceName);
+            $tabPerms = $tabManifest?->permissions ?? [];
+            $editSlugs = array_values(array_filter($tabPerms, fn ($s) => str_ends_with((string) $s, '.edit') || str_ends_with((string) $s, '.update')));
+            $deleteSlugs = array_values(array_filter($tabPerms, fn ($s) => str_ends_with((string) $s, '.delete') || str_ends_with((string) $s, '.destroy')));
+            $tabUser = function_exists('auth') ? auth()->user() : null;
+            $canEditTab = $editSlugs === [] || ($tabUser !== null && \LaraSlice\Core\Security\Access::allows($tabUser, $editSlugs));
+            $canDeleteTab = $deleteSlugs === [] || ($tabUser !== null && \LaraSlice\Core\Security\Access::allows($tabUser, $deleteSlugs));
             if (\Illuminate\Support\Facades\Route::has($prefix.'.show')
                 || \Illuminate\Support\Facades\Route::has($prefix.'.edit')
                 || \Illuminate\Support\Facades\Route::has($prefix.'.destroy')) {
-                $out['extra'] = static function ($item) use ($prefix) {
+                $out['extra'] = static function ($item) use ($prefix, $canEditTab, $canDeleteTab) {
                     $id = $item instanceof \Illuminate\Database\Eloquent\Model ? $item->getKey() : ($item->id ?? null);
                     if ($id === null) {
                         return [];
@@ -711,8 +857,8 @@ final class DirectoryUi
 
                     return [
                         'show_url' => \Illuminate\Support\Facades\Route::has($prefix.'.show') ? route($prefix.'.show', $id) : null,
-                        'edit_url' => \Illuminate\Support\Facades\Route::has($prefix.'.edit') ? route($prefix.'.edit', $id) : null,
-                        'delete_url' => \Illuminate\Support\Facades\Route::has($prefix.'.destroy') ? route($prefix.'.destroy', $id) : null,
+                        'edit_url' => $canEditTab && \Illuminate\Support\Facades\Route::has($prefix.'.edit') ? route($prefix.'.edit', $id) : null,
+                        'delete_url' => $canDeleteTab && \Illuminate\Support\Facades\Route::has($prefix.'.destroy') ? route($prefix.'.destroy', $id) : null,
                     ];
                 };
             }

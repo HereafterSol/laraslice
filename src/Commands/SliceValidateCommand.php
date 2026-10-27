@@ -35,7 +35,7 @@ class SliceValidateCommand extends Command
 
         $targets = [];
         if ($all) {
-            $manager->discover();
+            $manager->discover(true); // entry point: operate on the slices as they are on disk now, not a boot-time registry
             foreach ($manager->getAllSlices() as $slice) {
                 $yaml = $slice->path.DIRECTORY_SEPARATOR.'slice.yaml';
                 $json = $slice->path.DIRECTORY_SEPARATOR.'slice.yaml';

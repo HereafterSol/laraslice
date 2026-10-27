@@ -4677,7 +4677,7 @@ function larasliceWizard() {
                                         <button type="button" @click="uiDashboardWidgets.splice(wi, 1)" class="text-rose-500 text-[10px]">✕</button>
                                     </div>
                                 </template>
-                                <button type="button" @click="uiDashboardWidgets.push({ type: 'stat', handle: 'total', label: 'Total', query: 'count' })"
+                                <button type="button" @click="uiDashboardWidgets.push({ type: 'counter', handle: 'total', label: 'Total', aggregate: 'count' })"
                                     class="rounded-lg border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">+ Widget</button>
                             </div>
                         </div>

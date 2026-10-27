@@ -50,13 +50,19 @@ class FilterDrawerGenerationTest extends TestCase
         ]]]);
 
         $index = file_get_contents($path.'/Resources/views/index.blade.php');
-        $this->assertStringContainsString('filtersOpen', $index);
-        $this->assertStringContainsString('aria-label="Filters"', $index);
-        $this->assertStringContainsString('Apply Filters', $index);
+        // The Filters button is generated inline, gated on the
+        // declared set being non-empty; the drawer itself is the
+        // package partial every directory composes.
+        $this->assertStringContainsString('data-ls-filters-btn', $index);
+        $this->assertStringContainsString("!empty(\$sidebarFilters", $index);
+        $this->assertStringContainsString("@include('laraslice::directory.filters-drawer')", $index);
+
+        $drawer = file_get_contents(dirname(__DIR__, 3).'/src/Wizard/views/directory/filters-drawer.blade.php');
         // The drawer is gated on the declared set being non-empty:
         // slices without sidebar_filters never render it.
-        $this->assertStringContainsString("!empty($sidebarFilters", $index);
+        $this->assertStringContainsString("!empty(\$sidebarFilters", $drawer);
+        $this->assertStringContainsString('Apply Filters', $drawer);
         // Declared filter fields render as named controls.
-        $this->assertStringContainsString('name="{{ $sfHandle }}"', $index);
+        $this->assertStringContainsString('name="{{ $sfHandle }}"', $drawer);
     }
 }

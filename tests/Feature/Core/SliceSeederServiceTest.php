@@ -37,7 +37,7 @@ class SliceSeederServiceTest extends TestCase
 
     public function test_seeding_fills_every_column_with_a_value_of_its_type(): void
     {
-        $this->makeMigratedSlice('Ticket', ['priority:integer', 'price:decimal', 'urgent:boolean', 'due_date:date']);
+        $this->makeMigratedSlice('Ticket', ['title:string', 'priority:integer', 'price:decimal', 'urgent:boolean', 'due_date:date']);
         $this->assertTrue(Schema::hasTable('tickets'));
 
         $result = app(SliceSeederService::class)->seedSlice('Ticket', 6);
