@@ -47,7 +47,7 @@ class DeclaredPatternsTest extends TestCase
         }
 
         $mgr = file_get_contents($root.'/src/Core/Discovery/SliceManager.php');
-        foreach (["'.import'", "'.seed_action'", "'.invite'", '(l) P13', '(m) The declared-filters drawer', '(n) Strip-placed', '(o) Fidelity', '(p) Summary-card'] as $marker) {
+        foreach (["'.import'", "'.seed_action'", "'.invite'", '(l) P13', '(m) The declared-filters drawer', '(n) Strip-placed', '(o) Fidelity', '(p) Summary-card', '(q) Show-page identity'] as $marker) {
             $this->assertStringContainsString($marker, $mgr, "manager marker: {$marker}");
         }
 

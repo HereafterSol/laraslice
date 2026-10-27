@@ -35,7 +35,12 @@ class SliceSyncCommand extends Command
         $manager->clearCache();
         $manager->discover();
 
-        $allSlices = $manager->getAllSlices();
+        // Every discovered manifest, twins included: the
+        // name-keyed index (getAllSlices) holds one manifest
+        // per name, so name-shadowed slices — booted and
+        // serving — were never synced (backlog A4; the same
+        // defect slice:repair fixed via discoveredSlices()).
+        $allSlices = $manager->discoveredSlices();
         if (empty($allSlices)) {
             $this->warn('No vertical slices detected in this application.');
             return self::SUCCESS;

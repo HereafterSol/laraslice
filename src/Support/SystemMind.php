@@ -290,7 +290,7 @@ class SystemMind
         }
 
         // Form page: classify the manifest's fields.
-        $systemPatterns = '/(_by|_at|_id$|^id$)/';
+        $systemPatterns = '/(_by|_at|_ip|_id$|^id$)/';
         $systemNames = ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'created_at', 'updated_at', 'deleted_at'];
         $workflow = $manifest['workflow'] ?? null;
         $stateField = is_array($workflow) ? ($workflow['state_field'] ?? null) : null;

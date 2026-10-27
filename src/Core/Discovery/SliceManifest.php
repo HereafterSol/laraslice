@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Core\Discovery;
 
+use Illuminate\Support\Str;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceManifest
@@ -62,17 +63,9 @@ class SliceManifest
 
         if (str_ends_with($manifestPath, '.yaml') || str_ends_with($manifestPath, '.yml')) {
             $data = class_exists(Yaml::class) ? (Yaml::parse($content) ?: []) : [];
-            $jsonFile = $this->path.'/slice.yaml';
-            if (file_exists($jsonFile)) {
-                $jsonData = json_decode(file_get_contents($jsonFile), true) ?: [];
-                $data = array_merge($jsonData, $data);
-                if (! empty($jsonData['tables'])) {
-                    $data['tables'] = array_values(array_unique(array_merge($data['tables'] ?? [], $jsonData['tables'])));
-                }
-                if (! empty($jsonData['relations'])) {
-                    $data['relations'] = array_values(array_unique(array_merge($data['relations'] ?? [], $jsonData['relations']), SORT_REGULAR));
-                }
-            }
+            // (Phase 4 removed the slice.json twin merge; a vestigial
+            // block json_decoded the YAML itself here — always null,
+            // a pure no-op — until E4 removed it.)
             if (empty($data['tables']) && ! empty($data['models']) && is_array($data['models'])) {
                 foreach ($data['models'] as $m) {
                     if (! empty($m['table'])) {
@@ -84,6 +77,28 @@ class SliceManifest
             $data = json_decode($content, true) ?: [];
         }
 
+        $this->hydrate($data);
+    }
+
+    /**
+     * Build a manifest from ALREADY-parsed manifest data
+     * (the SliceManager manifest-data cache, backlog B1):
+     * skips the file read and the YAML parse, which over
+     * ~140 manifests is the dominant per-request discovery
+     * cost. Hydration is identical to the constructor's —
+     * the caller guards freshness by file mtime + size.
+     */
+    public static function fromParsed(string $manifestPath, array $data): static
+    {
+        $instance = (new \ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $instance->path = dirname($manifestPath);
+        $instance->hydrate($data);
+
+        return $instance;
+    }
+
+    private function hydrate(array $data): void
+    {
         $this->name = $data['name'] ?? basename($this->path);
         $this->title = $data['title'] ?? ucwords(str_replace(['_', '-'], ' ', $this->name));
         $this->version = $data['version'] ?? '1.0.0';
@@ -265,21 +280,52 @@ class SliceManifest
     public function getModelClass(): ?string
     {
         $modelsDir = $this->path.'/Models';
-        if (is_dir($modelsDir)) {
-            $files = glob($modelsDir.'/*.php');
-            if (! empty($files)) {
-                $base = basename($files[0], '.php');
-                $cleanDomain = $this->domain ? str_replace([' ', '-'], '', $this->domain) : null;
-                $candidates = [
-                    $this->namespace ? $this->namespace.'\\Models\\'.$base : null,
-                    $cleanDomain ? 'App\\Slices\\'.$cleanDomain.'\\'.$this->name.'\\Models\\'.$base : null,
-                    'App\\Slices\\'.$this->name.'\\Models\\'.$base,
-                    'App\\Models\\'.$base,
-                ];
-                foreach (array_filter($candidates) as $c) {
-                    if (class_exists($c)) {
-                        return $c;
-                    }
+        if (! is_dir($modelsDir)) {
+            return null;
+        }
+        // Candidate model basenames, most authoritative first:
+        // the manifest's declared root model, then every file
+        // in Models/. Trying only the FIRST file (the old
+        // behavior) resolved multi-model slices to a sibling
+        // model or to null — the slice's dashboard widgets and
+        // sync paths silently died on exactly those slices.
+        $bases = [];
+        foreach (($this->raw['models'] ?? []) as $model) {
+            if (is_array($model) && ! empty($model['handle']) && ($model['root'] ?? false)) {
+                $bases[] = Str::studly((string) $model['handle']);
+            }
+        }
+        foreach (glob($modelsDir.'/*.php') ?: [] as $file) {
+            $bases[] = basename($file, '.php');
+        }
+        // Path-derived namespace: the directory under the
+        // slices root maps 1:1 onto the namespace (PSR-4), so
+        // it resolves a slice's OWN model even when another
+        // slice shadows its name in the registry.
+        $pathNamespace = null;
+        $real = realpath($this->path);
+        if ($real !== false) {
+            $marker = DIRECTORY_SEPARATOR.'Slices'.DIRECTORY_SEPARATOR;
+            $pos = strrpos($real, $marker);
+            if ($pos !== false) {
+                $relative = substr($real, $pos + strlen($marker));
+                $segments = array_map(static fn ($seg) => Str::studly($seg), explode(DIRECTORY_SEPARATOR, $relative));
+                $pathNamespace = rtrim((string) config('laraslice.slices_namespace', 'App\\Slices'), '\\')
+                    .'\\'.implode('\\', $segments);
+            }
+        }
+        $cleanDomain = $this->domain ? str_replace([' ', '-'], '', $this->domain) : null;
+        foreach (array_unique($bases) as $base) {
+            $candidates = [
+                $pathNamespace ? $pathNamespace.'\\Models\\'.$base : null,
+                $this->namespace ? $this->namespace.'\\Models\\'.$base : null,
+                $cleanDomain ? 'App\\Slices\\'.$cleanDomain.'\\'.$this->name.'\\Models\\'.$base : null,
+                'App\\Slices\\'.$this->name.'\\Models\\'.$base,
+                'App\\Models\\'.$base,
+            ];
+            foreach (array_filter($candidates) as $c) {
+                if (class_exists($c)) {
+                    return $c;
                 }
             }
         }

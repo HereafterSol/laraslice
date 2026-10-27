@@ -43,6 +43,13 @@ class DataTableRows
             foreach ($columns as $column) {
                 $key = $column['key'];
                 $val = data_get($item, $key);
+                if ($val === null && in_array($key, ['created_at', 'updated_at', 'deleted_at'], true)) {
+                    // Listing BOs carry the audit stamps in
+                    // camelCase (BaseListingBusinessObject) —
+                    // a created_at column read only the snake
+                    // key and rendered an em dash (QA5).
+                    $val = data_get($item, lcfirst(str_replace(' ', '', ucwords(str_replace('_', ' ', $key)))));
+                }
                 $row[$key . '__raw'] = is_scalar($val) ? (string)$val : '';
 
                 // 1. If column has a custom callback formatter.
@@ -50,7 +57,7 @@ class DataTableRows
                 // name that happens to match a PHP function ('date')
                 // must not be invoked as one.
                 if (isset($column['formatter']) && ! is_string($column['formatter']) && is_callable($column['formatter'])) {
-                    $row[$key] = $column['formatter']($val, $item);
+                    static::applyProgress($row, $key, $column, $item, $column['formatter']($val, $item));
                     continue;
                 }
 
@@ -61,7 +68,7 @@ class DataTableRows
                         'code_badge' => static::codeBadge($val),
                         'composite_user' => static::resolveCompositeUser($item, $key, $val, $column),
                         'user_stack' => static::resolveUserStack($item, $key, $val, $column),
-                        'status_pill' => static::statusPill((string) ($val ?: data_get($item, 'user.status') ?: 'active')),
+                        'status_pill' => static::statusPill((string) ($val ?: data_get($item, 'user.status') ?: '')),
                         'money_breakdown' => static::moneyBreakdown(
                             $val,
                             data_get($item, $column['breakdown']['paid'] ?? 'paid_amount', data_get($item, 'paid', 0)),
@@ -73,13 +80,16 @@ class DataTableRows
                             data_get($item, $column['badge_from'] ?? 'priority'),
                             (string) ($column['badge_from'] ?? 'priority')
                         ),
+                        'badge' => static::badgeFor($val, $item, $column, $fkMaps[$key] ?? []),
                         'progress_bar' => static::progressBar((float) $val),
                         'timer' => static::resolveTimer($item),
+                        'lines' => static::resolveLines($item, $column),
                         'date' => static::formatDateValue($val, 'date'),
                         'date_time' => static::formatDateValue($val, 'datetime'),
                         'date_overdue' => static::dateOverdue($val),
                         default => static::display($val),
                     };
+                    static::applyProgress($row, $key, $column, $item, $row[$key] ?? '');
                     continue;
                 }
 
@@ -105,6 +115,7 @@ class DataTableRows
                 } else {
                     $row[$key] = static::display($val);
                 }
+                static::applyProgress($row, $key, $column, $item, $row[$key] ?? '');
             }
 
             // Every row carries the record's key under a reserved
@@ -127,12 +138,65 @@ class DataTableRows
         return $rows;
     }
 
+
+    /**
+     * A column may declare `progress_field`: the named field's
+     * percentage renders as the source-style bar (percent
+     * centered on the track) ABOVE the cell's own content —
+     * the original list idiom of progress over the status
+     * control (QA6, 25 Oct 2026).
+     */
+    private static function applyProgress(array &$row, string $key, array $column, mixed $item, mixed $cell): void
+    {
+        $row[$key] = $cell;
+        $field = $column['progress_field'] ?? null;
+        if (! is_string($field) || $field === '') {
+            return;
+        }
+        $pv = data_get($item, $field);
+        if (is_numeric($pv)) {
+            // The bar rides on its OWN row key, not baked into
+            // the cell HTML: an inline-edit cell must be able
+            // to hide the pill (the select replaces it) without
+            // losing the bar above the editor.
+            $row[$key.'__progress'] = static::progressBar((float) $pv, null, true);
+        }
+    }
+
     /**
      * Render a rich composite user avatar + name + subtitle cell with zero extra dependencies.
      */
     /**
      * Render an enterprise monospace code badge (e.g. #EMP-01, INV-2024).
      */
+    /**
+     * Colored pill for a label whose color lives on the record
+     * (declared `color_from`, e.g. a leave type's own color) —
+     * the source renders such taxonomies as solid badges in the
+     * taxonomy's color, never as plain text.
+     */
+    public static function badgeFor(mixed $val, mixed $item, array $column, array $fkMap): string
+    {
+        $label = (string) ($fkMap[$val] ?? $val);
+        $color = ! empty($column['color_from']) ? data_get($item, (string) $column['color_from']) : null;
+
+        return static::badge($label, $color);
+    }
+
+    public static function badge(string $label, mixed $color = null): string
+    {
+        if (trim($label) === '') {
+            return '—';
+        }
+        $label = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+        $color = is_string($color) && preg_match('/^#[0-9a-fA-F]{6}$/', trim($color)) ? trim($color) : null;
+        if ($color === null) {
+            return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-muted text-foreground">' . $label . '</span>';
+        }
+
+        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white" style="background-color: ' . $color . '">' . $label . '</span>';
+    }
+
     public static function codeBadge(mixed $val): string
     {
         $str = htmlspecialchars((string) ($val ?? '—'), ENT_QUOTES, 'UTF-8');
@@ -170,6 +234,9 @@ class DataTableRows
         $subtitle = data_get($item, 'designation.name')
             ?? data_get($item, 'designation_name')
             ?? data_get($item, 'designation')
+            ?? data_get($item, 'company_name')
+            ?? data_get($item, 'client_company')
+            ?? data_get($item, 'company')
             ?? data_get($item, 'user.email')
             ?? data_get($item, 'email');
 
@@ -190,6 +257,39 @@ class DataTableRows
 
         return static::compositeUser($name, $subtitle, $avatarUrl, $viewUrl);
     }
+    /**
+     * Labeled-lines cell: stacked "Label: value" rows declared
+     * per column (`lines: [{label, from, case?}]`), for meta-pair
+     * cells like a ticket's Others (Agent: X / Priority: Y) that
+     * are facts about the row, not a person or a single value.
+     * Values resolve by data_get path on the row; a line whose
+     * value is empty is skipped, and an all-empty cell is an
+     * em dash.
+     */
+    public static function resolveLines(mixed $item, array $column): string
+    {
+        $out = [];
+        foreach ((array) ($column['lines'] ?? []) as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+            $v = data_get($item, (string) ($line['from'] ?? ''));
+            if ($v === null || $v === '' || ! is_scalar($v)) {
+                continue;
+            }
+            $v = (string) $v;
+            if (($line['case'] ?? '') === 'headline') {
+                $v = \Illuminate\Support\Str::headline($v);
+            }
+            $label = (string) ($line['label'] ?? '');
+            $out[] = '<div class="text-[13px] leading-5 text-foreground">'
+                .($label !== '' ? '<span class="text-muted-foreground">'.e($label).':</span> ' : '')
+                .e($v).'</div>';
+        }
+
+        return $out === [] ? '—' : '<div class="flex flex-col">'.implode('', $out).'</div>';
+    }
+
     /**
      * Resolve an avatar stack (assignees / members) from a
      * collection-ish value: models, arrays, id lists, or a
@@ -343,6 +443,9 @@ class DataTableRows
      */
     public static function statusPill(string $status, ?string $label = null, ?string $color = null): string
     {
+        if (trim($status) === '') {
+            return '—';
+        }
         $statusKey = strtolower(trim($status));
         $label = htmlspecialchars($label ?: ucwords(str_replace('_', ' ', $status)), ENT_QUOTES, 'UTF-8');
 
@@ -468,7 +571,7 @@ class DataTableRows
         } catch (\Throwable $e) {
             return htmlspecialchars((string) $val, ENT_QUOTES, 'UTF-8');
         }
-        $label = $dt->format('M j, Y');
+        $label = $dt->format('d-m-Y');
         $end = $dt->copy()->endOfDay();
         if ($end->isPast()) {
             $cls = 'text-rose-600 dark:text-rose-400 font-semibold';
@@ -486,17 +589,24 @@ class DataTableRows
         return '<span class="text-xs '.$cls.'"'.$title.'>'.$safe.'</span>';
     }
 
-        public static function progressBar(float|int $percent, ?string $label = null): string
+        public static function progressBar(float|int $percent, ?string $label = null, bool $compact = false): string
     {
         $pct = max(0, min(100, (int) round($percent)));
         $lbl = $label !== null ? htmlspecialchars($label, ENT_QUOTES, 'UTF-8') : ($pct . '%');
 
+        // Source thresholds, read off the original list
+        // (QA6, 25 Oct 2026): 44/45/48 render red, 50/55/74
+        // amber, 97 green.
         $barColor = match (true) {
-            $pct >= 100 => 'bg-emerald-500',
-            $pct >= 60 => 'bg-primary',
-            $pct >= 30 => 'bg-amber-500',
+            $pct >= 90 => 'bg-emerald-500',
+            $pct >= 50 => 'bg-amber-500',
             default => 'bg-rose-500',
         };
+        if ($compact) {
+            return '<div class="relative w-full min-w-[110px] max-w-[170px] h-[22px] rounded-sm bg-slate-200 dark:bg-slate-700 overflow-hidden mb-1.5">'
+                .'<div class="h-full '.$barColor.'" style="width: '.$pct.'%"></div>'
+                .'<span class="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-slate-700 dark:text-slate-100">'.$pct.'%</span></div>';
+        }
 
         return '<div class="w-full min-w-[100px] max-w-[160px] space-y-1">' .
             '<div class="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">' .
@@ -614,7 +724,7 @@ class DataTableRows
      */
     protected static function modelDisplayName(Model $model): string
     {
-        foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $cand) {
+        foreach (['name', 'title', 'heading', 'subject', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $cand) {
             if (isset($model->{$cand}) && filled($model->{$cand})) {
                 return (string) $model->{$cand};
             }
@@ -635,6 +745,12 @@ class DataTableRows
      */
     public static function formatDateValue(mixed $value, string $fieldType): string
     {
+        // An empty date is an em dash, never "today" — DateTimeImmutable('')
+        // silently parses as now, which fabricated current dates for
+        // null date cells (e.g. listing BOs missing a declared column).
+        if ($value === null || $value === '') {
+            return '—';
+        }
         try {
             $dt = $value instanceof \DateTimeInterface
                 ? $value
@@ -646,10 +762,10 @@ class DataTableRows
         // A datetime sitting exactly at midnight is a date in disguise
         // (the common case for ported date columns) — never show ", 00:00".
         if ($fieldType === 'date' || $dt->format('H:i:s') === '00:00:00') {
-            return $dt->format('d M Y');
+            return $dt->format('d-m-Y');
         }
 
-        return $dt->format('d M Y, H:i');
+        return $dt->format('d-m-Y, h:i A');
     }
 
     public static function display(mixed $value): string|int|float

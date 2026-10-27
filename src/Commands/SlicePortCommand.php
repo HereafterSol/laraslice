@@ -4,7 +4,10 @@ namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
+use LaraSlice\Porting\PermissionMatrixExtractor;
 use LaraSlice\Porting\SlicePortService;
+use LaraSlice\Porting\SourceAnatomyExtractor;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Enterprise Monolith Reverse-Engineering & Legacy System Porting Command.
@@ -33,12 +36,22 @@ class SlicePortCommand extends Command
                             {--source-database= : Legacy database name}
                             {--source-username= : Legacy database username}
                             {--source-password= : Legacy database password}
-                            {--data-source= : Data to port: real (live DB, default), seeders (source seed files), both, none}';
+                            {--data-source= : Data to port: real (live DB, default), seeders (source seed files), both, none}
+                            {--anatomy : Page-anatomy pass only: read page probes from porting/probes/ (<slug>.json, <slug>-detail.json) and write Body UI-spec evidence to porting/ui-spec/<slug>.anatomy.ui.yaml}
+                            {--permissions : Permission-matrix pass only: extract the source roles x permissions matrix (via --source-* options) and write porting/permissions.yaml with proposed LaraSlice slugs and Mind club drafts}';
 
     protected $description = 'Reverse-engineer and port a legacy Laravel application into domain-bounded LaraSlice vertical slices';
 
     public function handle(SlicePortService $portService): int
     {
+        if ($this->option('anatomy')) {
+            return $this->runAnatomy();
+        }
+
+        if ($this->option('permissions')) {
+            return $this->runPermissions();
+        }
+
         $this->info('====================================================');
         $this->info('   LaraSlice Enterprise Legacy Porting Engine       ');
         $this->info('====================================================');
@@ -376,6 +389,271 @@ class SlicePortCommand extends Command
         $this->line('');
         $this->info('🎉 Porting analysis, blueprint synthesis & slice scaffolding completed successfully!');
         $this->info("You can now open /laraslice/wizard in your browser to view the active modules and slices.");
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Page-anatomy pass (P2): probes captured from the running
+     * source app (porting/probes/<slug>.json for lists,
+     * <slug>-detail.json for detail pages) become Body UI-spec
+     * evidence files. The extractor holds the classification
+     * rules; this pass only routes files.
+     */
+    /**
+     * Resolution stats for the extracted matrix against
+     * the TARGET app's declared permissions: a proposed
+     * slug resolves when it is declared, or when it is a
+     * view-own construct over a declared view. Grants
+     * whose primary misses but whose parent-collapsed
+     * alternative hits are counted separately.
+     *
+     * @param  array<string, mixed>  $matrix
+     * @return array<string, int>
+     */
+    private function permissionResolution(array $matrix): array
+    {
+        $stats = ['declared_permissions' => 0, 'proposed' => 0, 'resolved' => 0, 'resolved_via_alt' => 0];
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('permissions')) {
+                return $stats;
+            }
+            $declared = array_flip(\Illuminate\Support\Facades\DB::table('permissions')->pluck('slug')->all());
+            $stats['declared_permissions'] = count($declared);
+            $resolves = static function (?string $slug) use ($declared): bool {
+                if ($slug === null || $slug === '*') {
+                    return false;
+                }
+                if (isset($declared[$slug])) {
+                    return true;
+                }
+
+                return str_ends_with($slug, '.view-own') && isset($declared[substr($slug, 0, -9).'.view']);
+            };
+            foreach ($matrix['roles'] as $role) {
+                $alts = [];
+                foreach ($role['grants'] as $grant) {
+                    $alts[$grant['slug'] ?? ''] = $grant['alt_slug'] ?? null;
+                }
+                foreach ($role['club']['permissions'] as $slug) {
+                    if ($slug === '*') {
+                        continue;
+                    }
+                    $stats['proposed']++;
+                    if ($resolves($slug)) {
+                        $stats['resolved']++;
+                    } elseif ($resolves($alts[$slug] ?? null)) {
+                        $stats['resolved_via_alt']++;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Stats are advisory; the artifact stands without them.
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Permission-matrix pass (backlog C3): extract the
+     * source's roles × permissions matrix into
+     * porting/permissions.yaml — per-role grants with
+     * source name, scope and proposed LaraSlice slug,
+     * plus a Mind club draft per role. Proposals resolve
+     * against the real registry via slice:drift, exactly
+     * like Mind patterns.
+     */
+    private function runPermissions(): int
+    {
+        $database = (string) ($this->option('source-database') ?: '');
+        if ($database === '') {
+            $this->error('The --permissions pass needs --source-database (plus --source-username/--source-password when required).');
+
+            return self::FAILURE;
+        }
+        $host = (string) ($this->option('source-host') ?: '127.0.0.1');
+        $port = (int) ($this->option('source-port') ?: 3306);
+        try {
+            $pdo = new \PDO(
+                "mysql:host={$host};port={$port};dbname={$database}",
+                (string) ($this->option('source-username') ?: ''),
+                (string) ($this->option('source-password') ?: ''),
+                [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC]
+            );
+        } catch (\Throwable $e) {
+            $this->error('Could not connect to the source database: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $matrix = PermissionMatrixExtractor::extract($pdo);
+        foreach ($matrix['notes'] as $note) {
+            $this->warn($note);
+        }
+        $matrix['resolution'] = $this->permissionResolution($matrix);
+
+        $dir = base_path('porting');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $header = "# Source permission matrix (slice:port --permissions) — roles x permissions with scopes,\n"
+            ."# normalized to proposed LaraSlice slugs. Proposals resolve against the registry via\n"
+            ."# slice:drift (the Mind-pattern mechanism); 'clubs' is a draft for the system Mind.\n";
+        file_put_contents(
+            $dir.'/permissions.yaml',
+            $header.Yaml::dump(['permissions_matrix' => $matrix], 8, 2)
+        );
+
+        $t = $matrix['totals'];
+        $this->info(sprintf(
+            'Permission matrix written: %d roles, %d source permissions, %d effective grants (%d unparsed) → porting/permissions.yaml',
+            $t['roles'] ?? 0,
+            $t['permissions'] ?? 0,
+            $t['effective_grants'] ?? 0,
+            $t['unparsed'] ?? 0
+        ));
+        $r = $matrix['resolution'];
+        if (($r['declared_permissions'] ?? 0) > 0) {
+            $this->line(sprintf(
+                '  resolution vs target registry: %d/%d club slugs resolve directly, %d more via a parent-collapsed alt',
+                $r['resolved'] ?? 0,
+                $r['proposed'] ?? 0,
+                $r['resolved_via_alt'] ?? 0
+            ));
+        }
+        foreach ($matrix['roles'] as $role) {
+            $this->line(sprintf(
+                '  %-12s %s grants=%d club_permissions=%d',
+                $role['role'],
+                $role['super'] ? 'SUPER' : '     ',
+                count($role['grants']),
+                count($role['club']['permissions'])
+            ));
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function runAnatomy(): int
+    {
+        $probeDir = base_path('porting/probes');
+        $specDir = base_path('porting/ui-spec');
+        if (! is_dir($probeDir)) {
+            $this->warn('No probes at porting/probes/ — capture the source pages first (the probe harness writes <slug>.json / <slug>-detail.json there).');
+            return self::SUCCESS;
+        }
+
+        $lists = [];
+        $details = [];
+        foreach (glob($probeDir.'/*.json') ?: [] as $file) {
+            $data = json_decode((string) file_get_contents($file), true);
+            if (! is_array($data)) {
+                continue;
+            }
+            $base = basename($file, '.json');
+            if (str_ends_with($base, '-detail')) {
+                $details[substr($base, 0, -7)] = $data;
+            } else {
+                $lists[$base] = $data;
+            }
+        }
+
+        File::ensureDirectoryExists($specDir);
+        $slugs = array_values(array_unique([...array_keys($lists), ...array_keys($details)]));
+        sort($slugs);
+        $designTokens = null;
+        $designForms = [];
+        $designDivergences = [];
+        $interactions = [];
+        $inventoryFile = $probeDir.'/inventory.json';
+        if (is_file($inventoryFile)) {
+            $inventory = json_decode((string) file_get_contents($inventoryFile), true);
+            if (is_array($inventory)) {
+                $interactions = SourceAnatomyExtractor::extractInteractions($inventory);
+            }
+        }
+        foreach ($slugs as $slug) {
+            $pages = [];
+            if (isset($lists[$slug])) {
+                $pages['list'] = SourceAnatomyExtractor::extractList($lists[$slug], $slug)['pages']['list'];
+                $design = SourceAnatomyExtractor::extractDesign($lists[$slug]);
+                if ($design !== null) {
+                    if (($design['forms'] ?? []) !== []) {
+                        $designForms[$slug] = $design['forms'];
+                    }
+                    unset($design['forms']);
+                    if ($designTokens === null) {
+                        $designTokens = $design;
+                    } else {
+                        $divergent = SourceAnatomyExtractor::designDivergences($designTokens, $design);
+                        if ($divergent !== []) {
+                            $designDivergences[$slug] = $divergent;
+                        }
+                    }
+                }
+            }
+            if (isset($details[$slug])) {
+                $pages['detail'] = SourceAnatomyExtractor::extractDetail($details[$slug], $slug)['pages']['detail'];
+            }
+            $header = "# Source anatomy (slice:port --anatomy) — {$slug} · probed from the running source app
+"
+                ."# Evidence only: ports declare from this; decisions stay in the reviewed ui-spec.
+";
+            $anatomyPayload = ['slice' => $slug, 'pages' => $pages];
+            $sliceInteractions = null;
+            foreach ($interactions as $path => $entry) {
+                if (basename((string) $path) === $slug && ($entry['type'] ?? '') === 'list') {
+                    $sliceInteractions = $entry;
+                    break;
+                }
+            }
+            if ($sliceInteractions !== null) {
+                $anatomyPayload['interactions'] = $sliceInteractions;
+            }
+            if (isset($lists[$slug])) {
+                $hints = SourceAnatomyExtractor::declarationHints(
+                    $lists[$slug],
+                    $slug,
+                    $sliceInteractions['workflow_actions'] ?? []
+                );
+                if ($hints !== []) {
+                    $anatomyPayload['declaration_hints'] = $hints;
+                }
+            }
+            file_put_contents(
+                $specDir."/{$slug}.anatomy.ui.yaml",
+                $header.Yaml::dump($anatomyPayload, 6, 2)
+            );
+            $list = $pages['list'] ?? null;
+            $this->line(sprintf(
+                '  %-16s list: %s · facets %d · columns %d%s',
+                $slug,
+                $list === null ? '—' : ($list['placement'] ?? 'unclassified'),
+                $list === null ? 0 : count($list['facets']),
+                $list === null ? 0 : count($list['columns']),
+                isset($pages['detail']) ? ' · detail: tabs '.count($pages['detail']['tabs_observed']) : ''
+            ));
+        }
+        $this->info('Anatomy specs written: '.count($slugs).' → porting/ui-spec/*.anatomy.ui.yaml');
+
+        if ($designTokens !== null) {
+            $designHeader = "# Source design capture (slice:port --anatomy) — Tier-5 evidence: computed design tokens + form presentations probed from the running source app\n"
+                ."# The visual gate (SKILL 19B) asserts the port against these values; decisions stay in the reviewed ui-spec.\n";
+            $designPayload = [
+                'name' => 'source design capture',
+                'tokens' => $designTokens,
+                'forms' => $designForms,
+                'divergences' => $designDivergences,
+            ];
+            if ($interactions !== []) {
+                $designPayload['interactions'] = $interactions;
+            }
+            file_put_contents(
+                $specDir.'/source.design.yaml',
+                $designHeader.Yaml::dump($designPayload, 6, 2)
+            );
+            $this->info('Design spec written: porting/ui-spec/source.design.yaml · forms '.count($designForms).' · divergent pages '.count($designDivergences));
+        }
 
         return self::SUCCESS;
     }

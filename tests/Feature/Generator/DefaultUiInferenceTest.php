@@ -78,9 +78,11 @@ class DefaultUiInferenceTest extends TestCase
         $filterHandles = array_column($manifest['ui']['directory']['quick_filters'] ?? [], 'handle');
         $this->assertContains('status', $filterHandles);
 
+        // Fidelity rule (QA6, 25 Oct 2026): summary cards are
+        // never inferred — a card the source list does not show
+        // is a delta. They exist only when declared.
         $cards = $manifest['ui']['directory']['summary_cards'] ?? [];
-        $this->assertSame('total_amount', $cards[0]['handle'] ?? null);
-        $this->assertSame('sum', $cards[0]['aggregate'] ?? null);
+        $this->assertSame([], $cards, 'inferred directories carry no summary cards');
 
         $this->assertContains('board', $manifest['ui']['directory']['views'] ?? [], 'status slices get the board view');
     }

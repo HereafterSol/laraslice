@@ -41,6 +41,9 @@ final class BlueprintApplier
             if (! empty($root['table']) && ! preg_match('/^[a-z][a-z0-9_]{0,62}$/', $root['table'])) {
                 throw new RuntimeException("Blueprint apply requires a valid table name for the root model ({$root['table']}).");
             }
+            if (! empty($root['table']) && $root['table'] !== $rootTable) {
+                throw new RuntimeException("Blueprint root table [{$root['table']}] does not match the table the generated slice uses [{$rootTable}].");
+            }
 
             $blueprintModelHandles = array_flip(array_column($blueprint['models'], 'handle'));
             foreach ($blueprint['models'] as $model) {
@@ -205,6 +208,7 @@ final class BlueprintApplier
                         'name' => $field['handle'],
                         'label' => $field['label'] ?? Str::headline($field['handle']),
                         'type' => $field['type'],
+                        'input' => $field['input'] ?? null,
                         'required' => $required,
                         'nullable' => $field['nullable'] ?? ! $required,
                         'default' => $field['default'] ?? null,
@@ -271,7 +275,10 @@ final class BlueprintApplier
     private function normalizeManifest(string $sliceDirectory, array $blueprint, array $models): void
     {
         $manifestPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.yaml';
-        $manifest = json_decode((string) file_get_contents($manifestPath), true, flags: JSON_THROW_ON_ERROR);
+        // Phase 4: the manifest is YAML. (This method previously
+        // json_decoded slice.yaml, wrote JSON back into it, then
+        // overwrote it with the raw blueprint — all three wrong.)
+        $manifest = ManifestRepository::read($manifestPath);
         $root = current(array_filter($models, static fn (array $model): bool => ($model['root'] ?? false) === true));
         $manifest['blueprint'] = ['schema_version' => 1, 'handle' => $blueprint['handle']];
         $manifest['description'] = $blueprint['description'] ?? $manifest['description'];
@@ -331,10 +338,7 @@ final class BlueprintApplier
             'default' => $field['default'] ?? null,
             'options' => $field['options'] ?? [],
         ], $root['fields'] ?? []));
-        file_put_contents($manifestPath, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
-
-        $yamlPath = $sliceDirectory.DIRECTORY_SEPARATOR.'slice.yaml';
-        file_put_contents($yamlPath, Yaml::dump($blueprint, 10, 2), LOCK_EX);
+        ManifestRepository::writeYaml($sliceDirectory, $manifest);
 
         // Seed declared roles and demo users immediately
         if (! empty($manifest['roles']) && is_array($manifest['roles'])) {

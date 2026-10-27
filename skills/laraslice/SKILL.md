@@ -196,6 +196,24 @@ following column nullability. A repeater whose rows are all removed
 still syncs (the component submits a `_repeaters[]` marker), while a
 partial API update that omits the collection leaves children untouched.
 
+**Document arithmetic.** A repeater whose rows are money lines declares
+a `document:` block on the field — which row fields are the quantity,
+unit price and line amount, an optional row `type_field` (`item` adds
+to the subtotal, `discount` subtracts, `tax` adds to the total only),
+an optional per-row `tax_amount`, and the header fields that receive
+the `subtotal_field` / `total_field`:
+
+```yaml
+  document: { quantity: quantity, unit_price: price, amount: total,
+              tax_amount: tax, total_field: amount }
+```
+
+The form then renders computed line amounts (read-only) and live
+Subtotal / Total footers, and the base service recomputes everything
+on save via `Support\DocumentMath` — client-submitted amounts are
+never trusted. Declare the header total field read-only in document
+forms; it is an output, not an input.
+
 **Detail-page composition (hub tabs).** A slice's show page composes
 related-record tabs from the manifest, resolved at request time by
 `DirectoryUi::relatedTabs()` in this precedence: (1) `ui.show.tabs`
@@ -228,8 +246,13 @@ never type-driven, so geo decimals stay plain; due dates →
 date_overdue; progress → progress_bar; codes → code_badge; assignees
 → composite_user). The porter AND the generator's default directory
 both use it: a slice generated without a declared `ui.directory`
-still gets inferred columns, status/priority quick filters, and
-money summary cards in its manifest. Declared columns always win.
+still gets inferred columns and status/priority quick filters —
+but NEVER inferred summary cards (fidelity rule, QA6 25 Oct
+2026: the generator and porter used to invent money-sum cards
+and a "Total Records" fallback card; the original lists do not
+show them, so they were pure deltas — 90 demo manifests carried
+them). Summary cards exist only when declared from the source
+page's anatomy. Declared columns always win.
 
 Declared filters APPLY: the web controller builds filter criteria
 only from handles the manifest declares (`ui.directory.quick_filters`
@@ -274,8 +297,109 @@ SliceManager's registry is name-keyed, so same-named slices hide
 each other there; the command deliberately bypasses it and rewrites
 only inside each slice's own directory).
 
+Manifest resolution under twins (QA5): `DirectoryUi` resolves a
+page's declarations by the ROUTE OWNER first — when a same-named
+slice's routes file owns the current request path, its manifest
+wins; only non-twin lookups use the name cache. Without this,
+twinned pages render the first-discovered slice's columns (and
+every relation the wrong model lacks renders as an em dash).
+Porter type rule: `tinyint(1)` is boolean; wider tinyints are
+integers (a tinyint(4) completion percent typed boolean rendered
+every progress bar as "1%"). Detail headers use
+`DirectoryUi::recordLabel()` — title/name chain, then any
+`{thing}_name` attribute, then document numbers — never the raw
+five-field chain that titled records "Slice #id".
+
+Show-page widgets (25 Oct 2026): `ui.show.widgets` gain
+`placement: rail` (stacked cards at the top of the show
+page's right sidebar; default `main` = the overview grid)
+and two types beside gauge/chart — `stats` (declared
+measures: a record field, a relation aggregate, or the
+difference of two aggregates, with prefix/suffix/decimals)
+and `list` (relation rows with label/meta paths). Gauges
+also accept a record-field value (`value: {field: …}`),
+not only relation aggregates. Repair rule (ak) splits
+existing show blades into the main grid + rail loops.
+
+Dashboard widgets (25 Oct 2026): three personal widget
+types join counter/list/week/chart/today/clock —
+`people_dates` (upcoming recurrences of a date field:
+birthdays, joining anniversaries; always renders, honest
+empty state), `profile` (the signed-in user's own record
+as a card: name/subtitle paths + declared label/value
+lines; one unresolvable line path drops the line, never
+the card), and `schedule` (the user's Mon–Sun week as
+named cells, e.g. shift names). Lists and today-widgets
+honor declared `filter:`; counters accept `suffix:` and a
+`range: {field, period: this_week}`. The dashboard
+aggregates widgets from EVERY discovered slice — twin
+slices that share a name both contribute — and a slice's
+model resolves declared-root-first with a path-derived
+namespace, so a name-shadowed twin's model is its own.
+
+Inline-edit cells (25 Oct 2026): a column declared in
+`ui.directory.inline_edit` gets ONE editor in its cell — the
+plain select of the field's declared options posting to the
+slice's inline endpoint. The progress bar declared via
+`progress_field` rides on its own row key (`<key>__progress`)
+and renders ABOVE the editor, so hiding the pill never hides
+the bar; the workflow transition select does not render
+inside an inline-edit cell (transitions live in the bulk bar
+and detail views). A filter facet is never an editable
+value: option-criteria facets (Overdue, buckets) belong to
+filters only — the inline value domain is the FIELD's
+declared options.
+
+Filter criteria vocabulary (25 Oct 2026): a declared filter
+OPTION may carry `criteria` — field => {op, value} conditions
+(ops eq/neq/lt/lte/gt/gte/between/in/not_in/like; value
+tokens $today/$now/$user) that REPLACE the plain handle
+equality when that option is chosen, applied by the base
+service as one AND group (`__conditions`). This declares
+computed facets without code: the source's Overdue status
+(deadline < $today, status not in finished/canceled) and its
+progress buckets (between bounds). A date_range sidebar
+filter with `placement: strip`, `columns` +
+`column_options` + `column_param: date_filter_on` +
+`default_column` renders the source's strip range with its
+applies-to select; the drawer skips strip-placed filters.
+The first-run empty panel renders only when NO filter is
+active — a list filtered to zero keeps its chrome. The
+panel's own button row still carries the declared directory
+actions and the Import button (generator + repair rule
+(al)) — an empty slice must not lose its context actions.
+
+List furniture standards (QA6, 25 Oct 2026 — element-level diff
+against the original, not just structure): in the ERP
+composition the data-table renders ONE row above the table —
+page actions (belowToolbar slot) on the left, view switcher +
+columns menu on the right — never a separate right-aligned
+controls row stacked over the actions band (owner-caught: the
+stack cost ~72px of dead space and split what the original
+keeps in one row). The matrix template's row header is
+declared per slice (`ui.directory.matrix.row_label`, default
+'Employee'). Two dead-space traps are healed by repair and
+must not be reintroduced: the legacy Compact Top Bar wrapper
+rendered an empty bordered sliver when the actions placement
+was not header-right (its @if sat inside the div — rule (ah)
+moves the @if outside), and the index section wrapper's
+space-y rhythm landed on the zero-height chrome (bulk bar,
+drawer) when no KPI cards render (rule (ai) + the generator
+apply the spacing class only when cards exist). List dates render in
+the source install's company format `d-m-Y` (datetimes
+`d-m-Y, h:i A`); progress thresholds are <50 red / 50–89 amber /
+≥90 green (read off the original list, superseding the earlier
+75/40 guess); a column may declare `progress_field: <field>` —
+the field's percentage renders as the source-style bar
+(percent centered on the track) ABOVE the cell's own content,
+which is how the original composes progress over the status
+control instead of giving progress its own column; the
+composite_user subtitle chain reads company_name/client_company
+before email, so a client cell shows name + company like the
+original.
+
 Document views (G2): declare
-`ui.show.document: { title:, line_items: <relation|repeater>, totals: [fields] }`
+`ui.show.document: { title:, line_items: <relation|repeater>, totals: [fields] }` — add `primary: true` when the record's page IS the document (the source products' invoice behaviour): show renders the document in the app shell with Back/Edit/Print-view actions, and the `/document` route keeps the print layout.
 and the slice gains `{index-uri}/{id}/document` — SliceManager
 registers the route centrally (no routes-file edit), the base
 controller serves `DirectoryUi::documentFromManifest()`, and the
@@ -293,6 +417,62 @@ template (slice-overridable via `Resources/views/matrix.blade.php`).
 Declared routes (document + matrix) are registered by SliceManager
 BEFORE the slice's own resource routes, or the {id} show route
 swallows the /matrix segment.
+Roster population (QA8, 26 Oct 2026): with `roster: true` the
+grid lists the row-key label map — when that map is broader
+than the surface's population (a users map includes clients
+and admins), declare
+`matrix.roster_population: { table:, key: }` and the roster
+intersects the map with that table's key values (attendances:
+`employee_details.user_id` = exactly the employees). An
+unscoped roster silently lists every account.
+Taxonomy badges (QA8): a column whose label is a taxonomy
+record carrying its own color (leave types, priorities)
+declares `formatter: badge` + `color_from: <relation>.<color
+column>` — the cell renders a solid pill in the record's
+color; plain text for a colored taxonomy is a defect.
+Filter option shapes (QA8): quick/sidebar filter `options`
+may be a `{value: label}` map OR a list of `{value, label}`
+pairs; the runtime normalizes both before rendering (a map
+reaching the strip unnormalized rendered identical 'All'
+tabs).
+Relation-multi form fields (QA8-fix, 26 Oct 2026): a form
+section field with `type: relation_multi` (handle = the
+model's BelongsToMany method, `relation:` overrides it)
+renders a multi-select fed by controller-resolved
+`{handle}Options` (from the root model's own relation); the
+form BO carries an int-id array under the handle, and the
+base service SYNCs the relation on save (generated services
+declare `relationMultiDefinitions()`; partial updates only
+touch provided selections). This is how a task's Assigned
+To is built — never a per-slice controller hack.
+Labeled-lines cells (QA8-fix): formatter `lines` renders
+stacked "Label: value" rows from the column's `lines:
+[{label, from, case?}]` spec (values via data_get on the
+row) — for meta-pair cells like a ticket's Others (Agent /
+Priority) that are facts, not a person or a single value.
+Columns built by `DirectoryUi::columnsForSlice` pass the
+formatter keys through (badge_from, lines, color_from,
+relation, breakdown…); a formatter key missing from that
+pass-through renders an honest em dash, not an error.
+Bar-comparison show widgets (QA8-fix): `ui.show.widgets`
+type `bars` — each bar is a stats measure (field /
+relation aggregate / minus, optional `scale:` divisor)
+with its own `color:`; widths scale to the largest bar and
+an unset field reads as zero. This is the Planned-vs-Actual
+shape (project Hours Logged, Project Budget); rendered by
+`x-ui.bars` in main and rail placements.
+Matrix composition (25 Oct 2026): the slice's declared sidebar
+filters fuse with the month/year period into the page's GET bar
+(criteria MERGE with the period bounds — replacing them silently
+unfiltered the grid), and the declared bulk-entry + import
+actions render in their own row. `roster: true` renders every
+member of the row-key label map (elapsed days read absent,
+future days dash, Total column `present / days-in-month`) and
+the declared filters then scope the ROSTER itself (the row-key
+filter picks its member; `relation_exists` filters resolve
+through the model's own relation — BelongsTo owner key /
+HasOne foreign key). `legend: [{icon:, label:, class?:}]`
+renders the Note row above the grid.
 
 Report views (G2): declare
 `ui.directory.report: { group_by:, aggregates: [{fn: count|sum|avg, column?, label?}], date_field?:, title?: }`
@@ -304,10 +484,44 @@ scopes the period. Declared-route registration reads the controller
 class from the routes file's own `use` statement — never derive it
 from the slice namespace (segment casing breaks PSR-4 lookups).
 
+Named + comparison reports (25 Oct 2026): a slice may declare
+ADDITIONAL reports under `ui.directory.reports[]`, each
+`{handle:, title:, ...}` — served at `{index-uri}/report/{handle}`
+(route name `{prefix}.report.{handle}`). A report (primary or
+named) may declare `compare:` INSTEAD of group_by/aggregates:
+`compare: [{label:, table:, date_field:, amount:, sign:}]` — the
+multi-source money-stream shape (Income vs Expense): each source's
+rows are summed per month, columns align by month with a signed
+Net column, and the page opens with Total/Net cards, computed by
+`DirectoryUi::compareFromManifest()`. Compare sources are read
+from their tables directly (no per-slice service scoping); the
+host slice's authorization gates the page. Pilot: the demo's
+Payments slice hosts its grouped Finance Report at /report and
+Income vs Expense at /report/income-expense (values reconciled
+against the tables).
+
 Show-stat filters (F3c extension): a stat's `filter:` values may be
 `!`-prefixed to EXCLUDE (whereNotIn) — for definitions inclusion
 cannot express, e.g. open tasks = `board_column_id: ['!<complete-id>']`
 (the source application's own User::openTasks definition).
+
+Conversation surface (25 Oct 2026): a slice may declare
+`ui.conversation` — the two-pane 1:1 chat shape (the source app's
+Messages page) that no directory pattern expresses. The slice's
+model is the conversation: fields `user_one` / `user_two` plus a
+`replies` has-many whose rows carry `reply` + `user_id`
+(relation names are conventional; override with `one:` / `two:` /
+`replies:` in the declaration; `title:` names the page).
+SliceManager registers `{prefix}/chat` (GET page, POST start,
+POST `{id}/reply`); BaseSliceWebController serves the standard
+blade (`laraslice::directory.conversation`, slice-overridable):
+contact search + conversation list (partner, relative time,
+last-reply preview), thread with own/other bubbles, composer,
+and a New Conversation modal over the app's users. Server-
+rendered throughout (selection is `?c=<id>`; nothing is
+auto-selected — the empty state shows, as in the source); no
+realtime transport is faked, and there is no read-tracking —
+the source schema carries no read flag either.
 
 ### C. Multi-Slice Domain Scaffolding via CLI & UI
 Developers and AI agents can scaffold entire domain suites in one command:
@@ -424,7 +638,12 @@ standard dashboard; designed empty state) · P5 Report, P6 Document, P7 Matrix
 `ui.directory.matrix`) · P8 Views (`ui.directory.views`
 list/board/calendar) · P9 Settings hub (every feature's
 settings in ONE searchable hub, declared via `settings:` in
-the slice manifest and aggregated by the framework) · P10
+the slice manifest and aggregated by the framework; a
+section may declare `bind: {table: …}` to read/write a
+single-row settings table's columns — the ported-system
+form, where `*_settings` tables become hub forms instead
+of CRUD directories; unbound sections use the core
+key-value store) · P10
 Bulk entry (`ui.directory.bulk_entry` — one-date grid over
 the row key's relationship options with per-row fields, at
 `{index}/bulk-entry`; the Mark Attendance pattern. `range: true`
@@ -559,7 +778,7 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 - `php artisan slice:ui:prune {--force} {--dry-run}`: Identify and prune unused BlatUI components to keep assets lean.
 - `php artisan slice:wizard {--web}`: Interactive console wizard or one-click web browser launcher for Slice Studio.
 - `php artisan slice:sync <SliceName>`: Detect database schema drift and synchronize fields back to `slice.yaml`.
-- `php artisan slice:cache` / `slice:clear`: Cache or clear slice discovery manifests for production boot optimization.
+- `php artisan slice:cache` / `slice:clear`: Cache or clear slice discovery manifests for production boot optimization. The cache also stores each manifest's parsed data (mtime+size freshness stamp), so warm discovery skips YAML parsing; an edited manifest re-parses alone until the next `slice:cache`.
 - `php artisan slice:publish {slice?} {--all} {--force}`: Publish core slices into `app/Slices/` for full customization.
 
 ### Enterprise Governance & AI Commands
@@ -789,6 +1008,7 @@ When an AI agent or developer is tasked with porting an existing monolithic appl
 7. **All domains use `laraslice.journeys.v2`**: ERP → admin/employee/client; process-core/adjudication → admin/complainant/mobile; other → operational nav-derived personas. No mermaid BRD novels in the port plan.
 8. **100% port checklist (ERP benchmark)**: aggregates + settings hub (`type: settings_hub`) + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order (taxonomies → settings → roots → children → pivots). Apply must leave Porting/Blueprint/Slice Studio useful for customization.
 9. **Workflow bulk actions**: Seed `ui.directory.bulk_actions` from detected transitions; Studios remain the place to add/remove bulk and row actions.
+10. **Parity claim language (24 Oct 2026)**: A port claim must name its tiers — data, availability, structure, behaviour, appearance. Structural/behavioural gates passing does NOT license "100% replica" in any release, doc, or landing copy unless the appearance tier (source design tokens + form presentations, captured by `slice:port --anatomy` design capture and checked by the visual gate) also passes or its deviations are recorded and approved. When in doubt, write "structural replica" — it is the stronger claim because it is the true one.
 
 Over **50% to 60% of an application's architecture can be accurately reverse-engineered directly from its database schema, foreign keys, and seeders**.
 
@@ -1489,6 +1709,19 @@ Rather than having an LLM slowly generate raw HTML/CSS strings on the fly (which
 3. **Sub-Second Execution (70–500ms)**: Fast classification and schema composition guarantees real-time UI synthesis without latency.
 4. **"Cage with a Door" Fallback**: High-confidence choices render the exact BlatUI widget immediately. If confidence drops below 50%, it falls back cleanly to an interactive prompt or standard fallback view.
 
+> **Status note (24 Oct 2026 — read before citing this section).**
+> What exists today: `JevDecisionService` performs catalog
+> SELECTION for slice generation (archetype/risk decisions over
+> the BlatUI catalog), and the kit contract swaps DESIGN TOKENS
+> between kits (proven by the second-kit spike, docs/KIT-2-
+> CONTRACT.md). What does NOT exist: a synthesis engine that
+> renders Body declarations through a different kit's component
+> MARKUP. A kit with different markup (e.g. a source-faithful
+> replica kit) is Tier-5 work (see the Tier-5 improvement plan
+> in the page-structure program), not a shipped capability.
+> Until it lands, do not describe Jev as markup-level UI
+> synthesis in any release, doc, or claim.
+
 ### 17.2 The Canonical `ui:` Schema in `slice.yaml`
 Every `slice.yaml` declares its UI presentation, directory layout, filters, and form section structures:
 ```yaml
@@ -1554,6 +1787,744 @@ All changes flow into `slice.yaml` on generate. Blueprint Studio remains the ref
 
 ---
 
+## 18. Real-Usage Verification, Access Reconciliation & Release Gates (Tier 0 standard)
+
+A port is NOT done when its pages render for the super admin. It is done when
+real people in real roles can complete real journeys. Three layers, all
+mechanical, all required before any release claim:
+
+**The trilogy is the contract.** Mind (`porting/system.yaml`) = clubs,
+journeys, decisions — never executes. Body (`porting/ui-spec/<slice>.ui.yaml`,
+schema v2 in the framework's `docs/MIND_BODY_HEART.md`) = per-slice pages:
+list, **form** (per-field input/relation/default + `system_fields` that must
+never render), detail, and **access** per club with data scope (`all`/`own`).
+Heart (`slice.yaml`) = the runtime truth the generator reads. A list-only
+Body is an unfinished draft.
+
+**Access reconciliation (`slice:drift`).** Clubs map to roles via `maps_to`
+in the Mind (names rarely match). Patterns use the REGISTRY's vocabulary
+(per-slice singular bases: `leaf.*`, `task.*`, `project_time_log.*`) — domain
+prefixes (`work.*`, `billing.*`) match nothing and are drift. `X.apply`
+requires `X.create`; `X.view-own` is a framework construct slug. Run
+`php artisan slice:drift` — **zero errors is a release gate** (empty roles,
+ungranted club promises, unmapped clubs). `slice:drift --fix` grants mapped
+roles what their clubs promise, creating view-own permission rows when
+missing; it NEVER widens a view-own promise into a full view grant.
+Per-person **overrides** (the Mind's second layer) live in `user_permissions`
+(grant/revoke per person, enforced by `Access` via `PermissionOverrides`;
+a revoke beats the club grant; supers bypass).
+
+**Form hygiene is generator law** (FieldDefinitionNormalizer): manifest
+`show_in_form`/`hidden` flags are honored; system/audit columns (`*_by`,
+`approved_*`, `event_id`) default OFF forms; `*_date`/`*_on` datetimes render
+as date inputs; relations render as pickers, never raw ID inputs. Workflow
+state fields are server-set: the base controller applies the workflow's
+`initial_state` on create when the field is empty — a record saved with an
+empty status is a defect. Own-scope: a `view-own`-only grant narrows lists to
+the viewer's own records and 404s other people's detail routes. What "own"
+means is the Heart's `access.own_scope` clause list — `{field: <column>}` or
+`{relation: <name>, key: <related column>}` entries, ANY match wins (default
+when undeclared: the `user_id`/`owner_field` column). Declare the real shape:
+projects are the client's by `client_id` AND members' by the `members`
+relation; invoices are the client's via `{relation: project, key: client_id}`.
+A persona the Mind names (e.g. an external Client) is not real until its club
+exists in the Mind, its role exists, and `slice:drift` reads 0 errors —
+`--fix` creates missing view-own rows and grants mapped roles, but never
+creates roles and never widens view-own into view.
+
+**The real-usage test (per domain, before release).** Drive BOTH the source
+and the port through the same journeys in a real browser, as super admin AND
+as an employee-role user, with the same seeded person: create/edit/view every
+form, open every tab, approve/reject a workflow item. Assert VALUES, not
+renders: the saved row's status, the scoped list's row count, the other
+person's detail returning 404, the notification landing. Structural diffing
+(admin-only, header-level) cannot see empty columns, 403 walls, or missing
+defaults — the 23 Oct HR test found all three on a port that had "passed"
+every structural audit. The form audit (Body v2 vs the live create form:
+system fields rendered, declared fields missing, relations as raw inputs,
+workflow state editable) must return zero findings per slice.
+
+**Port completeness checklist (from the 24 Oct full re-audit).** CRUD
+parity is not port parity. For every source module, enumerate — from
+the live page, not the schema — and then declare in the three files
+or record as a deviation:
+
+- **Record workflow actions** beyond CRUD: send / remind / duplicate /
+  archive / convert (estimate → invoice) / copy / public link /
+  download / PDF / sign. These live in row menus and detail headers;
+  a slice that only has CRUD has the data, not the workflow.
+- **Bulk**: does the source list have row checkboxes and bulk
+  actions? The directory must declare them; absence is a deviation.
+- **Export / Import** presence per list (the machinery exists —
+  enablement is a declaration, per slice).
+- **Reports**: source report pages (attendance, finance, leave,
+  sales, task, time-log…) are pages, not slices of a table. A port
+  with no report pattern has a named gap, never a silent one.
+- **Settings surfaces**: every settings section in the source maps
+  to a declared settings section (the `bind:` pattern), a platform
+  surface, or a recorded deviation — count the source's sections.
+- **Timers & clocks**: per-record timers, a global timer, and
+  attendance punch actions are interactions, not decorations.
+- **Route-name uniqueness**: same-named slices MUST NOT share
+  route-name bases — the generator path-qualifies nested slices;
+  after any port or regeneration run `slice:links` and require
+  zero route claims, or every list's links jump to the wrong twin.
+- **Twin ports**: porting a module whose slice name is already
+  installed (different table or different app) namespaces the
+  incoming slice at mapping time (app-qualified, e.g.
+  `AccountingInvoices`; renames are reported in the port
+  result) — it never shadows the incumbent. A re-port of the
+  SAME slice (same name, table, app) keeps its name and
+  updates in place. In `slice:links`, shared-TABLE claims
+  between a twin pair are expected facts; registry NAME
+  collisions after a port are defects.
+
+## 19. Composition Parity — Hub Tabs, Detail Composition & the Screenshot Gate (H standard)
+
+**Scope note (24 Oct 2026).** This section governs COMPOSITION
+parity: what a page contains and how it is arranged (tabs,
+labels, sections, columns). It is not APPEARANCE parity — how
+the page looks (colour, type, component shapes, form
+presentation). Appearance is governed by §19B (Tier 5). A
+"replica" claim needs both; §19 alone licenses "structural
+replica" only.
+
+Structural parity is not parity. A detail page whose tabs cannot name their
+rows, or whose profile is a raw attribute dump, is not a replica — no matter
+what the differ says about list-page headers. These are framework standards,
+never per-slice patches:
+
+- **H1 — Hub tabs render the RELATED slice's declared list definition.**
+  `DirectoryUi::relatedTabsFromManifest()` resolves each relation tab to the
+  slice that owns the related table (`SliceManifest::primaryTable()` +
+  declared child models), takes its `ui.directory.columns`, fetches the rows
+  through the relation, decorates them through that slice's own service
+  (`BaseSliceService::listingBusinessObjects()` → its `mapToListing` + the
+  query's eager loads), and renders every cell through `DataTableRows` — the
+  same values as the related directory itself. The generic
+  ID/Summary/Status skeleton survives only as the unresolved fallback
+  (flagged `'unresolved'`); a slice whose columns do not describe the
+  related table falls back to model-derived columns (child entities with no
+  slice of their own) WITHOUT that slice's service decoration.
+- **H2 — Label resolution is universal.** A record's display label resolves
+  through the manifest/pipeline conventions everywhere (tabs, rails,
+  selects). Rendering `#<id>` as content, or an empty date becoming
+  "today" (`DataTableRows::formatDateValue` returns `—` for null/empty),
+  is a defect class.
+- **H3 — Detail composition is declared, not dumped.** The parameters card
+  renders `DirectoryUi::detailRows()`: manifest fields minus the system set
+  (`*_by`, approval stamps, tenant keys) — or, when the Heart declares
+  `ui.show.detail_fields`, exactly those rows: `{label, from, type?}` where
+  `from` is an attribute or dotted relation path (`employeeDetail.
+  designation.name`, `user.email`), resolved failure-safely to `—`. The card
+  title is `ui.show.detail_title` (`DirectoryUi::detailTitle()`); the header
+  subtitle is `ui.show.identity_fields` (`DirectoryUi::identitySubtitle()`,
+  values joined ` • `). The ownership card renders ONLY when the record
+  carries `assigned_to_role`/`assigned_to_department` — placeholder
+  role/department text is fabrication. Repair rules (r)/(s)/(t) in
+  `slice:repair` keep existing blades at this standard.
+- **H4 — Person/relation cells must resolve.** Person columns use the
+  `composite_user` formatter (avatar + name + subtitle from
+  designation_name/designation_id); relation columns (a person's User Role
+  via `role_user` → `roles.name`) must be decorated by the slice service —
+  an all-empty relation column fails the gate. Listing BOs must declare
+  every directory column they serve (a missing BO property silently drops
+  the column's values — cf. Projects `start_date`).
+- **H5 — Tab completeness.** Hubs declare every source tab or a named
+  equivalent (Shifts = shift-schedule relation tab). Gaps are listed in the
+  parity plan, never silently absent.
+- **H6 — Tab toolbars** (Add/Export/scoped search as the source has them)
+  remain the open item of this standard; tabs ship with their content first.
+
+**The visual gate (mandatory before any parity claim).** For each hub:
+screenshot pairs (list, overview, EVERY tab) original vs port on the SAME
+person/dataset, a per-page diff table, and tab-content assertions (rows
+carry the related records' labels, never `#id` summaries). Capture tabs by
+clicking the detail page's own tab strip and asserting the detail URL —
+module list pages are not tabs. A claim is only as good as the surface it
+was measured on.
+
+### 19B. Appearance Parity — the Tier-5 Visual Gate (24 Oct 2026)
+
+Adopted 24 Oct 2026 after the design-QA audit (computed styles
+measured on matched pages: ~20 of ~31 attributes differed —
+primary colour, sidebar scheme, font family, button geometry,
+table-header voice, card model, pill style). Appearance parity
+is a separate, measurable tier:
+
+- **The spec is captured, not remembered.** `slice:port
+  --anatomy` design capture records the source's computed
+  design tokens (primary/sidebar/font/button/header/card/
+  pill/search) and per-form presentation (drawer | page |
+  modal) into `porting/ui-spec/source.design.yaml`. Porting
+  without a design capture cannot claim Tier 5.
+- **The gate is computed-style assertions**, per page, port vs
+  the captured spec: EXACT for primary colour, font family,
+  sidebar scheme/width; ±2px for geometry (button height,
+  radius, row height per the declared density); form
+  presentation must match the captured value. Failures enter
+  the deviation register with the same mechanics as
+  structural deviations (fix, or record + owner approval).
+- **Rendering path.** The standard kit keeps its own identity
+  and is NOT expected to pass this gate. Tier 5 is rendered
+  by a replica kit (source-faithful component markup behind
+  the kit contract) — P3 of the Tier-5 plan. Until a replica
+  kit passes §19B on a page, that page is a structural
+  replica, and every public surface must say so.
+- **Release claim language.** Releases, changelogs, docs and
+  landing pages name the tiers a claim covers (data /
+  availability / structure / behaviour / appearance).
+  "100% replica" requires all five, per page, with the
+  register at zero unrecorded deviations.
+- **Composition is asserted separately (25 Oct 2026).** The
+  token gate measures computed styles; it cannot see REGION
+  ORDER. The composition rules are part of appearance parity
+  and are checked on the live page (the composition probe):
+  (1) **The page title lives in the topbar on ERP pages** —
+  title + `Home • X` breadcrumb at the topbar's left (the
+  source composition); the in-page title row is retired on
+  ERP slices (repair rule (aa), gated on the routes prefix
+  erp/hr/crm) so exactly ONE title + breadcrumb exists per
+  page; platform surfaces keep the shell breadcrumb and
+  their in-page titles. The shell derives the title from the
+  active navigation entry (the nav builder tries the slice's
+  own declared route-name prefix first — path-named slices
+  like `erp_erp_work_projects.*` otherwise never activate)
+  with a URI-headline fallback. (2) **The filter bar is fused
+  with the chrome on list pages** — facets + search + the
+  Filters button form a full-width strip directly under the
+  topbar; the data table pushes its bar into the layout's
+  `filterbar` stack, and the Filters button is emitted into
+  the quick-filters slot (generator + repair rule (y)), never
+  the table-actions slot. Strip-placed declared filters (a
+  date range with `placement: strip`) fuse into that SAME
+  band via the bar's `filterbar-extra` stack (layout kit,
+  26 Oct 2026) — a strip filter rendering as a second band
+  inside the content is a composition defect, not a variant. The slot block's guard admits
+  sidebar-only slices (`!empty($quickFilters) ||
+  !empty($sidebarFilters)` — generator + repair rule (z);
+  the narrow guard silently dropped the button on
+  drawer-only slices). (3) **exactly one Filters opener,
+  inside the strip** — the slot button dispatches
+  `open-ls-filters`; the drawer's standalone trigger row
+  yields to it, and a Filters button rendering anywhere else
+  (the toolbar row) is a composition failure. A token pass
+  with a composition failure is NOT appearance parity.
+  (4) **Hub composition is declared, not templated per page**
+  — `ui.show.composition: overview` (layout kit, 26 Oct 2026)
+  switches a show page to the hub composition the source
+  systems use: the record title renders in the topbar (the
+  layout yields a page `page-title` section over its nav-label
+  default), the tab strip fuses under the topbar via the
+  filterbar stack and drives the in-page panels through an
+  `ls-show-tab` window event (status + Edit + Delete pinned at
+  the strip's right edge), the identity header card and the
+  generic metadata strip are NOT rendered, declared widgets
+  lead, and the field card follows as a plain 'Details' card
+  (`ui.show.fields: end | hide`). The generator emits the
+  branches in every show blade; standard composition remains
+  the default. (5) **Portal dashboards are a composition,
+  too** — `config('laraslice.dashboard.composition') =
+  'portal'` renders the personal-workspace dashboard: a
+  Welcome header with a live clock and the attendance punch
+  (consuming the declared `clock` widget, whose panel is not
+  repeated), dual-figure counters (a counter may declare a
+  `secondary` measure with its own label/filter/tone — the
+  "1 Pending · 1 Overdue" cards), and the widget set the
+  portal declares. Dashboard filters accept an operator form
+  (`{op: lt|lte|gt|gte|neq, value:}`) and the `@today` token —
+  how a static manifest says "overdue". Two widget types
+  join the set: `table` (declared columns over the slice's
+  records, own-scope like every widget, relation-path fields
+  + `with:` eager loads) and `calendar` (the current month,
+  the declaring slice's records plotted on a date field).
+  Widgets carry a declared `order`; collect() sorts by it.
+
+## 20. List Contract v3 & Tab Content Contract — Density, Chrome, Wired Controls
+
+A list page is a contract, not a layout preference (Body schema v3
+in the framework's `docs/MIND_BODY_HEART.md`). Generation is
+**reconciliation**: `slice:repair` keeps existing blades at the
+current contract (rules (r)–(x)); a standard only new slices obey
+is not a standard. The three files declare semantics; a UI-kit
+component layer renders them — kits are swappable, contracts are
+verified by MEASUREMENT (row height, chrome height, control
+wiring), not screenshot resemblance. (24 Oct 2026: this
+sentence governs the STANDARD kit's contract. Tier-5 replica
+kits additionally pass the §19B appearance gate — computed-
+style assertions against the captured source design spec.
+Measurement, not resemblance, still rules: §19B measures
+styles instead of comparing screenshots.)
+
+- **Density is declared and total.** `ui.directory.density`
+  (default `compact`, ~49px rows matching the source systems) is
+  passed by the controller and governs EVERY grid cell —
+  selection and actions cells included; one comfortable cell sets
+  the whole row's height.
+- **One actions row, one toolbar row.** Declared directory
+  actions (Invite) render inside the top-bar cluster; quick
+  filters/search/Filters/columns compose the data table's own
+  toolbar via its `quick-filters` slot. Stacked chrome rows above
+  the table are contract violations — measure the table's offset
+  against the source page.
+- **Every control is wired.** The top-bar Export dispatches the
+  table's export event; inline editors post to the slice's inline
+  endpoint, whose allowlist is the Heart's `inline_edit` plus the
+  field's declared `options`. A rendered-but-dead control is a
+  defect of the same class as a missing column. YAML option keys
+  MUST be quoted when multi-word — unquoted flow-mapping keys
+  parse truncated and corrupt the value domain.
+- **Tab content contract v2 (closes H6 for relation tabs).** A
+  resolved tab carries the related slice's action surface from
+  its own Heart (`DirectoryUi::tabActionSurface()`): scoped Add
+  (create route + relation FK preset), Export of the shown rows,
+  per-row view/edit/delete, the slice's declared inline editor,
+  and source-shaped pagination. Rows without actions are a
+  picture of a list, not a port of one.
+- **Same-name slices** (a fidelity slice and its porter twin)
+  resolve manifests by PATH — the manifest a tab's columns came
+  from is the manifest its actions and inline declarations must
+  come from.
+
+**v3 follow-through (same section, later 23 Oct).** The Filters
+trigger lives in the data table's toolbar (the `table-actions`
+slot dispatches `open-ls-filters`; the drawer listens on the
+window event and its legacy standalone row self-removes when the
+toolbar button exists — repair (y)). **Inline actions**: a
+declared `inline_edit` field that is not a model attribute is an
+inline ACTION — `BaseSliceWebController::inlineUpdate` delegates
+to the service's `inlineFieldWriter($field)` (the Employees
+role-pivot writer is the reference implementation); column-
+declared `options` are the most local declaration and win in
+`columnsForSlice`. The grid's editor cell serves any declared
+inline column; the workflow transition select stays
+status-only. Identity headers follow the same density standard
+(repair (z)).
+
+## 21. Page Structure Contract (Body v4) & Conformance — the porting standard
+
+Full schema: framework `docs/MIND_BODY_HEART.md`, "Body schema
+v4". The rules an agent must follow on ANY page work:
+
+- **Composition is declared data.** Every list/detail/form
+  page declares its regions from the closed vocabulary, in
+  order. List: breadcrumb · title · header_actions · facets ·
+  toolbar · actions · grid · pagination. Detail: breadcrumb ·
+  identity · highlights · sections · tabs · related ·
+  activity. If a page needs a region the vocabulary lacks,
+  extend the vocabulary in the docs first — never improvise
+  chrome in a blade.
+- **Placement is required data.** `pages.list.placement`
+  (header-right | toolbar-left | command-bar |
+  below-facets-left). Ports copy the source's placement;
+  industry conventions conflict, so no silent default on a
+  port.
+- **Title region holds the title only.** Actions live in
+  header_actions / the actions band. No badges, version
+  pills, or seed affordances in the title row unless declared
+  (demo_seed is declaration-gated, default off).
+- **Density and pagination are names** (compact |
+  comfortable), never px. Banned in the 3 files: px values,
+  colours, CSS classes, kit component names, inline code.
+- **Detail widgets are declared too** (Body v4, Tier-5
+  P2): charts and panels on a detail page go in
+  `pages.detail.widgets` — {key, type: gauge | pie | donut
+  | bar | stat_row | stat | list | card | calendar, title,
+  shows}. A source chart with no declaration is a spec
+  gap; a declared widget the kit renders as filler is a
+  kit gap (§19B owns the assertion). Form presentations
+  are captured evidence (source.design.yaml), never
+  defaults: `presentation` in a Heart or ui-spec must
+  match the capture (DesignLint presentation findings).
+- **Enforcement:** `slice:drift --structure` audits every
+  index blade against this contract (invalid placement,
+  unguarded Seed chrome, version pills, placement readiness)
+  — run it after any generator/repair change; 0 errors is
+  the bar, warnings are the known backlog.
+- **Anti-drift law:** generated pages emit ONLY declared
+  regions/controls in declared order. Undeclared chrome in a
+  blade is a drift error (slice:drift structure class) and a
+  conformance failure — fix the declaration or the generator,
+  never bless the chrome.
+- **Conformance is the definition of done for a port:**
+  structure (ARIA snapshot vs source), behaviour (one test
+  per NN/g task: find / compare / view-edit-add / act),
+  data (golden master), visual (same-kit phase only).
+  Residual diffs go in the app's deviation register,
+  classified planned | defect; a port is "100%" when every
+  page is gated and every diff is fixed or
+  approved-and-recorded — not when a screenshot looks close.
+- **Design layer:** each kit carries a DESIGN.md (Google
+  format: YAML tokens + prose rules) and a machine-readable
+  component catalog (name, props, intent mapping). Check the
+  catalog before creating any component; check DESIGN.md
+  before choosing any visual value. Values come from tokens,
+  never from taste in the moment.
+- **Detail tab render modes:** a relation tab renders as a
+  table by default; `render: board` (+ `group_by`) or
+  `render: gantt` (+ `start_field`/`end_field`/`label_field`)
+  declares an additional presentation of the same relation,
+  rendered by the kit's board/gantt partials. Group labels
+  resolve by the FK-relation convention (board_column_id →
+  boardColumn → title/column_name/name). Declarations carry
+  field names only — presentation stays in the kit.
+- **JEV** is the Body→kit synthesis contract (regions →
+  kit contract table → components), being built as a real
+  layer under this standard (P1). Until it lands, pages are
+  generator+repair output held to this contract by drift +
+  conformance, and §17's synthesis wording is aspirational.
+- **Account-backed create (users-backed directories):**
+  when the source's directory IS a view over user accounts
+  (employees, clients), the create/edit surface is ONE
+  form that writes the account, the details record and the
+  directory row in a single transaction — never three
+  surfaces (quick create + invite + raw details form).
+  On a slice that owns its web controller, override
+  create/store/edit/update: validate the source's full
+  field set, write user (with role) + details + row via
+  forceFill inside DB::transaction, and give every
+  promised field a real column first (migration on the
+  slice). The directory row is born linked (user_id set),
+  so hubs and self-service light up immediately. The
+  employee-number suggestion derives from the directory
+  codes' max suffix when the details sequence was never
+  populated.
+
+## 22. The 100% Replica Protocol — porting any existing system
+
+A replica claim is a MEASURED state, never an impression.
+"100%" is earned gate by gate, and a port's status is its
+LOWEST unverified gate. Five gates, in order; each produces
+evidence, and all four feed one status file (below). The
+porter workflow (§12/§16) does the building; this protocol
+decides when building may call itself a replica.
+
+**Phase 0 — the composition map (before any table work).**
+Tables are not the unit of porting; surfaces are. From the
+source's routes, controllers and views, list every surface
+whose read or write spans more than one model: users-backed
+directories (employees = users + details; clients = users +
+client details), documents (invoice = header + items +
+totals), hubs (record + relations + widgets), wizards,
+joined reports. Each becomes a named composition with one
+owner slice BEFORE schemas are ported. A directory declared
+over an invented or mirror table the source does not have
+is a defect at this phase, not a design choice. Cross-model
+creates follow the account-backed rule (§21): one form, one
+transaction, all models written. **Twins**: when two port
+slices claim the same source surface (a pilot and a tree
+port of one page), the map names BOTH, and every later gate
+pairs EACH twin — or records it as a deliberate duplicate
+with its own verdict. Pairing only the healthy twin while
+the other renders placeholders is how a hollow flagship
+page survived three audits (QA8, 26 Oct 2026).
+
+**Gate S — schema parity.** Column-level diff, source table
+↔ ported table: every source column exists (name, type
+family, nullability) or carries a written reason the owner
+approved. Dropped-column defects (a parent_id, a lifecycle
+date set, a status vocabulary) are found HERE, by diff —
+never later, by a user. Generated forms never render system
+columns (§21.6): audit stamps, workflow state, and FK
+bookkeeping are classified in the Body, not discovered in
+the browser.
+
+**Gate D — data truth.** ETL is proven against the source,
+never against the loader's own output: row counts per table,
+aggregate reconciliation (sums on money columns, counts per
+status), FK integrity (every foreign key resolves), and
+join-level sampling — pick real entities and compare the
+JOINED record (user ⋈ details, invoice ⋈ items) field by
+field in both systems. Mirror tables must reproduce the
+source's pairings exactly; a shifted pairing (right name,
+wrong company) is a Gate D failure even when counts match.
+
+**Gate F — furniture conformance.** §21's page contract:
+every paired page diffed at the element level — headers,
+cards (declared only, never inferred), actions, counts,
+composition order — with deltas classified D/M/S and either
+fixed or carried as owner-approved deviations.
+
+**Gate T — task conformance (real usage, mandatory).**
+Per domain, the core journeys are EXECUTED in both systems
+with identical input and the outcome asserted in the
+database: create with the FULL form filled (every field the
+source accepts must persist in the port), edit, delete, each
+declared action, filters returning the same row sets. A page
+can pass Gate F and fail Gate T (a beautiful form that
+writes one of three models) — the port is not a replica
+until both pass. Personas matter (§18): run key journeys as
+the roles that actually perform them, not only as admin.
+
+**Gate V — visual conformance (composition, read by eye).**
+Paired screenshots of the flagship surfaces are READ side
+by side — shell and navigation model, topbar furniture,
+page-header pattern, the composition blocks in their
+order, density and treatment. A computed-style probe over
+sampled elements is NOT a visual gate (QA9, 26 Oct 2026:
+a token kit passed every probe while the shell, the
+dashboard and every hub remained a different composition).
+A style/token layer over standard markup can satisfy
+Gate V's token row only; layout divergence is recorded as
+Gate V divergence no matter how green Gates F and T are,
+and a replica claim names Gate V with the rest.
+
+**The status file — `REPLICA-STATUS.md`.** Every port keeps
+one at its root, updated at every gate run, in this shape:
+- Header: source system, date of last full run, overall
+  status = the lowest gate (e.g. "Gate F 100% · Gate T 82%").
+- Per-gate table: scope, measured result, evidence links
+  (diff outputs, screenshots, registers).
+- Per-domain task matrix: journey × result in both systems.
+- Deviations: each delta not fixed — classified, with the
+  owner's approval or "awaiting owner" stated plainly.
+- NOT covered: everything untested, named explicitly.
+The AI answers "what is the replica status?" FROM this file
+— offline, without re-running anything — quotes its date,
+and never upgrades a number the file does not back. When
+the file is stale or a gate has never run, the honest
+answer is the gap, not a guess. A port with no status file
+has no status.
+
+**Declaring 100%.** Only when all four gates read 100% on
+the same run, the deviations list is empty or fully
+owner-approved, and the NOT-covered list is empty. Anything
+less is reported as its real number — "structurally 100%,
+tasks 82%" — because a developer planning around a false
+100% inherits every hidden gap as a production surprise.
+
+### The porting runbook — follow it in order
+
+**Developer track (CLI / Studio):**
+
+1. **Capture the anatomy first.** `slice:port --anatomy` on the
+   source records every page's interaction inventory (page type,
+   export/import, bulk selection, workflow actions) as porting
+   evidence. For a non-Laravel source, point the porter at its
+   SQL dump or live database — it hard-fails on an ambiguous
+   source DB rather than guessing.
+2. **Write the Phase 0 composition map** (above) before porting
+   a single table: the cross-model surfaces, the account-backed
+   directories, the documents, the hubs.
+3. **Port.** `slice:port` (add `--permissions` for the source's
+   role × permission matrix, `--table-prefix` to coexist with an
+   existing install). Name collisions resolve by twin
+   namespacing — the incumbent keeps its name, the twin is
+   qualified by its app; renames are reported, never silent.
+4. **Move the data, then prove it.** Run the ETL, then verify
+   Gate D by joins against the source — never by the loader's
+   own row counts.
+5. **Declare the surface.** Filters with defaults, hub tabs and
+   composition (`ui.show.composition: overview`), dashboard
+   widgets, the replica shell on ported trees. Everything is a
+   Heart/Body declaration; per-page code is a smell.
+6. **Repair + cache.** `slice:repair` retrofits the declared
+   patterns fleet-wide (idempotent, evidence-gated), then
+   `slice:cache`.
+7. **Walk the gates in order** — S, D, F, T, V — and write the
+   results into the port's `REPLICA-STATUS.md`, residuals and
+   NOT-covered list included. The port's status is its lowest
+   gate.
+8. **Ship by the release boundary:** working demo + a changes
+   file + the owner's approval before any push, tag, or release.
+
+**AI track (an assistant porting with this skill):**
+
+- Read §21 (page structure) and this section *before* touching
+  the source; then work the developer track — the steps are the
+  same, your evidence discipline is stricter.
+- Never port table-by-table without the Phase 0 map: an
+  invented-table directory is a defect you created, not a
+  source behavior you discovered.
+- Quote replica status **only** from the port's
+  `REPLICA-STATUS.md`, with its date. Never upgrade a gate from
+  a probe: Gate V is read from paired screenshots, by eye — a
+  token measurement is not a visual pass, and reporting one as
+  the other is the exact failure this protocol exists to stop.
+- Verify every claim against the running systems (both of
+  them), value-for-value where the source exposes values.
+- Fix at the generator / standard layer so the next port
+  inherits the fix; a per-slice patch that only this port
+  enjoys is unfinished work.
+- Deviations are the owner's call: record them, never approve
+  your own.
+
+## 23. Concepts Map — teach from this
+
+One line per concept; the section named is its law.
+
+- **Mind** (`porting/system.yaml`) — the system's intent:
+  actors, roles as permission clubs, journeys, navigation,
+  flows, integrations. Never executes; never holds code.
+  (§18, `docs/MIND_BODY_HEART.md`)
+- **Body** (`porting/ui-spec/<slice>.ui.yaml`) — one
+  slice's pages as a contract: list, form (with field
+  classification + `system_fields`), detail, access per
+  club. A list-only Body is an unfinished draft. (§18, §21)
+- **Heart** (`slice.yaml`) — the manifest; the SOLE runtime
+  truth the generator reads. Mind and Body inform it; when
+  they disagree with it, Heart wins and the others are
+  stale. (§21)
+- **Soul** — the design identity (kit, density, voice),
+  declared in the Mind; it is not a fourth file.
+- **Slice** — a vertical unit: manifest + models + BOs +
+  services + controllers + views + migrations. Slices own
+  their tables and never reach into another slice's.
+  (§1, §3, §4)
+- **Business Object (BO)** — the typed shape data takes
+  between layers (form / listing / filter); the contract a
+  service validates. (§2, §5)
+- **Directory** — the standard list surface: columns,
+  facets, strips, drawers, bulk + record actions, declared
+  in the Heart, rendered by the kit. (§20, §21)
+- **Hub** — the record page: header identity, tabs
+  (fields / relations / audit), declared widgets with
+  main/rail placement. (§19, §21)
+- **Pattern** — a named, YAML-declared composition the
+  standard layer renders (matrix, bulk entry, document,
+  conversation, keyed-rows settings, import, invite,
+  create_from, account-backed create…). Ports declare
+  patterns; they never hand-build screens. (§19–§22)
+- **Porter** — the pipeline that turns a source system
+  into slices: discovery (code or SQL dump) → anatomy →
+  declarations → generation → repair. (§12, §16, §21)
+- **Anatomy** — the extracted truth of a source page
+  (columns, actions, cards, forms), the evidence ports
+  are declared from — never from taste. (§21)
+- **Repair rules** — idempotent generator-level fixes
+  applied fleet-wide; a defect is fixed in the generator
+  or a repair rule, never patched slice by slice. (§21)
+- **Kit** — the rendered design system. Ports may carry a
+  replica kit matching the source's look; the standard kit
+  is the default and the escape hatch. (§5.5, §21)
+- **Studio** — the developer surfaces over the same
+  declarations: Plan (Mind/Body editing), Operate (live
+  system state), Dev (slice tooling). Modes are
+  destinations, not steps. (§8, §18)
+- **Drift** (`slice:drift`) — access reconciliation:
+  Mind clubs vs granted permissions; zero errors is a
+  release gate. (§18)
+- **Conformance** — the measured comparison of port vs
+  source: Gate F (furniture) and Gate T (tasks), recorded
+  in the port's register. (§21, §22)
+- **Replica status** — the port's `REPLICA-STATUS.md`:
+  the four gates' measured results, deviations, and the
+  NOT-covered list. It is the only source an AI quotes
+  when asked how complete a port is. (§22)
+
+## 24. Starting a new project — two doors, one system
+
+A new LaraSlice project starts from a fresh Laravel application
+(there is no separate scaffolder binary): `composer create-project
+laravel/laravel`, then `composer require hereafter/laraslice` and
+`php artisan slice:install`. From there, two doors lead to the
+same system — the trilogy files are identical either way, and
+teams mix doors freely.
+
+**The Studio door (developer-led).**
+
+1. Open the Studio (`/laraslice/wizard`) and start in **Plan**:
+   write the Mind first — purpose, actors and their clubs,
+   journeys, operations. A non-technical owner can read and
+   sign this file; that is what it is for.
+2. **Create** mode scaffolds the first slice (or a whole domain
+   suite) from presets, blueprints, or the brief; **Design**
+   mode shapes its Body — columns, filters, tabs — with live
+   preview.
+3. Run the app. The Standard UI layer (§5.5/§21) renders the
+   basics correctly by default; declare, don't hand-build.
+4. Grow slice by slice; **Operate** mode watches health,
+   backups, and access as the system matures.
+
+**The AI door (skill-led).**
+
+1. Give the assistant this skill (`npx skills add
+   HereafterSol/laraslice`, or the copy shipped in `skills/`)
+   and, for live inspection, connect MCP (`laraslice:mcp`).
+2. Brief the AI with the Mind, not with tickets: ask it to
+   draft `system.yaml` (or run `slice:plan:draft` from a
+   written brief) and review the draft like an owner's
+   sign-off — the AI never promotes its own draft silently.
+3. The AI scaffolds slices by the same declarations a human
+   writes in Design mode, generates, and verifies against the
+   running app (§18's evidence rules apply from the first
+   slice, not just when porting).
+4. Every AI change lands as reviewable YAML + generated code —
+   diff it the way you would a colleague's PR.
+
+**Which door when.** Solo freelancer: either; the AI door is
+faster for breadth, the Studio door for feel. Big-team SDLC:
+Plan mode is the contract surface (BRD → Mind → sign-off),
+both doors build against it. Brief-first and from-zero are
+first-class starts — a project does NOT begin with porting;
+porting (§22) is simply the door for systems that already
+exist.
+
+## 25. The SDLC on LaraSlice — teams, software houses, AI
+
+The lifecycle is the product a software house sells; the
+framework gives every phase a surface and makes the handoffs
+files, not folklore (`docs/SDLC.md` is the long form).
+
+- **Discovery → the Mind.** Brief/BRD becomes `system.yaml` in
+  Plan mode; the owner signs the Mind — that sign-off is the
+  requirements gate. Drafts (yours or `slice:plan:draft`'s)
+  are marked and never self-promoted.
+- **Architecture/design → the Body.** Domains are bounded
+  contexts teams can own; Bodies are reviewable without
+  running the app; architecture tests fail the build on
+  boundary violations.
+- **Build → slices.** Create/Design, CLI, or the AI door
+  (§24) — identical declarations, interchangeable work. The
+  Standard UI layer is what keeps many hands' output one
+  product.
+- **Verify → gates.** `slice:drift` zero-errors, per-domain
+  real-usage runs (§18), the composition probe; for ports,
+  the five Replica gates (§22) with `REPLICA-STATUS.md` as
+  the quotable record.
+- **Release → the boundary.** Demo + changes file + docs/
+  README/landing/changelog updated + owner approval, then
+  merge/tag/publish. An AI prepares releases; it does not
+  ship them.
+- **Operate → Operate mode.** Health, backups per the Mind's
+  policy, audit trail, access review, operator manuals from
+  the Mind. Maintenance loop: Plan edit → impact →
+  diff-save → `slice:repair` (fleet-wide, idempotent) →
+  Operate verify.
+
+**AI's seat:** a team member with defined permissions —
+drafts in discovery, builds by declaration, verifies with
+evidence, never approves its own deviations or releases.
+This skill is the shared protocol: the same document onboards
+a new hire and an AI assistant, which is why the lifecycle
+holds at software-house scale.
+
+## 26. The runtime family — portability is the horizon
+
+LaraSlice is the reference implementation of a standard, not
+the whole ambition (`docs/RUNTIMES.md`). The trilogy files,
+the Dev Studio Standard, the Standard UI patterns, and this
+skill are written runtime-neutral so sibling implementations
+(Node, Java, .NET, Python, React/Next/Angular/Astro, plain
+HTML, Flutter, Android) can inherit them whole. Two working
+rules follow for everything built here:
+
+- **The Heart's vocabulary never leaks one stack's idioms.**
+  Storage types are families; UI is patterns, not components;
+  stack specifics live in the runtime's mapping layer. A
+  declaration only one runtime could honor is a standard
+  defect, however convenient locally.
+- **A cross-runtime move is a port** — verified by the same
+  five gates (§22), with the Mind untouched: it was never the
+  old runtime's property.
+
+Sibling runtimes are roadmap, not shipped goods; never
+describe them as existing. The permanence principles behind
+the vision — a standard not a feature, knowledge in files,
+domain-shaped so it travels beyond web software — are
+written out in `docs/RUNTIMES.md` ('Built to last'). The sequencing stands: mature
+this foundation, ship the flagship demo, then the family.
+
 ## Branch notes (`feat/workflow-bulk-actions`) — keep in sync with code
 
 ### Slice YAML v0.1
@@ -1580,6 +2551,16 @@ php artisan slice:repair          # re-inject DirectoryUi loader; merge config g
 php artisan slice:repair --publish-ui
 php artisan view:clear
 ```
+
+### Regenerating an existing slice's form
+`php artisan slice:regen-form {Slice} [--path=DIR] [--write] [--keep-staging]`
+rebuilds form/create/edit from the slice's Heart: field definitions are
+rebuilt from the manifest, the slice is generated into a staging root, and
+only the three form views are transplanted. Dry-run by default — the report
+names any surface that would be **lost** (named inputs / `$…Options`
+variables the Heart cannot re-derive, e.g. pivot multi-selects and hand
+edits). `--write` backs the originals up under
+`storage/app/laraslice/regen-backups/` before transplanting.
 
 ### MFA local toggle
 ```env

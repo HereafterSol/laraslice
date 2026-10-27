@@ -17,7 +17,51 @@
         }
     }
 @endphp
+@php
+    // Layout kit step 2 (26 Oct 2026): on pages whose data-table
+    // pushes the external filter bar (the data-table component's
+    // own auto rule keys on the same paths), the strip segment
+    // joins THAT band via the 'filterbar-extra' stack — one
+    // integrated band, as in the source composition — instead of
+    // rendering as a second band inside the content.
+    $lsPath = request()->path();
+    $inExternalBar = $lsPath === 'erp' || str_starts_with($lsPath, 'erp/')
+        || str_starts_with($lsPath, 'hr/') || str_starts_with($lsPath, 'crm/');
+@endphp
 @if (!empty($stripFilters))
+@if ($inExternalBar)
+@push('filterbar-extra')
+<form method="GET" class="flex flex-wrap items-end gap-2">
+    @foreach (($activeFilters ?? []) as $ak => $av)
+        @if (!in_array($ak, $stripKeys, true) && !is_array($av) && $av !== null && $av !== '')
+        <input type="hidden" name="{{ $ak }}" value="{{ $av }}" />
+        @endif
+    @endforeach
+    @foreach ($stripFilters as $sf)
+        @php $sfHandle = $sf['handle'] ?? ''; $param = $sf['column_param'] ?? 'date_filter_on'; @endphp
+        @if (!empty($sf['column_options']))
+        <label class="flex flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {{ $sf['column_label'] ?? 'Date filter on' }}
+            <select name="{{ $param }}" class="h-8 rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground">
+                @foreach ($sf['column_options'] as $value => $label)
+                <option value="{{ $value }}" @selected((string) (request()->query($param) ?? ($sf['default_column'] ?? '')) === (string) $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+        </label>
+        @endif
+        <label class="flex flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {{ $sf['label'] ?? 'Date' }} from
+            <input type="date" name="{{ $sfHandle }}_from" value="{{ $activeFilters[$sfHandle . '_from'] ?? request()->query($sfHandle . '_from') ?? '' }}" class="h-8 rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
+        </label>
+        <label class="flex flex-col gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {{ $sf['label'] ?? 'Date' }} to
+            <input type="date" name="{{ $sfHandle }}_to" value="{{ $activeFilters[$sfHandle . '_to'] ?? request()->query($sfHandle . '_to') ?? '' }}" class="h-8 rounded-lg border border-border bg-background px-2 text-xs font-normal normal-case tracking-normal text-foreground" />
+        </label>
+    @endforeach
+    <x-ui.button type="submit" size="sm">Apply</x-ui.button>
+</form>
+@endpush
+@else
 <form method="GET" class="mb-4 flex flex-wrap items-end gap-2">
     @foreach (($activeFilters ?? []) as $ak => $av)
         @if (!in_array($ak, $stripKeys, true) && !is_array($av) && $av !== null && $av !== '')
@@ -47,4 +91,5 @@
     @endforeach
     <x-ui.button type="submit" size="sm">Apply</x-ui.button>
 </form>
+@endif
 @endif

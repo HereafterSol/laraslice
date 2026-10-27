@@ -95,7 +95,10 @@ final class BlueprintPlanner
                 $columns[] = [
                     'column' => $field['handle'],
                     'type' => $storageType,
-                    'field_type' => $field['type'],
+                    // Semantic type: a field carrying a static options
+                    // map IS an enum (stored as string) — e.g. the
+                    // type: string + input: select + options shape.
+                    'field_type' => ! empty($field['options']) ? 'enum' : $field['type'],
                     'nullable' => $field['nullable'] ?? ! $required,
                     'required' => $required,
                     'default' => $field['default'] ?? ($field['type'] === 'boolean' ? false : null),

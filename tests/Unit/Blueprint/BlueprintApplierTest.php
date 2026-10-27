@@ -47,7 +47,7 @@ final class BlueprintApplierTest extends TestCase
         $migrationNames = array_map('basename', glob($target.'/Migrations/*.php'));
         sort($migrationNames);
         $this->assertLessThan($migrationNames[1], $migrationNames[0]);
-        $manifest = json_decode((string) file_get_contents($target.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($target.'/slice.yaml');
         $this->assertSame(['service_desks', 'tickets'], $manifest['tables']);
         $this->assertFileExists($target.'/slice.yaml');
         $this->assertCount(2, glob($target.'/Migrations/*.php'));
@@ -138,12 +138,13 @@ final class BlueprintApplierTest extends TestCase
         $this->assertFileExists($target.'/Models/ShopProduct.php');
         $this->assertFileExists($target.'/Models/ShopVariant.php');
         $this->assertFileExists($target.'/slice.yaml');
-        $this->assertFileExists($target.'/slice.json');
+        // Phase 4: manifests are YAML-only — no JSON twin is written.
+        $this->assertFileDoesNotExist($target.'/slice.json');
 
         $this->assertStringContainsString('namespace App\\Slices\\ECommerce\\ShopProducts\\Models;', file_get_contents($target.'/Models/ShopProduct.php'));
         $this->assertStringContainsString('namespace App\\Slices\\ECommerce\\ShopProducts\\Models;', file_get_contents($target.'/Models/ShopVariant.php'));
 
-        $manifest = json_decode((string) file_get_contents($target.'/slice.json'), true, flags: JSON_THROW_ON_ERROR);
+        $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($target.'/slice.yaml');
         $this->assertSame('E-Commerce', $manifest['domain']);
         $this->assertSame('/e-commerce/shop_products', $manifest['navigation']['url']);
         $this->assertSame('E-Commerce', $manifest['navigation']['group']);

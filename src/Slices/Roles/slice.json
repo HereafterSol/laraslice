@@ -12,5 +12,8 @@
         "roles.create",
         "roles.edit",
         "roles.delete"
-    ]
+    ],
+    "navigation": {
+        "group": "Operations"
+    }
 }

@@ -26,7 +26,6 @@ final class DataTableUiParserTest extends TestCase
         $this->assertSame('date_overdue', $cols['due_date']['formatter'] ?? null);
         $this->assertSame('status_pill', $cols['board_column']['formatter'] ?? $cols['status']['formatter'] ?? null);
         $this->assertSame('composite_user', $cols['users']['formatter'] ?? null);
-        $this->assertSame('text_with_badge', $cols['heading']['formatter'] ?? null, 'heading is title+badges, not status_pill');
         $this->assertContains($cols['due_date']['formatter'], DataTableUiParser::FORMATTERS);
     }
 

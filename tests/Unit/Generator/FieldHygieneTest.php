@@ -31,6 +31,18 @@ class FieldHygieneTest extends TestCase
         $this->assertFalse($out['added_by']['show_in_form']);
         $this->assertTrue($out['added_by']['system']);
         $this->assertFalse($out['approved_at']['show_in_form']);
+        // Server-stamped IP columns are system fields too.
+        $ipOut = [];
+        foreach ($n->normalize([
+            ['name' => 'clock_in_ip', 'type' => 'string'],
+            ['name' => 'ip_address', 'type' => 'string'],
+            ['name' => 'relationship', 'type' => 'string'],
+        ]) as $d) {
+            $ipOut[$d['name']] = $d;
+        }
+        $this->assertFalse($ipOut['clock_in_ip']['show_in_form']);
+        $this->assertFalse($ipOut['ip_address']['show_in_form']);
+        $this->assertTrue($ipOut['relationship']['show_in_form']);
         // An explicit manifest flag survives normalization now.
         $this->assertFalse($out['reason']['show_in_form']);
         $this->assertTrue($out['added_note']['show_in_form']);

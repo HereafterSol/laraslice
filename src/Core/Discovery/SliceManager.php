@@ -44,6 +44,9 @@ class SliceManager
     /** @var array<string, SliceManifest> first holder of each normalized name key */
     protected array $normalizedNameHolders = [];
 
+    /** @var array<string, array{model: string, winner: string, candidates: array<int, string>}> ambiguous modelClass() resolutions */
+    protected array $modelCollisions = [];
+
     /**
      * Every manifest seen during discovery, including slices whose
      * registry key was taken by a same-named twin. Shadowed slices
@@ -57,31 +60,115 @@ class SliceManager
 
     protected bool $repairDryRun = false;
 
+    /**
+     * True once this instance has completed a discovery pass.
+     * discover() is an "ensure discovered" operation: repeat calls
+     * in one process are no-ops unless forced (24 Oct 2026 — a
+     * hub detail page was issuing ~60 full rescans, ~0.9s each,
+     * and blowing the 30s server limit). Mutation flows invalidate
+     * via clearCache(), which every toggle/destroy/sync path
+     * already calls after writing.
+     */
+    protected bool $discovered = false;
+
+    /**
+     * Parsed manifest data cache (backlog B1): manifest
+     * path => ['mtime' => int, 'size' => int, 'data' => array],
+     * loaded lazily from bootstrap/cache. Null = not loaded
+     * yet. Written by cacheSlices() alongside the path list;
+     * entries are only trusted when the file's current
+     * mtime + size match, so an edited manifest re-parses
+     * (and only that one) until the next slice:cache.
+     *
+     * @var array<string, array{mtime: int, size: int, data: array}>|null
+     */
+    protected ?array $manifestDataCache = null;
+
     public function __construct(Application $app)
     {
         $this->app = $app;
     }
 
-    public function discover(): void
+    public function getManifestDataCachePath(): string
     {
+        if (function_exists('app') && method_exists($this->app, 'bootstrapPath')) {
+            return $this->app->bootstrapPath('cache/laraslice_manifest_data.php');
+        }
+
+        return sys_get_temp_dir().'/laraslice_manifest_data.php';
+    }
+
+    /**
+     * @return array<string, array{mtime: int, size: int, data: array}>
+     */
+    protected function manifestDataCache(): array
+    {
+        if ($this->manifestDataCache !== null) {
+            return $this->manifestDataCache;
+        }
+        $this->manifestDataCache = [];
+        $path = $this->getManifestDataCachePath();
+        if (file_exists($path)) {
+            $cached = include $path;
+            if (is_array($cached)) {
+                $this->manifestDataCache = $cached;
+            }
+        }
+
+        return $this->manifestDataCache;
+    }
+
+    /**
+     * Construct a manifest, reusing cached parsed data when
+     * the manifest file is unchanged (mtime + size match).
+     */
+    protected function loadManifest(string $manifestPath): SliceManifest
+    {
+        $cache = $this->manifestDataCache();
+        if (isset($cache[$manifestPath]) && is_array($cache[$manifestPath]['data'] ?? null)) {
+            $mtime = @filemtime($manifestPath);
+            $size = @filesize($manifestPath);
+            if ($mtime === ($cache[$manifestPath]['mtime'] ?? null) && $size === ($cache[$manifestPath]['size'] ?? null)) {
+                return SliceManifest::fromParsed($manifestPath, $cache[$manifestPath]['data']);
+            }
+        }
+
+        return new SliceManifest($manifestPath);
+    }
+
+    public function discover(bool $force = false): void
+    {
+        if ($this->discovered && ! $force) {
+            return;
+        }
         $this->slices = [];
         $this->navigationCache = [];
         $this->resolvedModels = [];
+        $this->modelCollisions = [];
         $this->nameCollisions = [];
         $this->normalizedNameHolders = [];
         $this->discoveredSlices = [];
         if ($this->isCached()) {
             $cached = include $this->getCachedSlicesPath();
             if (is_array($cached)) {
-                foreach ($cached as $name => $manifestPath) {
-                    if (file_exists($manifestPath)) {
-                        $manifest = new SliceManifest($manifestPath);
+                // Values are manifest paths in both cache
+                // formats: the legacy name-keyed map and the
+                // lossless path list cacheSlices() now writes.
+                // Iterating values only registers every cached
+                // manifest — including same-named twins the
+                // legacy map's keys could not represent as
+                // separate entries on the write side.
+                foreach ($cached as $manifestPath) {
+                    if (is_string($manifestPath) && file_exists($manifestPath)) {
+                        $manifest = $this->loadManifest($manifestPath);
                         $this->registerManifest($manifest);
                         if ($manifest->active) {
                             $this->bootSlice($manifest);
                         }
                     }
                 }
+
+                $this->discovered = true;
 
                 return;
             }
@@ -104,6 +191,8 @@ class SliceManager
         foreach ($scanPaths as $path) {
             $this->scanDirectoryForSlices($path);
         }
+
+        $this->discovered = true;
     }
 
     /**
@@ -117,7 +206,7 @@ class SliceManager
 
         $manifestFile = $this->findManifest($path);
         if ($manifestFile) {
-            $manifest = new SliceManifest($manifestFile);
+            $manifest = $this->loadManifest($manifestFile);
             $this->registerManifest($manifest);
 
             if ($manifest->active) {
@@ -178,12 +267,25 @@ class SliceManager
      */
     public function cacheSlices(): int
     {
-        $map = [];
-        foreach ($this->slices as $name => $manifest) {
+        // Lossless by construction (foundation backlog A2,
+        // 24 Oct 2026): the cache is built from EVERY
+        // discovered manifest, not from the name index.
+        // The old name-keyed map silently dropped every
+        // name-shadowed twin (115 cached of 140 discovered
+        // on the demo) and a cached boot then 500'd on the
+        // missing slices. A manifest whose file cannot be
+        // resolved now refuses the whole write instead of
+        // shrinking the registry quietly.
+        $paths = [];
+        foreach ($this->discoveredSlices as $manifest) {
             $manifestFile = $this->findManifest($manifest->path);
-            if ($manifestFile) {
-                $map[$name] = $manifestFile;
+            if (! $manifestFile) {
+                throw new \RuntimeException(
+                    "slice:cache refused: manifest file for slice [{$manifest->name}] at [{$manifest->path}] could not be resolved; ".
+                    'writing the cache would silently drop it from the registry.'
+                );
             }
+            $paths[] = $manifestFile;
         }
 
         $cachePath = $this->getCachedSlicesPath();
@@ -192,17 +294,960 @@ class SliceManager
             @mkdir($cacheDir, 0755, true);
         }
 
-        $export = var_export($map, true);
+        $export = var_export($paths, true);
         file_put_contents($cachePath, "<?php\n\nreturn {$export};\n");
 
-        return count($map);
+        // Parsed-data cache (B1): the path list alone still
+        // left discovery parsing every manifest's YAML on
+        // every request (~0.44s over 140 manifests). Store
+        // each manifest's parsed data beside its freshness
+        // stamp; loadManifest() reuses it while the file is
+        // unchanged, so a warm boot skips the YAML parser.
+        $dataCache = [];
+        foreach ($this->discoveredSlices as $manifest) {
+            $manifestFile = $this->findManifest($manifest->path);
+            if ($manifestFile && file_exists($manifestFile)) {
+                $dataCache[$manifestFile] = [
+                    'mtime' => filemtime($manifestFile),
+                    'size' => filesize($manifestFile),
+                    'data' => $manifest->raw,
+                ];
+            }
+        }
+        $dataPath = $this->getManifestDataCachePath();
+        if (! is_dir(dirname($dataPath))) {
+            @mkdir(dirname($dataPath), 0755, true);
+        }
+        file_put_contents($dataPath, "<?php\n\nreturn ".var_export($dataCache, true).";\n");
+        $this->manifestDataCache = $dataCache;
+
+        return count($paths);
     }
 
     /**
      * Clear cached slice discovery file.
      */
+    /**
+     * Remove an auto-heal child-route group whose controller
+     * does not exist (backlog A3). Matches only the generated
+     * block shape: a Route::prefix('<prefix>') group whose body
+     * references [<Child>WebController::class, ...] and ends at
+     * the first line that is exactly `});`. Returns the stripped
+     * content, or null when no such block is present.
+     */
+    private function stripInventedChildRoutes(string $content, string $childUrlPrefix, string $childStudly): ?string
+    {
+        $lines = explode("\n", $content);
+        $start = null;
+        foreach ($lines as $i => $line) {
+            if (str_contains($line, "Route::prefix('{$childUrlPrefix}')")) {
+                $start = $i;
+                break;
+            }
+        }
+        if ($start === null) {
+            return null;
+        }
+        $end = null;
+        $referencesController = false;
+        for ($j = $start; $j < count($lines) && $j <= $start + 12; $j++) {
+            if (str_contains($lines[$j], $childStudly.'WebController::class')) {
+                $referencesController = true;
+            }
+            if (trim($lines[$j]) === '});') {
+                $end = $j;
+                break;
+            }
+        }
+        if ($end === null || ! $referencesController) {
+            return null;
+        }
+        // The generated block starts with a blank separator line.
+        $from = ($start > 0 && trim($lines[$start - 1]) === '') ? $start - 1 : $start;
+        array_splice($lines, $from, $end - $from + 1);
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Repair (x): move an index blade's standalone quick-filter
+     * block into the data table's quick-filters slot. Returns the
+     * rewritten content, or null when the block shape is not the
+     * generated one (hand-edited blades are left alone).
+     */
+    private function slotQuickFilters(string $content): ?string
+    {
+        if (! str_contains($content, '<x-ui.data-table')) {
+            return null;
+        }
+        $lines = explode("\n", $content);
+        $ifIdx = null;
+        foreach ($lines as $i => $line) {
+            if (str_contains($line, '@if(!empty($quickFilters))')) {
+                $ifIdx = $i;
+                break;
+            }
+        }
+        if ($ifIdx === null) {
+            return null;
+        }
+        $foreachIdx = null;
+        $endforeachIdx = null;
+        $endIdx = null;
+        foreach ($lines as $i => $line) {
+            if ($i <= $ifIdx) {
+                continue;
+            }
+            if ($foreachIdx === null && str_contains($line, '@foreach($quickFilters as $qf)')) {
+                $foreachIdx = $i;
+                continue;
+            }
+            if ($foreachIdx !== null && $endforeachIdx === null && str_contains($line, '@endforeach')) {
+                $endforeachIdx = $i;
+                continue;
+            }
+            if ($endforeachIdx !== null && trim($line) === '@endif') {
+                $endIdx = $i;
+                break;
+            }
+        }
+        if ($foreachIdx === null || $endforeachIdx === null || $endIdx === null) {
+            return null;
+        }
+        $indent = str_repeat(' ', strlen($lines[$ifIdx]) - strlen(ltrim($lines[$ifIdx])));
+        $inner = array_slice($lines, $foreachIdx, $endforeachIdx - $foreachIdx + 1);
+        $slot = array_merge(
+            [$indent.'@if(!empty($quickFilters))', $indent.'    <x-slot:quick-filters>'],
+            $inner,
+            [$indent.'    </x-slot:quick-filters>', $indent.'@endif']
+        );
+        $startIdx = $ifIdx;
+        if ($startIdx > 0 && str_contains($lines[$startIdx - 1], 'Quick Filter Tabs')) {
+            $startIdx--;
+        }
+        array_splice($lines, $startIdx, $endIdx - $startIdx + 1);
+        $dtIdx = null;
+        $gtIdx = null;
+        foreach ($lines as $i => $line) {
+            if ($dtIdx === null && str_contains($line, '<x-ui.data-table')) {
+                $dtIdx = $i;
+                continue;
+            }
+            if ($dtIdx !== null && str_ends_with(rtrim($line), '>')) {
+                $gtIdx = $i;
+                break;
+            }
+        }
+        if ($gtIdx === null) {
+            return null;
+        }
+        array_splice($lines, $gtIdx + 1, 0, $slot);
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Repair (y, revised 25 Oct 2026): the Filters button belongs
+     * in the quick-filters slot — the strip the source composition
+     * places directly under the topbar (on ERP pages the data
+     * table pushes that slot's bar into the layout strip). Blades
+     * carrying the button in a table-actions slot get it
+     * relocated (an emptied slot is removed); blades missing it
+     * get it inserted; a missing quick-filters slot is created.
+     * The button dispatches the window event the filters drawer
+     * listens for; the drawer's standalone trigger row removes
+     * itself at runtime when this button exists. Returns null
+     * when nothing applies.
+     */
+    /**
+     * Repair rule (aa): retire the in-page title row on ERP-app
+     * slices. The shell topbar carries the section title + Home
+     * breadcrumb on ERP pages (the source composition, 25 Oct
+     * 2026); the generated title block beside it duplicated both.
+     * Two shapes: (B) 'Compact Top Bar' — an inner title div
+     * inside the row; (A) the current generator's row with the
+     * h1 + breadcrumb as direct children. The title block is
+     * deleted; the row keeps any header-right actions block and
+     * gains `empty:hidden` so a row left with only a conditional
+     * block renders nothing when the condition is off. Gated by
+     * the caller to ERP-shell slices (routes prefix erp/hr/crm —
+     * the layout's own test); platform slices keep their in-page
+     * titles (their shell has no topbar title).
+     */
+    /**
+     * (af) Restore the ownership card's data guard in show
+     * blades generated before the guard existed: the card
+     * reads $record->assigned_to_role / assigned_to_department
+     * with boilerplate fallbacks ('General Staff' /
+     * 'Operations'), so unguarded blades print that invented
+     * ownership on EVERY record. The current generator wraps
+     * the card in the @if; this rule adds the same wrap.
+     */
+    private function guardOwnershipCard(string $content): ?string
+    {
+        $marker = '<!-- Responsibility & Ownership Card -->';
+        $pos = strpos($content, $marker);
+        if ($pos === false) {
+            return null;
+        }
+        $before = substr($content, max(0, $pos - 240), min(240, $pos));
+        if (str_contains($before, 'assigned_to_role')) {
+            return null;
+        }
+        $endTag = '</x-ui.card>';
+        $end = strpos($content, $endTag, $pos);
+        if ($end === false) {
+            return null;
+        }
+        $end += strlen($endTag);
+        $guard = '@if(!empty($record->assigned_to_role) || !empty($record->assigned_to_department))'."\n";
+
+        return substr($content, 0, $pos).$guard.substr($content, $pos, $end - $pos)."\n                @endif".substr($content, $end);
+    }
+
+    /**
+     * (ag) Point show blades' $label line at
+     * DirectoryUi::recordLabel() (the chain that also tries
+     * document numbers and {thing}_name attributes) instead of
+     * the five-field chain that titled projects and invoices
+     * "Slice #id" (QA5, 25 Oct 2026).
+     */
+    /**
+     * (ah) Unghost the legacy Compact Top Bar: its wrapper div
+     * renders even when the slice's actions placement is not
+     * 'header-right', because the placement @if sits INSIDE the
+     * div — the page gets a 9px bordered sliver plus the
+     * wrapper's space-y gap of dead space above the table
+     * (owner-caught, 25 Oct 2026). Move the @if OUTSIDE the div
+     * so the bar exists only when its branch renders. Guarded:
+     * only when the div contains exactly the @if block.
+     */
+    private function unghostCompactTopBar(string $content): ?string
+    {
+        $ifLine = "@if((\$placement ?? 'below-facets-left') === 'header-right')";
+        $divOpen = '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-border/40">';
+
+        // Broken intermediate (first (ah) run): the @if ended up
+        // BOTH before and inside the div. Drop the inner one.
+        $brokenPattern = "        ".$ifLine."\n    ".$divOpen."\n        ".$ifLine;
+        if (str_contains($content, $brokenPattern)) {
+            return str_replace($brokenPattern, "    ".$ifLine."\n    ".$divOpen, $content);
+        }
+
+        // Original shape: div (with empty:hidden) wrapping the
+        // @if. Move the @if outside and swap the closing pair.
+        $open = '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-border/40 empty:hidden">';
+        $pos = strpos($content, $open);
+        if ($pos === false) {
+            return null;
+        }
+        $afterOpen = substr($content, $pos + strlen($open));
+        if (! preg_match('/^(\s*)'.preg_quote($ifLine, '/').'/', $afterOpen, $m)) {
+            return null;
+        }
+        $closePair = "        @endif\n    </div>";
+        $closePos = strpos($content, $closePair, $pos);
+        if ($closePos === false) {
+            return null;
+        }
+        $inner = substr($content, $pos + strlen($open), $closePos - ($pos + strlen($open)));
+        // Strip the @if line itself from the head of $inner;
+        // what follows must be the actions wrapper div.
+        $inner = preg_replace('/^\s*'.preg_quote($ifLine, '/').'\n/', '', $inner, 1);
+        if (! preg_match('/^\s*<div class="ml-auto flex flex-wrap items-center gap-2">/', (string) $inner)) {
+            return null;
+        }
+        $bar = "    ".$ifLine."\n    ".$divOpen.$inner."    </div>\n    @endif";
+
+        return substr($content, 0, $pos).$bar.substr($content, $closePos + strlen($closePair));
+    }
+
+    /**
+     * (ai) Conditional band rhythm on index pages: the section
+     * wrapper's space-y-* margin lands on the zero-height
+     * chrome (bulk bar, filters drawer) when no KPI cards
+     * render, reading as dead space above the actions row
+     * (owner-caught, 25 Oct 2026). Apply the spacing class
+     * only when KPI cards will render.
+     */
+    private function conditionalIndexRhythm(string $content): ?string
+    {
+        $pattern = "/(@section\('content'\)\n)<div class=\"(space-y-\d+)\">/";
+        if (! preg_match($pattern, $content, $m)) {
+            return null;
+        }
+        $replacement = $m[1]
+            ."@php \$hasKpiCards = !empty(\$summaryCards) || !empty(\$dashWidgets); @endphp\n"
+            .'<div class="{{ $hasKpiCards ? \''.$m[2].'\' : \'\' }}">';
+
+        return preg_replace($pattern, $replacement, $content, 1);
+    }
+
+    /**
+     * (aj) The first-run empty panel must not swallow the
+     * directory when a list is merely FILTERED to zero: extend
+     * its condition so it renders only with no active filters
+     * (the data-table then shows its in-table empty row and
+     * the filter bar stays visible/clearable).
+     */
+    private function scopeEmptyPanelToUnfiltered(string $content): ?string
+    {
+        $old = "@if (count(\$rows) === 0 && (\$defaultView ?? 'table') !== 'calendar')";
+        if (! str_contains($content, $old)) {
+            return null;
+        }
+
+        return str_replace(
+            $old,
+            "@if (count(\$rows) === 0 && empty(array_filter(\$activeFilters ?? [])) && (\$defaultView ?? 'table') !== 'calendar')",
+            $content
+        );
+    }
+
+    /**
+     * (ak) Show-page widget placements: the overview widgets
+     * region renders MAIN-placement widgets only (with the
+     * stats/list card branches), and RAIL-placement widgets
+     * render as stacked cards at the top of the right sidebar
+     * — the source hubs' overview composition (progress gauge
+     * and detail sections in the main column; tasks pie,
+     * statistics and appreciation lists in the rail).
+     */
+    private function splitShowWidgetPlacements(string $content): ?string
+    {
+        if (str_contains($content, 'Declared rail widgets')) {
+            return null;
+        }
+        $gridAnchor = '<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">';
+        $gridPos = strpos($content, $gridAnchor);
+        if ($gridPos === false) {
+            return null;
+        }
+        $changed = false;
+
+        // Rail loop at the top of the right sidebar.
+        $sidebar = "<!-- Right 1/3 Action & Responsibility Sidebar -->\n            <div class=\"space-y-6\">";
+        if (str_contains($content, $sidebar)) {
+            $content = str_replace($sidebar, $sidebar."\n".self::showRailLoop(), $content);
+            $changed = true;
+            $gridPos = strpos($content, $gridAnchor);
+        }
+
+        // Main region: replace any existing widgets region
+        // before the grid, or insert the canonical one.
+        $region = self::showMainWidgetsRegion();
+        $existing = strpos($content, '@if(!empty($showWidgets');
+        if ($existing !== false && $existing < $gridPos) {
+            $lineStart = strrpos(substr($content, 0, $existing), "\n");
+            $lineStart = $lineStart === false ? 0 : $lineStart + 1;
+            // Swallow a directly preceding declaration comment.
+            $before = substr($content, 0, $lineStart);
+            if (preg_match('/\{\{--[^}]*show\.widgets[^}]*--\}\}\s*$/', $before, $cm)) {
+                $lineStart -= strlen($cm[0]);
+            }
+            $content = substr($content, 0, $lineStart).$region."\n".substr($content, $gridPos);
+            $changed = true;
+        } else {
+            $content = substr($content, 0, $gridPos).$region."\n".substr($content, $gridPos);
+            $changed = true;
+        }
+
+        return $changed ? $content : null;
+    }
+
+    private static function showMainWidgetsRegion(): string
+    {
+        return <<<'BLADE'
+        {{-- Declared overview widgets (ui.show.widgets, S-UI 3): gauges and charts computed server-side --}}
+        @if(!empty($showWidgets ?? []))
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            @foreach($showWidgets as $widget)
+            @if(($widget['placement'] ?? 'main') === 'main')
+            @if(($widget['type'] ?? '') === 'gauge')
+            <x-ui.card class="p-5 bg-card border shadow-xs">
+                <x-ui.gauge :value="$widget['value']" :max="$widget['max']" :label="$widget['title']" :display="$widget['display']" />
+            </x-ui.card>
+            @elseif(($widget['type'] ?? '') === 'chart')
+            <x-ui.card class="p-5 bg-card border shadow-xs">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ $widget['title'] }}</p>
+                <x-ui.chart :type="$widget['chart']" :labels="$widget['labels']" :series="$widget['series']" :height="200" />
+            </x-ui.card>
+            @elseif(($widget['type'] ?? '') === 'stats')
+            <x-ui.card class="p-5 bg-card border shadow-xs">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ $widget['title'] }}</p>
+                <dl class="space-y-2">
+                    @foreach($widget['rows'] as $row)
+                    <div class="flex items-center justify-between gap-3 text-[13px]">
+                        <dt class="text-muted-foreground">{{ $row['label'] }}</dt>
+                        <dd class="font-semibold text-foreground">{{ $row['value'] }}</dd>
+                    </div>
+                    @endforeach
+                </dl>
+            </x-ui.card>
+            @elseif(($widget['type'] ?? '') === 'list')
+            <x-ui.card class="p-5 bg-card border shadow-xs">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ $widget['title'] }}</p>
+                @if(($widget['rows'] ?? []) === [])
+                <p class="text-[13px] text-muted-foreground">{{ $widget['empty'] ?? 'Nothing to show.' }}</p>
+                @else
+                <ul class="divide-y divide-border/60">
+                    @foreach($widget['rows'] as $row)
+                    <li class="flex items-center justify-between gap-3 py-1.5 first:pt-0 last:pb-0">
+                        <span class="text-[13px] font-medium text-foreground">{{ $row['label'] }}</span>
+                        @if(($row['meta'] ?? '') !== '')<span class="text-xs text-muted-foreground">{{ $row['meta'] }}</span>@endif
+                    </li>
+                    @endforeach
+                </ul>
+                @endif
+            </x-ui.card>
+            @endif
+            @endif
+            @endforeach
+        </div>
+        @endif
+BLADE;
+    }
+
+    private static function showRailLoop(): string
+    {
+        return <<<'BLADE'
+        {{-- Declared rail widgets (ui.show.widgets placement: rail) --}}
+        @foreach($showWidgets ?? [] as $widget)
+        @if(($widget['placement'] ?? 'main') === 'rail')
+        <x-ui.card class="p-5 bg-card border shadow-xs">
+            @if(($widget['type'] ?? '') === 'gauge')
+            <x-ui.gauge :value="$widget['value']" :max="$widget['max']" :label="$widget['title']" :display="$widget['display']" />
+            @elseif(($widget['type'] ?? '') === 'chart')
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ $widget['title'] }}</p>
+            <x-ui.chart :type="$widget['chart']" :labels="$widget['labels']" :series="$widget['series']" :height="200" />
+            @elseif(($widget['type'] ?? '') === 'stats')
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ $widget['title'] }}</p>
+            <dl class="space-y-2">
+                @foreach($widget['rows'] as $row)
+                <div class="flex items-center justify-between gap-3 text-[13px]">
+                    <dt class="text-muted-foreground">{{ $row['label'] }}</dt>
+                    <dd class="font-semibold text-foreground">{{ $row['value'] }}</dd>
+                </div>
+                @endforeach
+            </dl>
+            @elseif(($widget['type'] ?? '') === 'list')
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ $widget['title'] }}</p>
+            @if(($widget['rows'] ?? []) === [])
+            <p class="text-[13px] text-muted-foreground">{{ $widget['empty'] ?? 'Nothing to show.' }}</p>
+            @else
+            <ul class="divide-y divide-border/60">
+                @foreach($widget['rows'] as $row)
+                <li class="flex items-center justify-between gap-3 py-1.5 first:pt-0 last:pb-0">
+                    <span class="text-[13px] font-medium text-foreground">{{ $row['label'] }}</span>
+                    @if(($row['meta'] ?? '') !== '')<span class="text-xs text-muted-foreground">{{ $row['meta'] }}</span>@endif
+                </li>
+                @endforeach
+            </ul>
+            @endif
+            @endif
+        </x-ui.card>
+        @endif
+        @endforeach
+BLADE;
+    }
+
+    /**
+     * (al) The first-run empty panel replaces the whole list
+     * composition — including the actions band — so declared
+     * directory actions (and Import) vanished exactly when a
+     * slice was empty. The panel's button row gains the
+     * declared-actions include and the import button.
+     */
+    private function emptyPanelActions(string $content): ?string
+    {
+        $start = strpos($content, '@if (count($rows) === 0');
+        if ($start === false) {
+            return null;
+        }
+        $else = strpos($content, "\n    @else", $start);
+        if ($else === false) {
+            return null;
+        }
+        $region = substr($content, $start, $else - $start);
+        if (str_contains($region, 'directory.actions')) {
+            return null;
+        }
+        $seedLine = "                @if((\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))";
+        $seedPos = strpos($region, $seedLine);
+        if ($seedPos === false) {
+            return null;
+        }
+        $insert = "                @include('laraslice::directory.actions')\n"
+            ."                @isset(\$importUrl)\n"
+            ."                <x-ui.button href=\"{{ \$importUrl }}\" as=\"a\" variant=\"secondary\" size=\"sm\" class=\"border border-border gap-1.5\">\n"
+            ."                    <x-lucide-upload class=\"size-3.5\" /> <span>Import</span>\n"
+            ."                </x-ui.button>\n"
+            ."                @endisset\n";
+        $region = substr($region, 0, $seedPos).$insert.substr($region, $seedPos);
+
+        return substr($content, 0, $start).$region.substr($content, $else);
+    }
+
+    private function useRecordLabelHelper(string $content): ?string
+    {
+        if (! str_contains($content, '$record->title ??')) {
+            return null;
+        }
+        $out = preg_replace(
+            '/\$label = \$record->title \?\? \$record->name \?\? \$record->full_name \?\? \$record->heading \?\? \$record->subject \?\? \(\'([^\']+) #\' \. \$id\);/',
+            '\$label = \\LaraSlice\\Support\\DirectoryUi::recordLabel(\$record) ?? (\'$1 #\' . \$id);',
+            $content,
+            1,
+            $count
+        );
+
+        return $count > 0 ? $out : null;
+    }
+
+    private function retireInPageTitleRow(string $content): ?string
+    {
+        $lines = explode("\n", $content);
+        $count = count($lines);
+        $deleteBlock = function (int $start) use (&$lines, $count): ?int {
+            // Balanced-<div> scan from $start; returns the end
+            // line index (inclusive) or null when unbalanced.
+            $depth = 0;
+            for ($i = $start; $i < $count; $i++) {
+                $depth += substr_count($lines[$i], '<div') - substr_count($lines[$i], '</div>');
+                if ($i > $start && $depth <= 0) {
+                    return $i;
+                }
+                if ($i === $start && $depth === 0 && str_contains($lines[$i], '</div>')) {
+                    return $i;
+                }
+            }
+
+            return null;
+        };
+
+        for ($i = 0; $i < $count; $i++) {
+            $isRowB = str_contains($lines[$i], '<!-- Compact Top Bar');
+            $isRowA = str_contains($lines[$i], 'flex items-center gap-3 pb-2 border-b border-border/40')
+                && isset($lines[$i + 1]) && str_contains($lines[$i + 1], '<h1');
+            if (! $isRowB && ! $isRowA) {
+                continue;
+            }
+            $rowIdx = $isRowB ? $i + 1 : $i;
+            if (! isset($lines[$rowIdx]) || ! str_contains($lines[$rowIdx], '<div')) {
+                return null;
+            }
+            // Locate the title block: shape B nests it in an
+            // inner div on the next line; shape A holds the h1
+            // directly.
+            $titleStart = null;
+            if ($isRowB && isset($lines[$rowIdx + 1]) && trim($lines[$rowIdx + 1]) === '<div class="flex items-center gap-3">') {
+                $titleStart = $rowIdx + 1;
+                $titleEnd = $deleteBlock($titleStart);
+                if ($titleEnd === null) {
+                    return null;
+                }
+                $block = implode("\n", array_slice($lines, $titleStart, $titleEnd - $titleStart + 1));
+                if (! str_contains($block, '<h1') || ! str_contains($block, '>Home<')) {
+                    return null;
+                }
+                array_splice($lines, $titleStart, $titleEnd - $titleStart + 1);
+            } elseif ($isRowA) {
+                // Delete the h1 line and the breadcrumb div
+                // block that follows it.
+                $h1 = $i + 1;
+                $crumbStart = null;
+                for ($j = $h1 + 1; $j < min($count, $h1 + 4); $j++) {
+                    if (str_contains($lines[$j], '<div') && str_contains(implode("\n", array_slice($lines, $j, 6)), '>Home<')) {
+                        $crumbStart = $j;
+                        break;
+                    }
+                }
+                if ($crumbStart === null) {
+                    return null;
+                }
+                $crumbEnd = $deleteBlock($crumbStart);
+                if ($crumbEnd === null) {
+                    return null;
+                }
+                array_splice($lines, $h1, $crumbEnd - $h1 + 1);
+            } else {
+                return null;
+            }
+            // The row may now hold only conditional blocks:
+            // hide it when it renders empty.
+            if (! str_contains($lines[$rowIdx], 'empty:hidden')) {
+                $lines[$rowIdx] = preg_replace('/class="([^"]*)"/', 'class="$1 empty:hidden"', $lines[$rowIdx], 1);
+            }
+
+            return implode("\n", $lines);
+        }
+
+        return null;
+    }
+
+    /**
+     * Repair rule (z): widen the slots guard. Finds the narrow
+     * @if(!empty($quickFilters)) line that opens the block
+     * containing <x-slot:toolbar-lead> or <x-slot:quick-filters>
+     * (within the next two non-blank lines) and widens it to
+     * admit sidebar filters, matching the current generator.
+     * Returns the updated blade, or null when already widened /
+     * not applicable.
+     */
+    private function widenQuickFilterGuard(string $content): ?string
+    {
+        if (! str_contains($content, '<x-ui.data-table') || ! str_contains($content, 'data-ls-filters-btn')) {
+            return null;
+        }
+        $lines = explode("\n", $content);
+        foreach ($lines as $i => $line) {
+            if (trim($line) !== '@if(!empty($quickFilters))') {
+                continue;
+            }
+            $seen = 0;
+            for ($j = $i + 1; $j < count($lines) && $seen < 2; $j++) {
+                if (trim($lines[$j]) === '') {
+                    continue;
+                }
+                $seen++;
+                if (str_contains($lines[$j], '<x-slot:toolbar-lead>') || str_contains($lines[$j], '<x-slot:quick-filters>')) {
+                    $lines[$i] = str_replace(
+                        '@if(!empty($quickFilters))',
+                        '@if(!empty($quickFilters) || !empty($sidebarFilters ?? []))',
+                        $line
+                    );
+
+                    return implode("\n", $lines);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function slotTableActions(string $content): ?string
+    {
+        if (! str_contains($content, '<x-ui.data-table')) {
+            return null;
+        }
+        $button = <<<'BLADE'
+            @if(!empty($sidebarFilters ?? []))
+            <button type="button" data-ls-filters-btn @click="$dispatch('open-ls-filters')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-foreground hover:bg-muted text-xs font-medium shadow-2xs transition-colors cursor-pointer">
+                <x-lucide-filter class="size-3.5" />
+                <span>Filters</span>
+                @if(!empty($activeFilters ?? []))
+                <span class="inline-flex items-center justify-center size-4 rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{{ count(array_filter($activeFilters)) }}</span>
+                @endif
+            </button>
+            @endif
+BLADE;
+        $buttonLines = explode("\n", $button);
+        $lines = explode("\n", $content);
+        $changed = false;
+
+        // The data-table invocation's closing line.
+        $gtIdx = null;
+        foreach ($lines as $i => $line) {
+            if ($gtIdx === null && str_contains($line, '<x-ui.data-table')) {
+                $gtIdx = $i;
+                continue;
+            }
+            if ($gtIdx !== null && str_ends_with(rtrim($line), '>')) {
+                $gtIdx = $i;
+                break;
+            }
+        }
+        if ($gtIdx === null) {
+            return null;
+        }
+
+        // 1) Relocate a button sitting in a table-actions slot.
+        if (str_contains($content, 'data-ls-filters-btn')) {
+            $taOpen = $taClose = $btnStart = $btnEnd = null;
+            foreach ($lines as $i => $line) {
+                if ($taOpen === null && str_contains($line, '<x-slot:table-actions>')) {
+                    $taOpen = $i;
+                }
+                if ($taOpen !== null && str_contains($line, '</x-slot:table-actions>')) {
+                    $taClose = $i;
+                    break;
+                }
+            }
+            if ($taOpen !== null && $taClose !== null) {
+                for ($i = $taOpen; $i <= $taClose; $i++) {
+                    if (str_contains($lines[$i], 'data-ls-filters-btn')) {
+                        $btnStart = $i;
+                    }
+                    if ($btnStart !== null && str_contains($lines[$i], '</button>')) {
+                        $btnEnd = $i;
+                        break;
+                    }
+                }
+            }
+            if ($btnStart === null) {
+                return null; // already placed outside table-actions
+            }
+            array_splice($lines, $btnStart, $btnEnd - $btnStart + 1);
+            $changed = true;
+            // Re-locate the slot after the removal.
+            $taOpen = $taClose = null;
+            foreach ($lines as $i => $line) {
+                if ($taOpen === null && str_contains($line, '<x-slot:table-actions>')) {
+                    $taOpen = $i;
+                }
+                if ($taOpen !== null && str_contains($line, '</x-slot:table-actions>')) {
+                    $taClose = $i;
+                    break;
+                }
+            }
+            if ($taOpen !== null && $taClose !== null) {
+                $residual = array_filter(
+                    array_slice($lines, $taOpen + 1, $taClose - $taOpen - 1),
+                    fn ($l) => trim($l) !== ''
+                );
+                if ($residual === []) {
+                    $from = $taOpen;
+                    $to = $taClose;
+                    if ($from > 0 && str_contains($lines[$from - 1], '@if(!empty($sidebarFilters')) {
+                        $from--;
+                    }
+                    if (isset($lines[$to + 1]) && trim($lines[$to + 1]) === '@endif') {
+                        $to++;
+                    }
+                    array_splice($lines, $from, $to - $from + 1);
+                }
+            }
+            // gtIdx may have shifted; recompute it.
+            $gtIdx = null;
+            foreach ($lines as $i => $line) {
+                if ($gtIdx === null && str_contains($line, '<x-ui.data-table')) {
+                    $gtIdx = $i;
+                    continue;
+                }
+                if ($gtIdx !== null && str_ends_with(rtrim($line), '>')) {
+                    $gtIdx = $i;
+                    break;
+                }
+            }
+            if ($gtIdx === null) {
+                return null;
+            }
+        }
+
+        // 2) Insert the button at the end of the quick-filters
+        // slot, creating the slot when the blade has none.
+        $qfClose = null;
+        for ($i = $gtIdx; $i < count($lines); $i++) {
+            if (str_contains($lines[$i], '</x-slot:quick-filters>')) {
+                $qfClose = $i;
+                break;
+            }
+            if ($i > $gtIdx && str_contains($lines[$i], '</x-ui.data-table>')) {
+                break;
+            }
+        }
+        if ($qfClose !== null) {
+            array_splice($lines, $qfClose, 0, $buttonLines);
+        } else {
+            $slotLines = array_merge(
+                ['            <x-slot:quick-filters>'],
+                $buttonLines,
+                ['            </x-slot:quick-filters>']
+            );
+            array_splice($lines, $gtIdx + 1, 0, $slotLines);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Repair (ac): restructure an index blade's page-top to the
+     * source composition (list contract v3) — title row keeps
+     * only title + breadcrumb (version badge dropped); the
+     * actions cluster moves into the data table's below-toolbar
+     * band, reordered primary-first (Add, declared actions,
+     * Import, Bulk, Report, Matrix, Export, Seed). Returns null
+     * when the blade's top bar is not the generated shape.
+     */
+    private function relocateDirectoryActions(string $content): ?string
+    {
+        if (str_contains($content, 'x-slot:below-toolbar') || ! str_contains($content, 'flex items-center gap-2 flex-wrap')) {
+            return null;
+        }
+        $lines = explode("\n", $content);
+        $barStart = null;
+        $sessIdx = null;
+        foreach ($lines as $i => $line) {
+            if ($barStart === null && str_contains($line, '<!-- Compact Top Bar')) {
+                $barStart = $i;
+            }
+            if ($barStart !== null && str_contains($line, "@if (session('success'))")) {
+                $sessIdx = $i;
+                break;
+            }
+        }
+        if ($barStart === null || $sessIdx === null) {
+            return null;
+        }
+        // Top bar close: the last 4-space </div> before the alerts.
+        $barClose = null;
+        for ($i = $sessIdx - 1; $i > $barStart; $i--) {
+            if ($lines[$i] === '    </div>') {
+                $barClose = $i;
+                break;
+            }
+        }
+        $clusterStart = null;
+        for ($i = $barStart; $i < ($barClose ?? $sessIdx); $i++) {
+            if (str_contains($lines[$i], '<div class="flex items-center gap-2 flex-wrap">')) {
+                $clusterStart = $i;
+                break;
+            }
+        }
+        if ($barClose === null || $clusterStart === null) {
+            return null;
+        }
+        $clusterEnd = $barClose - 1; // the cluster's own </div>
+        if (trim($lines[$clusterEnd]) !== '</div>') {
+            return null;
+        }
+        $blockLines = array_slice($lines, $clusterStart + 1, $clusterEnd - $clusterStart - 1);
+        // Split the cluster into named blocks.
+        $blocks = [];
+        $i = 0;
+        $n = count($blockLines);
+        $takeBalanced = function (int $from) use ($blockLines, $n): int {
+            $depth = 0;
+            for ($j = $from; $j < $n; $j++) {
+                $l = $blockLines[$j];
+                if (preg_match('/@(if|isset|foreach|for|while|section|push|once)\b/', $l)) {
+                    $depth++;
+                }
+                if (preg_match('/@(endif|endisset|endforeach|endfor|endwhile|endsection|endpush|endonce)\b/', $l)) {
+                    $depth--;
+                    if ($depth === 0) {
+                        return $j;
+                    }
+                }
+            }
+
+            return $n - 1;
+        };
+        while ($i < $n) {
+            $l = $blockLines[$i];
+            if (trim($l) === '') {
+                $i++;
+                continue;
+            }
+            if (str_contains($l, "\$can['seed']")) {
+                $j = $takeBalanced($i);
+                $seedBlock = array_slice($blockLines, $i, $j - $i + 1);
+                $seedBlock[0] = str_replace(
+                    "@if((\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))",
+                    "@if((\$demoSeed ?? false) && (\$can['seed'] ?? true) && Route::has('laraslice.wizard.seed_slice'))",
+                    $seedBlock[0]
+                );
+                $blocks['seed'] = $seedBlock;
+                $i = $j + 1;
+            } elseif (str_contains($l, 'window.dispatchEvent')) {
+                $j = $i;
+                while ($j < $n && ! str_contains($blockLines[$j], '</button>')) {
+                    $j++;
+                }
+                $blocks['export'] = array_slice($blockLines, $i, $j - $i + 1);
+                $i = $j + 1;
+            } elseif (str_contains($l, "@include('laraslice::directory.actions')")) {
+                $blocks['actions'] = [$l];
+                $i++;
+            } elseif (preg_match('/@isset\(\$(reportUrl|matrixUrl|importUrl|bulkEntryUrl)\)/', $l, $m)) {
+                $j = $takeBalanced($i);
+                $blocks[strtolower(str_replace('Url', '', $m[1]))] = array_slice($blockLines, $i, $j - $i + 1);
+                $i = $j + 1;
+            } elseif (str_contains($l, "\$can['create']")) {
+                $j = $takeBalanced($i);
+                $blocks['add'] = array_slice($blockLines, $i, $j - $i + 1);
+                $i = $j + 1;
+            } else {
+                // Unknown segment: keep it with the actions group
+                // so nothing the page had is lost.
+                $blocks['actions'][] = $l;
+                $i++;
+            }
+        }
+        if (! isset($blocks['add']) && ! isset($blocks['export'])) {
+            return null;
+        }
+        $ordered = [];
+        foreach (['add', 'actions', 'import', 'bulk', 'report', 'matrix', 'export', 'seed'] as $k) {
+            if (! empty($blocks[$k])) {
+                $ordered = array_merge($ordered, $blocks[$k]);
+            }
+        }
+        $slot = array_merge(
+            ['        <x-slot:below-toolbar>'],
+            $ordered,
+            ['        </x-slot:below-toolbar>']
+        );
+        // Rebuild the page top: title lines up to the cluster,
+        // then the top bar close; drop the badge line.
+        $head = [];
+        for ($i = $barStart; $i < $clusterStart; $i++) {
+            if (str_contains($lines[$i], 'font-mono text-[10px]')) {
+                continue;
+            }
+            $head[] = $lines[$i];
+        }
+        while ($head !== [] && trim(end($head)) === '') {
+            array_pop($head);
+        }
+        $tail = array_slice($lines, $barClose + 1);
+        $lines = array_merge(array_slice($lines, 0, $barStart), $head, ['    </div>', ''], $tail);
+        // Insert the slot into the data-table invocation: after
+        // the table-actions slot when present, else after the
+        // quick-filters slot, else after the invocation tag.
+        $dtIdx = null;
+        $gtIdx = null;
+        foreach ($lines as $i => $line) {
+            if ($dtIdx === null && str_contains($line, '<x-ui.data-table')) {
+                $dtIdx = $i;
+                continue;
+            }
+            if ($dtIdx !== null && str_ends_with(rtrim($line), '>')) {
+                $gtIdx = $i;
+                break;
+            }
+        }
+        if ($gtIdx === null) {
+            return null;
+        }
+        $insertAt = $gtIdx;
+        for ($i = $gtIdx + 1; $i < min(count($lines), $gtIdx + 40); $i++) {
+            if (str_contains($lines[$i], '</x-slot:table-actions>') || str_contains($lines[$i], '</x-slot:quick-filters>')) {
+                $insertAt = $i;
+                if (isset($lines[$i + 1]) && trim($lines[$i + 1]) === '@endif') {
+                    $insertAt = $i + 1;
+                }
+            }
+            if (str_contains($lines[$i], '</x-ui.data-table>')) {
+                break;
+            }
+        }
+        array_splice($lines, $insertAt + 1, 0, $slot);
+
+        return implode("\n", $lines);
+    }
+
     public function clearCache(): bool
     {
+        // clearCache() is the invalidation signal: every mutation
+        // flow calls it after writing, so the next discover()
+        // must rescan instead of returning the memoized pass.
+        $this->discovered = false;
+        $this->manifestDataCache = null;
+        $dataPath = $this->getManifestDataCachePath();
+        if (file_exists($dataPath)) {
+            @unlink($dataPath);
+        }
         $cachePath = $this->getCachedSlicesPath();
         if (file_exists($cachePath)) {
             return @unlink($cachePath);
@@ -222,13 +1267,27 @@ class SliceManager
         $document = is_array($slice->raw['ui']['show']['document'] ?? null);
         $matrix = is_array($slice->raw['ui']['directory']['matrix'] ?? null);
         $report = is_array($slice->raw['ui']['directory']['report'] ?? null);
+        $namedReports = [];
+        foreach (($slice->raw['ui']['directory']['reports'] ?? []) as $named) {
+            if (is_array($named) && ! empty($named['handle'])) {
+                $namedReports[] = (string) $named['handle'];
+            }
+        }
         $inline = ! empty($slice->raw['ui']['directory']['inline_edit'] ?? []);
         $bulkEntry = is_array($slice->raw['ui']['directory']['bulk_entry'] ?? null);
         $timer = is_array($slice->raw['ui']['show']['timer'] ?? null);
+        $punch = false;
+        foreach (($slice->raw['ui']['dashboard']['widgets'] ?? []) as $widget) {
+            if (is_array($widget) && ($widget['type'] ?? '') === 'clock' && ! empty($widget['punch'])) {
+                $punch = true;
+                break;
+            }
+        }
         $import = is_array($slice->raw['ui']['directory']['import'] ?? null);
         $seed = is_array($slice->raw['ui']['directory']['reference_sets'] ?? null);
         $invite = is_array($slice->raw['ui']['directory']['invite'] ?? null);
-        if (! $document && ! $matrix && ! $report && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite) {
+        $conversation = is_array($slice->raw['ui']['conversation'] ?? null);
+        if (! $document && ! $matrix && ! $report && $namedReports === [] && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite && ! $punch && ! $conversation) {
             return;
         }
         try {
@@ -264,10 +1323,28 @@ class SliceManager
                     ->get($uriPrefix.'/matrix', [$controllerClass, 'matrix'])
                     ->name($namePrefix.'.matrix');
             }
+            if ($conversation && ! Route::has($namePrefix.'.chat')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/chat', [$controllerClass, 'conversationPage'])
+                    ->name($namePrefix.'.chat');
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/chat', [$controllerClass, 'conversationStart'])
+                    ->name($namePrefix.'.chat.start');
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/chat/{id}/reply', [$controllerClass, 'conversationReply'])
+                    ->name($namePrefix.'.chat.reply');
+            }
             if ($report && ! Route::has($namePrefix.'.report')) {
                 Route::middleware($middleware)
                     ->get($uriPrefix.'/report', [$controllerClass, 'report'])
                     ->name($namePrefix.'.report');
+            }
+            foreach ($namedReports as $namedHandle) {
+                if (! Route::has($namePrefix.'.report.'.$namedHandle)) {
+                    Route::middleware($middleware)
+                        ->get($uriPrefix.'/report/{reportHandle}', [$controllerClass, 'report'])
+                        ->name($namePrefix.'.report.'.$namedHandle);
+                }
             }
             if ($bulkEntry && ! Route::has($namePrefix.'.bulk_entry')) {
                 Route::middleware($middleware)
@@ -276,6 +1353,11 @@ class SliceManager
                 Route::middleware($middleware)
                     ->post($uriPrefix.'/bulk-entry', [$controllerClass, 'bulkEntryStore'])
                     ->name($namePrefix.'.bulk_entry_store');
+            }
+            if ($punch && ! Route::has($namePrefix.'.punch')) {
+                Route::middleware($middleware)
+                    ->post($uriPrefix.'/punch', [$controllerClass, 'punch'])
+                    ->name($namePrefix.'.punch');
             }
             if ($timer && ! Route::has($namePrefix.'.timer_start')) {
                 Route::middleware($middleware)
@@ -412,6 +1494,193 @@ class SliceManager
     }
 
     /**
+     * (ag) Page Structure Contract (Body v4): dual-emit the list
+     * page's actions cluster so the declared `placement` decides
+     * at runtime where it renders — title row under header-right,
+     * below-toolbar band otherwise. The band cluster is wrapped
+     * in the !== conditional, and a header copy (Seed Demo
+     * stripped: seed is band-only by contract) is inserted into
+     * the title row under the === conditional.
+     *
+     * Conservative by design: returns null (blade untouched)
+     * unless the blade has a below-toolbar slot, an h1 before
+     * it, a recognisable title-row shape, and — when a Seed
+     * block sits in the band — a cleanly removable one (the
+     * generator's trailing demoSeed block). Idempotent: blades
+     * already carrying the header-right conditional are skipped.
+     */
+    /**
+     * (ah) Page Structure Contract (Body v4), second half: upgrade
+     * a dual-emitted blade (ag) to all four placement sites. The
+     * band condition tightens to === 'below-facets-left'; a
+     * command-bar strip is inserted after the title row; a
+     * toolbar-lead slot carrying the cluster is added inside the
+     * data-table invocation. The cluster markup is reused from
+     * the blade's own header-right copy (balanced-div extract),
+     * so each blade keeps its own buttons/drawer variants.
+     * All-or-nothing per blade: any missing anchor returns null.
+     */
+    private function quadEmitPlacementCluster(string $content): ?string
+    {
+        if (! str_contains($content, "=== 'header-right'") || str_contains($content, "=== 'command-bar'")) {
+            return null; // not dual-emitted yet, or already quad
+        }
+        $bandCondition = "@if((\$placement ?? 'below-facets-left') !== 'header-right')";
+        if (! str_contains($content, $bandCondition) || ! str_contains($content, '<x-slot:quick-filters>')) {
+            return null;
+        }
+
+        // Extract the header cluster (balanced <div> scan from
+        // the ml-auto wrapper the (ag)/generator emission uses).
+        $headerIf = strpos($content, "@if((\$placement ?? 'below-facets-left') === 'header-right')");
+        if ($headerIf === false) {
+            return null;
+        }
+        $divOpen = strpos($content, '<div class="ml-auto flex flex-wrap items-center gap-2">', $headerIf);
+        if ($divOpen === false) {
+            return null;
+        }
+        $clusterStart = $divOpen + strlen('<div class="ml-auto flex flex-wrap items-center gap-2">');
+        $depth = 1;
+        $scan = $clusterStart;
+        $clusterEnd = null;
+        while (preg_match('/<div\b|<\/div>/', $content, $dm, PREG_OFFSET_CAPTURE, $scan)) {
+            $token = $dm[0][0];
+            $scan = $dm[0][1] + strlen($token);
+            $depth += $token === '</div>' ? -1 : 1;
+            if ($depth === 0) {
+                $clusterEnd = $dm[0][1];
+                break;
+            }
+        }
+        if ($clusterEnd === null) {
+            return null;
+        }
+        $cluster = trim(substr($content, $clusterStart, $clusterEnd - $clusterStart));
+        if ($cluster === '') {
+            return null;
+        }
+
+        // 1) Tighten the band condition to the exact placement.
+        $content = str_replace(
+            $bandCondition,
+            "@if((\$placement ?? 'below-facets-left') === 'below-facets-left')",
+            $content
+        );
+
+        // 2) Command-bar strip after the title row: the header
+        // block's @endif, then the row's closing </div>.
+        $endifPos = strpos($content, '@endif', $clusterEnd);
+        if ($endifPos === false) {
+            return null;
+        }
+        $rowClose = strpos($content, '</div>', $endifPos);
+        if ($rowClose === false) {
+            return null;
+        }
+        $insertAt = $rowClose + strlen('</div>');
+        $commandBar = "\n    @if((\$placement ?? 'below-facets-left') === 'command-bar')\n"
+            ."    <div class=\"flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2\">\n"
+            .$cluster."\n"
+            ."    </div>\n"
+            ."    @endif";
+        $content = substr($content, 0, $insertAt).$commandBar.substr($content, $insertAt);
+
+        // 3) Toolbar-lead slot inside the data-table invocation.
+        $qfPos = strpos($content, '<x-slot:quick-filters>');
+        $toolbarLead = "<x-slot:toolbar-lead>\n"
+            ."            @if((\$placement ?? 'below-facets-left') === 'toolbar-left')\n"
+            .$cluster."\n"
+            ."            @endif\n"
+            ."            </x-slot:toolbar-lead>\n            ";
+        $content = substr($content, 0, $qfPos).$toolbarLead.substr($content, $qfPos);
+
+        return $content;
+    }
+
+    private function dualEmitPlacementCluster(string $content): ?string
+    {
+        if (str_contains($content, "=== 'header-right'")) {
+            return null; // already dual-emitted
+        }
+        $slotOpen = '<x-slot:below-toolbar>';
+        $slotClose = '</x-slot:below-toolbar>';
+        $openPos = strpos($content, $slotOpen);
+        $closePos = $openPos === false ? false : strpos($content, $slotClose, $openPos);
+        if ($openPos === false || $closePos === false) {
+            return null;
+        }
+        $h1Pos = strpos($content, '<h1');
+        if ($h1Pos === false || $h1Pos > $openPos) {
+            return null;
+        }
+
+        $clusterStart = $openPos + strlen($slotOpen);
+        $cluster = substr($content, $clusterStart, $closePos - $clusterStart);
+
+        // Header copy: strip the Seed Demo block (band-only by
+        // contract). Generator shape = trailing demoSeed @if.
+        $headerCluster = $cluster;
+        if (str_contains($headerCluster, 'Seed Demo')) {
+            $seedStart = strpos($headerCluster, '@if(($demoSeed');
+            if ($seedStart === false) {
+                return null;
+            }
+            $tail = substr($headerCluster, $seedStart);
+            $lastEndif = strrpos($tail, '@endif');
+            if ($lastEndif === false || trim(substr($tail, $lastEndif + strlen('@endif'))) !== '') {
+                return null; // seed block is not the trailing block
+            }
+            $headerCluster = substr($headerCluster, 0, $seedStart);
+        }
+        $headerCluster = trim($headerCluster);
+        if ($headerCluster === '') {
+            return null;
+        }
+
+        $headerBlock = "\n        @if((\$placement ?? 'below-facets-left') === 'header-right')\n"
+            ."        <div class=\"ml-auto flex flex-wrap items-center gap-2\">\n"
+            .$headerCluster."\n"
+            ."        </div>\n"
+            ."        @endif";
+
+        // Insert into the title row: shape A (title + breadcrumb
+        // in one flex row) and shape B (Compact Top Bar: inner
+        // title group inside an outer row) share the breadcrumb
+        // tail — the span close followed by one or two div closes.
+        $pattern = '/(<span class="text-foreground">[^<]*<\/span>\s*<\/div>)(\s*<\/div>)?(\s*<\/div>)/';
+        if (! preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+        $m = null;
+        foreach ($matches[0] as $i => $whole) {
+            if ($whole[1] > $h1Pos && $whole[1] < $openPos) {
+                $m = [$whole, $matches[1][$i], $matches[2][$i], $matches[3][$i]];
+                break;
+            }
+        }
+        if ($m === null) {
+            return null; // no title-row breadcrumb tail before the table
+        }
+        $insertAt = $m[0][1] + strlen($m[1][0]) + strlen($m[2][0] ?? '');
+        // Shape A keeps its row close after the block; shape B's
+        // second close belongs to the inner group and stays
+        // before it. Both read: closes-so-far + block + final close.
+        $content = substr($content, 0, $insertAt).$headerBlock.substr($content, $insertAt);
+
+        // Wrap the band cluster in the !== conditional.
+        $openPos = strpos($content, $slotOpen);
+        $closePos = strpos($content, $slotClose, $openPos);
+        $content = substr($content, 0, $openPos + strlen($slotOpen))
+            ."\n            @if((\$placement ?? 'below-facets-left') !== 'header-right')"
+            .substr($content, $openPos + strlen($slotOpen), $closePos - ($openPos + strlen($slotOpen)))
+            ."\n            @endif"
+            .substr($content, $closePos);
+
+        return $content;
+    }
+
+    /**
      * Rewrite files of slices generated by older LaraSlice versions to the current layout
      * (view widths, embedded child panels, child services/controllers, domain-prefixed routes).
      *
@@ -428,6 +1697,17 @@ class SliceManager
         $packageSlices = realpath(dirname(__DIR__, 2).'/Slices');
         if ($packageSlices !== false && str_starts_with((string) realpath($slice->path), $packageSlices)) {
             return [];
+        }
+
+        // ERP-shell slice? The routes file's URI prefix decides,
+        // the same evidence the layout's ERP test uses (its first
+        // segment): erp / hr / crm. Manifest fields are unreliable
+        // here — older slices declare neither app nor a nav URL.
+        $isErpSlice = false;
+        $routesWeb = $slice->getRoutesPath() ? $slice->getRoutesPath().'/web.php' : null;
+        if ($routesWeb && is_file($routesWeb)
+            && preg_match("/Route::prefix\('([^']+)'\)/", (string) file_get_contents($routesWeb), $pm)) {
+            $isErpSlice = in_array(explode('/', $pm[1])[0] ?? '', ['erp', 'hr', 'crm'], true);
         }
 
         $viewsPath = $slice->getViewsPath();
@@ -525,6 +1805,314 @@ class SliceManager
                                 }
                             }
                             $vContent = implode("\n", $lines);
+                            $vChanged = true;
+                        }
+                    }
+                    // (u) List contract v3 wiring: existing
+                    // index blades predate the density + inline
+                    // bindings — without them the data table
+                    // renders 'comfortable' and the declared
+                    // inline editor never receives its endpoint.
+                    if (str_contains($vContent, '<x-ui.data-table') && ! str_contains($vContent, 'density')) {
+                        $wired = preg_replace_callback(
+                            '/<x-ui\.data-table\b[^>]*>/s',
+                            static function (array $m): string {
+                                if (str_contains($m[0], 'density')) {
+                                    return $m[0];
+                                }
+                                $tag = rtrim(substr($m[0], 0, -1));
+                                if (! str_contains($tag, 'inline-update-url')) {
+                                    $tag .= ' :inline-update-url="$inlineUpdateUrl ?? null"';
+                                }
+                                $tag .= ' :density="$density ?? \'compact\'"';
+
+                                return $tag.' >';
+                            },
+                            $vContent,
+                            1
+                        );
+                        if (is_string($wired) && $wired !== $vContent) {
+                            $vContent = $wired;
+                            $vChanged = true;
+                        }
+                    }
+                    // (v) The top-bar Export button shipped
+                    // dead (no handler). The data table listens
+                    // for the window 'export-table' event — wire
+                    // the button to dispatch it.
+                    if (str_contains($vContent, '<span>Export</span>') && ! str_contains($vContent, 'export-table')) {
+                        $exported = preg_replace(
+                            '/<button type="button" class="([^"]*shadow-2xs transition-colors)">(\s*<x-lucide-download)/',
+                            '<button type="button" onclick="window.dispatchEvent(new CustomEvent(\'export-table\'))" class="$1">$2',
+                            $vContent,
+                            1
+                        );
+                        if (is_string($exported) && $exported !== $vContent) {
+                            $vContent = $exported;
+                            $vChanged = true;
+                        }
+                    }
+                    // (x) Quick filters render inside the data
+                    // table toolbar slot (list contract v3), not
+                    // on a stacked row of their own.
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'x-ui.filter-tabs') && ! str_contains($vContent, 'x-slot:quick-filters')) {
+                        $slottedQf = $this->slotQuickFilters($vContent);
+                        if ($slottedQf !== null) {
+                            $vContent = $slottedQf;
+                            $vChanged = true;
+                        }
+                    }
+                    // (aa) Facet selects (list contract v3): a
+                    // quick filter declared display: select renders
+                    // as a labeled dropdown in the toolbar, not as
+                    // tabs — the loop body gains the branch.
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'x-slot:quick-filters') && ! str_contains($vContent, "'display'] ?? 'tabs'")) {
+                        $oldLoop = <<<'BLADE'
+            @foreach($quickFilters as $qf)
+            <x-ui.filter-tabs
+                :tabs="$qf['options'] ?? []"
+                :param="$qf['handle']"
+                :activeTab="$activeFilters[$qf['handle']] ?? null"
+                :default="$filterDefaults[$qf['handle']] ?? null"
+            />
+            @endforeach
+BLADE;
+                        $newLoop = <<<'BLADE'
+            @foreach($quickFilters as $qf)
+            @if(($qf['display'] ?? 'tabs') === 'select')
+            <label class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="font-medium">{{ $qf['label'] ?? $qf['handle'] }}</span>
+                <select onchange="const u = new window.URL(window.location.href); if (this.value) { u.searchParams.set('{{ $qf['handle'] }}', this.value); } else { u.searchParams.delete('{{ $qf['handle'] }}'); } window.location.href = u.toString();" class="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground cursor-pointer">
+                    <option value="">All</option>
+                    @foreach($qf['options'] ?? [] as $opt)
+                    <option value="{{ $opt['value'] }}" @selected((string) ($activeFilters[$qf['handle']] ?? '') === (string) $opt['value'])>{{ $opt['label'] }}</option>
+                    @endforeach
+                </select>
+            </label>
+            @else
+            <x-ui.filter-tabs
+                :tabs="$qf['options'] ?? []"
+                :param="$qf['handle']"
+                :activeTab="$activeFilters[$qf['handle']] ?? null"
+                :default="$filterDefaults[$qf['handle']] ?? null"
+            />
+            @endif
+            @endforeach
+BLADE;
+                        if (str_contains($vContent, $oldLoop)) {
+                            $vContent = str_replace($oldLoop, $newLoop, $vContent);
+                            $vChanged = true;
+                        }
+                    }
+                    // (ab) Facet-select handler scope fix: in
+                    // an inline handler, bare `URL` resolves to
+                    // document.URL (a string) — window.URL is the
+                    // constructor. (The (aa) loop shipped the
+                    // bare form.)
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'const u = new URL(location.href)')) {
+                        $vContent = str_replace(
+                            'const u = new URL(location.href); if (this.value) { u.searchParams.set(',
+                            'const u = new window.URL(window.location.href); if (this.value) { u.searchParams.set(',
+                            $vContent
+                        );
+                        $vContent = str_replace(
+                            "'); } location.href = u.toString();",
+                            "'); } window.location.href = u.toString();",
+                            $vContent
+                        );
+                        $vChanged = true;
+                    }
+                    // (y) Filters button in the quick-filters
+                    // slot (the strip under the topbar; revised
+                    // 25 Oct 2026): the drawer's standalone
+                    // trigger row yields to it.
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'filters-drawer')) {
+                        $slottedTa = $this->slotTableActions($vContent);
+                        if ($slottedTa !== null) {
+                            $vContent = $slottedTa;
+                            $vChanged = true;
+                        }
+                    }
+                    // (z) The slots guard must admit
+                    // sidebar-only slices: blades generated
+                    // before the widening wrap toolbar-lead +
+                    // quick-filters in @if(!empty($quickFilters)),
+                    // which silently drops the Filters button
+                    // (and the whole slot block) on slices whose
+                    // filters live only in the drawer — the
+                    // drawer's fallback trigger then renders in
+                    // the wrong row (caught on Attendances,
+                    // 25 Oct 2026).
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'data-ls-filters-btn')) {
+                        $widened = $this->widenQuickFilterGuard($vContent);
+                        if ($widened !== null) {
+                            $vContent = $widened;
+                            $vChanged = true;
+                        }
+                    }
+                    // (aa) Retire the in-page title row on
+                    // ERP slices: the shell topbar carries the
+                    // title + breadcrumb there now (gate
+                    // computed at the top of repairSlice from
+                    // the routes prefix).
+                    if ($base === 'index.blade.php' && $isErpSlice) {
+                        $retired = $this->retireInPageTitleRow($vContent);
+                        if ($retired !== null) {
+                            $vContent = $retired;
+                            $vChanged = true;
+                        }
+                    }
+                    // (ai) Conditional band rhythm: the
+                    // section wrapper's space-y only when
+                    // KPI cards render above the table.
+                    if ($base === 'index.blade.php') {
+                        $rhythmed = $this->conditionalIndexRhythm($vContent);
+                        if ($rhythmed !== null) {
+                            $vContent = $rhythmed;
+                            $vChanged = true;
+                        }
+                        // (aj) Empty panel only when unfiltered.
+                        $scoped = $this->scopeEmptyPanelToUnfiltered($vContent);
+                        if ($scoped !== null) {
+                            $vContent = $scoped;
+                            $vChanged = true;
+                        }
+                    }
+                    // (ah) Unghost the legacy Compact Top
+                    // Bar: move its placement @if outside the
+                    // wrapper div so non-header-right pages
+                    // stop rendering an empty bordered sliver
+                    // above the table.
+                    // (al) Declared actions + Import survive
+                    // the first-run empty panel.
+                    if ($base === 'index.blade.php') {
+                        $paneled = $this->emptyPanelActions($vContent);
+                        if ($paneled !== null) {
+                            $vContent = $paneled;
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'Compact Top Bar')) {
+                        $unghosted = $this->unghostCompactTopBar($vContent);
+                        if ($unghosted !== null) {
+                            $vContent = $unghosted;
+                            $vChanged = true;
+                        }
+                    }
+                    // (af) + (ag) Show blades: restore the
+                    // ownership card's data guard, and point
+                    // the $label line at recordLabel().
+                    if ($base === 'show.blade.php') {
+                        $guarded = $this->guardOwnershipCard($vContent);
+                        if ($guarded !== null) {
+                            $vContent = $guarded;
+                            $vChanged = true;
+                        }
+                        $labeled = $this->useRecordLabelHelper($vContent);
+                        if ($labeled !== null) {
+                            $vContent = $labeled;
+                            $vChanged = true;
+                        }
+                        // (ak) Widget placements: main grid +
+                        // right-rail loops on show pages.
+                        $placed = $this->splitShowWidgetPlacements($vContent);
+                        if ($placed !== null) {
+                            $vContent = $placed;
+                            $vChanged = true;
+                        }
+                    }
+                    // (ac) Page-top composition (list contract
+                    // v3): title-only top bar; actions move to
+                    // the data table's below-toolbar band.
+                    // (al) Declared actions + Import survive
+                    // the first-run empty panel.
+                    if ($base === 'index.blade.php') {
+                        $paneled = $this->emptyPanelActions($vContent);
+                        if ($paneled !== null) {
+                            $vContent = $paneled;
+                            $vChanged = true;
+                        }
+                    }
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'Compact Top Bar')) {
+                        $relocated = $this->relocateDirectoryActions($vContent);
+                        if ($relocated !== null) {
+                            $vContent = $relocated;
+                            $vChanged = true;
+                        }
+                    }
+                    // (ae) Columns menu becomes a declared
+                    // directory option (columns_menu).
+                    if ($base === 'index.blade.php' && str_contains($vContent, ":density=\"\$density ?? 'compact'\"") && ! str_contains($vContent, 'columns-menu')) {
+                        $vContent = str_replace(
+                            ":density=\"\$density ?? 'compact'\"",
+                            ":density=\"\$density ?? 'compact'\"\n            :columns-menu=\"\$columnsMenu ?? true\"",
+                            $vContent
+                        );
+                        $vChanged = true;
+                    }
+                    // (af) Cleanup for (ac)'s first run: it
+                    // emitted the top-bar close twice. Remove the
+                    // duplicate when the exact sequence is present.
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'x-slot:below-toolbar')) {
+                        $dupPattern = "    </div>\n\n    </div>\n\n    @if (session('success'))";
+                        if (str_contains($vContent, $dupPattern)) {
+                            $vContent = str_replace($dupPattern, "    </div>\n\n    @if (session('success'))", $vContent);
+                            $vChanged = true;
+                        }
+                    }
+                    // (ag) Page Structure Contract (Body v4):
+                    // dual-emit the actions cluster so the
+                    // declared list placement decides at runtime
+                    // where it renders (title row vs band).
+                    if ($base === 'index.blade.php' && str_contains($vContent, 'x-slot:below-toolbar')) {
+                        $dual = $this->dualEmitPlacementCluster($vContent);
+                        if ($dual !== null) {
+                            $vContent = $dual;
+                            $vChanged = true;
+                        }
+                        // (ah) …then upgrade dual emission to
+                        // all four placement sites.
+                        $quad = $this->quadEmitPlacementCluster($vContent);
+                        if ($quad !== null) {
+                            $vContent = $quad;
+                            $vChanged = true;
+                        }
+                    }
+                    // (w) Chrome consolidation (list contract v3):
+                    // declared directory actions (Invite etc.) belong
+                    // in the top bar's action cluster — one actions
+                    // row like the source systems — not on a row of
+                    // their own; and the page root spacing tightens.
+                    if ($base === 'index.blade.php' && str_contains($vContent, "@include('laraslice::directory.actions')")) {
+                        $lines = explode("\n", $vContent);
+                        $incIdx = null;
+                        $exportIdx = null;
+                        $createIdx = null;
+                        foreach ($lines as $i => $line) {
+                            if (str_contains($line, "@include('laraslice::directory.actions')")) {
+                                $incIdx = $i;
+                            }
+                            if (str_contains($line, '<span>Export</span>')) {
+                                $exportIdx = $i;
+                            }
+                            if ($createIdx === null && str_contains($line, "@if(\$can['create']")) {
+                                $createIdx = $i;
+                            }
+                        }
+                        // Only relocate when the include still sits
+                        // below the top bar (after the Export button).
+                        if ($incIdx !== null && $exportIdx !== null && $createIdx !== null && $incIdx > $exportIdx) {
+                            $incLine = $lines[$incIdx];
+                            array_splice($lines, $incIdx, 1);
+                            if ($incIdx < $createIdx) {
+                                $createIdx--;
+                            }
+                            array_splice($lines, $createIdx, 0, [$incLine]);
+                            $vContent = implode("\n", $lines);
+                            $vChanged = true;
+                        }
+                        if (str_contains($vContent, '<div class="space-y-3">')) {
+                            $vContent = str_replace('<div class="space-y-3">', '<div class="space-y-2">', $vContent);
                             $vChanged = true;
                         }
                     }
@@ -665,8 +2253,30 @@ class SliceManager
                             if (is_string($createLabel) && $createLabel !== '') {
                                 $generated = 'Add '.\Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slice->name));
                                 if ($generated !== $createLabel && str_contains($vContent, $generated)) {
-                                    $vContent = str_replace($generated, $createLabel, $vContent);
-                                    $vChanged = true;
+                                    // Idempotency (fixed 25 Oct
+                                    // 2026): when the declared
+                                    // label CONTAINS the generated
+                                    // string ('Add Lead Contact'
+                                    // vs 'Add Lead'), a plain
+                                    // str_replace re-matches its
+                                    // own output and appends the
+                                    // suffix on EVERY run. Shield
+                                    // already-correct occurrences,
+                                    // replace the rest, unshield.
+                                    $shield = "\u{0001}LSLABEL\u{0001}";
+                                    $relabeled = str_replace(
+                                        $shield,
+                                        $createLabel,
+                                        str_replace(
+                                            $generated,
+                                            $createLabel,
+                                            str_replace($createLabel, $shield, $vContent)
+                                        )
+                                    );
+                                    if ($relabeled !== $vContent) {
+                                        $vContent = $relabeled;
+                                        $vChanged = true;
+                                    }
                                 }
                             }
                         } catch (\Throwable $e) {
@@ -709,6 +2319,111 @@ class SliceManager
                                 $vContent
                             );
                             $vChanged = true;
+                        }
+                        // (r) H1 hub tabs: wrap the legacy ID/Summary/
+                        // Status skeleton block in the enriched branch —
+                        // when DirectoryUi resolved the related slice's
+                        // declared columns + rows, render those through
+                        // the shared partial; the skeleton remains only
+                        // as the unresolved fallback.
+                        if (str_contains($vContent, '>Summary</th>') && ! str_contains($vContent, 'related-tab-table')) {
+                            $wrapped = preg_replace_callback(
+                                '/@php\s*\n\s*\$relName = \$rtab\[\'relation\'\].*?@endif/s',
+                                static function (array $m): string {
+                                    return '@if(!empty($rtab[\'columns\']))'."\n"
+                                        .'                @if(count($rtab[\'rows\'] ?? []) === 0)'."\n"
+                                        .'                    <div class="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">'."\n"
+                                        .'                        No related records yet.'."\n"
+                                        .'                    </div>'."\n"
+                                        .'                @else'."\n"
+                                        .'                    @include(\'laraslice::partials.related-tab-table\', [\'rtab\' => $rtab])'."\n"
+                                        .'                @endif'."\n"
+                                        .'            @else'."\n"
+                                        .'            '.$m[0]."\n"
+                                        .'            @endif';
+                                },
+                                $vContent,
+                                1
+                            );
+                            if ($wrapped !== null && $wrapped !== $vContent) {
+                                $vContent = $wrapped;
+                                $vChanged = true;
+                            }
+                        }
+                        // (s) H3 detail composition: old show blades
+                        // render the parameters card from RAW record
+                        // attributes (system columns and all). Give
+                        // them the detailRows-first structure the
+                        // current generator emits, plus the declared
+                        // detail title.
+                        if (str_contains($vContent, 'getAttributes()') && ! str_contains($vContent, 'detailRows')) {
+                            $sliceNameEsc = str_replace("'", "\\'", (string) $slice->name);
+                            $wrapped = preg_replace_callback(
+                                '/@foreach\(\(\$record->getAttributes\(\).*?@endforeach/s',
+                                static function (array $m) use ($sliceNameEsc): string {
+                                    return '@php $detailRows = \\LaraSlice\\Support\\DirectoryUi::detailRows(\''.$sliceNameEsc.'\', $record); @endphp'."\n"
+                                        .'                            @if(! empty($detailRows))'."\n"
+                                        .'                                @foreach($detailRows as $detailRow)'."\n"
+                                        .'                                    <div>'."\n"
+                                        .'                                        <dt class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ $detailRow[\'label\'] }}</dt>'."\n"
+                                        .'                                        <dd class="mt-1 text-sm font-medium text-foreground whitespace-pre-wrap break-words">@if($detailRow[\'html\']){!! $detailRow[\'value\'] !!}@else{{ $detailRow[\'value\'] }}@endif</dd>'."\n"
+                                        .'                                    </div>'."\n"
+                                        .'                                @endforeach'."\n"
+                                        .'                            @else'."\n"
+                                        .'                            '.$m[0]."\n"
+                                        .'                            @endif';
+                                },
+                                $vContent,
+                                1
+                            );
+                            if ($wrapped !== null && $wrapped !== $vContent) {
+                                $vContent = $wrapped;
+                                $vChanged = true;
+                            }
+                            $titled = str_replace(
+                                '<span>Attribute Parameters</span>',
+                                '<span>{{ \\LaraSlice\\Support\\DirectoryUi::detailTitle(\''.$sliceNameEsc.'\') }}</span>',
+                                $vContent
+                            );
+                            if ($titled !== $vContent) {
+                                $vContent = $titled;
+                                $vChanged = true;
+                            }
+                        }
+                        // (z) Identity header compaction (list/
+                        // detail chrome standard): slimmer card
+                        // padding, avatar and tab strip.
+                        if ($base === 'show.blade.php') {
+                            $compacted = str_replace(
+                                ['<x-ui.card class="p-6 bg-card border shadow-xs">',
+                                 'size-14 rounded-2xl bg-primary/10 text-primary font-bold text-lg',
+                                 '<div class="space-y-6" x-data="{ activeTab:',
+                                 'px-4 py-2.5 text-[13px] font-medium border-b-2'],
+                                ['<x-ui.card class="p-4 bg-card border shadow-xs">',
+                                 'size-11 rounded-xl bg-primary/10 text-primary font-bold text-base',
+                                 '<div class="space-y-4" x-data="{ activeTab:',
+                                 'px-4 py-2 text-[13px] font-medium border-b-2'],
+                                $vContent
+                            );
+                            if ($compacted !== $vContent) {
+                                $vContent = $compacted;
+                                $vChanged = true;
+                            }
+                        }
+                        // (t) H3 identity subtitle: declared
+                        // ui.show.identity_fields (designation •
+                        // department for a person) win over the
+                        // generic subtitle fallback chain.
+                        if (str_contains($vContent, '$subtitle = $record->subtitle ??') && ! str_contains($vContent, 'identitySubtitle')) {
+                            $subtitled = str_replace(
+                                '$subtitle = $record->subtitle ??',
+                                '$subtitle = \\LaraSlice\\Support\\DirectoryUi::identitySubtitle(\''.str_replace("'", "\\'", (string) $slice->name).'\', $record) ?? $record->subtitle ??',
+                                $vContent
+                            );
+                            if ($subtitled !== $vContent) {
+                                $vContent = $subtitled;
+                                $vChanged = true;
+                            }
                         }
                     }
                     if ($base === 'index.blade.php' && ! str_contains($vContent, 'matrixUrl') && str_contains($vContent, "@if(\$can['create']")) {
@@ -1050,6 +2765,27 @@ class SliceManager
                                 $childStudly = Str::studly(Str::singular($tbl));
                                 $childUrlPrefix = "{$domainSlug}/{$childPluralSnake}";
 
+                                // Never invent routes for a child
+                                // controller that does not exist:
+                                // the dangling reference breaks
+                                // route:list / route:cache for the
+                                // WHOLE application (backlog A3 —
+                                // 18 pivot/child controllers, e.g.
+                                // ProjectMember, TaskUser,
+                                // BillStatus). Children without
+                                // their own controller are served
+                                // by the parent's hub tabs, not a
+                                // standalone directory. Strip any
+                                // block an older heal wrote for one.
+                                if (! file_exists($slice->path.'/Controllers/'.$childStudly.'WebController.php')) {
+                                    $stripped = $this->stripInventedChildRoutes($webContent, $childUrlPrefix, $childStudly);
+                                    if ($stripped !== null) {
+                                        $webContent = $stripped;
+                                        $contentChanged = true;
+                                    }
+                                    continue;
+                                }
+
                                 // A single named group: identical URIs under two names break route:cache
                                 $explicitRoutes = "\nRoute::prefix('{$childUrlPrefix}')->name('{$childPluralSnake}.')->middleware(config('laraslice.generated_routes.web_middleware', ['web', 'auth']))->group(function () {\n"
                                     ."    Route::get('/', [{$childStudly}WebController::class, 'index'])->name('index');\n"
@@ -1303,28 +3039,68 @@ PHP;
                 continue;
             }
             try {
+                // Collect first, then SORT by path: directory
+                // iteration order is filesystem-dependent, so
+                // an unsorted fallback made the winning model
+                // class a coin flip across machines whenever
+                // duplicate trees carried the same model name
+                // (backlog A5). Sorted order is deterministic;
+                // on the reference install it reproduces the
+                // previously observed winners.
+                $found = [];
                 $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
                 $it->setMaxDepth(6);
                 foreach ($it as $file) {
                     if ($file->isFile() && $file->getFilename() === $studlyName.'.php'
                         && basename(dirname($file->getPathname())) === 'Models') {
-                        $relative = substr($file->getPathname(), strlen($root) + 1, -4);
-                        $segments = array_map(static fn ($s) => Str::studly($s), explode(DIRECTORY_SEPARATOR, $relative));
-                        $candidates[] = $baseNs.'\\'.implode('\\', $segments);
+                        $found[] = $file->getPathname();
                     }
+                }
+                sort($found, SORT_STRING);
+                foreach ($found as $pathname) {
+                    $relative = substr($pathname, strlen($root) + 1, -4);
+                    $segments = array_map(static fn ($s) => Str::studly($s), explode(DIRECTORY_SEPARATOR, $relative));
+                    $candidates[] = $baseNs.'\\'.implode('\\', $segments);
                 }
             } catch (\Throwable $e) {
                 // A broken tree must not break model resolution.
             }
         }
 
+        $existing = [];
         foreach ($candidates as $class) {
-            if (class_exists($class) && is_subclass_of($class, Model::class)) {
-                return $this->resolvedModels[$studlyName] = $class;
+            if (class_exists($class) && is_subclass_of($class, Model::class) && ! in_array($class, $existing, true)) {
+                $existing[] = $class;
             }
+        }
+        if (count($existing) > 1) {
+            // Ambiguity is recorded, mirroring nameCollisions():
+            // the winner stays the first candidate (registry
+            // order, then sorted fallback), but the choice is
+            // now visible instead of silent.
+            $this->modelCollisions[$studlyName] = [
+                'model' => $studlyName,
+                'winner' => $existing[0],
+                'candidates' => array_values(array_unique($existing)),
+            ];
+        }
+        if ($existing !== []) {
+            return $this->resolvedModels[$studlyName] = $existing[0];
         }
 
         return $this->resolvedModels[$studlyName] = null;
+    }
+
+    /**
+     * Model names that resolved ambiguously (more than one
+     * installed model class shares the name), keyed by model
+     * name. Populated lazily as modelClass() resolves.
+     *
+     * @return array<string, array{model: string, winner: string, candidates: array<int, string>}>
+     */
+    public function modelCollisions(): array
+    {
+        return $this->modelCollisions;
     }
 
     public function getAllSlices(): array
@@ -1611,9 +3387,24 @@ PHP;
             $groupSlug = $group ? Str::slug($group) : null;
             $groupDot = $groupSlug ? str_replace('-', '_', $groupSlug).'.' : '';
 
+            // The slice's OWN declared route-name prefix (parsed
+            // from its routes file) outranks every guess: slices
+            // from the path-named generation register names like
+            // erp_erp_work_projects.* that none of the slug
+            // candidates below can ever match — their nav entries
+            // never turned active (no sidebar highlight, no
+            // topbar title) until the declared prefix was tried.
+            $declaredNamePrefix = null;
+            $routesFile = $slice->getRoutesPath() ? $slice->getRoutesPath().'/web.php' : null;
+            if ($routesFile && is_file($routesFile)
+                && preg_match("/->name\('([^']+)'\)/", (string) file_get_contents($routesFile), $nm)) {
+                $declaredNamePrefix = $nm[1];
+            }
+
             // Determine route: explicit in slice.yaml, or fallback to registered candidate route names
             $routeCandidates = array_values(array_filter([
                 $slice->navigation['route'] ?? null,
+                $declaredNamePrefix ? $declaredNamePrefix.'index' : null,
                 $groupDot ? $groupDot.$snake.'.index' : null,
                 $groupDot ? $groupDot.$singularSnake.'.index' : null,
                 $snake.'.index',
@@ -1902,6 +3693,8 @@ PHP;
 
         // 2. Register System-Level Core Slice Permissions
         $coreSystemPerms = [
+            ['slug' => 'ai.copilot.use', 'name' => 'Use AI Copilot', 'desc' => 'Allows opening the AI Copilot and using its chat, context and record-creation endpoints.', 'group' => 'AI Copilot', 'domain' => 'Platform Engine'],
+            ['slug' => 'ai.settings.edit', 'name' => 'Edit AI Settings', 'desc' => 'Allows changing AI providers, models and Copilot configuration.', 'group' => 'AI Copilot', 'domain' => 'Platform Engine'],
             ['slug' => 'studio.access', 'name' => 'Access Slice Studio & Wizard', 'desc' => 'Allows opening and accessing Slice Studio and Blueprint Studio interfaces.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
             ['slug' => 'studio.create', 'name' => 'Scaffold & Generate Feature Slices', 'desc' => 'Allows generating new vertical slices, child tables, and fields via the wizard.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],
             ['slug' => 'studio.blueprint', 'name' => 'Blueprint Studio Schema Design', 'desc' => 'Allows designing, introspecting, and applying declarative schemas in Blueprint Studio.', 'group' => 'Slice Studio & Architecture Wizard', 'domain' => 'Platform Engine'],

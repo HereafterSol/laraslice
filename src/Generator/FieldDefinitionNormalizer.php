@@ -349,7 +349,12 @@ BLADE;
      */
     public static function isSystemField(string $name): bool
     {
-        return in_array($name, ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id'], true)
-            || str_ends_with($name, '_by');
+        return in_array($name, ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'ip_address'], true)
+            || str_ends_with($name, '_by')
+            // Server-stamped network values (clock_in_ip,
+            // clock_out_ip, login_ip, …): the server records
+            // them (cf. the clock punch); a human never types
+            // them into a form.
+            || str_ends_with($name, '_ip');
     }
 }

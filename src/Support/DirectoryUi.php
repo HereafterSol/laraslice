@@ -13,7 +13,7 @@ final class DirectoryUi
 {
     /** @var list<string> */
     public const HTML_FORMATTERS = [
-        'code_badge', 'composite_user', 'user_stack', 'status_pill', 'money_breakdown',
+        'code_badge', 'composite_user', 'user_stack', 'status_pill', 'money_breakdown', 'lines',
         'progress_bar', 'badge', 'text_with_badge', 'date_overdue', 'timer'];
 
     /**
@@ -22,6 +22,56 @@ final class DirectoryUi
      * @param  list<array<string, mixed>>  $fallback
      * @return list<array<string, mixed>>
      */
+    /**
+     * Option-level filter criteria (fidelity vocabulary): a
+     * declared filter option may carry `criteria` — a map of
+     * field => {op, value} conditions that REPLACE the plain
+     * handle equality when that option is chosen. This is how
+     * computed facets are declared: the source's "Overdue"
+     * status (deadline in the past, not finished/canceled) and
+     * its progress buckets (completion between two bounds).
+     * Returns the condition list for the base service's
+     * __conditions criterion, or null when the chosen option
+     * carries no criteria (plain equality applies). Value
+     * tokens: $today (Y-m-d), $now (datetime), $user (id).
+     *
+     * @return list<array{field: string, op: string, value: mixed}>|null
+     */
+    public static function optionConditions(array $declared, mixed $value, ?int $userId = null): ?array
+    {
+        foreach ((array) ($declared['options'] ?? []) as $option) {
+            if (! is_array($option) || ! array_key_exists('value', $option)
+                || (string) $option['value'] !== (string) $value
+                || empty($option['criteria']) || ! is_array($option['criteria'])) {
+                continue;
+            }
+            $resolve = static function ($v) use ($userId) {
+                return match ($v) {
+                    '$today' => date('Y-m-d'),
+                    '$now' => date('Y-m-d H:i:s'),
+                    '$user' => $userId,
+                    default => $v,
+                };
+            };
+            $conditions = [];
+            foreach ($option['criteria'] as $field => $cond) {
+                if (! is_array($cond) || empty($cond['op'])) {
+                    continue;
+                }
+                $raw = $cond['value'] ?? null;
+                $conditions[] = [
+                    'field' => (string) $field,
+                    'op' => (string) $cond['op'],
+                    'value' => is_array($raw) ? array_map($resolve, $raw) : $resolve($raw),
+                ];
+            }
+
+            return $conditions === [] ? null : $conditions;
+        }
+
+        return null;
+    }
+
     public static function columnsForSlice(string $sliceName, array $fallback = []): array
     {
         $manifest = self::readManifest($sliceName);
@@ -48,7 +98,10 @@ final class DirectoryUi
                 $label = (string) preg_replace('/\s+Id$/', '', $label);
             }
             $def = $fieldIndex[(string) $key] ?? [];
-            $options = self::normalizeOptions($def['options'] ?? null);
+            $options = self::normalizeOptions($c['options'] ?? null);
+            if ($options === []) {
+                $options = self::normalizeOptions($def['options'] ?? null);
+            }
             if ($options === []) {
                 // The value set may live only in the directory's
                 // filter declarations (literal options, or
@@ -65,9 +118,13 @@ final class DirectoryUi
                 'formatter' => $fmt,
                 'html' => in_array($fmt, self::HTML_FORMATTERS, true),
                 'badge_from' => $c['badge_from'] ?? null,
+                'progress_field' => $c['progress_field'] ?? null,
                 'breakdown' => $c['breakdown'] ?? null,
                 'label_table' => $c['label_table'] ?? null,
                 'label_column' => $c['label_column'] ?? null,
+                'color_from' => $c['color_from'] ?? null,
+                'relation' => $c['relation'] ?? null,
+                'lines' => $c['lines'] ?? null,
                 'options' => $options !== [] ? $options : null,
                 'field_type' => isset($def['type']) && is_string($def['type']) ? $def['type'] : null,
             ], fn ($v) => $v !== null);
@@ -87,9 +144,141 @@ final class DirectoryUi
      *
      * @return list<array{label: string, value: string, html: bool}>
      */
+    /**
+     * The record's own label for detail headers (QA5, 25 Oct
+     * 2026): the generated chain (title → name → full_name →
+     * heading → subject) missed the records whose identity is a
+     * {thing}_name or a document number, so project and invoice
+     * pages titled themselves "Project #1" / "Invoice #1" while
+     * the record's real name sat in the fields below. Candidates
+     * first, then any {thing}_name attribute, then null (the
+     * caller keeps its "Slice #id" fallback).
+     */
+    public static function recordLabel(mixed $record): ?string
+    {
+        if (! is_object($record)) {
+            return null;
+        }
+        foreach (['title', 'name', 'full_name', 'heading', 'subject', 'label'] as $candidate) {
+            $value = data_get($record, $candidate);
+            if (is_scalar($value) && (string) $value !== '') {
+                return (string) $value;
+            }
+        }
+        // A {thing}_name beats a code/number: a project is
+        // titled by its name, not its short code.
+        $attrs = method_exists($record, 'getAttributes')
+            ? array_keys($record->getAttributes())
+            : array_keys(get_object_vars($record));
+        foreach ($attrs as $attr) {
+            if (str_ends_with((string) $attr, '_name')) {
+                $value = data_get($record, (string) $attr);
+                if (is_string($value) && $value !== '') {
+                    return $value;
+                }
+            }
+        }
+        foreach (['invoice_number', 'order_number', 'code', 'reference', 'number'] as $candidate) {
+            $value = data_get($record, $candidate);
+            if (is_scalar($value) && (string) $value !== '') {
+                return (string) $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Identity subtitle for a detail header: the slice may declare
+     * ui.show.identity_fields as `from` paths on the record (its own
+     * attributes or dotted relation paths, e.g. designation +
+     * department for a person). Resolved values join with ' • '.
+     * Null when nothing is declared or nothing resolves — callers
+     * keep their generic fallback.
+     */
+    public static function identitySubtitle(string $sliceName, mixed $record): ?string
+    {
+        if (! is_object($record)) {
+            return null;
+        }
+        $manifest = self::readManifest($sliceName);
+        $paths = $manifest['ui']['show']['identity_fields'] ?? null;
+        if (! is_array($paths) || $paths === []) {
+            return null;
+        }
+        $parts = [];
+        foreach ($paths as $path) {
+            $from = is_array($path) ? ($path['from'] ?? null) : $path;
+            if (! is_string($from) || $from === '') {
+                continue;
+            }
+            try {
+                $value = data_get($record, $from);
+            } catch (\Throwable $e) {
+                $value = null;
+            }
+            if (is_scalar($value) && (string) $value !== '') {
+                $parts[] = (string) $value;
+            }
+        }
+
+        return $parts !== [] ? implode(' • ', $parts) : null;
+    }
+
+    /**
+     * The detail card's heading: declared per slice
+     * (ui.show.detail_title), generic otherwise.
+     */
+    public static function detailTitle(string $sliceName): string
+    {
+        $manifest = self::readManifest($sliceName);
+        $title = $manifest['ui']['show']['detail_title'] ?? null;
+
+        return is_string($title) && $title !== '' ? $title : 'Attribute Parameters';
+    }
+
     public static function detailRows(string $sliceName, mixed $record): array
     {
         $manifest = self::readManifest($sliceName);
+
+        // H3: a declared profile composition wins outright. Entries
+        // name a label and a `from` path resolved against the record —
+        // its own attributes or dotted relation paths
+        // (employeeDetail.designation.name, user.email) — so a detail
+        // page can present a curated profile that spans the record's
+        // relations instead of one table's columns.
+        $declared = $manifest['ui']['show']['detail_fields'] ?? null;
+        if (is_array($declared) && $declared !== [] && is_object($record)) {
+            $rows = [];
+            foreach ($declared as $entry) {
+                if (! is_array($entry) || empty($entry['from'])) {
+                    continue;
+                }
+                // A declared path that cannot resolve (a relation the
+                // data model lacks) renders as an em dash — a broken
+                // declaration must never break the detail page.
+                try {
+                    $value = data_get($record, (string) $entry['from']);
+                } catch (\Throwable $e) {
+                    $value = null;
+                }
+                $type = (string) ($entry['type'] ?? 'text');
+                $text = match ($type) {
+                    'date', 'datetime' => DataTableRows::formatDateValue($value, $type),
+                    'status' => (string) ($value ?? '—'),
+                    default => (string) DataTableRows::display($value),
+                };
+                $rows[] = [
+                    'label' => (string) ($entry['label'] ?? \Illuminate\Support\Str::headline((string) $entry['from'])),
+                    'value' => $text === '' ? '—' : $text,
+                    'html' => false,
+                ];
+            }
+            if ($rows !== []) {
+                return $rows;
+            }
+        }
+
         $fields = self::fieldIndex($manifest);
         $attributes = is_object($record) && method_exists($record, 'getAttributes')
             ? $record->getAttributes()
@@ -98,11 +287,15 @@ final class DirectoryUi
             return [];
         }
 
-        $skip = ['id', 'created_at', 'updated_at', 'deleted_at', 'company_id', 'tenant_id', 'organization_id', 'workflow_state_entered_at'];
+        // System/audit columns never reach a detail page (the same
+        // hygiene law as forms, Tier 0): ownership stamps, approval
+        // stamps and tenant keys are machinery, not profile content.
+        $skip = ['id', 'created_at', 'updated_at', 'deleted_at', 'company_id', 'tenant_id', 'organization_id', 'workflow_state_entered_at',
+            'added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'password', 'remember_token'];
         $columns = [];
         foreach ($fields as $name => $def) {
             $name = (string) $name;
-            if (in_array($name, $skip, true) || ! array_key_exists($name, $attributes) || ! empty($def['hidden'])) {
+            if (in_array($name, $skip, true) || str_ends_with($name, '_by') || str_ends_with($name, '_ip') || ! array_key_exists($name, $attributes) || ! empty($def['hidden'])) {
                 continue;
             }
             $label = (string) ($def['label'] ?? \Illuminate\Support\Str::headline($name));
@@ -175,22 +368,41 @@ final class DirectoryUi
     {
         $tabs = [];
         $seen = [];
-        $add = static function (string $relation, ?string $label) use (&$tabs, &$seen): void {
-            if ($relation === '' || isset($seen[$relation])) {
+        $add = static function (string $relation, ?string $label, ?string $handle = null, array $extras = []) use (&$tabs, &$seen): void {
+            // Dedupe is by RELATION for plain tabs (a declared
+            // tab, a hasMany relation and a repeater naming the
+            // same relation are one tab). A RENDER-MODE tab
+            // (board / gantt) is an additional presentation of
+            // its relation, keyed by its declared handle — a
+            // table and a board over one relation are two tabs.
+            $isRenderMode = in_array($extras['render'] ?? 'table', ['board', 'gantt'], true);
+            $key = $isRenderMode ? ($handle !== null && $handle !== '' ? $handle : $relation) : $relation;
+            if ($relation === '' || isset($seen[$key])) {
                 return;
             }
-            $seen[$relation] = true;
-            $tabs[] = [
-                'handle' => $relation,
+            $seen[$key] = true;
+            $tabs[] = array_merge([
+                'handle' => $isRenderMode ? $key : $relation,
                 'label' => $label !== null && $label !== '' ? $label : \Illuminate\Support\Str::headline($relation),
                 'type' => 'relation',
                 'relation' => $relation,
-            ];
+            ], $extras);
         };
 
         foreach (($manifest['ui']['show']['tabs'] ?? []) as $tab) {
             if (is_array($tab) && ($tab['type'] ?? '') === 'relation') {
-                $add((string) ($tab['relation'] ?? $tab['handle'] ?? ''), isset($tab['label']) ? (string) $tab['label'] : null);
+                $extras = [];
+                foreach (['render', 'group_by', 'start_field', 'end_field', 'label_field'] as $k) {
+                    if (! empty($tab[$k])) {
+                        $extras[$k] = (string) $tab[$k];
+                    }
+                }
+                $add(
+                    (string) ($tab['relation'] ?? $tab['handle'] ?? ''),
+                    isset($tab['label']) ? (string) $tab['label'] : null,
+                    isset($tab['handle']) ? (string) $tab['handle'] : null,
+                    $extras
+                );
             }
         }
 
@@ -230,10 +442,558 @@ final class DirectoryUi
                 } catch (\Throwable $e) {
                     // A broken relation must never break the detail page.
                 }
+                // H1: a hub tab renders the RELATED slice's declared
+                // list definition (columns + DataTableRows values),
+                // never a generic ID/Summary/Status skeleton. Tabs that
+                // cannot be resolved are flagged 'unresolved' so the
+                // drift/presentation checks can catch them.
+                $tabs[$i] = self::enrichTabularTab($tabs[$i], $record);
             }
         }
 
         return $tabs;
+    }
+
+    /** @var array<string, string>|null table name => owning slice name */
+    private static ?array $sliceNameByTable = null;
+
+    /**
+     * Map a database table to the slice that owns it (root model wins),
+     * scanning the discovered manifests once per request.
+     */
+    private static function sliceNameForTable(string $table): ?string
+    {
+        if (self::$sliceNameByTable === null) {
+            self::$sliceNameByTable = [];
+            try {
+                if (function_exists('app') && app()->bound(SliceManager::class)) {
+                    $manager = app(SliceManager::class);
+                    $manager->discover();
+                    foreach ($manager->discoveredSlices() as $slice) {
+                        // Root ownership via the manifest's own table
+                        // resolution (handles every manifest shape,
+                        // including porter-era manifests with no
+                        // models section at all).
+                        try {
+                            $primary = $slice->primaryTable();
+                        } catch (\Throwable $e) {
+                            $primary = null;
+                        }
+                        if (is_string($primary) && $primary !== '') {
+                            self::$sliceNameByTable[$primary] = (string) $slice->name;
+                        }
+                        // Declared child models in list-shaped manifests.
+                        foreach (($slice->raw['models'] ?? []) as $model) {
+                            if (! is_array($model) || empty($model['table'])) {
+                                continue;
+                            }
+                            $t = (string) $model['table'];
+                            if (! isset(self::$sliceNameByTable[$t]) || ! empty($model['root'])) {
+                                self::$sliceNameByTable[$t] = (string) $slice->name;
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Enrichment is best-effort; tabs fall back unflagged-free.
+            }
+        }
+
+        return self::$sliceNameByTable[$table] ?? null;
+    }
+
+    /**
+     * H1 enrichment: resolve the tab relation's owning slice, take its
+     * declared directory columns (or a field-derived fallback), fetch
+     * the rows through the relation and render every cell through the
+     * same DataTableRows pipeline the listings use — FK labels, option
+     * labels, composite people cells, progress bars and all.
+     *
+     * @param  array<string, mixed>  $tab
+     * @return array<string, mixed>
+     */
+    private static function enrichTabularTab(array $tab, object $record): array
+    {
+        $relation = (string) ($tab['relation'] ?? '');
+        if ($relation === '' || ! method_exists($record, $relation)) {
+            return $tab;
+        }
+        // Render-mode tabs (board / gantt) consume the RAW
+        // related records in their own kit partials — the
+        // tabular column pipeline does not apply.
+        $render = (string) ($tab['render'] ?? 'table');
+        if ($render === 'board' || $render === 'gantt') {
+            try {
+                $query = $record->{$relation}();
+                if (is_object($query) && method_exists($query, 'get')) {
+                    $tab['records'] = $query->limit(100)->get();
+                }
+            } catch (\Throwable $e) {
+                $tab['records'] = [];
+            }
+
+            return $tab;
+        }
+        try {
+            $query = $record->{$relation}();
+            if (! is_object($query) || ! method_exists($query, 'getRelated')) {
+                return $tab;
+            }
+            $related = $query->getRelated();
+            $sliceName = self::sliceNameForTable($related->getTable());
+            if ($sliceName === null) {
+                return $tab + ['unresolved' => true];
+            }
+            $columns = self::columnsForSlice($sliceName);
+            if ($columns === []) {
+                $columns = self::fallbackTabColumns($sliceName);
+            }
+            // Sanity: the resolved slice's columns must describe THIS
+            // relation's table. Name/model resolution ambiguities can
+            // bind a child table to a sibling slice (the shifts/quota
+            // tangle); when no declared column exists on the related
+            // table, derive columns from the model itself instead of
+            // rendering another slice's directory — and skip that
+            // slice's service decoration, which would discard the
+            // child's fields the same way.
+            $sliceOwnsTable = $columns !== [] && self::columnsDescribeTable($columns, $related->getTable());
+            if (! $sliceOwnsTable) {
+                $foreignKey = null;
+                if ($query instanceof \Illuminate\Database\Eloquent\Relations\HasOneOrMany) {
+                    $foreignKey = $query->getForeignKeyName();
+                }
+                $columns = self::modelDerivedColumns($related->getTable(), $foreignKey);
+            }
+            if ($columns === []) {
+                return $tab + ['unresolved' => true];
+            }
+            $rows = $query->limit(50)->get();
+            // Decorate through the related slice's own listing
+            // mapping when it has a service — tabs then show the
+            // same computed values as the related directory itself.
+            $service = $sliceOwnsTable ? self::serviceForSlice($sliceName) : null;
+            if ($service !== null && method_exists($service, 'listingBusinessObjects')) {
+                try {
+                    $rows = $service->listingBusinessObjects($rows);
+                } catch (\Throwable $e) {
+                    // Raw models still render through the pipeline.
+                }
+            }
+            // Tab content contract v2: a resolved tab is a working
+            // list, not a picture of one — scoped create/export,
+            // per-row actions and the related slice's declared
+            // inline editor ride along (see tabActionSurface()).
+            $surface = $sliceOwnsTable ? self::tabActionSurface($sliceName, $tab, $query, $record, $rows) : null;
+            $tab['columns'] = $columns;
+            $tab['rows'] = DataTableRows::from($rows, $columns, $surface['extra'] ?? null);
+            if ($surface !== null) {
+                foreach (['slice', 'create_url', 'create_label', 'export_name', 'inline'] as $k) {
+                    if (isset($surface['tab'][$k])) {
+                        $tab[$k] = $surface['tab'][$k];
+                    }
+                }
+                if (! empty($surface['raw'])) {
+                    foreach ($tab['rows'] as $i => $row) {
+                        $rid = $row['__id'] ?? null;
+                        if ($rid !== null && isset($surface['raw'][$rid])) {
+                            $tab['rows'][$i]['__raw_'.$surface['tab']['inline']['field']] = $surface['raw'][$rid];
+                        }
+                    }
+                }
+            }
+
+            return $tab;
+        } catch (\Throwable $e) {
+            return $tab + ['unresolved' => true];
+        }
+    }
+
+
+    /** @var array<string, \LaraSlice\Core\Discovery\SliceManifest|null> slice name => manifest */
+    private static array $manifestByName = [];
+
+    private static function manifestForSlice(string $sliceName): ?\LaraSlice\Core\Discovery\SliceManifest
+    {
+        if (! array_key_exists($sliceName, self::$manifestByName)) {
+            self::$manifestByName[$sliceName] = null;
+            try {
+                if (function_exists('app') && app()->bound(SliceManager::class)) {
+                    $manager = app(SliceManager::class);
+                    $manager->discover();
+                    // Two slices can share one name (a fidelity
+                    // slice and its porter twin). The manifest the
+                    // tab's columns came from is the one
+                    // readManifest() resolved — match by path
+                    // first so the action surface (inline_edit,
+                    // routes) comes from that same Heart.
+                    $wantDir = null;
+                    $mp = self::manifestPath($sliceName);
+                    if ($mp !== null) {
+                        $wantDir = dirname($mp);
+                    }
+                    $byName = null;
+                    foreach ($manager->discoveredSlices() as $slice) {
+                        if ((string) $slice->name !== $sliceName) {
+                            continue;
+                        }
+                        if ($wantDir !== null && rtrim((string) $slice->path, '/') === rtrim($wantDir, '/')) {
+                            self::$manifestByName[$sliceName] = $slice;
+                            break;
+                        }
+                        $byName ??= $slice;
+                    }
+                    if (self::$manifestByName[$sliceName] === null) {
+                        self::$manifestByName[$sliceName] = $byName;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Action surface is best-effort.
+            }
+        }
+
+        return self::$manifestByName[$sliceName];
+    }
+
+    /**
+     * The slice's web route-name prefix, parsed from its own
+     * routes/web.php with the same pattern SliceManager uses for
+     * declared-route registration.
+     */
+    private static function routePrefixForSlice(string $sliceName): ?string
+    {
+        $manifest = self::manifestForSlice($sliceName);
+        if ($manifest === null) {
+            return null;
+        }
+        try {
+            $routesPath = $manifest->getRoutesPath();
+            $webFile = $routesPath ? $routesPath.'/web.php' : null;
+            if (! $webFile || ! is_file($webFile)) {
+                return null;
+            }
+            if (preg_match("/Route::prefix\('([^']+)'\)->name\('([^']+)\.'\)/", (string) file_get_contents($webFile), $m)) {
+                return $m[2];
+            }
+        } catch (\Throwable $e) {
+            // fall through
+        }
+
+        return null;
+    }
+
+    /**
+     * Tab content contract v2 — the action surface of a resolved
+     * tab, derived entirely from the RELATED slice's own Heart:
+     * its routes (create/show/edit/destroy), its declared
+     * ui.directory.inline_edit (the same allowlist the inline
+     * endpoint enforces) and the relation's foreign key for the
+     * scoped-create preset. Nothing here is hub-specific.
+     *
+     * @param  array<string, mixed>  $tab
+     * @return array{extra: ?callable, tab: array<string, mixed>, raw: array<array-key, mixed>}|null
+     */
+    private static function tabActionSurface(string $sliceName, array $tab, object $query, object $record, iterable $rows): ?array
+    {
+        $prefix = self::routePrefixForSlice($sliceName);
+        if ($prefix === null) {
+            return null;
+        }
+        $out = ['extra' => null, 'tab' => ['slice' => $sliceName], 'raw' => []];
+        try {
+            if (\Illuminate\Support\Facades\Route::has($prefix.'.show')
+                || \Illuminate\Support\Facades\Route::has($prefix.'.edit')
+                || \Illuminate\Support\Facades\Route::has($prefix.'.destroy')) {
+                $out['extra'] = static function ($item) use ($prefix) {
+                    $id = $item instanceof \Illuminate\Database\Eloquent\Model ? $item->getKey() : ($item->id ?? null);
+                    if ($id === null) {
+                        return [];
+                    }
+
+                    return [
+                        'show_url' => \Illuminate\Support\Facades\Route::has($prefix.'.show') ? route($prefix.'.show', $id) : null,
+                        'edit_url' => \Illuminate\Support\Facades\Route::has($prefix.'.edit') ? route($prefix.'.edit', $id) : null,
+                        'delete_url' => \Illuminate\Support\Facades\Route::has($prefix.'.destroy') ? route($prefix.'.destroy', $id) : null,
+                    ];
+                };
+            }
+            if (\Illuminate\Support\Facades\Route::has($prefix.'.create')) {
+                $params = [];
+                if ($query instanceof \Illuminate\Database\Eloquent\Relations\HasOneOrMany) {
+                    $local = $query->getLocalKeyName();
+                    $params[$query->getForeignKeyName()] = $record->{$local};
+                }
+                $out['tab']['create_url'] = route($prefix.'.create', $params);
+                $label = (string) ($tab['label'] ?? $sliceName);
+                $out['tab']['create_label'] = 'Add '.\Illuminate\Support\Str::singular($label);
+                $out['tab']['export_name'] = \Illuminate\Support\Str::slug($label);
+            }
+            // Inline editor: the related slice's declared
+            // inline_edit fields, restricted to fields that are
+            // also columns of this tab; options mirror the
+            // endpoint's own allowlist extraction.
+            $manifest = self::manifestForSlice($sliceName);
+            $raw = $manifest?->raw ?? [];
+            $inlineFields = (array) ($raw['ui']['directory']['inline_edit'] ?? []);
+            $columnKeys = array_column(self::columnsForSlice($sliceName), 'key');
+            foreach ($inlineFields as $field) {
+                $field = (string) $field;
+                if (! in_array($field, $columnKeys, true)) {
+                    continue;
+                }
+                $options = self::fieldOptions($raw, $field);
+                if ($options === []) {
+                    continue;
+                }
+                if (\Illuminate\Support\Facades\Route::has($prefix.'.inline')) {
+                    $out['tab']['inline'] = [
+                        'field' => $field,
+                        'options' => $options,
+                        'url' => route($prefix.'.inline', ['id' => '__ID__']),
+                    ];
+                    foreach ($rows as $row) {
+                        $rid = $row instanceof \Illuminate\Database\Eloquent\Model ? $row->getKey() : ($row->id ?? null);
+                        if ($rid !== null) {
+                            $out['raw'][$rid] = is_object($row) ? ($row->{$field} ?? null) : null;
+                        }
+                    }
+                }
+                break;
+            }
+        } catch (\Throwable $e) {
+            // The tab still renders its rows without the surface.
+        }
+
+        return $out;
+    }
+
+    /**
+     * Declared option list for a manifest field, shaped
+     * [{value, label}] — the same definitions the inline
+     * endpoint validates against.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return list<array{value: string, label: string}>
+     */
+    private static function fieldOptions(array $raw, string $field): array
+    {
+        $defs = [];
+        foreach ((array) ($raw['fields'] ?? []) as $key => $def) {
+            if (! is_array($def)) {
+                continue;
+            }
+            $handle = $def['handle'] ?? $def['name'] ?? (is_string($key) ? $key : null);
+            if ($handle !== null) {
+                $defs[(string) $handle] = $def;
+            }
+        }
+        foreach ((array) ($raw['models'] ?? []) as $model) {
+            foreach ((array) ($model['fields'] ?? []) as $def) {
+                if (is_array($def) && isset($def['handle'])) {
+                    $defs[(string) $def['handle']] = $def;
+                }
+            }
+        }
+        $options = $defs[$field]['options'] ?? null;
+        if (! is_array($options)) {
+            return [];
+        }
+        $out = [];
+        foreach ($options as $k => $opt) {
+            if (is_array($opt)) {
+                $value = (string) ($opt['value'] ?? $k);
+                $out[] = ['value' => $value, 'label' => (string) ($opt['label'] ?? $value)];
+            } elseif (is_int($k)) {
+                $out[] = ['value' => (string) $opt, 'label' => (string) $opt];
+            } else {
+                $out[] = ['value' => (string) $k, 'label' => (string) $opt];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @var array<string, list<string>> table => schema column names */
+    private static array $tableColumnsCache = [];
+
+    /** @return list<string> */
+    private static function tableColumns(string $table): array
+    {
+        if (! isset(self::$tableColumnsCache[$table])) {
+            try {
+                self::$tableColumnsCache[$table] = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+            } catch (\Throwable $e) {
+                self::$tableColumnsCache[$table] = [];
+            }
+        }
+
+        return self::$tableColumnsCache[$table];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $columns
+     */
+    private static function columnsDescribeTable(array $columns, string $table): bool
+    {
+        $actual = self::tableColumns($table);
+        if ($actual === []) {
+            return true; // cannot verify — do not second-guess the slice
+        }
+        foreach ($columns as $col) {
+            $key = (string) ($col['key'] ?? '');
+            if ($key !== '' && $key !== 'id' && in_array($key, $actual, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Columns derived from the related table itself — the fallback for
+     * child entities that own no slice/directory (e.g. leave quotas).
+     * System/tenant/audit columns are excluded; FK columns resolve to
+     * labels through the DataTableRows batch maps.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function modelDerivedColumns(string $table, ?string $foreignKey = null): array
+    {
+        $actual = self::tableColumns($table);
+        $skip = ['company_id', 'created_at', 'updated_at', 'deleted_at', 'hash', 'added_by', 'last_updated_by', 'created_by', 'updated_by'];
+        if ($foreignKey !== null && $foreignKey !== '') {
+            $skip[] = $foreignKey; // the parent's key — every row shares it
+        }
+        $labelish = [];
+        $fks = [];
+        $scalars = [];
+        foreach ($actual as $col) {
+            if ($col === 'id' || in_array($col, $skip, true) || str_ends_with($col, '_by')) {
+                continue;
+            }
+            if (str_ends_with($col, '_name') || in_array($col, ['name', 'title', 'heading', 'subject'], true)) {
+                $labelish[] = $col;
+            } elseif (str_ends_with($col, '_id')) {
+                $fks[] = $col;
+            } else {
+                $scalars[] = $col;
+            }
+        }
+        $columns = [];
+        foreach (array_slice(array_merge($labelish, $fks, $scalars), 0, 6) as $key) {
+            $label = \Illuminate\Support\Str::headline($key);
+            if (str_ends_with($key, '_id')) {
+                $label = (string) preg_replace('/\s+Id$/', '', $label);
+            }
+            $columns[] = [
+                'key' => $key,
+                'label' => $label,
+                'formatter' => $key === 'status' ? 'status_pill' : 'text',
+                'html' => $key === 'status',
+            ];
+        }
+
+        return $columns;
+    }
+
+    /** @var array<string, object|null> slice name => listing service */
+    private static array $serviceBySlice = [];
+
+    /**
+     * Resolve a slice's listing service by naming convention
+     * (<Namespace>\Services\<Singular>SliceService), the same class
+     * its generated controller uses. Null when the slice has none.
+     */
+    private static function serviceForSlice(string $sliceName): ?object
+    {
+        if (array_key_exists($sliceName, self::$serviceBySlice)) {
+            return self::$serviceBySlice[$sliceName];
+        }
+        $service = null;
+        try {
+            if (function_exists('app') && app()->bound(SliceManager::class)) {
+                $manager = app(SliceManager::class);
+                $manager->discover();
+                $slice = $manager->getSlice($sliceName);
+                $ns = $slice?->namespace;
+                if (is_string($ns) && $ns !== '') {
+                    $singular = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($sliceName));
+                    $plural = \Illuminate\Support\Str::studly($sliceName);
+                    foreach (array_unique([$singular, $plural]) as $base) {
+                        $class = rtrim($ns, '\\').'\\Services\\'.$base.'SliceService';
+                        if (class_exists($class)) {
+                            $service = app()->bound($class) ? app($class) : new $class;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            $service = null;
+        }
+
+        return self::$serviceBySlice[$sliceName] = $service;
+    }
+
+    /**
+     * When the related slice declares no directory columns, derive a
+     * modest column set from its manifest fields: the label field
+     * first, then scalar/date fields, status last. System/audit
+     * columns never appear (Tier 0 hygiene set).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function fallbackTabColumns(string $sliceName): array
+    {
+        $manifest = self::readManifest($sliceName);
+        $index = self::fieldIndex($manifest);
+        if ($index === []) {
+            return [];
+        }
+        $system = ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'created_at', 'updated_at', 'deleted_at'];
+        $labelKeys = ['name', 'title', 'heading', 'subject', 'full_name', 'label'];
+        $picked = [];
+        foreach ($labelKeys as $lk) {
+            if (isset($index[$lk])) {
+                $picked[] = $lk;
+                break;
+            }
+        }
+        if ($picked === []) {
+            foreach (array_keys($index) as $k) {
+                if (str_ends_with((string) $k, '_name')) {
+                    $picked[] = (string) $k;
+                    break;
+                }
+            }
+        }
+        foreach (array_keys($index) as $k) {
+            $k = (string) $k;
+            if (count($picked) >= 5 || in_array($k, $picked, true) || in_array($k, $system, true)
+                || str_ends_with($k, '_by') || $k === 'status') {
+                continue;
+            }
+            $type = $index[$k]['type'] ?? 'string';
+            if (in_array($type, ['string', 'date', 'datetime', 'integer', 'decimal', 'boolean', 'text'], true)) {
+                $picked[] = $k;
+            }
+        }
+        if (isset($index['status'])) {
+            $picked[] = 'status';
+        }
+        $columns = [];
+        foreach ($picked as $k) {
+            $def = $index[$k];
+            $columns[] = array_filter([
+                'key' => $k,
+                'label' => (string) ($def['label'] ?? \Illuminate\Support\Str::headline($k)),
+                'formatter' => $k === 'status' ? 'status_pill' : 'text',
+                'html' => $k === 'status',
+                'options' => self::normalizeOptions($def['options'] ?? null) ?: null,
+                'field_type' => isset($def['type']) && is_string($def['type']) ? $def['type'] : null,
+            ], fn ($v) => $v !== null);
+        }
+
+        return $columns;
     }
 
     /**
@@ -272,6 +1032,29 @@ final class DirectoryUi
      * A widget that cannot be computed is skipped, never
      * misreported (same rule as declared stats).
      */
+    /**
+     * Declared show-page composition (layout kit step 3,
+     * 26 Oct 2026). ui.show.composition:
+     *   standard (default) — identity header card + metadata
+     *     strip + in-page tab ribbon + field card.
+     *   overview — the source systems' hub composition: the
+     *     record title moves to the topbar (page-title section),
+     *     the tab strip fuses under it (filterbar stack), no
+     *     header card or metadata strip, declared widgets lead
+     *     and the field card follows as a plain 'Details' card.
+     * ui.show.fields: end (default) | hide — field-card
+     * placement under the overview composition.
+     */
+    public static function showCompositionFromManifest(array $manifest): array
+    {
+        $show = $manifest['ui']['show'] ?? [];
+
+        return [
+            'mode' => ($show['composition'] ?? 'standard') === 'overview' ? 'overview' : 'standard',
+            'fields' => ($show['fields'] ?? 'end') === 'hide' ? 'hide' : 'end',
+        ];
+    }
+
     public static function showWidgetsFromManifest(array $manifest, mixed $record = null): array
     {
         $defs = $manifest['ui']['show']['widgets'] ?? [];
@@ -288,7 +1071,10 @@ final class DirectoryUi
             $type = (string) ($def['type'] ?? '');
             try {
                 if ($type === 'gauge' && $handle !== '') {
-                    $value = self::widgetAggregate($record, (array) ($def['value'] ?? []));
+                    $valueSpec = (array) ($def['value'] ?? []);
+                    $value = isset($valueSpec['field'])
+                        ? (is_numeric(data_get($record, (string) $valueSpec['field'])) ? (float) data_get($record, (string) $valueSpec['field']) : null)
+                        : self::widgetAggregate($record, $valueSpec);
                     $maxSpec = $def['max'] ?? null;
                     $max = is_numeric($maxSpec) ? (float) $maxSpec
                         : (is_array($maxSpec) && isset($maxSpec['field'])
@@ -299,12 +1085,71 @@ final class DirectoryUi
                     }
                     $widgets[] = [
                         'handle' => $handle,
+                        'placement' => (string) ($def['placement'] ?? 'main'),
                         'type' => 'gauge',
                         'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
                         'value' => $value,
                         'max' => $max,
                         'percent' => max(0.0, min(100.0, round($value / $max * 100, 1))),
                         'display' => self::trimNumber($value).' / '.self::trimNumber($max),
+                    ];
+                } elseif ($type === 'stats' && $handle !== '') {
+                    $rows = [];
+                    foreach ((array) ($def['measures'] ?? []) as $measure) {
+                        if (! is_array($measure) || empty($measure['label'])) {
+                            continue;
+                        }
+                        $v = self::measureValue($record, $measure);
+                        if ($v === null) {
+                            continue;
+                        }
+                        $text = isset($measure['decimals'])
+                            ? number_format($v, (int) $measure['decimals'])
+                            : self::trimNumber($v);
+                        $rows[] = [
+                            'label' => (string) $measure['label'],
+                            'value' => (string) ($measure['prefix'] ?? '').$text.(string) ($measure['suffix'] ?? ''),
+                        ];
+                    }
+                    if ($rows !== []) {
+                        $widgets[] = [
+                            'handle' => $handle,
+                            'placement' => (string) ($def['placement'] ?? 'main'),
+                            'type' => 'stats',
+                            'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                            'rows' => $rows,
+                        ];
+                    }
+                } elseif ($type === 'list' && $handle !== '') {
+                    $relation = (string) ($def['relation'] ?? '');
+                    if ($relation === '' || ! method_exists($record, $relation)) {
+                        continue;
+                    }
+                    $query = self::applyWidgetFilters($record->{$relation}(), (array) ($def['filter'] ?? []));
+                    $items = $query
+                        ->orderBy((string) ($def['order_by'] ?? 'id'), (string) ($def['direction'] ?? 'desc'))
+                        ->limit((int) ($def['limit'] ?? 5))
+                        ->get();
+                    $labelField = (string) ($def['label_field'] ?? 'name');
+                    $rows = [];
+                    foreach ($items as $item) {
+                        $label = data_get($item, $labelField);
+                        if (! is_scalar($label) || (string) $label === '') {
+                            $label = data_get($item, 'title') ?? data_get($item, 'name') ?? ('#'.data_get($item, 'id'));
+                        }
+                        $meta = ! empty($def['meta_field']) ? data_get($item, (string) $def['meta_field']) : null;
+                        $rows[] = [
+                            'label' => (string) $label,
+                            'meta' => is_scalar($meta) ? (string) $meta : '',
+                        ];
+                    }
+                    $widgets[] = [
+                        'handle' => $handle,
+                        'placement' => (string) ($def['placement'] ?? 'main'),
+                        'type' => 'list',
+                        'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                        'rows' => $rows,
+                        'empty' => (string) ($def['empty_text'] ?? 'Nothing to show.'),
                     ];
                 } elseif ($type === 'chart' && $handle !== '') {
                     $relation = (string) ($def['relation'] ?? '');
@@ -347,12 +1192,57 @@ final class DirectoryUi
                     }
                     $widgets[] = [
                         'handle' => $handle,
+                        'placement' => (string) ($def['placement'] ?? 'main'),
                         'type' => 'chart',
                         'chart' => (string) ($def['chart'] ?? 'donut'),
                         'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
                         'labels' => $labels,
                         'series' => $series,
                     ];
+                } elseif ($type === 'bars' && $handle !== '') {
+                    // Planned-vs-actual style comparisons: each bar is
+                    // a stats measure (field / aggregate / minus) with
+                    // its own color; an unset field reads as zero —
+                    // a comparison against "not planned" is still a
+                    // comparison. Widths scale to the largest bar.
+                    $bars = [];
+                    foreach ((array) ($def['bars'] ?? []) as $bar) {
+                        if (! is_array($bar) || empty($bar['label'])) {
+                            continue;
+                        }
+                        $v = self::measureValue($record, $bar);
+                        if ($v === null && isset($bar['field'])) {
+                            $v = 0.0;
+                        }
+                        if ($v === null) {
+                            continue;
+                        }
+                        if (isset($bar['scale']) && is_numeric($bar['scale']) && (float) $bar['scale'] != 0.0) {
+                            $v = $v / (float) $bar['scale'];
+                        }
+                        $text = isset($bar['decimals'])
+                            ? number_format($v, (int) $bar['decimals'])
+                            : self::trimNumber($v);
+                        $bars[] = [
+                            'label' => (string) $bar['label'],
+                            'value' => $v,
+                            'color' => (string) ($bar['color'] ?? '#3b82f6'),
+                            'display' => (string) ($bar['prefix'] ?? '').$text.(string) ($bar['suffix'] ?? ''),
+                        ];
+                    }
+                    if ($bars !== []) {
+                        $max = max(array_map(fn ($b) => $b['value'], $bars));
+                        foreach ($bars as $i => $b) {
+                            $bars[$i]['percent'] = $max > 0 ? max(0.0, min(100.0, round($b['value'] / $max * 100, 1))) : 0.0;
+                        }
+                        $widgets[] = [
+                            'handle' => $handle,
+                            'placement' => (string) ($def['placement'] ?? 'main'),
+                            'type' => 'bars',
+                            'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                            'bars' => $bars,
+                        ];
+                    }
                 }
             } catch (\Throwable) {
                 continue;
@@ -367,17 +1257,13 @@ final class DirectoryUi
      * {relation, aggregate: count|sum|avg, column?, filter?}
      * with the declared-stats filter semantics ('!' excludes).
      */
-    protected static function widgetAggregate(mixed $record, array $spec): ?float
+    /**
+     * The declared-stats filter semantics ('!' excludes),
+     * shared by widget aggregates and widget lists.
+     */
+    protected static function applyWidgetFilters(mixed $query, array $filter): mixed
     {
-        $relation = (string) ($spec['relation'] ?? '');
-        if ($relation === '' || ! is_object($record) || ! method_exists($record, $relation)) {
-            return null;
-        }
-        $query = $record->{$relation}();
-        if (! is_object($query)) {
-            return null;
-        }
-        foreach (($spec['filter'] ?? []) as $column => $value) {
+        foreach ($filter as $column => $value) {
             if (is_array($value)) {
                 $exclude = array_values(array_filter($value, fn ($v) => is_string($v) && str_starts_with($v, '!')));
                 $include = array_values(array_diff($value, $exclude));
@@ -391,6 +1277,46 @@ final class DirectoryUi
                 $query = $query->where((string) $column, $value);
             }
         }
+
+        return $query;
+    }
+
+    /**
+     * One stats measure: a record field, a relation aggregate
+     * spec, or the difference of two aggregate specs (profit
+     * = earnings - expenses).
+     */
+    protected static function measureValue(mixed $record, array $measure): ?float
+    {
+        if (isset($measure['field'])) {
+            $v = data_get($record, (string) $measure['field']);
+
+            return is_numeric($v) ? (float) $v : null;
+        }
+        if (isset($measure['minus']) && is_array($measure['minus']) && count($measure['minus']) === 2) {
+            $a = self::widgetAggregate($record, (array) $measure['minus'][0]);
+            $b = self::widgetAggregate($record, (array) $measure['minus'][1]);
+            if ($a === null || $b === null) {
+                return null;
+            }
+
+            return $a - $b;
+        }
+
+        return self::widgetAggregate($record, $measure);
+    }
+
+    protected static function widgetAggregate(mixed $record, array $spec): ?float
+    {
+        $relation = (string) ($spec['relation'] ?? '');
+        if ($relation === '' || ! is_object($record) || ! method_exists($record, $relation)) {
+            return null;
+        }
+        $query = $record->{$relation}();
+        if (! is_object($query)) {
+            return null;
+        }
+        $query = self::applyWidgetFilters($query, (array) ($spec['filter'] ?? []));
 
         return match ((string) ($spec['aggregate'] ?? 'count')) {
             'sum' => (float) $query->sum((string) ($spec['column'] ?? '')),
@@ -631,6 +1557,21 @@ final class DirectoryUi
         }
 
         $rows = [];
+        // Roster mode (declared `roster: true`): every member of
+        // the row-key label map is a row, with or without records
+        // — the source's attendance grid renders the full roster
+        // and marks elapsed days absent; a records-only grid
+        // reads as an empty page for a quiet month.
+        if (! empty($decl['roster'])) {
+            foreach ($labelMap as $key => $label) {
+                $rows[$key] = [
+                    'key' => $key,
+                    'label' => (string) $label,
+                    'cells' => [],
+                    'present' => 0,
+                ];
+            }
+        }
         foreach ($records as $record) {
             // Records arrive as Eloquent models (getAttributes), as
             // listing business objects (typed public properties), or
@@ -676,6 +1617,10 @@ final class DirectoryUi
             'rows' => $rows,
             'month' => $month,
             'year' => $year,
+            'days_in_month' => $daysInMonth,
+            'roster' => ! empty($decl['roster']),
+            'legend' => array_values(array_filter((array) ($decl['legend'] ?? []), 'is_array')),
+            'row_label' => is_string($decl['row_label'] ?? null) && $decl['row_label'] !== '' ? $decl['row_label'] : 'Employee',
         ];
     }
 
@@ -940,6 +1885,76 @@ final class DirectoryUi
         ];
     }
 
+    /**
+     * Multi-source comparison report (the Income-vs-Expense
+     * shape): several money streams, each declared as
+     * {label, table, date_field, amount, sign}, aligned by
+     * month with a signed Net column, totals and header
+     * cards. Declared as a named report under
+     * ui.directory.reports[] with a `compare` list; the
+     * controller supplies one row set per source with
+     * normalized {date, amount} rows.
+     *
+     * @param  array<string, mixed>  $decl
+     * @param  list<array{label: string, sign: int, rows: list<array{date: mixed, amount: mixed}>}>  $sources
+     * @return array{title: string, groupLabel: string, columns: list<string>, rows: list<array{label: string, values: list<string>}>, totals: list<string>, count: int, cards: list<array{label: string, value: string}>}|null
+     */
+    public static function compareFromManifest(array $decl, array $sources): ?array
+    {
+        if (empty($decl['compare']) || ! is_array($decl['compare']) || $sources === []) {
+            return null;
+        }
+        $money = fn ($v) => number_format((float) $v, 2);
+        $periods = [];
+        $totals = array_fill(0, count($sources), 0.0);
+        $count = 0;
+        foreach ($sources as $i => $source) {
+            foreach ($source['rows'] as $row) {
+                $count++;
+                $amount = is_numeric($row['amount'] ?? null) ? (float) $row['amount'] : 0.0;
+                $totals[$i] += $amount;
+                $ts = isset($row['date']) && $row['date'] !== null && $row['date'] !== ''
+                    ? strtotime((string) $row['date']) : false;
+                if ($ts === false) {
+                    continue;
+                }
+                $key = date('Y-m', $ts);
+                $periods[$key][$i] = ($periods[$key][$i] ?? 0.0) + $amount;
+            }
+        }
+        ksort($periods);
+        $net = fn (array $sums) => array_sum(array_map(
+            fn ($i) => ($sources[$i]['sign'] ?? 1) * ($sums[$i] ?? 0.0),
+            array_keys($sources)
+        ));
+        $rows = [];
+        foreach ($periods as $key => $sums) {
+            $values = [];
+            foreach ($sources as $i => $source) {
+                $values[] = $money($sums[$i] ?? 0.0);
+            }
+            $values[] = $money($net($sums));
+            $rows[] = ['label' => date('F Y', strtotime($key.'-01')), 'values' => $values];
+        }
+        $totalValues = array_map($money, $totals);
+        $totalValues[] = $money($net($totals));
+        $cards = [];
+        foreach ($sources as $i => $source) {
+            $cards[] = ['label' => 'Total '.$source['label'], 'value' => $money($totals[$i])];
+        }
+        $cards[] = ['label' => 'Net', 'value' => $money($net($totals))];
+
+        return [
+            'title' => (string) ($decl['title'] ?? 'Comparison Report'),
+            'groupLabel' => 'Month',
+            'columns' => [...array_column($sources, 'label'), 'Net'],
+            'rows' => $rows,
+            'totals' => $totalValues,
+            'count' => $count,
+            'cards' => $cards,
+        ];
+    }
+
     protected static function optionLabel(array $fieldDef, string $value): ?string
     {
         $options = $fieldDef['options'] ?? null;
@@ -1039,6 +2054,23 @@ final class DirectoryUi
         return [];
     }
 
+    /**
+     * Declared filter options as a list of {value, label} pairs —
+     * the shape every strip/drawer renderer consumes. Manifests
+     * declare options in BOTH shapes (maps and pair lists); the
+     * renderers must never see the raw map (a map rendered as
+     * pairs produced identical 'All' tabs, QA8 26 Oct 2026).
+     */
+    public static function optionsList(mixed $options): array
+    {
+        $list = [];
+        foreach (static::normalizeOptions($options) as $value => $label) {
+            $list[] = ['value' => $value, 'label' => $label];
+        }
+
+        return $list;
+    }
+
     protected static function normalizeOptions(mixed $options): array
     {
         $map = [];
@@ -1064,11 +2096,42 @@ final class DirectoryUi
         return $map;
     }
 
+    /** Placements the Page Structure Contract (Body v4) allows for a list page's primary action. */
+    public const LIST_PLACEMENTS = ['header-right', 'toolbar-left', 'command-bar', 'below-facets-left'];
+
+    /**
+     * Resolve a list page's declared primary-action placement
+     * (Body v4, Page Structure Contract). Reads
+     * ui.pages.list.placement first, then the legacy
+     * ui.directory.placement; anything undeclared or outside the
+     * vocabulary falls back to 'below-facets-left' — the actions
+     * band under the filter bar, which is the fleet's current
+     * rendered behaviour, so undeclared pages never move.
+     *
+     * @param  array<string, mixed>  $ui  The manifest's `ui` array.
+     */
+    public static function listPlacement(array $ui): string
+    {
+        $declared = $ui['pages']['list']['placement']
+            ?? $ui['directory']['placement']
+            ?? null;
+
+        return is_string($declared) && in_array($declared, self::LIST_PLACEMENTS, true)
+            ? $declared
+            : 'below-facets-left';
+    }
+
     /**
      * @return array<string, mixed>
      */
+    /** @var array<string, array<string, mixed>> slice name => parsed manifest */
+    private static array $manifestDataBySlice = [];
+
     public static function readManifest(string $sliceName): array
     {
+        if (array_key_exists($sliceName, self::$manifestDataBySlice)) {
+            return self::$manifestDataBySlice[$sliceName];
+        }
         $path = self::manifestPath($sliceName);
         if ($path === null || ! is_file($path)) {
             return [];
@@ -1076,12 +2139,12 @@ final class DirectoryUi
 
         try {
             if (str_ends_with(strtolower($path), '.json')) {
-                return json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR) ?: [];
+                return self::$manifestDataBySlice[$sliceName] = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR) ?: [];
             }
             if (class_exists(Yaml::class)) {
                 $data = Yaml::parseFile($path);
 
-                return is_array($data) ? $data : [];
+                return self::$manifestDataBySlice[$sliceName] = is_array($data) ? $data : [];
             }
         } catch (\Throwable $e) {
             return [];
@@ -1090,8 +2153,60 @@ final class DirectoryUi
         return [];
     }
 
+    /** @var array<string, string|null> slice name => manifest path */
+    private static array $manifestPathBySlice = [];
+
     public static function manifestPath(string $sliceName): ?string
     {
+        // Route-owner preference (QA5, 25 Oct 2026): when slices
+        // share a name (twins), the name index resolves the FIRST
+        // discovered — a page then renders its twin's declared
+        // columns, whose relations its own model may not carry
+        // (the work Projects list rendered the pilot slice's
+        // columns and every relation cell came out empty). When
+        // a same-named slice's declared route prefix owns the
+        // current request path, THAT slice's manifest is the
+        // page's own — the G5 own-manifest principle applied to
+        // directory reads. The result is deliberately not written
+        // to the name-keyed static cache.
+        try {
+            if (function_exists('app') && app()->bound(SliceManager::class) && app()->bound('request')) {
+                $reqPath = trim((string) app('request')->path(), '/');
+                if ($reqPath !== '') {
+                    $manager = app(SliceManager::class);
+                    $manager->discover();
+                    // discoveredSlices(), not getAllSlices(): the
+                    // name-keyed registry collapses twins to one
+                    // entry, which is the shadowing itself.
+                    foreach ($manager->discoveredSlices() as $candidate) {
+                        if (($candidate->name ?? null) !== $sliceName) {
+                            continue;
+                        }
+                        foreach (glob(rtrim((string) $candidate->path, '/\\').'/Routes/*.php') ?: [] as $routesFile) {
+                            $src = (string) @file_get_contents($routesFile);
+                            if (! preg_match("/Route::prefix\\(\\s*'([^']+)'\\)/", $src, $m)) {
+                                continue;
+                            }
+                            $prefix = trim($m[1], '/');
+                            if ($reqPath === $prefix || str_starts_with($reqPath, $prefix.'/')) {
+                                foreach (['slice.yaml', 'slice.yml'] as $file) {
+                                    $p = rtrim((string) $candidate->path, '/\\').DIRECTORY_SEPARATOR.$file;
+                                    if (is_file($p)) {
+                                        return $p;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fall through to the name index.
+        }
+
+        if (array_key_exists($sliceName, self::$manifestPathBySlice)) {
+            return self::$manifestPathBySlice[$sliceName];
+        }
         try {
             if (function_exists('app') && app()->bound(SliceManager::class)) {
                 /** @var SliceManager $manager */
@@ -1102,7 +2217,7 @@ final class DirectoryUi
                     foreach (['slice.yaml', 'slice.yaml', 'slice.yml'] as $file) {
                         $p = rtrim($slice->path, '/\\').DIRECTORY_SEPARATOR.$file;
                         if (is_file($p)) {
-                            return $p;
+                            return self::$manifestPathBySlice[$sliceName] = $p;
                         }
                     }
                 }
@@ -1125,11 +2240,11 @@ final class DirectoryUi
             }
             $found = self::findManifestUnder($root, $sliceName, 0, 6);
             if ($found) {
-                return $found;
+                return self::$manifestPathBySlice[$sliceName] = $found;
             }
         }
 
-        return null;
+        return self::$manifestPathBySlice[$sliceName] = null;
     }
 
     protected static function findManifestUnder(string $dir, string $sliceName, int $depth, int $max): ?string

@@ -97,9 +97,9 @@ BLADE);
         $index = file_get_contents($this->root.'/Old/Resources/views/index.blade.php');
         // (e) controller-preference: stale unconditional assignments
         // become ??-guarded so controller-passed values win.
-        $this->assertStringContainsString("$tableViews = $tableViews ?? $dirUi['views'] ?? ['table'];", $index);
-        $this->assertStringContainsString("$defaultView = $defaultView ?? $dirUi['default_view'] ?? 'table';", $index);
-        $this->assertStringContainsString("$inlineEdit = $inlineEdit ?? $dirUi['inline_edit'] ?? [];", $index);
+        $this->assertStringContainsString('$tableViews = $tableViews ?? $dirUi[\'views\'] ?? [\'table\'];', $index);
+        $this->assertStringContainsString('$defaultView = $defaultView ?? $dirUi[\'default_view\'] ?? \'table\';', $index);
+        $this->assertStringContainsString('$inlineEdit = $inlineEdit ?? $dirUi[\'inline_edit\'] ?? [];', $index);
         $this->assertStringContainsString('$matrixUrl', $index);
         $this->assertStringContainsString('$bulkEntryUrl', $index);
         $this->assertStringContainsString('$reportUrl', $index);

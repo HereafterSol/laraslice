@@ -18,8 +18,9 @@ class SliceCacheCommand extends Command
         $manager->discover();
 
         $count = $manager->cacheSlices();
+        $discovered = count($manager->discoveredSlices());
 
-        $this->info("Successfully cached {$count} slice(s) to [{$manager->getCachedSlicesPath()}].");
+        $this->info("Successfully cached {$count} of {$discovered} discovered slice(s) to [{$manager->getCachedSlicesPath()}].");
 
         return self::SUCCESS;
     }

@@ -19,7 +19,10 @@ class DashboardUiTest extends TestCase
         parent::setUp();
         DashboardFakeModel::$rows = [
             ['id' => 1, 'heading' => 'Alpha', 'board_column_id' => 2, 'due_date' => Carbon::now()->toDateTimeString()],
-            ['id' => 2, 'heading' => 'Beta', 'board_column_id' => 4, 'due_date' => Carbon::now()->addDay()->toDateTimeString()],
+            // Monday of the current week: always inside the
+            // Mon–Sun week strip (addDay() crossed into next
+            // week when the suite ran on a Sunday).
+            ['id' => 2, 'heading' => 'Beta', 'board_column_id' => 4, 'due_date' => Carbon::now()->startOfWeek(Carbon::MONDAY)->setTime(10, 0)->toDateTimeString()],
             ['id' => 3, 'heading' => 'Gamma', 'board_column_id' => 4, 'due_date' => Carbon::now()->subWeeks(2)->toDateTimeString()],
             ['id' => 4, 'heading' => 'Delta', 'board_column_id' => 3, 'due_date' => null],
         ];
@@ -28,6 +31,33 @@ class DashboardUiTest extends TestCase
     private function manifest(array $widgets): array
     {
         return ['ui' => ['dashboard' => ['widgets' => $widgets]]];
+    }
+
+    public function test_people_dates_projects_recurrences_into_the_window(): void
+    {
+        $today = Carbon::today();
+        DashboardFakeModel::$rows = [
+            // Birthday in 5 days (different birth year): inside.
+            ['id' => 1, 'date_of_birth' => $today->copy()->addDays(5)->subYears(30)->toDateString(), 'user' => ['name' => 'Soon']],
+            // Birthday today: inside, labelled Today.
+            ['id' => 2, 'date_of_birth' => $today->copy()->subYears(41)->toDateString(), 'user' => ['name' => 'Today Person']],
+            // Birthday in 60 days: outside a 30-day window.
+            ['id' => 3, 'date_of_birth' => $today->copy()->addDays(60)->subYears(22)->toDateString(), 'user' => ['name' => 'Far']],
+            // Birthday yesterday: rolls to next year, outside.
+            ['id' => 4, 'date_of_birth' => $today->copy()->subDay()->subYears(28)->toDateString(), 'user' => ['name' => 'Past']],
+            // No date at all: skipped silently.
+            ['id' => 5, 'date_of_birth' => null, 'user' => ['name' => 'Unknown']],
+        ];
+
+        $widgets = DashboardUi::widgetsFromManifest($this->manifest([
+            ['handle' => 'birthdays', 'type' => 'people_dates', 'title' => 'Birthdays', 'field' => 'date_of_birth', 'days' => 30],
+        ]), DashboardFakeModel::class, ['index' => '/employees', 'show' => '/employees/{id}']);
+
+        $this->assertCount(1, $widgets);
+        $this->assertSame(['Today Person', 'Soon'], array_column($widgets[0]['rows'], 'label'));
+        $this->assertStringContainsString('Today', $widgets[0]['rows'][0]['meta']);
+        $this->assertStringContainsString('in 5d', $widgets[0]['rows'][1]['meta']);
+        $this->assertSame('/employees/2', $widgets[0]['rows'][0]['url']);
     }
 
     public function test_counter_list_week_and_chart(): void
@@ -51,6 +81,34 @@ class DashboardUiTest extends TestCase
         $this->assertSame(1, count(array_filter($week, fn ($d) => $d['today'])));
         $this->assertSame(['To Do', 'Doing', 'Completed'], $widgets[3]['labels']);
         $this->assertSame([1, 1, 2], $widgets[3]['series']);
+    }
+
+    public function test_today_widget_includes_date_only_values(): void
+    {
+        DashboardFakeModel::$rows = [
+            ['id' => 1, 'heading' => 'Timed', 'due_date' => Carbon::today()->setTime(9, 30)->toDateTimeString()],
+            ['id' => 2, 'heading' => 'DateOnly', 'due_date' => Carbon::today()->toDateString()],
+            ['id' => 3, 'heading' => 'Tomorrow', 'due_date' => Carbon::tomorrow()->toDateTimeString()],
+        ];
+        $widgets = DashboardUi::widgetsFromManifest($this->manifest([
+            ['handle' => 'due_today', 'type' => 'today', 'title' => 'Due Today', 'date_field' => 'due_date', 'label_field' => 'heading'],
+        ]), DashboardFakeModel::class, ['index' => '/tasks', 'show' => '/tasks/{id}']);
+
+        $this->assertCount(1, $widgets);
+        $rows = $widgets[0]['rows'];
+        $this->assertSame(['DateOnly', 'Timed'], array_column($rows, 'label'));
+        $this->assertSame('', $rows[0]['meta']);
+        $this->assertSame('09:30', $rows[1]['meta']);
+    }
+
+    public function test_own_scoped_widget_without_a_user_is_skipped_never_widened(): void
+    {
+        $widgets = DashboardUi::widgetsFromManifest($this->manifest([
+            ['handle' => 'mine', 'type' => 'counter', 'title' => 'Mine', 'scope' => 'own', 'own' => ['field' => 'user_id']],
+            ['handle' => 'all', 'type' => 'counter', 'title' => 'All'],
+        ]), DashboardFakeModel::class);
+
+        $this->assertSame(['all'], array_column($widgets, 'handle'));
     }
 
     public function test_broken_widgets_are_skipped(): void
@@ -103,6 +161,14 @@ class DashboardFakeQuery
     public function whereBetween(string $column, array $range): static
     {
         $this->rows = array_values(array_filter($this->rows, fn ($r) => ($r[$column] ?? null) !== null && $r[$column] >= $range[0] && $r[$column] <= $range[1]));
+
+        return $this;
+    }
+
+    public function whereDate(string $column, mixed $date): static
+    {
+        $day = $date instanceof \DateTimeInterface ? $date->format('Y-m-d') : substr((string) $date, 0, 10);
+        $this->rows = array_values(array_filter($this->rows, fn ($r) => ($r[$column] ?? null) !== null && substr((string) $r[$column], 0, 10) === $day));
 
         return $this;
     }

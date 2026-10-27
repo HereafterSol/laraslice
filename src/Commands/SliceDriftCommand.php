@@ -7,24 +7,29 @@ namespace LaraSlice\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use LaraSlice\Support\PageStructureDrift;
 use LaraSlice\Support\SystemDrift;
 use LaraSlice\Support\SystemMind;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceDriftCommand extends Command
 {
-    protected $signature = 'slice:drift {--fix : Reconcile: grant the mapped roles what their clubs promise (creating view-own permission rows when missing)}';
+    protected $signature = 'slice:drift {--fix : Reconcile: grant the mapped roles what their clubs promise (creating view-own permission rows when missing)} {--structure : Also audit generated index blades against the Page Structure Contract (Body v4)}';
 
     protected $description = 'Mind ↔ Heart drift audit: compare the Mind\'s role clubs and the Bodies\' access declarations against the roles\' actual permission grants. Exits 1 on error-severity drift.';
 
     public function handle(): int
     {
         $path = SystemMind::defaultPath();
-        if (! is_file($path)) {
+        $hasMind = is_file($path);
+        if (! $hasMind && ! $this->option('structure')) {
             $this->warn('No Mind found at porting/system.yaml — nothing to audit against. Draft one with slice:plan:draft.');
             return self::SUCCESS;
         }
-        $mind = SystemMind::load($path) ?? [];
+        if (! $hasMind) {
+            $this->warn('No Mind found at porting/system.yaml — running the page-structure audit only.');
+        }
+        $mind = $hasMind ? (SystemMind::load($path) ?? []) : [];
 
         $roleGrants = [];
         $registry = [];
@@ -59,7 +64,7 @@ class SliceDriftCommand extends Command
             }
         }
 
-        if ($this->option('fix')) {
+        if ($this->option('fix') && $hasMind) {
             $this->reconcile($mind, $roleGrants, $registry);
             // Re-gather grants + registry after the changes.
             $registry = DB::table('permissions')->pluck('slug')->map(fn ($s) => (string) $s)->all();
@@ -76,7 +81,12 @@ class SliceDriftCommand extends Command
             }
         }
 
-        $findings = SystemDrift::audit($mind, $roleGrants, $registry, $bodies);
+        $findings = $hasMind ? SystemDrift::audit($mind, $roleGrants, $registry, $bodies) : [];
+
+        if ($this->option('structure')) {
+            $findings = array_merge($findings, $this->auditPageStructure());
+        }
+
         if ($findings === []) {
             $this->info('No drift: the Mind\'s promises, the Bodies\' access declarations, and the roles\' grants agree.');
             return self::SUCCESS;
@@ -97,6 +107,77 @@ class SliceDriftCommand extends Command
     }
 
     /**
+     * Page Structure Contract (Body v4) audit: every generated
+     * index blade under app/Slices against its slice's declared
+     * ui config, plus the app's published data-table component.
+     *
+     * @return list<array{kind: string, severity: string, message: string}>
+     */
+    private function auditPageStructure(): array
+    {
+        $findings = [];
+        $slicesRoot = base_path('app/Slices');
+        if (is_dir($slicesRoot)) {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($slicesRoot, \FilesystemIterator::SKIP_DOTS)
+            );
+            foreach ($iterator as $file) {
+                if (! $file->isFile() || $file->getFilename() !== 'index.blade.php') {
+                    continue;
+                }
+                $bladePath = $file->getPathname();
+                if (! str_contains($bladePath, '/Resources/views/')) {
+                    continue;
+                }
+                $sliceDir = dirname($bladePath, 3);
+                $ui = [];
+                $yamlPath = $sliceDir.'/slice.yaml';
+                if (is_file($yamlPath)) {
+                    try {
+                        $parsed = Yaml::parseFile($yamlPath);
+                        $ui = is_array($parsed['ui'] ?? null) ? $parsed['ui'] : [];
+                    } catch (\Throwable) {
+                        // unparsable Heart: the blade checks still run
+                    }
+                }
+                $label = str_replace(base_path().'/', '', $sliceDir);
+                $findings = array_merge(
+                    $findings,
+                    PageStructureDrift::auditBlade((string) file_get_contents($bladePath), $ui, $label)
+                );
+
+                // Detail-page half of the contract: a Heart that
+                // promises relation tabs needs a show blade that
+                // can render them (structure.hollow-hub).
+                $showPath = $sliceDir.'/Resources/views/show.blade.php';
+                if (is_file($showPath) && is_file($yamlPath)) {
+                    try {
+                        $manifest = Yaml::parseFile($yamlPath);
+                        if (is_array($manifest)) {
+                            $findings = array_merge(
+                                $findings,
+                                PageStructureDrift::auditShowBlade((string) file_get_contents($showPath), $manifest, $label)
+                            );
+                        }
+                    } catch (\Throwable) {
+                        // unparsable Heart: the index checks already ran
+                    }
+                }
+            }
+        }
+
+        $component = base_path('resources/views/components/ui/data-table.blade.php');
+        if (is_file($component)) {
+            $findings = array_merge(
+                $findings,
+                PageStructureDrift::auditComponent((string) file_get_contents($component))
+            );
+        }
+
+        return $findings;
+    }
+
+    /**
      * Execute the reconciliation plan: create framework-construct
      * permissions the registry lacks (view-own forms) and grant
      * each mapped role the slugs its club promises.
@@ -114,6 +195,7 @@ class SliceDriftCommand extends Command
         }
         $granted = 0;
         $created = 0;
+        $missing = [];
         foreach ($plan as $action) {
             if ($action['action'] === 'unresolvable') {
                 $this->warn("Unresolvable: club {$action['club']} pattern '{$action['pattern']}' names nothing in the registry — fix the Mind's vocabulary.");
@@ -121,6 +203,18 @@ class SliceDriftCommand extends Command
             }
             if ($action['action'] === 'unmapped-club' || $action['role'] === null) {
                 $this->warn("Unmapped club {$action['club']}: declare maps_to in the Mind to reconcile '{$action['pattern']}'.");
+                continue;
+            }
+            $roleId = $roleIds[$action['role']] ?? null;
+            if ($roleId === null) {
+                // A mapped-but-missing role must never fail
+                // silently: warn once per club→role pair and
+                // create nothing for it.
+                $key = $action['club'].' -> '.$action['role'];
+                if (! isset($missing[$key])) {
+                    $missing[$key] = true;
+                    $this->warn("Mapped role missing: club {$action['club']} maps_to '{$action['role']}', but no role with that name exists — nothing was granted for this club. maps_to must name a role in THIS system.");
+                }
                 continue;
             }
             $slug = $action['slug'];
@@ -137,14 +231,11 @@ class SliceDriftCommand extends Command
                 ]);
                 $created++;
             }
-            $roleId = $roleIds[$action['role']] ?? null;
-            if ($roleId !== null) {
-                DB::table('permission_role')->insertOrIgnore([
-                    'permission_id' => $permissionId,
-                    'role_id' => $roleId,
-                ]);
-                $granted++;
-            }
+            DB::table('permission_role')->insertOrIgnore([
+                'permission_id' => $permissionId,
+                'role_id' => $roleId,
+            ]);
+            $granted++;
         }
         $this->info("Reconciled: {$granted} grant(s) applied, {$created} permission(s) created.");
     }

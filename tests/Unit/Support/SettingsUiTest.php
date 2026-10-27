@@ -46,4 +46,47 @@ class SettingsUiTest extends TestCase
         $this->assertTrue($fields[2]['secret']);
         $this->assertSame(['low' => 'Low', 'medium' => 'Medium'], $sections[1]['fields'][0]['options']);
     }
+
+    public function test_keyed_rows_bind_carries_through(): void
+    {
+        $entries = [[
+            'slice' => 'Settings',
+            'manifest' => ['settings' => [[
+                'handle' => 'notifications',
+                'title' => 'Notifications',
+                'bind' => ['table' => 'email_notification_settings', 'rows_key' => 'slug', 'rows_label' => 'setting_name', 'toggles' => ['send_email', 'send_slack']],
+                'fields' => [],
+            ]]],
+        ]];
+        $sections = SettingsUi::collectSections($entries, fn ($k, $d) => $d);
+        $this->assertSame('email_notification_settings', $sections[0]['bind']['table']);
+        $this->assertSame('slug', $sections[0]['bind']['rows_key']);
+        $this->assertSame(['send_email', 'send_slack'], $sections[0]['bind']['toggles']);
+    }
+
+    public function test_bound_section_carries_its_table(): void
+    {
+        $resolver = fn (string $key, mixed $default) => $default;
+
+        $sections = SettingsUi::collectSections([
+            ['slice' => 'Settings', 'manifest' => ['settings' => [
+                [
+                    'handle' => 'smtp', 'title' => 'Email (SMTP)',
+                    'bind' => ['table' => 'smtp_settings'],
+                    'fields' => [
+                        ['handle' => 'mail_host', 'label' => 'Mail Host', 'type' => 'text'],
+                    ],
+                ],
+                [
+                    'handle' => 'plain', 'title' => 'Plain',
+                    'fields' => [
+                        ['handle' => 'note', 'label' => 'Note', 'type' => 'text'],
+                    ],
+                ],
+            ]]],
+        ], $resolver);
+
+        $this->assertSame(['table' => 'smtp_settings'], $sections[0]['bind']);
+        $this->assertNull($sections[1]['bind'], 'unbound sections stay on the key-value store');
+    }
 }

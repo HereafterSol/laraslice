@@ -518,6 +518,127 @@ class SlicePortService
     }
 
     /**
+     * Twin-port namespacing (mapping level): resolve the
+     * incoming slice names against the slices already in
+     * the target BEFORE anything is generated, so a second
+     * port can never silently shadow an installed slice
+     * (the registry then resolves name lookups
+     * deterministically, but the twin still owns the
+     * loser's routes/classes by scan order — prevention
+     * beats ranking).
+     *
+     * A name is kept when it is free, or when the incumbent
+     * is the SAME slice (same primary table, same app) —
+     * a re-port updates in place. Otherwise the incoming
+     * slice is qualified with the port's app name
+     * (Invoices → AccountingInvoices), then a numeric
+     * suffix, until the normalized name is unclaimed.
+     * Renames are returned for the port report.
+     *
+     * @param  array<string, array<string, mixed>>  $sliceMapping
+     * @param  array<int, array{name: string, primary_table: ?string, app: ?string, path: ?string}>  $existing
+     * @return array{mapping: array<string, array<string, mixed>>, renames: array<string, array{to: string, incumbent: ?string, table: ?string}>}
+     */
+    public static function resolvePortSliceNames(array $sliceMapping, array $existing, string $app): array
+    {
+        $normalize = static fn (string $name): string => strtolower((string) preg_replace('/[^a-z0-9]/i', '', $name));
+
+        $claimed = [];
+        foreach ($existing as $entry) {
+            $claimed[$normalize((string) ($entry['name'] ?? ''))] = $entry;
+        }
+
+        $mapping = [];
+        $renames = [];
+        foreach ($sliceMapping as $name => $info) {
+            $name = (string) $name;
+            // targetTableName reads the porting table-prefix
+            // config; outside an app container (unit context)
+            // no prefix is configured, so the raw name IS the
+            // target name.
+            try {
+                $table = isset($info['primary_table']) ? self::targetTableName((string) $info['primary_table']) : null;
+            } catch (\Throwable) {
+                $table = isset($info['primary_table']) ? (string) $info['primary_table'] : null;
+            }
+            $incumbent = $claimed[$normalize($name)] ?? null;
+
+            $sameSlice = $incumbent !== null
+                && ($incumbent['primary_table'] ?? null) === $table
+                && (($incumbent['app'] ?? null) === null || ($incumbent['app'] ?? null) === $app);
+
+            if ($incumbent === null || $sameSlice) {
+                $mapping[$name] = $info;
+                $claimed[$normalize($name)] = ['name' => $name, 'primary_table' => $table, 'app' => $app, 'path' => null];
+                continue;
+            }
+
+            $base = \Illuminate\Support\Str::studly($app).$name;
+            $candidate = $base;
+            $n = 2;
+            while (isset($claimed[$normalize($candidate)])) {
+                $candidate = $base.$n;
+                $n++;
+            }
+            $mapping[$candidate] = $info;
+            $claimed[$normalize($candidate)] = ['name' => $candidate, 'primary_table' => $table, 'app' => $app, 'path' => null];
+            $renames[$name] = ['to' => $candidate, 'incumbent' => $incumbent['path'] ?? null, 'table' => $table];
+        }
+
+        return ['mapping' => $mapping, 'renames' => $renames];
+    }
+
+    /**
+     * The slices already installed in the target root, in
+     * the shape resolvePortSliceNames consumes. The app is
+     * read from the manifest when declared, else the first
+     * path segment under the slices root.
+     *
+     * @return array<int, array{name: string, primary_table: ?string, app: ?string, path: ?string}>
+     */
+    public function existingTargetSlices(string $slicesPath): array
+    {
+        $existing = [];
+        if (! is_dir($slicesPath)) {
+            return $existing;
+        }
+        $repo = new \LaraSlice\Core\Discovery\ManifestRepository;
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($slicesPath, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            if ($file->getFilename() !== 'slice.yaml') {
+                continue;
+            }
+            $dir = $file->getPath();
+            try {
+                $raw = $repo->readFromSliceDir($dir);
+            } catch (\Throwable) {
+                continue;
+            }
+            if (! is_array($raw)) {
+                continue;
+            }
+            $table = null;
+            $first = $raw['tables'][0] ?? null;
+            if (is_string($first)) {
+                $table = $first;
+            } elseif (is_array($first)) {
+                $table = $first['name'] ?? null;
+            }
+            $rel = ltrim(substr($dir, strlen(rtrim($slicesPath, '/'))), '/');
+            $existing[] = [
+                'name' => (string) ($raw['name'] ?? basename($dir)),
+                'primary_table' => $table,
+                'app' => isset($raw['app']) && is_string($raw['app']) ? $raw['app'] : (explode('/', $rel)[0] ?? null),
+                'path' => $dir,
+            ];
+        }
+
+        return $existing;
+    }
+
+    /**
      * Scaffold physical vertical slices directly into app/Slices/{App}/{Domain}/{Slice}.
      */
     public function scaffoldSlices(array $inspection, string $app = 'ERP', ?string $superDomain = null): array
@@ -527,6 +648,16 @@ class SlicePortService
         $errors = [];
 
         $sliceMapping = $inspection['slice_mapping'];
+
+        // Twin-port namespacing: qualify incoming names that
+        // would shadow an installed slice (see the resolver).
+        $resolvedNames = self::resolvePortSliceNames(
+            $sliceMapping,
+            $this->existingTargetSlices((string) config('laraslice.slices_path', app_path('Slices'))),
+            $app
+        );
+        $sliceMapping = $resolvedNames['mapping'];
+        $renames = $resolvedNames['renames'];
         $tables = $inspection['tables'];
         $multitenant = $inspection['tenancy']['enabled'] ?? false;
         $tenantKey = $inspection['tenancy']['tenant_key'] ?? 'company_id';
@@ -673,6 +804,7 @@ class SlicePortService
         return [
             'created' => $created,
             'errors' => $errors,
+            'renames' => $renames,
         ];
     }
 
@@ -1734,7 +1866,7 @@ PHP;
             'longText' => 'text',
             'integer' => 'integer',
             'bigInteger' => 'integer',
-            'tinyInteger' => 'boolean',
+            'tinyInteger' => 'integer',
             'smallInteger' => 'integer',
             'unsignedBigInteger' => 'integer',
             'unsignedInteger' => 'integer',
@@ -1811,6 +1943,92 @@ PHP;
     }
 
     /**
+     * L2b: detect the D3 document (line-item money) shape in a
+     * child table's field names and return the declaration to
+     * emit on the repeater field, or null when the child is
+     * not money-shaped. Pure: names in, declaration out.
+     * The generator carries the block into the service's
+     * repeaterDefinitions and the base service recomputes
+     * amounts on save (see Support\DocumentMath).
+     *
+     * @param  array<int, string>  $childFieldNames
+     * @param  array<int, string>  $rootFieldNames
+     */
+    public static function documentDeclarationFor(array $childFieldNames, array $rootFieldNames = []): ?array
+    {
+        $pick = static function (array $candidates, array $names): ?string {
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $names, true)) {
+                    return $candidate;
+                }
+            }
+
+            return null;
+        };
+        $quantity = $pick(['quantity', 'qty'], $childFieldNames);
+        $unitPrice = $pick(['unit_price', 'price', 'rate'], $childFieldNames);
+        $amount = $pick(['total', 'amount', 'line_total', 'subtotal'], $childFieldNames);
+        if ($quantity === null || $unitPrice === null || $amount === null) {
+            return null;
+        }
+        $doc = ['quantity' => $quantity, 'unit_price' => $unitPrice, 'amount' => $amount];
+        $tax = $pick(['tax_amount', 'tax'], $childFieldNames);
+        if ($tax !== null) {
+            $doc['tax_amount'] = $tax;
+        }
+        if (in_array('type', $childFieldNames, true)) {
+            $doc['type_field'] = 'type';
+        }
+        $totalField = $pick(['amount', 'total', 'grand_total'], $rootFieldNames);
+        if ($totalField !== null) {
+            $doc['total_field'] = $totalField;
+        }
+
+        return $doc;
+    }
+
+    /**
+     * L2b: build one bound settings section (D1 pattern) for a
+     * settings-classified table, or null when the table is
+     * directory-shaped (it references a root besides the
+     * tenant) and so is not a single-row settings table.
+     *
+     * @param  array<int, string>  $columnNames
+     */
+    public static function settingsSectionFor(string $table, array $columnNames, string $tenantKey = 'company_id'): ?array
+    {
+        foreach ($columnNames as $column) {
+            if (str_ends_with($column, '_id') && $column !== $tenantKey && $column !== 'id') {
+                return null;
+            }
+        }
+        $names = array_values(array_filter($columnNames, static fn ($c) => ! in_array($c, ['id', 'created_at', 'updated_at', 'deleted_at'], true)));
+        if ($names === []) {
+            return null;
+        }
+        $key = str_ends_with($table, '_settings') ? substr($table, 0, -9) : $table;
+        $fields = [];
+        foreach ($names as $name) {
+            $type = 'text';
+            if (preg_match('/password|secret|token|api_key/', $name)) {
+                $type = 'secret';
+            } elseif (preg_match('/^(is_|has_|enable)|_enabled$/', $name)) {
+                $type = 'toggle';
+            } elseif (preg_match('/port|_count|_order|_days|_limit|_per_page/', $name)) {
+                $type = 'number';
+            }
+            $fields[] = ['handle' => $name, 'label' => Str::headline($name), 'type' => $type];
+        }
+
+        return [
+            'handle' => $key,
+            'title' => Str::headline($key),
+            'bind' => ['table' => $table],
+            'fields' => $fields,
+        ];
+    }
+
+    /**
      * F2: repeater sub-fields for a child table — every editable column
      * except the parent FK, the tenant key, and audit/system columns.
      */
@@ -1827,13 +2045,17 @@ PHP;
                 continue;
             }
             $fk = Str::singular($primaryTable).'_id';
+            $repFields = $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey);
+            $childNames = array_map(static fn ($f) => (string) ($f['handle'] ?? $f['name'] ?? ''), $repFields);
+            $rootNames = array_map(static fn ($c) => (string) ($c['name'] ?? ''), $tables[$primaryTable]['columns'] ?? []);
             $relations[] = [
                 'name' => Str::snake($childTable),
                 'type' => 'hasMany',
                 'model' => Str::snake(Str::singular($childTable)),
                 'foreign_key' => $fk,
                 'table' => self::targetTableName($childTable),
-                'fields' => $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey),
+                'fields' => $repFields,
+                'document' => self::documentDeclarationFor($childNames, $rootNames),
             ];
         }
 
@@ -2834,6 +3056,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $sliceObj = [
                 'name' => $sliceName,
                 'handle' => $sliceHandle,
+                'type' => $info['type'] ?? 'aggregate_root',
                 'root_table' => $primaryTable,
                 'records_count' => $rowCounts[$primaryTable] ?? 0,
                 'child_tables' => $childDefinitions,
@@ -3118,6 +3341,36 @@ public function analyzeSourceNavigation(string $sourcePath): array
         // trees. Collisions are now detected up front and reported.
         $collisions = $this->detectTargetCollisions($modules);
 
+        // Twin-port namespacing (mapping level): detection alone
+        // still GENERATED the twin. Now incoming names that would
+        // shadow an installed slice are qualified up front (see
+        // resolvePortSliceNames); a re-port of the same slice
+        // keeps its name and updates in place.
+        $flatMapping = [];
+        foreach ($modules as $module) {
+            foreach ($module['slices'] ?? [] as $planSlice) {
+                if (isset($planSlice['name'])) {
+                    $flatMapping[(string) $planSlice['name']] = ['primary_table' => (string) ($planSlice['root_table'] ?? '')];
+                }
+            }
+        }
+        $renames = self::resolvePortSliceNames(
+            $flatMapping,
+            $this->existingTargetSlices((string) config('laraslice.slices_path', app_path('Slices'))),
+            (string) $domain
+        )['renames'];
+        if ($renames !== []) {
+            foreach ($modules as $mi => $module) {
+                foreach ($module['slices'] ?? [] as $si => $planSlice) {
+                    $old = (string) ($planSlice['name'] ?? '');
+                    if (isset($renames[$old])
+                        && ($renames[$old]['table'] ?? null) === self::targetTableName((string) ($planSlice['root_table'] ?? ''))) {
+                        $modules[$mi]['slices'][$si]['name'] = $renames[$old]['to'];
+                    }
+                }
+            }
+        }
+
         foreach ($modules as $module) {
             $moduleName = $module['name'] ?? 'Core';
             $slices = $module['slices'] ?? [];
@@ -3174,6 +3427,61 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     ];
 
                     $sliceDir = $generator->generate($sliceName, $fields, ! empty($wf) || ! empty($options['ui']), $options);
+
+                    // L2b: anatomy declaration hints (from a prior
+                    // slice:port --anatomy run) become Heart
+                    // declarations — today: the source's create
+                    // label, when the porter would otherwise emit
+                    // the generic default.
+                    if (is_string($sliceDir) && $sliceDir !== '') {
+                        try {
+                            $slug = Str::snake(Str::plural(Str::studly($sliceName)));
+                            $hintFile = base_path("porting/ui-spec/{$slug}.anatomy.ui.yaml");
+                            if (is_file($hintFile)) {
+                                $anatomy = \Symfony\Component\Yaml\Yaml::parseFile($hintFile);
+                                $createLabel = $anatomy['declaration_hints']['create_label'] ?? null;
+                                if (is_string($createLabel) && $createLabel !== '') {
+                                    $manifest = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
+                                    if (empty($manifest['ui']['directory']['create_label'])) {
+                                        $manifest['ui']['directory']['create_label'] = $createLabel;
+                                        \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifest);
+                                    }
+                                }
+                            }
+                        } catch (\Throwable $hintEx) {
+                            $errors[$sliceName.'_hints'] = $hintEx->getMessage();
+                        }
+                    }
+
+                    // L2b: the Settings hub gains bound settings
+                    // sections for every single-row-shaped table
+                    // it carries (D1 pattern, auto-declared).
+                    if (($slice['type'] ?? '') === 'settings_hub' && is_string($sliceDir) && $sliceDir !== '') {
+                        try {
+                            $tables = [$rootTable];
+                            foreach ($childTables as $childDef) {
+                                $ct = is_array($childDef) ? ($childDef['table'] ?? '') : (string) $childDef;
+                                if ($ct !== '') {
+                                    $tables[] = $ct;
+                                }
+                            }
+                            $sections = [];
+                            foreach (array_unique($tables) as $t) {
+                                $cols = array_map(static fn ($c) => (string) ($c['name'] ?? $c['Field'] ?? ''), $this->getColumnsForTable($t));
+                                $section = self::settingsSectionFor($t, array_filter($cols), $tenantKey);
+                                if ($section !== null) {
+                                    $sections[] = $section;
+                                }
+                            }
+                            if ($sections !== []) {
+                                $manifest = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
+                                $manifest['settings'] = $sections;
+                                \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifest);
+                            }
+                        } catch (\Throwable $settingsEx) {
+                            $errors[$sliceName.'_settings'] = $settingsEx->getMessage();
+                        }
+                    }
 
                     // Materialize workflow into DB engine so /admin/workflows lists ported machines
                     if (! empty($wf) && is_array($wf)) {
@@ -3249,6 +3557,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             'child_tables_created' => $scaffoldedChildren,
             'errors' => $errors,
             'collisions' => $collisions,
+            'renames' => $renames,
             'data_import' => $dataImportResult,
         ];
     }
@@ -3302,9 +3611,16 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
             $seen[$cName] = true;
 
-            $type = match($c['type'] ?? 'string') {
+            // QA5 (25 Oct 2026): only tinyint(1) is a boolean.
+            // Wider tinyints are numbers — mapping every tinyint
+            // to boolean typed completion_percent as bool, whose
+            // listing BO then cast 74 to true and rendered "1%".
+            $rawType = (string) ($c['type'] ?? 'string');
+            $baseType = strtolower((string) preg_replace('/\(.*$/', '', $rawType));
+            $type = match($baseType) {
                 'integer', 'bigint', 'int' => 'integer',
-                'boolean', 'tinyint' => 'boolean',
+                'boolean' => 'boolean',
+                'tinyint' => str_contains($rawType, '(1)') ? 'boolean' : 'integer',
                 'date', 'datetime', 'timestamp' => 'timestamp',
                 'decimal', 'float', 'double' => 'decimal',
                 'text', 'longtext' => 'text',
@@ -3570,6 +3886,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     'options' => $cf['options'] ?? [],
                 ];
             }
+            $childNames = array_map(static fn ($f) => (string) ($f['handle'] ?? ''), $repFields);
+            $rootNames = array_map(static fn ($f) => (string) ($f['name'] ?? ''), $this->getFieldsForTable($rootTable));
             $relations[] = [
                 'name' => $childTable,
                 'type' => 'hasMany',
@@ -3577,6 +3895,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 'table' => $childTable,
                 'foreign_key' => $fk,
                 'fields' => $repFields,
+                'document' => self::documentDeclarationFor($childNames, $rootNames),
             ];
         }
         $cols = [];
@@ -3656,6 +3975,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                                 'foreign_key' => $rel['foreign_key'] ?? '',
                                 // Sub-fields come from the child table's columns
                                 'repeater_fields' => $rel['fields'] ?? [],
+                                'document' => $rel['document'] ?? null,
                                 'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
                             ],
                         ],
@@ -3777,18 +4097,6 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 ];
             }
 
-            // Summary cards: money fields become KPI cards (like Akaunting's Receivables/Payables)
-            if ($isMoney && count($summaryCards) < 3) {
-                // Avoid "Total Total Amount" when label already contains Total/Amount
-                $cardLabel = preg_match('/\b(total|amount|balance)\b/i', $label) ? $label : 'Total '.$label;
-                $summaryCards[] = [
-                    'handle' => $handle,
-                    'label' => $cardLabel,
-                    'aggregate' => 'sum',
-                    'formatter' => 'money',
-                ];
-            }
-
             // Searchable: text-like fields
             if (in_array($type, ['string', 'text'], true) && ! $isStatus && count($searchableFields) < 5) {
                 // Skip long text blobs, IDs, and codes already shown as badges
@@ -3806,15 +4114,9 @@ public function analyzeSourceNavigation(string $sourcePath): array
             ];
         }
 
-        // Add a count summary card if we have no money fields (every list benefits from a total)
-        if (empty($summaryCards)) {
-            $summaryCards[] = [
-                'handle' => 'id',
-                'label' => 'Total Records',
-                'aggregate' => 'count',
-                'formatter' => 'number',
-            ];
-        }
+        // No fallback summary card (fidelity rule, QA6 25 Oct
+        // 2026): cards come only from the source page's anatomy,
+        // declared through the ui-spec — never invented here.
 
         // Group form fields into logical sections
         $sections = [];
@@ -3850,6 +4152,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                                 'foreign_key' => $rel['foreign_key'] ?? '',
                                 // Sub-fields come from the child table's columns
                                 'repeater_fields' => $rel['fields'] ?? [],
+                                'document' => $rel['document'] ?? null,
                                 'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
                             ],
                         ],

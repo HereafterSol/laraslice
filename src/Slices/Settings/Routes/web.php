@@ -6,11 +6,15 @@ use LaraSlice\Slices\Settings\Controllers\ThemeWebController;
 
 Route::middleware(['web', 'auth'])->prefix('admin/settings')->name('settings.')->group(function () {
     Route::get('/', [SettingWebController::class, 'hub'])->name('hub');
+
+    // Built-in POST routes register BEFORE the hub-section
+    // catch-all: POST /admin/settings/smtp would otherwise
+    // match {section}='smtp' first and 404 in saveHubSection.
+    Route::post('/smtp', [SettingWebController::class, 'saveSmtp'])->name('smtp.save');
+    Route::post('/smtp/test', [SettingWebController::class, 'testSmtp'])->name('smtp.test');
     Route::post('/{section}', [SettingWebController::class, 'saveHubSection'])->where('section', '[^/]+')->name('hub.save');
 
     Route::get('/smtp', [SettingWebController::class, 'smtp'])->name('smtp');
-    Route::post('/smtp', [SettingWebController::class, 'saveSmtp'])->name('smtp.save');
-    Route::post('/smtp/test', [SettingWebController::class, 'testSmtp'])->name('smtp.test');
 
     Route::get('/theme', [ThemeWebController::class, 'index'])->name('theme');
 

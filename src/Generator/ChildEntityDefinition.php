@@ -61,8 +61,14 @@ final class ChildEntityDefinition
                 throw new InvalidArgumentException("Unsupported database type for child field '{$name}'.");
             }
             $type = self::TYPES[strtolower($rawType)];
-            $inputType = strtolower($rawType);
             $options = $field['options'] ?? [];
+            // A select input carrying a static options map is an
+            // enum for form/validation purposes; storage stays the
+            // declared type (e.g. string) — the planner's field_type
+            // rule applies the same inference.
+            $inputType = ($field['input'] ?? null) === 'select' && is_array($options) && $options !== []
+                ? 'enum'
+                : strtolower($rawType);
             if ($inputType === 'enum') {
                 if (! is_array($options) || $options === [] || count($options) > 50) {
                     throw new InvalidArgumentException("Enum field '{$name}' requires between 1 and 50 options.");
@@ -72,8 +78,11 @@ final class ChildEntityDefinition
                         throw new InvalidArgumentException("Enum field '{$name}' has an invalid option.");
                     }
                 }
-            } elseif ($options !== []) {
-                throw new InvalidArgumentException("Field '{$name}' options are only supported for enum fields.");
+            } elseif ($options !== [] && ($field['input'] ?? null) !== 'select') {
+                // Static options are legitimate on select-input fields
+                // too (string storage rendered as a dropdown) — the
+                // same rule BlueprintValidator applies.
+                throw new InvalidArgumentException("Field '{$name}' options are only supported for enum fields and select inputs.");
             }
 
             $nullable = $field['nullable'] ?? ! ($field['required'] ?? false);

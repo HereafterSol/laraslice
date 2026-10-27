@@ -5,7 +5,7 @@
     nothing when the slice declares none.
 --}}
 @if (!empty($directoryActions))
-<div class="mb-4 flex flex-wrap items-center gap-2">
+<div class="contents">
     @foreach ($directoryActions as $action)
     @if (($action['method'] ?? 'get') === 'post')
     <form method="POST" action="{{ $action['href'] }}" class="inline-flex" @if(!empty($action['confirm'])) onsubmit="return confirm('{{ $action['confirm'] }}')" @endif>

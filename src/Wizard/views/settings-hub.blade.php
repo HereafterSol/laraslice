@@ -57,6 +57,34 @@
                     </div>
                     <form method="POST" action="{{ route('settings.hub.save', ['section' => $active['id']]) }}" class="px-6 py-5 space-y-5">
                         @csrf
+                        @if (! empty($active['rows']))
+                            {{-- Keyed-rows binding (L5): one row per record, toggle columns --}}
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-[13px]">
+                                    <thead>
+                                        <tr class="border-b border-border/60 text-left">
+                                            <th class="py-2 pr-4 font-medium text-foreground">Event</th>
+                                            @foreach ($active['toggle_columns'] as $column)
+                                                <th class="py-2 px-3 font-medium text-foreground">{{ \Illuminate\Support\Str::headline($column) }}</th>
+                                            @endforeach
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($active['rows'] as $row)
+                                            <tr class="border-b border-border/40">
+                                                <td class="py-2 pr-4 text-foreground">{{ $row['label'] }}</td>
+                                                @foreach ($active['toggle_columns'] as $column)
+                                                    <td class="py-2 px-3">
+                                                        <input type="checkbox" name="rows[{{ $row['key'] }}][{{ $column }}]" value="1" @checked($row['toggles'][$column] ?? false)
+                                                            class="size-4.5 rounded border-border accent-primary" />
+                                                    </td>
+                                                @endforeach
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
                         @foreach($active['fields'] as $field)
                             <div>
                                 @if($field['type'] === 'toggle')

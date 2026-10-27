@@ -53,6 +53,42 @@ class ShowWidgetsTest extends TestCase
         $this->assertSame([1, 1, 3], $widgets[0]['series']);
     }
 
+    public function test_field_gauge_stats_measures_and_rail_list(): void
+    {
+        $manifest = ['ui' => ['show' => ['widgets' => [
+            [
+                'handle' => 'progress', 'type' => 'gauge', 'title' => 'Progress',
+                'value' => ['field' => 'completion'], 'max' => 100,
+            ],
+            [
+                'handle' => 'statistics', 'type' => 'stats', 'title' => 'Statistics', 'placement' => 'rail',
+                'measures' => [
+                    ['label' => 'Done', 'relation' => 'tasks', 'aggregate' => 'count', 'filter' => ['board_column_id' => 4]],
+                    ['label' => 'Remaining', 'minus' => [
+                        ['relation' => 'tasks', 'aggregate' => 'count'],
+                        ['relation' => 'tasks', 'aggregate' => 'count', 'filter' => ['board_column_id' => 4]],
+                    ]],
+                ],
+            ],
+            [
+                'handle' => 'recent', 'type' => 'list', 'title' => 'Recent', 'placement' => 'rail',
+                'relation' => 'tasks', 'label_field' => 'board_column_id', 'limit' => 2,
+            ],
+        ]]]];
+
+        $widgets = DirectoryUi::showWidgetsFromManifest($manifest, $this->record());
+        $this->assertSame(['progress', 'statistics', 'recent'], array_column($widgets, 'handle'));
+        $this->assertSame('main', $widgets[0]['placement']);
+        $this->assertSame(88.0, $widgets[0]['percent']);
+        $this->assertSame('rail', $widgets[1]['placement']);
+        $this->assertSame(
+            [['label' => 'Done', 'value' => '3'], ['label' => 'Remaining', 'value' => '2']],
+            $widgets[1]['rows']
+        );
+        $this->assertSame('rail', $widgets[2]['placement']);
+        $this->assertCount(2, $widgets[2]['rows']);
+    }
+
     public function test_broken_widget_is_skipped(): void
     {
         $manifest = ['ui' => ['show' => ['widgets' => [
@@ -67,6 +103,8 @@ class ShowWidgetsTest extends TestCase
 
 class WidgetRecord
 {
+    public mixed $completion = 88;
+
     public function __construct(private array $rows) {}
 
     public function tasks(): WidgetQuery
@@ -96,6 +134,13 @@ class WidgetQuery
     public function whereNotIn(string $column, array $values): static
     {
         $this->rows = array_values(array_filter($this->rows, fn ($r) => ! in_array($r[$column] ?? null, $values)));
+
+        return $this;
+    }
+
+    public function orderBy(string $column, string $direction = 'asc'): static
+    {
+        usort($this->rows, fn ($a, $b) => (($a[$column] ?? 0) <=> ($b[$column] ?? 0)) * ($direction === 'desc' ? -1 : 1));
 
         return $this;
     }

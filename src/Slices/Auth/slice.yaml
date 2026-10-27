@@ -1,0 +1,15 @@
+name: Auth
+title: 'Authentication & Session Security'
+version: 1.0.0
+description: 'Core Slice: Web session login/logout, Sanctum API Bearer tokens for Flutter, password management'
+author: 'LaraSlice Core'
+icon: key
+active: true
+core: true
+navigation:
+  visible: false
+  group: Operations
+permissions:
+  - auth.login
+  - auth.register
+  - auth.tokens.manage

@@ -35,7 +35,9 @@ use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SlicePortCommand;
 use LaraSlice\Commands\SlicePlanDraftCommand;
+use LaraSlice\Commands\SliceConformanceCommand;
 use LaraSlice\Commands\SliceDriftCommand;
+use LaraSlice\Commands\SliceRegenFormCommand;
 use LaraSlice\Commands\SliceRepairCommand;
 use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceSeedCommand;
@@ -160,8 +162,10 @@ class LaraSliceServiceProvider extends ServiceProvider
             SlicePortCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
+                SliceRegenFormCommand::class,
                 SlicePlanDraftCommand::class,
                 SliceDriftCommand::class,
+                SliceConformanceCommand::class,
                 SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,
@@ -197,6 +201,16 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         // Schema checks are cached per process; forget them whenever the schema changes
         Event::listen(MigrationsEnded::class, fn () => SchemaCache::flush());
+
+        // Declared record actions (L3): one endpoint for every
+        // slice's Heart-declared ui.actions — adoption is by
+        // declaration alone, independent of the wizard/studio.
+        Route::prefix('laraslice')->middleware(['web', 'auth'])->group(function () {
+            Route::post('/record-actions/{prefix}/{id}/{action}', \LaraSlice\Http\Controllers\RecordActionController::class)
+                ->name('laraslice.record_action');
+            Route::post('/bulk-actions/{prefix}/{action}', \LaraSlice\Http\Controllers\BulkActionController::class)
+                ->name('laraslice.bulk_action');
+        });
 
         // 3. Register Wizard Routes. Every route needs studio.access; writes need the
         // matching studio.* permission so read access never unlocks code generation.
@@ -357,7 +371,20 @@ class LaraSliceServiceProvider extends ServiceProvider
                 Route::middleware(['web', 'auth'])->get('/dashboard', function () {
                     $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
                     $entries = [];
-                    foreach ($manager->getActiveSlices() as $slice) {
+                    // Iterate EVERY discovered slice, not the
+                    // name-keyed active map: twin slices that
+                    // share a name (a pilot port beside its
+                    // work port) shadow each other in that map,
+                    // and the shadowed twin's widgets would
+                    // never reach the dashboard.
+                    $allSlices = $manager->discoveredSlices();
+                    if ($allSlices === []) {
+                        $allSlices = $manager->getActiveSlices();
+                    }
+                    foreach ($allSlices as $slice) {
+                        if (isset($slice->active) && ! $slice->active) {
+                            continue;
+                        }
                         if (empty($slice->raw['ui']['dashboard']['widgets'] ?? [])) {
                             continue;
                         }
@@ -368,6 +395,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                             && preg_match("/Route::prefix\('([^']+)'\)/", (string) file_get_contents($webFile), $m)) {
                             $routes['index'] = '/'.trim($m[1], '/');
                             $routes['show'] = $routes['index'].'/{id}';
+                            $routes['punch'] = $routes['index'].'/punch';
                         }
                         $entries[] = [
                             'manifest' => $slice->raw,
@@ -378,8 +406,22 @@ class LaraSliceServiceProvider extends ServiceProvider
 
                     return view('laraslice::dashboard', [
                         'widgets' => \LaraSlice\Support\DashboardUi::collect($entries),
+                        // Layout kit step 4: the host app chooses
+                        // its dashboard composition (standard |
+                        // portal) in config/laraslice.php.
+                        'composition' => (string) config('laraslice.dashboard.composition', 'standard'),
                     ]);
                 })->name('dashboard');
+            }
+
+            // The setup checklist page (G1): the destination
+            // of the topbar Setup Progress widget. Registered
+            // like the dashboard — only when the host defines
+            // no 'checklist' route of its own.
+            if (! $routes->hasNamedRoute('checklist')) {
+                Route::middleware(['web', 'auth'])->get('/checklist', function () {
+                    return view('laraslice::checklist');
+                })->name('checklist');
             }
         });
     }

@@ -56,7 +56,9 @@ class BlueprintValidatorTest extends TestCase
     public function test_it_rejects_unknown_schema_keys_instead_of_silently_ignoring_them(): void
     {
         $blueprint = $this->serviceDeskBlueprint();
-        $blueprint['models'][0]['fields'][0]['searchable'] = true;
+        // 'searchable' used to be the unknown key here; it has since
+        // become a legitimate field key — use a truly unknown one.
+        $blueprint['models'][0]['fields'][0]['bogus_directive'] = true;
 
         $this->expectException(BlueprintValidationException::class);
         (new BlueprintValidator)->validate($blueprint);

@@ -28,7 +28,8 @@
                 "route": "workflows.logs",
                 "icon": "file-text"
             }
-        ]
+        ],
+        "group": "Operations"
     },
     "permissions": [
         "workflows.view",

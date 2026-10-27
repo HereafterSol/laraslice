@@ -21,7 +21,7 @@ class FidelityDeclarationsTest extends TestCase
             [['start_date' => '2024-02-07 19:40:00']],
             [['key' => 'start_date', 'formatter' => 'date']]
         );
-        $this->assertSame('07 Feb 2024', $rows[0]['start_date']);
+        $this->assertSame('07-02-2024', $rows[0]['start_date']); // source install date format (d-m-Y), QA6
     }
 
     public function test_formatter_name_matching_a_php_function_is_not_invoked(): void
@@ -32,7 +32,7 @@ class FidelityDeclarationsTest extends TestCase
             [['x' => '2024-01-01']],
             [['key' => 'x', 'formatter' => 'date']]
         );
-        $this->assertSame('01 Jan 2024', $rows[0]['x']);
+        $this->assertSame('01-01-2024', $rows[0]['x']);
     }
 
     public function test_generator_and_repair_carry_fidelity_bindings(): void

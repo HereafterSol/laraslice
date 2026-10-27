@@ -2,8 +2,8 @@
              a Filters button in the strip opens the full declared set in a right
              drawer; filters apply server-side (G5). Mirrors the reference ERP. -->
         @if(!empty($sidebarFilters ?? []))
-        <div x-data="{ filtersOpen: false }" @keydown.escape="filtersOpen = false">
-            <div class="flex items-center justify-end border-b border-border/60 pb-3">
+        <div x-data="{ filtersOpen: false }" @keydown.escape.window="filtersOpen = false" @open-ls-filters.window="filtersOpen = true">
+            <div class="flex items-center justify-end border-b border-border/60 pb-3" data-ls-filters-trigger>
                 <button type="button" @click="filtersOpen = true" class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-2xs transition-colors hover:bg-muted cursor-pointer">
                     <x-lucide-filter class="size-3.5" /> Filters
                     @if(!empty($activeFilters ?? []))
@@ -66,3 +66,15 @@
             </aside>
         </div>
         @endif
+
+<script>
+    // List contract v3: when the page's data table carries the
+    // toolbar Filters button (data-ls-filters-btn), this standalone
+    // trigger row is a duplicate — remove it. Pages whose blades
+    // predate the slot keep the trigger as their only opener.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (document.querySelector('[data-ls-filters-btn]')) {
+            document.querySelectorAll('[data-ls-filters-trigger]').forEach(function (e) { e.remove(); });
+        }
+    });
+</script>

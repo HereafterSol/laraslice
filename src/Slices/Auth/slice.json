@@ -8,7 +8,8 @@
     "active": true,
     "core": true,
     "navigation": {
-        "visible": false
+        "visible": false,
+        "group": "Operations"
     },
     "permissions": [
         "auth.login",

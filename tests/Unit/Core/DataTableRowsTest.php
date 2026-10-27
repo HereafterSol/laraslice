@@ -16,7 +16,7 @@ class DataTableRowsTest extends TestCase
         $rows = DataTableRows::from([$object, $array], [['key' => 'id'], ['key' => 'title']]);
 
         $this->assertSame([
-            ['id__raw' => '1', 'id' => 1, 'title__raw' => 'Acme', 'title' => 'Acme'],
+            ['id__raw' => '1', 'id' => 1, 'title__raw' => 'Acme', 'title' => 'Acme', '__id' => 1],
             ['id__raw' => '2', 'id' => 2, 'title__raw' => 'Globex', 'title' => 'Globex'],
         ], $rows);
     }
@@ -53,6 +53,13 @@ class DataTableRowsTest extends TestCase
             fn ($item) => ['edit_url' => '/things/'.$item->id.'/edit']
         );
 
-        $this->assertSame([['id__raw' => '7', 'id' => 7, 'edit_url' => '/things/7/edit']], $rows);
+        $this->assertSame([['id__raw' => '7', 'id' => 7, '__id' => 7, 'edit_url' => '/things/7/edit']], $rows);
+    }
+
+    public function test_empty_status_renders_a_dash_not_an_invented_active(): void
+    {
+        $this->assertSame('—', \LaraSlice\Support\DataTableRows::statusPill(''));
+        $this->assertSame('—', \LaraSlice\Support\DataTableRows::statusPill('   '));
+        $this->assertStringContainsString('Paid', \LaraSlice\Support\DataTableRows::statusPill('paid'));
     }
 }

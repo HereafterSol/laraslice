@@ -105,17 +105,25 @@ class SystemDrift
                     if ($slug === null) {
                         continue;
                     }
-                    if (! self::slugDeclared($slug, $registry)) {
+                    // An own-scoped view is a view-own requirement:
+                    // a view-own grant satisfies it, and so does a
+                    // full view grant (the widening inside
+                    // slugCandidates) — but an own-scoped promise
+                    // must never DEMAND the full grant.
+                    $requirement = ($scope === 'own' && $action === 'view')
+                        ? "{$slice}.view-own"
+                        : $slug;
+                    if (! self::slugDeclared($requirement, $registry)) {
                         $findings[] = self::finding('body-permission-undeclared', 'warning',
-                            "Body {$slice}: club {$clubName} action '{$action}' implies {$slug}, which no Heart declares.");
+                            "Body {$slice}: club {$clubName} action '{$action}' implies {$requirement}, which no Heart declares.");
                         continue;
                     }
                     $granted = $mappedRole !== null
-                        ? self::grantsSatisfy($roleGrants[$mappedRole] ?? [], $slug)
-                        : self::anyRoleGrants($roleGrants, $slug);
+                        ? self::grantsSatisfy($roleGrants[$mappedRole] ?? [], $requirement)
+                        : self::anyRoleGrants($roleGrants, $requirement);
                     if (! $granted) {
                         $findings[] = self::finding('body-access-ungranted', 'error',
-                            "Body {$slice}: club {$clubName} is declared '{$action}' access but ".($mappedRole ? "role {$mappedRole} does not grant {$slug}" : "no role grants {$slug}").'.');
+                            "Body {$slice}: club {$clubName} is declared '{$action}' access but ".($mappedRole ? "role {$mappedRole} does not grant {$requirement}" : "no role grants {$requirement}").'.');
                     }
                 }
                 if ($scope === 'own') {

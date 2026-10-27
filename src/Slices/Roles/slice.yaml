@@ -1,0 +1,15 @@
+name: Roles
+title: 'Roles & Permissions (RBAC)'
+version: 1.0.0
+description: 'Core Slice: Granular Role-Based Access Control, permission matrix, and role assignment'
+author: 'LaraSlice Core'
+icon: shield-check
+active: true
+core: true
+permissions:
+  - roles.view
+  - roles.create
+  - roles.edit
+  - roles.delete
+navigation:
+  group: Operations

@@ -55,7 +55,9 @@ class ManifestRepositoryTest extends TestCase
         ]);
         (new SliceModifier($this->dir, 'App\\Slices'))->addFieldsBatch('Product', [['name' => 'barcode', 'type' => 'string']]);
 
-        $raw = json_decode(file_get_contents($path.'/slice.json'), true);
+        // Phase 4: manifests are YAML-only — generation writes no JSON twin.
+        $this->assertFileDoesNotExist($path.'/slice.json');
+        $raw = ManifestRepository::read($path.'/slice.yaml');
         $this->assertSame(['sku', 'barcode'], array_keys($raw['fields']));
         $this->assertSame('SKU', $raw['fields']['sku']['label']);
     }
@@ -78,22 +80,30 @@ class ManifestRepositoryTest extends TestCase
         $this->assertFileDoesNotExist($this->dir.'/slice.json');
     }
 
-    public function test_phase1_json_only_migrates_to_yaml_and_keeps_json(): void
+    public function test_phase4_json_only_dir_is_rejected_until_migrated(): void
     {
         file_put_contents($this->dir.'/slice.json', json_encode([
             'name' => 'Invoices',
             'fields' => ['total' => ['name' => 'total', 'type' => 'decimal']],
         ]));
 
+        // Phase 4 removed the Phase-1 read-time auto-migration: a
+        // JSON-only slice fails loudly and names the migration command.
+        try {
+            ManifestRepository::readFromSliceDir($this->dir);
+            $this->fail('Expected a RuntimeException for a JSON-only slice dir.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('JSON-only', $e->getMessage());
+            $this->assertStringContainsString('slice:migrate-json-to-yaml', $e->getMessage());
+        }
+        $this->assertFileDoesNotExist($this->dir.'/slice.yaml');
+
+        // The explicit migration path remains: after it runs, the
+        // slice loads and the YAML round-trips to the same manifest.
+        ManifestRepository::migrateJsonToYaml($this->dir, false, false);
         $manifest = ManifestRepository::readFromSliceDir($this->dir);
-
         $this->assertSame('Invoices', $manifest['name']);
-        $this->assertFileExists($this->dir.'/slice.json');
-        $this->assertFileExists($this->dir.'/slice.yaml');
-
-        // Round-trip: YAML parses back to the same manifest
         $again = ManifestRepository::read($this->dir.'/slice.yaml');
-        $this->assertSame($manifest['name'], $again['name']);
         $this->assertSame(array_keys($manifest['fields']), array_keys($again['fields']));
     }
 
@@ -114,7 +124,7 @@ class ManifestRepositoryTest extends TestCase
         $this->assertFileExists($this->dir.'/slice.json');
     }
 
-    public function test_phase1_malformed_yaml_falls_back_to_json(): void
+    public function test_phase4_malformed_yaml_fails_loudly_without_json_fallback(): void
     {
         file_put_contents($this->dir.'/slice.yaml', "name: [unclosed\n  bad: : :\n");
         file_put_contents($this->dir.'/slice.json', json_encode([
@@ -122,10 +132,11 @@ class ManifestRepositoryTest extends TestCase
             'fields' => ['x' => ['name' => 'x', 'type' => 'string']],
         ]));
 
-        $manifest = ManifestRepository::readFromSliceDir($this->dir);
-
-        $this->assertSame('Fallback', $manifest['name']);
-        $this->assertFileExists($this->dir.'/slice.json');
+        // Phase 4: no silent JSON fallback — a malformed manifest is
+        // a loud error naming the removed fallback, JSON untouched.
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('JSON fallback was removed in Phase 4');
+        ManifestRepository::readFromSliceDir($this->dir);
     }
 
     public function test_phase2_write_yaml_only_does_not_create_json(): void

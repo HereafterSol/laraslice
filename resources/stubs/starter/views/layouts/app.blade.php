@@ -108,6 +108,12 @@
             $canUseStudio = Route::has('laraslice.wizard') && auth()->check()
                 && \LaraSlice\Core\Security\Access::allows(auth()->user(), 'studio.access');
 
+            // AI Copilot is a declared capability (ai.copilot.use):
+            // the bubble renders only for users who may use it —
+            // its endpoints enforce the same permission.
+            $canUseAi = auth()->check()
+                && \LaraSlice\Core\Security\Access::allows(auth()->user(), 'ai.copilot.use');
+
             $workspaceItems = [
                 ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
             ];
@@ -160,60 +166,8 @@
                     <x-block.search-form placeholder="Search slices, routes..." readonly @focus="searchOpen = true; $el.blur()" @click="searchOpen = true" />
                 </x-ui.sidebar-header>
                 <x-ui.sidebar-content class="gap-0">
-                    @foreach ($navMain as $group)
-                        <x-ui.collapsible :open="true" class="group/collapsible" ::data-state="open ? 'open' : 'closed'">
-                            <x-ui.sidebar-group>
-                                <div class="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ring-sidebar-ring flex h-8 w-full shrink-0 items-center justify-between rounded-md px-2 text-sm font-medium outline-none transition-[margin,opacity] duration-200 ease-linear">
-                                    @if (!empty($group['items'][0]['url']))
-                                        <a href="{{ $group['items'][0]['url'] }}" class="flex-1 hover:text-primary transition-colors truncate font-semibold" title="Go to {{ $group['title'] }}">
-                                            {{ $group['title'] }}
-                                        </a>
-                                    @else
-                                        <span class="flex-1 truncate font-semibold">{{ $group['title'] }}</span>
-                                    @endif
-                                    <x-ui.collapsible-trigger class="p-1 rounded hover:bg-muted/60 transition cursor-pointer shrink-0 ml-1">
-                                        <x-lucide-chevron-right class="size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                                    </x-ui.collapsible-trigger>
-                                </div>
-                                <x-ui.collapsible-content>
-                                    <x-ui.sidebar-group-content>
-                                        <x-ui.sidebar-menu>
-                                            @foreach ($group['items'] as $item)
-                                                <x-ui.sidebar-menu-item>
-                                                    @if (!empty($item['children']))
-                                                        {{-- Parent with sub-pages: a dropdown, open while one of its pages is active --}}
-                                                        <x-ui.collapsible :open="$item['isOpen'] ?? false" class="group/menu-collapsible" ::data-state="open ? 'open' : 'closed'">
-                                                            <x-ui.sidebar-menu-button :tooltip="$item['title']" @click="open = !open" ::aria-expanded="open">
-                                                                <x-dynamic-component :component="'lucide-' . $item['icon']" />
-                                                                <span class="min-w-0 truncate">{{ $item['title'] }}</span>
-                                                                <x-lucide-chevron-right class="ml-auto transition-transform duration-200 group-data-[state=open]/menu-collapsible:rotate-90" />
-                                                            </x-ui.sidebar-menu-button>
-                                                            <x-ui.collapsible-content>
-                                                                <x-ui.sidebar-menu-sub>
-                                                                    @foreach ($item['children'] as $child)
-                                                                        <x-ui.sidebar-menu-sub-item>
-                                                                            <x-ui.sidebar-menu-sub-button href="{{ $child['url'] }}" :is-active="$child['isActive']">
-                                                                                <span>{{ $child['title'] }}</span>
-                                                                            </x-ui.sidebar-menu-sub-button>
-                                                                        </x-ui.sidebar-menu-sub-item>
-                                                                    @endforeach
-                                                                </x-ui.sidebar-menu-sub>
-                                                            </x-ui.collapsible-content>
-                                                        </x-ui.collapsible>
-                                                    @else
-                                                        <x-ui.sidebar-menu-button href="{{ $item['url'] }}" :is-active="$item['isActive'] ?? false" :tooltip="$item['title']">
-                                                            <x-dynamic-component :component="'lucide-' . $item['icon']" />
-                                                            <span>{{ $item['title'] }}</span>
-                                                        </x-ui.sidebar-menu-button>
-                                                    @endif
-                                                </x-ui.sidebar-menu-item>
-                                            @endforeach
-                                        </x-ui.sidebar-menu>
-                                    </x-ui.sidebar-group-content>
-                                </x-ui.collapsible-content>
-                            </x-ui.sidebar-group>
-                        </x-ui.collapsible>
-                    @endforeach
+                    {!! \LaraSlice\Support\NavHtml::cached($navMain) !!}
+                    {!! \LaraSlice\Support\NavHtml::activeScript() !!}
                 </x-ui.sidebar-content>
                 <x-ui.sidebar-footer>
                     <x-block.nav-user
@@ -280,6 +234,9 @@
                         </x-ui.breadcrumb>
 
                         <div class="ml-auto flex items-center gap-2">
+                            <x-layout.setup-progress />
+                            <x-layout.global-timer />
+                            <x-layout.quick-create />
                             <!-- Quick Search Button (Cmd+K) -->
                             <button type="button" @click="searchOpen = true"
                                     class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-input bg-muted/30 text-muted-foreground hover:text-foreground text-xs transition cursor-pointer">
@@ -408,6 +365,8 @@
                 });
             })();
             </script>
-        <x-ui.ai-copilot-bubble />
+        @if ($canUseAi)
+            <x-ui.ai-copilot-bubble />
+        @endif
 </body>
 </html>

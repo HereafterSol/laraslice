@@ -94,6 +94,26 @@ class GeneratorCorrectnessTest extends TestCase
         $this->assertNotEmpty($fields);
     }
 
+
+    public function test_generated_form_renders_validation_errors_and_quick_add_stays_submittable(): void
+    {
+        $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Errorcheck', [
+            ['name' => 'title', 'type' => 'string', 'label' => 'Title'],
+        ]);
+        $form = file_get_contents($path.'/Resources/views/form.blade.php');
+        // Validation failures must be visible: the generated form
+        // renders the error bag as a summary banner.
+        $this->assertStringContainsString('$errors->any()', $form);
+        $this->assertStringContainsString('$errors->all()', $form);
+
+        // The quick-add drawer's primary input must not carry a bare
+        // HTML `required`: the drawer lives inside the parent form,
+        // so it silently blocked every submit (the component
+        // validates quick-add input in JS instead).
+        $stub = file_get_contents(dirname(__DIR__, 3).'/resources/stubs/starter/views/components/ui/combobox-relationship.blade.php');
+        $this->assertDoesNotMatchRegularExpression('/placeholder="Enter [^"]*\.\.\."\s+autofocus\s+required/', $stub);
+    }
+
     public function test_form_objects_coerce_request_values_instead_of_throwing(): void
     {
         $form = TypedForm::fromArray([

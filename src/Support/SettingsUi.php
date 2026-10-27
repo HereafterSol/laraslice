@@ -13,9 +13,18 @@ use Illuminate\Support\Str;
  * save. Values persist through the core Setting store, keyed
  * per section and grouped by the declaring slice.
  *
+ * A section may instead declare `bind: {table: <name>}` —
+ * then its fields are COLUMNS of that settings table and
+ * values read/write the table's single row (created on
+ * first save). This is how ported systems surface their
+ * settings: the source's own settings tables (smtp_settings,
+ * invoice_settings, …) become hub forms instead of hollow
+ * CRUD directories (backlog D1). Unbound sections keep the
+ * core key-value store.
+ *
  * Field types: text, number, textarea, select (options),
- * toggle, secret (stored encrypted; blank saves keep the
- * current value).
+ * toggle, secret (stored encrypted in the KV store; blank
+ * saves keep the current value).
  */
 class SettingsUi
 {
@@ -67,6 +76,20 @@ class SettingsUi
                     'title' => (string) ($def['title'] ?? Str::headline($handle)),
                     'icon' => $def['icon'] ?? null,
                     'description' => $def['description'] ?? null,
+                    'bind' => isset($def['bind']['table']) && is_string($def['bind']['table'])
+                        ? array_filter([
+                            'table' => $def['bind']['table'],
+                            // Keyed-rows binding (L5): a multi-row
+                            // settings table edited as one row per
+                            // record with toggle columns — the
+                            // notification-settings shape.
+                            'rows_key' => isset($def['bind']['rows_key']) && is_string($def['bind']['rows_key']) ? $def['bind']['rows_key'] : null,
+                            'rows_label' => isset($def['bind']['rows_label']) && is_string($def['bind']['rows_label']) ? $def['bind']['rows_label'] : null,
+                            'toggles' => isset($def['bind']['toggles']) && is_array($def['bind']['toggles'])
+                                ? array_values(array_filter($def['bind']['toggles'], 'is_string'))
+                                : null,
+                        ], static fn ($v) => $v !== null)
+                        : null,
                     'fields' => $fields,
                 ];
             }

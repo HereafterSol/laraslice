@@ -17,7 +17,7 @@ final class BlueprintValidator
     private const RESERVED_FIELDS = ['id', 'created_at', 'updated_at', 'deleted_at'];
 
     public const ALLOWED_FORMATTERS = [
-        'code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar',
+        'code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'lines',
         'date_time', 'date_overdue', 'text', 'text_with_badge', 'number', 'money', 'badge',
     ];
 
@@ -190,11 +190,20 @@ final class BlueprintValidator
                     $errors[] = "{$fieldPath}.encrypted is only supported for string, text, email, url and json fields.";
                 }
 
-                if (($field['type'] ?? null) === 'enum') {
+                // Options belong to enum fields AND to fields rendered
+                // as a select (type stays the storage type; the shipped
+                // service-desk example pairs type: string + input: select
+                // + options). An enum has no other option source, so its
+                // map is required; a select input may instead be
+                // relational (an FK select draws options from records),
+                // so its map is validated when present, not required.
+                $isEnum = ($field['type'] ?? null) === 'enum';
+                $isSelect = ($field['input'] ?? null) === 'select';
+                if ($isEnum || $isSelect) {
                     $options = $field['options'] ?? null;
-                    if (! is_array($options) || $options === []) {
+                    if ($isEnum && (! is_array($options) || $options === [])) {
                         $errors[] = "{$fieldPath}.options must be a non-empty map for enum fields.";
-                    } else {
+                    } elseif (is_array($options)) {
                         foreach ($options as $value => $label) {
                             if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($label) || $label === '' || ! BladeSafeText::isSafe($label)) {
                                 $errors[] = "{$fieldPath}.options must map values (letters, numbers, _ . -) to non-empty labels.";
@@ -203,7 +212,7 @@ final class BlueprintValidator
                         }
                     }
                 } elseif (isset($field['options'])) {
-                    $errors[] = "{$fieldPath}.options is only supported for enum fields.";
+                    $errors[] = "{$fieldPath}.options is only supported for enum fields and select inputs.";
                 }
             }
 
@@ -572,7 +581,7 @@ final class BlueprintValidator
 
                                             continue;
                                         }
-                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help', 'type', 'label', 'repeater_fields', 'add_button_text', 'model', 'table', 'foreign_key'], $fldPath, $errors);
+                                        $this->checkKeys($fld, ['handle', 'span', 'is_searchable', 'help', 'type', 'label', 'repeater_fields', 'add_button_text', 'model', 'table', 'foreign_key', 'document'], $fldPath, $errors);
                                         if (empty($fld['handle']) || ! is_string($fld['handle'])) {
                                             $errors[] = "{$fldPath}.handle must be a non-empty string.";
                                         }

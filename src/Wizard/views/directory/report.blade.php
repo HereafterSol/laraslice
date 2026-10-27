@@ -32,6 +32,17 @@
         </div>
     </div>
 
+    @if(!empty($report['cards']))
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        @foreach($report['cards'] as $card)
+        <div class="rounded-xl border border-border/60 px-4 py-3">
+            <div class="text-xs text-muted-foreground">{{ $card['label'] }}</div>
+            <div class="text-lg font-bold tabular-nums">{{ $card['value'] }}</div>
+        </div>
+        @endforeach
+    </div>
+    @endif
+
     <div class="overflow-x-auto rounded-xl border border-border/60">
         <table class="w-full text-sm">
             <thead>
