@@ -236,7 +236,7 @@ ui:
   dashboard:
     enabled: true
     widgets:
-      - type: stat
+      - type: counter
         handle: open
         label: Open items
 workflow: true

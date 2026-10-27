@@ -54,7 +54,7 @@ ui:
   dashboard:
     enabled: true
     widgets:
-      - type: stat
+      - type: counter
         handle: outstanding
         label: Outstanding
 fields:
