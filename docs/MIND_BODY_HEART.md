@@ -394,7 +394,7 @@ order, with the primary action where — lived as hard-coded
 generator template. When a source page composed differently, no
 file could say so, and the drift was found by eye. v4 makes
 composition declared data. Research basis (Carbon, Ant,
-Atlassian, NN/g, Salesforce, Fluent; commissioned R&D,
+Enterprise UX research (NN/g, Fluent, and similar); commissioned R&D,
 `PAGE-STRUCTURE-PORTING-FIDELITY-PLAN-2026-10-23.md`): the
 canonical anatomy is convergent across design systems, but
 PRIMARY-ACTION PLACEMENT is genuinely contested (header-right /

@@ -132,7 +132,7 @@ LaraSlice operates on a pragmatic **Three-Layer Hybrid Model** ([ADR-001](docs/a
 | **Native Slice RBAC** | Lightweight, zero-vendor-lockin permission engine bridged directly into Laravel's native `Gate::before`. Super-admin possesses default root access avoiding 403 lockouts. |
 | **Enterprise Audit Engine** | Immutable compliance tracking in `laraslice_audit_logs`. `AuditableSlice` Eloquent trait records actor email, IP, user-agent, and before/after JSON diffs with sensitive field redaction. |
 | **High-Performance Discovery** | `php artisan slice:cache` creates a compiled manifest map for production environments, eliminating filesystem scanning overhead on boot. |
-| **BlatUI Frontend** | Pure Blade + Alpine.js + Tailwind CSS v4 design system. 156+ accessible shadcn-styled components. Zero Metronic dependencies. |
+| **BlatUI Frontend** | Pure Blade + Alpine.js + Tailwind CSS v4 design system. 156+ accessible shadcn-styled components. Zero legacy third-party admin-kit dependencies. |
 | **Flutter Mobile Generator** | Scaffolds native Flutter Dart models, client services, and CRUD UI views with one command (`php artisan slice:export-flutter`). |
 | **Declarative Blueprint Studio** | Visual designer and round-trip `slice.yaml` editor with visual field widths (`33%`, `50%`, `100%`) and real-time UI mockups. |
 | **Native AI & MCP Server** | Built-in Model Context Protocol server (`/.well-known/mcp`) allowing AI coding agents to inspect schemas and co-author slices. |

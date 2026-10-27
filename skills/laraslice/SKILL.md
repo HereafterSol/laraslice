@@ -24,10 +24,10 @@ This skill provides comprehensive instructions for AI agents and developers work
    - Each slice owns its own `Models/`, `Migrations/`, `Controllers/`, `Services/`, `Contracts/` (Business Objects / DTOs), `Routes/` (`web.php`, `api.php`), `Resources/views/`, and `Schemas/`.
    - Manifest: `slice.yaml` is the version-controlled single source of truth for metadata, capabilities, navigation, and relations.
 
-3. **No Livewire / No Flux / No Metronic**:
+3. **No Livewire / No Flux / No legacy admin-kit JS**:
    - The stack is strictly **Pure Blade + Alpine.js + Tailwind CSS v4**.
    - Atomic UI elements use **BlatUI** (`<x-ui.card>`, `<x-ui.table>`, `<x-ui.input>`, `<x-ui.badge>`, `<x-ui.button>`, `<x-ui.label>`).
-   - The application layout uses the pure BlatUI Dashboard-01 responsive shell (`layouts.app` / `<x-layouts.app>`). Pure Lucide icons (`<x-lucide-*>` and dynamic Lucide components). Zero Metronic dependencies (`ktui.min.js`, Keenicons, and `KTDrawer` are strictly prohibited).
+   - The application layout uses the pure BlatUI Dashboard-01 responsive shell (`layouts.app` / `<x-layouts.app>`). Pure Lucide icons (`<x-lucide-*>` and dynamic Lucide components). Prohibited: legacy kit scripts (`ktui.min.js`, Keenicons, `KTDrawer`, and similar vendor drawer stacks).
 
 4. **Design Tokens & Theme Consistency**:
    - Always use semantic CSS variables mapped to Tailwind utilities: `bg-background`, `bg-card`, `border-border`, `text-foreground`, `text-muted-foreground`, `text-primary`.
