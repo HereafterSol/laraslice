@@ -1,5 +1,7 @@
 # Mind · Body · Heart — the three files of a Slice system
 
+> **Porting:** trilogy files describe the system; **completion** is measured separately — [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md), [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md), status template [templates/REPLICA-STATUS.md](templates/REPLICA-STATUS.md).
+
 Every Slice system is described by three coordinated files. Only
 one of them runs.
 

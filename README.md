@@ -38,6 +38,8 @@ Every LaraSlice system is described by three plain files anyone can read:
 
 The **soul** — your design identity (design system, density, refinement) — is declared in the Mind and realized by the Heart's runtime. Porting drafts all three files from the old system; a fresh project writes the Mind first and generates the rest. Full guide: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md).
 
+> **Framework vs a finished replica.** LaraSlice’s architecture (Mind · Body · Heart, VSA, gated ports) is separate from **any one legacy port**. Quote replica status **only** from that app’s `porting/REPLICA-STATUS.md` — the **lowest unverified gate** is the truth. Template: [docs/templates/REPLICA-STATUS.md](docs/templates/REPLICA-STATUS.md). Read: [docs/ARCHITECTURE-VS-PORT-TRUTH.md](docs/ARCHITECTURE-VS-PORT-TRUTH.md).
+
 ## 🆕 What's new in v2.0.1 — The Verification Patch
 
 v2.0.1 is what an independent verification programme found in v2.0.0 — the full suite on a second platform, a fresh flagship install, and a from-scratch re-port of a production application — fixed:
@@ -58,7 +60,7 @@ v2.0.0 turns the scaffold into a foundation. Everything below was proven live ag
 - **The 100% Replica Protocol.** Porting is gated, not vibes: schema parity, join-verified data truth, furniture parity, task conformance, and visual conformance read from paired screenshots — every port keeps a `REPLICA-STATUS.md` and quotes its lowest gate.
 - **Foundation hardening.** Own-scope data access with per-person overrides, form hygiene by default, drift audit + reconciliation (`slice:drift`), a fleet-wide idempotent `slice:repair`, document forms with real line-item arithmetic, workflow notifications, and declared patterns for import, invite, seed actions, clock punch, keyed-rows settings, and a server-rendered conversation surface.
 
-Full notes: [CHANGELOG.md](CHANGELOG.md) · Concepts: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md) · Protocol: [docs/REPLICA-PROTOCOL.md](docs/REPLICA-PROTOCOL.md) · Lifecycle: [docs/SDLC.md](docs/SDLC.md) · Portability: [docs/RUNTIMES.md](docs/RUNTIMES.md)
+Full notes: [CHANGELOG.md](CHANGELOG.md) · Concepts: [docs/MIND_BODY_HEART.md](docs/MIND_BODY_HEART.md) · Protocol: [docs/REPLICA-PROTOCOL.md](docs/REPLICA-PROTOCOL.md) · Lifecycle: [docs/SDLC.md](docs/SDLC.md) · Portability: [docs/RUNTIMES.md](docs/RUNTIMES.md) · Backlog: [docs/BACKLOG.md](docs/BACKLOG.md)
 
 ## 🌿 Vision, Mission & Philosophy
 

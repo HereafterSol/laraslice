@@ -5,6 +5,9 @@ description: Architectural standards, CLI commands, Declarative Schemas, multi-t
 
 # LaraSlice Framework & AI Assistant Skill
 
+> **Release baseline:** Prefer **`hereafter/laraslice` v2.0.1+** ([Verification Patch](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1)) for ports and replicas. Use `--import-auth` on data import, run `slice:drift` (zero errors) before parity claims, and maintain `porting/REPLICA-STATUS.md` per §22 (lowest gate = status). **Do not confuse framework architecture with a finished replica:** `docs/ARCHITECTURE-VS-PORT-TRUTH.md`. Framework backlog: `docs/BACKLOG.md` in the package repo.
+
+
 This skill provides comprehensive instructions for AI agents and developers working on **LaraSlice** applications. It covers the Three-Layer Packaging Model (ADR-001), Vertical Slice Architecture, Pure BlatUI tokens, Declarative Schema Builder, multi-table aggregate patterns, cross-slice communication, and deep integration with **Laravel Boost**.
 
 ---
@@ -807,7 +810,7 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 - `php artisan slice:ui:prune {--force} {--dry-run}`: Identify and prune unused BlatUI components to keep assets lean.
 - `php artisan slice:wizard {--web}`: Interactive console wizard or one-click web browser launcher for Slice Studio.
 - `php artisan slice:sync <SliceName>`: Detect database schema drift and synchronize fields back to `slice.yaml`.
-- `php artisan slice:cache` / `slice:clear`: Cache or clear slice discovery manifests for production boot optimization. The cache also stores each manifest's parsed data (mtime+size freshness stamp), so warm discovery skips YAML parsing; an edited manifest re-parses alone until the next `slice:cache`.
+- `php artisan slice:cache` / `slice:clear`: Cache or clear slice discovery manifests for production boot optimization. Paths are stored **relative to `base_path()`** so a copied port tree does not keep booting slices from another install's absolute paths. After **any** filesystem clone of an app, run `slice:clear` then `slice:cache` (or `slice:repair`, which clears cache). Legacy absolute caches rebase via `app/Slices` / vendor slice suffixes when possible. Parsed manifest data is cached with the same keys (mtime+size freshness).
 - `php artisan slice:publish {slice?} {--all} {--force}`: Publish core slices into `app/Slices/` for full customization.
 
 ### Enterprise Governance & AI Commands
