@@ -4,10 +4,13 @@ namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Slices\Workflows\Services\WorkflowEngineService;
 
 /**
  * Enterprise Cross-Environment Slice State & Migration Synchronizer.
@@ -43,6 +46,7 @@ class SliceSyncCommand extends Command
         $allSlices = $manager->discoveredSlices();
         if (empty($allSlices)) {
             $this->warn('No vertical slices detected in this application.');
+
             return self::SUCCESS;
         }
 
@@ -51,6 +55,7 @@ class SliceSyncCommand extends Command
             $matched = $manager->getSlice($targetSlice);
             if (! $matched) {
                 $this->error("Slice [{$targetSlice}] not found.");
+
                 return self::FAILURE;
             }
             $slicesToSync = [$matched];
@@ -58,7 +63,7 @@ class SliceSyncCommand extends Command
             $slicesToSync = $allSlices;
         }
 
-        $this->info("=== LaraSlice Enterprise State & Schema Synchronizer ===");
+        $this->info('=== LaraSlice Enterprise State & Schema Synchronizer ===');
         if ($dryRun) {
             $this->warn('[DRY-RUN MODE] Inspecting manifest versions and pending migrations without executing.');
         }
@@ -74,7 +79,7 @@ class SliceSyncCommand extends Command
             // silently yields an empty manifest, which used to
             // skip workflow sync for every YAML slice.
             try {
-                $manifestData = \LaraSlice\Core\Discovery\ManifestRepository::read($manifestPath) ?: [];
+                $manifestData = ManifestRepository::read($manifestPath) ?: [];
             } catch (\Throwable $e) {
                 if (File::exists($manifestPath)) {
                     $manifestData = json_decode(File::get($manifestPath), true) ?: [];
@@ -95,7 +100,7 @@ class SliceSyncCommand extends Command
             if (File::isDirectory($migrationsDir)) {
                 $migrationFiles = File::glob($migrationsDir.'/*_*.php') ?: [];
                 $ranMigrations = Schema::hasTable('migrations')
-                    ? \Illuminate\Support\Facades\DB::table('migrations')->pluck('migration')->toArray()
+                    ? DB::table('migrations')->pluck('migration')->toArray()
                     : [];
 
                 foreach ($migrationFiles as $mFile) {
@@ -111,7 +116,7 @@ class SliceSyncCommand extends Command
                 : '<info>Up to date</info>';
 
             // Run pending migrations if requested
-            if (! $dryRun && count($pendingMigrations) > 0 && ($runMigrations || $this->confirm("Run ".count($pendingMigrations)." pending migration(s) for slice [{$slice->name}]?", true))) {
+            if (! $dryRun && count($pendingMigrations) > 0 && ($runMigrations || $this->confirm('Run '.count($pendingMigrations)." pending migration(s) for slice [{$slice->name}]?", true))) {
                 $relMigrationPath = Str::after(str_replace('\\', '/', $migrationsDir), str_replace('\\', '/', base_path()).'/');
                 Artisan::call('migrate', [
                     '--path' => $relMigrationPath,
@@ -121,16 +126,17 @@ class SliceSyncCommand extends Command
                 $migStatus = '<info>Synced ('.count($pendingMigrations).' applied)</info>';
             }
 
-                        // Sync declarative workflow if defined in slice.yaml
+            // Sync declarative workflow if defined in slice.yaml
             if (! empty($manifestData['workflow']) && (is_array($manifestData['workflow']) || $manifestData['workflow'] === true)) {
                 try {
                     $wfConfig = is_array($manifestData['workflow']) ? $manifestData['workflow'] : [];
-                    app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)->syncWorkflowFromManifest(
+                    app(WorkflowEngineService::class)->syncWorkflowFromManifest(
                         $wfConfig,
                         $slice->name,
                         $slice->getModelClass()
                     );
-                } catch (\Throwable) {}
+                } catch (\Throwable) {
+                }
             }
 
             $tableRows[] = [
@@ -157,14 +163,15 @@ class SliceSyncCommand extends Command
             $jsonFile = $slice->path.'/slice.yaml';
             if (is_file($jsonFile)) {
                 try {
-                    $m = \LaraSlice\Core\Discovery\ManifestRepository::read($jsonFile);
-                    \LaraSlice\Core\Discovery\ManifestRepository::writeYamlTwin($jsonFile, $m);
+                    $m = ManifestRepository::read($jsonFile);
+                    ManifestRepository::writeYamlTwin($jsonFile, $m);
                 } catch (\Throwable $e) {
                 }
             }
         }
 
         $this->info('All slice manifests, permissions, and routes are synchronized with environment (JSON + YAML + DB).');
+
         return self::SUCCESS;
     }
 }

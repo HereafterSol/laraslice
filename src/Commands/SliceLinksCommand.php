@@ -3,6 +3,7 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
@@ -99,6 +100,7 @@ final class SliceLinksCommand extends Command
 
             if (! $hasIndex) {
                 $problems[] = [$slice->name, "no index route for {$navUrl}"];
+
                 continue;
             }
 
@@ -106,7 +108,7 @@ final class SliceLinksCommand extends Command
             $hasRecords = false;
             if ($primary && Schema::hasTable($primary)) {
                 try {
-                    $hasRecords = \Illuminate\Support\Facades\DB::table($primary)->limit(1)->exists();
+                    $hasRecords = DB::table($primary)->limit(1)->exists();
                 } catch (\Throwable $e) {
                     $hasRecords = false;
                 }
@@ -116,6 +118,7 @@ final class SliceLinksCommand extends Command
                 if ($hasRecords) {
                     $problems[] = [$slice->name, "records exist in {$primary} but no detail route under {$navUrl} — list rows are dead ends"];
                 }
+
                 continue;
             }
 
@@ -170,7 +173,7 @@ final class SliceLinksCommand extends Command
             }
         }
 
-        $this->info("Checked {$checked} navigable slices and ".count($claims)." page-route names.");
+        $this->info("Checked {$checked} navigable slices and ".count($claims).' page-route names.');
         if ($problems === []) {
             $this->info('✓ All slice links resolve inside their own slice.');
 

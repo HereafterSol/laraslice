@@ -29,6 +29,7 @@ class WorkflowTransitionCommand extends Command
         $model = $this->resolveModel($manager, $slice, $id);
         if (! $model) {
             $this->error("Could not find record #{$id} for entity {$slice}");
+
             return 1;
         }
 
@@ -59,7 +60,8 @@ class WorkflowTransitionCommand extends Command
 
             return 0;
         } catch (\Throwable $e) {
-            $this->error("Transition failed: ".$e->getMessage());
+            $this->error('Transition failed: '.$e->getMessage());
+
             return 1;
         }
     }
@@ -109,8 +111,8 @@ class WorkflowTransitionCommand extends Command
             "App\\Slices\\Billing\\{$slice}\\Models\\".Str::singular($slice),
             "App\\Slices\\Support\\{$slice}\\Models\\".Str::singular($slice),
             "App\\Slices\\Legal\\{$slice}\\Models\\".Str::singular($slice),
-            "App\\Models\\".Str::singular($slice),
-            "App\\Models\\".Str::studly($slice),
+            'App\\Models\\'.Str::singular($slice),
+            'App\\Models\\'.Str::studly($slice),
         ];
 
         foreach ($candidates as $cls) {

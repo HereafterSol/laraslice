@@ -3,13 +3,14 @@
 namespace LaraSlice\Core\Base;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use LaraSlice\Core\Contracts\IBusinessObject;
 use LaraSlice\Core\Contracts\IFilterObject;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use LaraSlice\Support\DocumentMath;
 use LaraSlice\Support\SchemaCache;
 
@@ -471,9 +472,9 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
      */
     public function listingBusinessObjects(iterable $models): array
     {
-        $collection = $models instanceof \Illuminate\Database\Eloquent\Collection
+        $collection = $models instanceof Collection
             ? $models
-            : new \Illuminate\Database\Eloquent\Collection($models);
+            : new Collection($models);
         if ($collection->isNotEmpty()) {
             try {
                 $eager = array_keys($this->newQuery()->getEagerLoads());
@@ -573,6 +574,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                     } else {
                         $query->whereHas($relation, fn ($q) => $q->where($qualified, $value));
                     }
+
                     continue;
                 }
                 // Own-scope alternatives (Body v2 access): the
@@ -607,6 +609,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                             }
                         }
                     });
+
                     continue;
                 }
                 // Option-criteria conditions (fidelity): the
@@ -668,6 +671,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                             }
                         }
                     });
+
                     continue;
                 }
                 // Any other __ key is reserved-namespace noise

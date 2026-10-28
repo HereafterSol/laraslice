@@ -8,6 +8,8 @@ use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Schema\FieldType;
+use LaraSlice\Slices\Workflows\Services\WorkflowEngineService;
+use Symfony\Component\Yaml\Yaml;
 
 class SliceModifier
 {
@@ -203,8 +205,9 @@ PHP;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
 
         return [
             'success' => true,
@@ -624,7 +627,7 @@ PHP;
         $oldHidden = ! empty($current['hidden']) || (isset($current['visible']) && $current['visible'] === false);
         $newHidden = ! empty($navConfig['hidden']);
         if ($oldHidden !== $newHidden) {
-            $changes[] = $newHidden ? "Slice hidden from sidebar navigation" : "Slice made visible in sidebar navigation";
+            $changes[] = $newHidden ? 'Slice hidden from sidebar navigation' : 'Slice made visible in sidebar navigation';
         }
 
         // Child submenu links
@@ -640,6 +643,7 @@ PHP;
                 if (! empty($c['icon'])) {
                     $item['icon'] = $c['icon'];
                 }
+
                 return $item;
             }, array_filter($navConfig['children'], fn ($c) => is_array($c) && ! empty($c['label']))))
             : ($current['children'] ?? []);
@@ -694,8 +698,9 @@ PHP;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
 
         if (isset($navConfig['permissions']) && is_array($navConfig['permissions'])) {
             try {
@@ -714,7 +719,6 @@ PHP;
      * Every route group keeps its name, so route() calls and route:cache keep working; the
      * slug redirects follow the new URL, and a single marked 301 sends the old URL to the new one.
      */
-    
     public function buildSnapshot(array $manifest, ?string $version = null): array
     {
         return [
@@ -746,6 +750,7 @@ PHP;
             }
         }
     }
+
     protected function moveRoutePrefix(string $content, string $oldPrefix, string $newPrefix, bool $redirectOld): string
     {
         $groupPattern = '/Route::prefix\(\s*([\'"])'.preg_quote($oldPrefix, '/').'\1\s*\)/';
@@ -779,7 +784,7 @@ PHP;
     protected function resolveStudioSliceDir(string $sliceName): string
     {
         $studly = SliceName::canonical($sliceName);
-        $plural = \Illuminate\Support\Str::plural($studly);
+        $plural = Str::plural($studly);
         $dir = $this->resolveSliceDir($plural);
         if (! is_dir($dir)) {
             // Fall back to the raw name (already plural or nested)
@@ -788,6 +793,7 @@ PHP;
         if (! is_dir($dir)) {
             throw new \RuntimeException("Slice directory for [{$sliceName}] not found.");
         }
+
         return $dir;
     }
 
@@ -810,11 +816,11 @@ PHP;
                 return $c;
             }
         }
+
         return null;
     }
 
     protected function resolveSliceDir(string $pluralName): string
-
     {
         // 1. Direct flat path
         $appPath = rtrim($this->slicesPath, '/\\').DIRECTORY_SEPARATOR.$pluralName;
@@ -1136,8 +1142,9 @@ REL;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
 
         $childGenerator = new ChildEntityGenerator;
         $childGenerator->generate($sliceDir, $baseSliceNamespace, $pluralSlice, $childTable, $parentTable, $foreignKey, $fields);
@@ -1491,12 +1498,13 @@ REL;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
 
         if (isset($manifest['permissions']) && is_array($manifest['permissions'])) {
             try {
-                app(\LaraSlice\Core\Discovery\SliceManager::class)->syncPermissions();
+                app(SliceManager::class)->syncPermissions();
             } catch (\Throwable $e) {
                 report($e);
             }
@@ -1777,8 +1785,9 @@ PHP;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
 
         return [
             'success' => true,
@@ -1910,8 +1919,9 @@ PHP;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
-        } catch (\Throwable $e) {}
+            app(SliceManager::class)->clearCache();
+        } catch (\Throwable $e) {
+        }
 
         return [
             'success' => true,
@@ -1937,7 +1947,7 @@ PHP;
     public function previewStudioConfig(string $sliceName, array $ui = [], array $navigation = [], ?array $workflow = null): array
     {
         $sliceDir = $this->resolveStudioSliceDir($sliceName);
-        $current = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
+        $current = ManifestRepository::readFromSliceDir($sliceDir);
         $next = $this->applyStudioConfig($current, $ui, $navigation, $workflow);
 
         // applyStudioConfig always bumps the patch version; a version-only
@@ -2003,11 +2013,12 @@ PHP;
 
     protected function dumpYaml(array $manifest): string
     {
-        if (! class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+        if (! class_exists(Yaml::class)) {
             return json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         }
-        return \Symfony\Component\Yaml\Yaml::dump(
-            \LaraSlice\Core\Discovery\ManifestRepository::normalize($manifest),
+
+        return Yaml::dump(
+            ManifestRepository::normalize($manifest),
             6,
             2
         );
@@ -2042,6 +2053,7 @@ PHP;
         if ($changes === 0) {
             return '(no changes)';
         }
+
         return implode("\n", $out);
     }
 
@@ -2098,14 +2110,14 @@ PHP;
         ManifestRepository::writeBoth($manifestFile, $manifest);
 
         try {
-            app(\LaraSlice\Core\Discovery\SliceManager::class)->clearCache();
+            app(SliceManager::class)->clearCache();
         } catch (\Throwable $e) {
         }
 
         // Sync workflow to DB if present
         if (! empty($manifest['workflow']) && is_array($manifest['workflow'])) {
             try {
-                app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class)
+                app(WorkflowEngineService::class)
                     ->syncWorkflowFromManifest($manifest['workflow'], $sliceName, $this->resolveModelClass($sliceDir));
             } catch (\Throwable $e) {
             }

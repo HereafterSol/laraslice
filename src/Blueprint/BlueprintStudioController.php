@@ -9,10 +9,16 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use LaraSlice\Core\Ai\JevDecisionService;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Generator\SliceName;
+use LaraSlice\Porting\SlicePortService;
+use LaraSlice\Support\SystemMind;
+use LaraSlice\Support\SystemOperate;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
+use LaraSlice\Wizard\WizardController;
 use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
@@ -123,7 +129,8 @@ final class BlueprintStudioController extends Controller
         if (File::exists($portPlanFile)) {
             try {
                 $portPlan = json_decode(File::get($portPlanFile), true);
-            } catch (Throwable) {}
+            } catch (Throwable) {
+            }
         }
 
         return view('laraslice::blueprint-studio', [
@@ -224,7 +231,8 @@ final class BlueprintStudioController extends Controller
                 if (is_array($decoded) && count($decoded) > 0) {
                     $slicesList = $decoded;
                 }
-            } catch (Throwable) {}
+            } catch (Throwable) {
+            }
         }
 
         if ($planScope === null) {
@@ -246,7 +254,7 @@ final class BlueprintStudioController extends Controller
                 $applier = new BlueprintApplier(static fn (string $table): bool => Schema::hasTable($table));
 
                 foreach ($slicesList as $sIdx => $sl) {
-                    $sliceName = $sl['name'] ?? "Slice ".($sIdx + 1);
+                    $sliceName = $sl['name'] ?? 'Slice '.($sIdx + 1);
                     $sliceSource = $sl['source'] ?? '';
                     if (empty($sliceSource) && isset($sl['blueprint'])) {
                         $sliceSource = Yaml::dump($sl['blueprint'], 4, 2);
@@ -325,7 +333,7 @@ final class BlueprintStudioController extends Controller
                 $domainTarget = rtrim($slicesPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$domainFolder;
 
                 $jev = new JevDecisionService;
-                $archetypeDecision = $jev->classifyArchetype("Domain Suite for {$domainName} containing ".count($slicesList)." vertical slices");
+                $archetypeDecision = $jev->classifyArchetype("Domain Suite for {$domainName} containing ".count($slicesList).' vertical slices');
                 $riskDecision = $jev->evaluateMigrationRisk(
                     $this->getDatabaseTables(),
                     $allDatabaseOps
@@ -499,7 +507,7 @@ final class BlueprintStudioController extends Controller
                     }
                 }
 
-                $successMsg = "Successfully generated all ".count($generatedTargets)." vertical slices in [{$domainName}] domain suite with persisted slice.yaml files!";
+                $successMsg = 'Successfully generated all '.count($generatedTargets)." vertical slices in [{$domainName}] domain suite with persisted slice.yaml files!";
                 if ($migrated) {
                     $successMsg .= ' Database migrations were automatically executed.';
                 } else {
@@ -667,7 +675,7 @@ final class BlueprintStudioController extends Controller
                     if ($out && ! str_contains($out, 'Nothing to migrate')) {
                         $outputs[] = $out;
                     }
-                } catch (\Throwable $pe) {
+                } catch (Throwable $pe) {
                     try {
                         Artisan::call('migrate', [
                             '--force' => true,
@@ -678,7 +686,7 @@ final class BlueprintStudioController extends Controller
                         if ($out && ! str_contains($out, 'Nothing to migrate')) {
                             $outputs[] = $out;
                         }
-                    } catch (\Throwable $e) {
+                    } catch (Throwable $e) {
                         $outputs[] = 'Error in '.$relative.': '.$e->getMessage();
                     }
                 }
@@ -702,20 +710,20 @@ final class BlueprintStudioController extends Controller
                 try {
                     (new $seederClass)->run();
                     $seeded[] = $seederClass;
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                 }
             }
         }
 
-        $sliceSeederPath = app_path("Slices/{$domainName}/MasterData/Database/Seeders/".Str::studly($domainName)."MasterDataSeeder.php");
+        $sliceSeederPath = app_path("Slices/{$domainName}/MasterData/Database/Seeders/".Str::studly($domainName).'MasterDataSeeder.php');
         if (file_exists($sliceSeederPath)) {
             require_once $sliceSeederPath;
-            $sliceClass = "App\\Slices\\{$domainName}\\MasterData\\Database\\Seeders\\".Str::studly($domainName)."MasterDataSeeder";
+            $sliceClass = "App\\Slices\\{$domainName}\\MasterData\\Database\\Seeders\\".Str::studly($domainName).'MasterDataSeeder';
             if (class_exists($sliceClass)) {
                 try {
                     (new $sliceClass)->run();
                     $seeded[] = $sliceClass;
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                 }
             }
         }
@@ -1087,7 +1095,7 @@ final class BlueprintStudioController extends Controller
     /**
      * Inspect or load architecture plan for legacy application porting.
      */
-    public function portPlan(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
+    public function portPlan(Request $request, SlicePortService $portService): JsonResponse
     {
         @set_time_limit(180);
         @ini_set('max_execution_time', '180');
@@ -1128,14 +1136,16 @@ final class BlueprintStudioController extends Controller
                 if (! is_array($plan) || ! isset($plan['modules'])) {
                     throw new \InvalidArgumentException('Invalid JSON Architecture Plan format.');
                 }
+
                 return response()->json(['success' => true, 'plan' => $plan]);
             }
 
             // 2. Load ERP preset example plan if requested and installed
             if ($preset === 'erp' && empty($source)) {
                 $examplePlan = base_path('docs/porting-architecture-plan.json');
-                if (\Illuminate\Support\Facades\File::exists($examplePlan)) {
-                    $plan = json_decode(\Illuminate\Support\Facades\File::get($examplePlan), true);
+                if (File::exists($examplePlan)) {
+                    $plan = json_decode(File::get($examplePlan), true);
+
                     return response()->json(['success' => true, 'plan' => $plan, 'example' => true]);
                 }
             }
@@ -1154,7 +1164,7 @@ final class BlueprintStudioController extends Controller
                 $clonedFrom = $request->input('source'); // original URL, token never included
             }
 
-            if (empty($source) || ! \Illuminate\Support\Facades\File::isDirectory($source)) {
+            if (empty($source) || ! File::isDirectory($source)) {
                 throw new \InvalidArgumentException("Source application directory not found: [{$source}]. Please provide a valid local project path or Git URL.");
             }
 
@@ -1170,7 +1180,7 @@ final class BlueprintStudioController extends Controller
                 'inspection' => $inspection,
                 'cloned_from' => $clonedFrom,
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -1184,9 +1194,10 @@ final class BlueprintStudioController extends Controller
     protected function portPresetDir(): string
     {
         $dir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-presets');
-        if (! \Illuminate\Support\Facades\File::isDirectory($dir)) {
-            \Illuminate\Support\Facades\File::makeDirectory($dir, 0755, true);
+        if (! File::isDirectory($dir)) {
+            File::makeDirectory($dir, 0755, true);
         }
+
         return $dir;
     }
 
@@ -1205,7 +1216,7 @@ final class BlueprintStudioController extends Controller
             return response()->json(['success' => false, 'message' => 'Plan data is required.'], 422);
         }
 
-        $slug = \Illuminate\Support\Str::slug($name);
+        $slug = Str::slug($name);
         if ($slug === '') {
             $slug = 'preset-'.time();
         }
@@ -1221,7 +1232,7 @@ final class BlueprintStudioController extends Controller
             'plan' => $plan,
         ];
 
-        \Illuminate\Support\Facades\File::put(
+        File::put(
             $this->portPresetDir().DIRECTORY_SEPARATOR.$slug.'.json',
             json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
         );
@@ -1235,8 +1246,8 @@ final class BlueprintStudioController extends Controller
     public function listPortPresets(): JsonResponse
     {
         $presets = [];
-        foreach (\Illuminate\Support\Facades\File::glob($this->portPresetDir().DIRECTORY_SEPARATOR.'*.json') as $file) {
-            $data = json_decode(\Illuminate\Support\Facades\File::get($file), true);
+        foreach (File::glob($this->portPresetDir().DIRECTORY_SEPARATOR.'*.json') as $file) {
+            $data = json_decode(File::get($file), true);
             if (is_array($data)) {
                 $presets[] = [
                     'slug' => $data['slug'] ?? basename($file, '.json'),
@@ -1259,11 +1270,11 @@ final class BlueprintStudioController extends Controller
     public function loadPortPreset(string $slug): JsonResponse
     {
         $file = $this->portPresetDir().DIRECTORY_SEPARATOR.basename($slug).'.json';
-        if (! \Illuminate\Support\Facades\File::exists($file)) {
+        if (! File::exists($file)) {
             return response()->json(['success' => false, 'message' => 'Preset not found.'], 404);
         }
 
-        $data = json_decode(\Illuminate\Support\Facades\File::get($file), true);
+        $data = json_decode(File::get($file), true);
 
         return response()->json(['success' => true, 'preset' => $data]);
     }
@@ -1274,8 +1285,8 @@ final class BlueprintStudioController extends Controller
     public function deletePortPreset(string $slug): JsonResponse
     {
         $file = $this->portPresetDir().DIRECTORY_SEPARATOR.basename($slug).'.json';
-        if (\Illuminate\Support\Facades\File::exists($file)) {
-            \Illuminate\Support\Facades\File::delete($file);
+        if (File::exists($file)) {
+            File::delete($file);
         }
 
         return response()->json(['success' => true]);
@@ -1287,9 +1298,10 @@ final class BlueprintStudioController extends Controller
     protected function portSourceCacheDir(): string
     {
         $dir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-sources');
-        if (! \Illuminate\Support\Facades\File::isDirectory($dir)) {
-            \Illuminate\Support\Facades\File::makeDirectory($dir, 0755, true);
+        if (! File::isDirectory($dir)) {
+            File::makeDirectory($dir, 0755, true);
         }
+
         return $dir;
     }
 
@@ -1299,12 +1311,13 @@ final class BlueprintStudioController extends Controller
     protected function readSourceMeta(string $dir): array
     {
         $metaFile = $dir.DIRECTORY_SEPARATOR.'.porting-meta.json';
-        if (\Illuminate\Support\Facades\File::exists($metaFile)) {
-            $meta = json_decode(\Illuminate\Support\Facades\File::get($metaFile), true);
+        if (File::exists($metaFile)) {
+            $meta = json_decode(File::get($metaFile), true);
             if (is_array($meta)) {
                 return $meta;
             }
         }
+
         return [];
     }
 
@@ -1316,8 +1329,8 @@ final class BlueprintStudioController extends Controller
         $sources = [];
         $cacheDir = $this->portSourceCacheDir();
 
-        foreach (\Illuminate\Support\Facades\File::directories($cacheDir) as $dir) {
-            if (! \Illuminate\Support\Facades\File::isDirectory($dir.DIRECTORY_SEPARATOR.'.git')) {
+        foreach (File::directories($cacheDir) as $dir) {
+            if (! File::isDirectory($dir.DIRECTORY_SEPARATOR.'.git')) {
                 continue;
             }
             $meta = $this->readSourceMeta($dir);
@@ -1348,13 +1361,13 @@ final class BlueprintStudioController extends Controller
     public function keepCachedSource(Request $request, string $key): JsonResponse
     {
         $dir = $this->portSourceCacheDir().DIRECTORY_SEPARATOR.basename($key);
-        if (! \Illuminate\Support\Facades\File::isDirectory($dir)) {
+        if (! File::isDirectory($dir)) {
             return response()->json(['success' => false, 'message' => 'Cached source not found.'], 404);
         }
 
         $meta = $this->readSourceMeta($dir);
         $meta['keep'] = (bool) $request->input('keep', true);
-        \Illuminate\Support\Facades\File::put($dir.DIRECTORY_SEPARATOR.'.porting-meta.json', json_encode($meta, JSON_PRETTY_PRINT));
+        File::put($dir.DIRECTORY_SEPARATOR.'.porting-meta.json', json_encode($meta, JSON_PRETTY_PRINT));
 
         return response()->json(['success' => true, 'keep' => $meta['keep']]);
     }
@@ -1365,8 +1378,8 @@ final class BlueprintStudioController extends Controller
     public function deleteCachedSource(string $key): JsonResponse
     {
         $dir = $this->portSourceCacheDir().DIRECTORY_SEPARATOR.basename($key);
-        if (\Illuminate\Support\Facades\File::isDirectory($dir)) {
-            \Illuminate\Support\Facades\File::deleteDirectory($dir);
+        if (File::isDirectory($dir)) {
+            File::deleteDirectory($dir);
         }
 
         return response()->json(['success' => true]);
@@ -1375,7 +1388,7 @@ final class BlueprintStudioController extends Controller
     /**
      * Inspect a legacy application directory and return table classification & slice mapping.
      */
-    public function portInspect(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
+    public function portInspect(Request $request, SlicePortService $portService): JsonResponse
     {
         @set_time_limit(180);
         @ini_set('max_execution_time', '180');
@@ -1385,11 +1398,12 @@ final class BlueprintStudioController extends Controller
 
         try {
             $data = $portService->inspect($source, $domain);
+
             return response()->json([
                 'success' => true,
                 'data' => $data,
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -1400,7 +1414,7 @@ final class BlueprintStudioController extends Controller
     /**
      * Execute the porting and migration pipeline for a legacy application.
      */
-    public function portExecute(Request $request, \LaraSlice\Porting\SlicePortService $portService): JsonResponse
+    public function portExecute(Request $request, SlicePortService $portService): JsonResponse
     {
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
@@ -1446,11 +1460,11 @@ final class BlueprintStudioController extends Controller
             if (is_array($dataImport)) {
                 $missing = $dataImport['missing_target_tables'] ?? [];
                 if (is_array($missing) && $missing !== []) {
-                    $message .= ' WARNING: data import skipped ' . count($missing) . ' table(s) whose target tables do not exist ('
-                        . implode(', ', $missing) . ') — those rows were NOT imported; run migrations and re-run the import.';
+                    $message .= ' WARNING: data import skipped '.count($missing).' table(s) whose target tables do not exist ('
+                        .implode(', ', $missing).') — those rows were NOT imported; run migrations and re-run the import.';
                 }
                 if (! empty($dataImport['auth_warning'])) {
-                    $message .= ' WARNING: ' . $dataImport['auth_warning'];
+                    $message .= ' WARNING: '.$dataImport['auth_warning'];
                 }
             }
 
@@ -1461,7 +1475,7 @@ final class BlueprintStudioController extends Controller
                 'slices_created_count' => $createdCount,
                 'errors_count' => $errorCount,
             ], $ok ? 200 : 422);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -1725,14 +1739,14 @@ final class BlueprintStudioController extends Controller
     /**
      * ONE Studio shell. Modes are panels; only Port is mounted in Phase 1.
      */
-    public function shell(\Illuminate\Http\Request $request): mixed
+    public function shell(Request $request): mixed
     {
         $mode = (string) $request->query('mode', '');
         $sliceCount = 0;
         try {
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $sliceCount = count($manager->getAllSlices());
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $sliceCount = 0;
         }
 
@@ -1749,35 +1763,35 @@ final class BlueprintStudioController extends Controller
     /** Operate mode actions: run a backup, generate the manual (R4). */
     public function operateBackup(Request $request): mixed
     {
-        $created = \LaraSlice\Support\SystemOperate::runBackup();
+        $created = SystemOperate::runBackup();
 
-        return response()->json(['created' => $created, 'backups' => \LaraSlice\Support\SystemOperate::backups()]);
+        return response()->json(['created' => $created, 'backups' => SystemOperate::backups()]);
     }
 
     public function operateManual(Request $request): mixed
     {
-        return response()->json(['markdown' => \LaraSlice\Support\SystemOperate::manualMarkdown()]);
+        return response()->json(['markdown' => SystemOperate::manualMarkdown()]);
     }
 
     /** Plan mode: diff-before-save for the Mind (system.yaml). */
     public function planPreview(Request $request): mixed
     {
-        $mind = \LaraSlice\Support\SystemMind::load() ?? ['system' => ['name' => config('app.name')]];
-        $updated = \LaraSlice\Support\SystemMind::applyForm($mind, $request->only(['purpose', 'roles', 'journeys', 'operations']));
-        $before = \LaraSlice\Support\SystemMind::path() !== null ? (string) file_get_contents(\LaraSlice\Support\SystemMind::path()) : '';
+        $mind = SystemMind::load() ?? ['system' => ['name' => config('app.name')]];
+        $updated = SystemMind::applyForm($mind, $request->only(['purpose', 'roles', 'journeys', 'operations']));
+        $before = SystemMind::path() !== null ? (string) file_get_contents(SystemMind::path()) : '';
 
-        return response()->json(['diff' => \LaraSlice\Support\SystemMind::diff($before, \LaraSlice\Support\SystemMind::render($updated))]);
+        return response()->json(['diff' => SystemMind::diff($before, SystemMind::render($updated))]);
     }
 
     public function planSave(Request $request): mixed
     {
-        $mind = \LaraSlice\Support\SystemMind::load() ?? ['system' => ['name' => config('app.name')]];
-        $updated = \LaraSlice\Support\SystemMind::applyForm($mind, $request->only(['purpose', 'roles', 'journeys', 'operations']));
-        $path = \LaraSlice\Support\SystemMind::path() ?? \LaraSlice\Support\SystemMind::defaultPath();
+        $mind = SystemMind::load() ?? ['system' => ['name' => config('app.name')]];
+        $updated = SystemMind::applyForm($mind, $request->only(['purpose', 'roles', 'journeys', 'operations']));
+        $path = SystemMind::path() ?? SystemMind::defaultPath();
         if (! is_dir(dirname($path))) {
             mkdir(dirname($path), 0775, true);
         }
-        file_put_contents($path, \LaraSlice\Support\SystemMind::render($updated));
+        file_put_contents($path, SystemMind::render($updated));
 
         return response()->json(['saved' => true, 'path' => $path]);
     }
@@ -1785,25 +1799,25 @@ final class BlueprintStudioController extends Controller
     public function panel(string $mode, Request $request): mixed
     {
         if ($mode === 'plan') {
-            $mind = \LaraSlice\Support\SystemMind::load();
+            $mind = SystemMind::load();
 
             return view('laraslice::partials.plan-panel', [
                 'mind' => $mind,
-                'mindPath' => \LaraSlice\Support\SystemMind::path(),
-                'form' => $mind !== null ? \LaraSlice\Support\SystemMind::toForm($mind) : ['purpose' => '', 'roles' => '', 'journeys' => '', 'operations' => ''],
+                'mindPath' => SystemMind::path(),
+                'form' => $mind !== null ? SystemMind::toForm($mind) : ['purpose' => '', 'roles' => '', 'journeys' => '', 'operations' => ''],
             ]);
         }
 
         if ($mode === 'operate') {
-            $mind = \LaraSlice\Support\SystemMind::load();
+            $mind = SystemMind::load();
 
             return view('laraslice::partials.operate-panel', [
-                'health' => \LaraSlice\Support\SystemOperate::health(),
-                'backups' => \LaraSlice\Support\SystemOperate::backups(),
+                'health' => SystemOperate::health(),
+                'backups' => SystemOperate::backups(),
                 'backupPolicy' => $mind['operations']['backups'] ?? null,
                 'sync' => $mind['operations']['sync'] ?? null,
-                'audit' => \LaraSlice\Support\SystemOperate::recentAudit(),
-                'access' => \LaraSlice\Support\SystemOperate::accessReview(),
+                'audit' => SystemOperate::recentAudit(),
+                'access' => SystemOperate::accessReview(),
             ]);
         }
 
@@ -1812,8 +1826,8 @@ final class BlueprintStudioController extends Controller
         }
 
         if ($mode === 'schema') {
-            $view = app(\LaraSlice\Wizard\WizardController::class)->schemaStudioView();
-            if ($view instanceof \Illuminate\View\View) {
+            $view = app(WizardController::class)->schemaStudioView();
+            if ($view instanceof View) {
                 return view('laraslice::partials.schema-panel', $view->getData());
             }
 
@@ -1828,7 +1842,7 @@ final class BlueprintStudioController extends Controller
 
         if ($mode === 'design') {
             $view = $this->buildStudioView($request);
-            if ($view instanceof \Illuminate\View\View) {
+            if ($view instanceof View) {
                 return view('laraslice::partials.design-panel', $view->getData());
             }
 
@@ -1837,5 +1851,4 @@ final class BlueprintStudioController extends Controller
 
         abort(404);
     }
-
 }

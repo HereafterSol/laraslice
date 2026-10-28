@@ -110,6 +110,7 @@ trait HasWorkflow
     public function scopeWhereWorkflowState($query, string|array $state)
     {
         $stateField = $this->getWorkflowStateField();
+
         return is_array($state) ? $query->whereIn($stateField, $state) : $query->where($stateField, $state);
     }
 

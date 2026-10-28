@@ -82,6 +82,7 @@ trait AuthorizesSliceActions
         if (Access::allows($user, ["{$base}.view-own", "{$plural}.view-own"])) {
             return 'own';
         }
+
         return 'none';
     }
 

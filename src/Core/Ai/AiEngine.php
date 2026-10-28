@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\LaraSliceServiceProvider;
+use LaraSlice\Porting\SlicePortService;
 use LaraSlice\Slices\Settings\Models\Setting;
 
 class AiEngine
@@ -752,11 +753,11 @@ class AiEngine
             $dir = storage_path('app'.DIRECTORY_SEPARATOR.'porting-presets');
             $reply = "### 📂 Saved Porting Presets\n\n";
             if (! is_dir($dir)) {
-                return $reply."No presets saved yet. Analyze a project in Porting Studio, then click **💾 Save as Preset**.";
+                return $reply.'No presets saved yet. Analyze a project in Porting Studio, then click **💾 Save as Preset**.';
             }
             $files = glob($dir.DIRECTORY_SEPARATOR.'*.json') ?: [];
             if (empty($files)) {
-                return $reply."No presets saved yet. Analyze a project in Porting Studio, then click **💾 Save as Preset**.";
+                return $reply.'No presets saved yet. Analyze a project in Porting Studio, then click **💾 Save as Preset**.';
             }
             foreach ($files as $file) {
                 $data = json_decode(file_get_contents($file), true);
@@ -780,7 +781,7 @@ class AiEngine
 
             @set_time_limit(180);
             try {
-                $portService = app(\LaraSlice\Porting\SlicePortService::class);
+                $portService = app(SlicePortService::class);
                 $localPath = $portService->cloneGitSource($repoUrl, $branch);
                 $inspection = $portService->inspect($localPath, 'ERP');
 
@@ -805,7 +806,7 @@ class AiEngine
                     }
                     $reply .= "\n";
                 }
-                $reply .= "Open **Porting Studio** → set source type to 🔗 Git Repository with this URL to see the full interactive plan, then **⚡ Execute Porting**.";
+                $reply .= 'Open **Porting Studio** → set source type to 🔗 Git Repository with this URL to see the full interactive plan, then **⚡ Execute Porting**.';
 
                 return $reply;
             } catch (\Throwable $e) {
@@ -821,7 +822,7 @@ class AiEngine
 
             @set_time_limit(180);
             try {
-                $portService = app(\LaraSlice\Porting\SlicePortService::class);
+                $portService = app(SlicePortService::class);
                 $inspection = $portService->inspect($path, 'ERP');
 
                 $tableCount = count($inspection['tables'] ?? []);
@@ -830,7 +831,7 @@ class AiEngine
                 $reply = "### 📁 Porting Analysis: `{$path}`\n\n";
                 $reply .= "**Tables found:** {$tableCount}\n";
                 $reply .= "**Slices proposed:** {$sliceCount}\n\n";
-                $reply .= "Open **Porting Studio** with this path to see the full interactive plan.";
+                $reply .= 'Open **Porting Studio** with this path to see the full interactive plan.';
 
                 return $reply;
             } catch (\Throwable $e) {

@@ -524,6 +524,7 @@ class SliceSeederService
             if (in_array($parentTbl, $sliceTables, true) || strtolower($slice->name) === strtolower($parentBase) || strtolower($slice->name) === strtolower(Str::plural($parentBase))) {
                 try {
                     $this->seedTable($parentTbl, $slice, 10);
+
                     return;
                 } catch (\Throwable $e) {
                     // Fallback to direct insertion if slice seeder hits an edge case
@@ -545,7 +546,7 @@ class SliceSeederService
             $entities = [
                 'Acme Corporation', 'Globex Systems', 'Soylent Enterprises', 'Initech Global',
                 'Umbrella Solutions', 'Hooli Dynamics', 'Stark Technologies', 'Wayne Industries',
-                'Cyberdyne Labs', 'Massive Dynamic'
+                'Cyberdyne Labs', 'Massive Dynamic',
             ];
 
             $now = now()->toDateTimeString();
@@ -641,7 +642,7 @@ class SliceSeederService
     public function seedSliceRolesAndUsers(SliceManifest $slice): void
     {
         $manifestRoles = [];
-        $sliceJsonPath = $slice->path . '/slice.yaml';
+        $sliceJsonPath = $slice->path.'/slice.yaml';
         if (file_exists($sliceJsonPath)) {
             $data = json_decode(file_get_contents($sliceJsonPath), true);
             $manifestRoles = $data['roles'] ?? ($data['workflow']['roles'] ?? []);

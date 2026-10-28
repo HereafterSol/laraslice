@@ -2,6 +2,8 @@
 
 namespace LaraSlice\Porting;
 
+use Illuminate\Support\Str;
+
 /**
  * Phase 2 — classify source *DataTable.php into Slice YAML v0.1 formatter vocabulary.
  *
@@ -90,7 +92,7 @@ class DataTableUiParser
 
     public function resolveDataTablesDir(string $sourcePath): ?string
     {
-        $base = rtrim($sourcePath, "/\\");
+        $base = rtrim($sourcePath, '/\\');
         foreach ([
             $base.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'DataTables',
             $base.DIRECTORY_SEPARATOR.'DataTables',
@@ -117,7 +119,7 @@ class DataTableUiParser
             $candidates[] = $studly.'sDataTable.php';
         }
 
-        $base = rtrim($sourcePath, "/\\");
+        $base = rtrim($sourcePath, '/\\');
         $roots = [
             $base.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'DataTables',
             $base.DIRECTORY_SEPARATOR.'DataTables',
@@ -160,6 +162,7 @@ class DataTableUiParser
                 $classification = $this->classifyBody($handle, $body, 'editColumn');
                 if ($classification === null) {
                     $skipped[] = ['handle' => $handle, 'reason' => 'unclassified_editColumn'];
+
                     continue;
                 }
                 $columns[$handle] = $classification;
@@ -177,6 +180,7 @@ class DataTableUiParser
                 $classification = $this->classifyBody($handle, $body, 'addColumn');
                 if ($classification === null) {
                     $skipped[] = ['handle' => $handle, 'reason' => 'unclassified_addColumn'];
+
                     continue;
                 }
                 if (! isset($columns[$handle]) || ($columns[$handle]['confidence'] ?? '') === 'low') {
@@ -418,7 +422,7 @@ class DataTableUiParser
                 $ui['directory']['columns'][] = [
                     'handle' => $handle,
                     'key' => $handle,
-                    'label' => \Illuminate\Support\Str::headline($handle),
+                    'label' => Str::headline($handle),
                     'formatter' => $formatter,
                     'type' => $formatter,
                     'sortable' => false,
@@ -443,7 +447,7 @@ class DataTableUiParser
                 $ui['directory']['sidebar_filters'] = $ui['directory']['sidebar_filters'] ?? [];
                 $ui['directory']['sidebar_filters'][] = [
                     'handle' => $h,
-                    'label' => \Illuminate\Support\Str::headline($h),
+                    'label' => Str::headline($h),
                     'type' => 'text',
                     'inferred_from' => 'filterColumn',
                 ];

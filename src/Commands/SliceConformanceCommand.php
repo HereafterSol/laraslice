@@ -22,6 +22,7 @@ class SliceConformanceCommand extends Command
         $specFiles = is_dir($specDir) ? (glob($specDir.'/*.anatomy.ui.yaml') ?: []) : [];
         if ($specFiles === []) {
             $this->warn('No anatomy specs at porting/ui-spec/*.anatomy.ui.yaml — run slice:port --anatomy first.');
+
             return self::SUCCESS;
         }
 
@@ -78,6 +79,7 @@ class SliceConformanceCommand extends Command
                 $register = is_array($parsed['deviations'] ?? null) ? $parsed['deviations'] : [];
             } catch (\Throwable) {
                 $this->error('porting/deviations.yaml is unparsable — the register must stay readable.');
+
                 return self::FAILURE;
             }
         }
@@ -101,6 +103,7 @@ class SliceConformanceCommand extends Command
             $slug = (string) $spec['slice'];
             if (! isset($hearts[$slug])) {
                 $this->line("  {$slug}: no ported slice with this handle — skipped");
+
                 continue;
             }
             $pages++;

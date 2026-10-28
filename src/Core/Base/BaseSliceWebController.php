@@ -2,16 +2,24 @@
 
 namespace LaraSlice\Core\Base;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
+use LaraSlice\Support\DirectoryUi;
+use Symfony\Component\Yaml\Yaml;
 
 abstract class BaseSliceWebController extends Controller
 {
@@ -40,7 +48,7 @@ abstract class BaseSliceWebController extends Controller
         }
 
         $formClass = $this->getFormClass();
-        $createForm = new $formClass();
+        $createForm = new $formClass;
 
         // Load UI config from slice.yaml for summary cards, quick filters, etc.
         $uiConfig = $this->getSliceUiConfig();
@@ -55,7 +63,7 @@ abstract class BaseSliceWebController extends Controller
         if (($uiConfig['directory']['default_view'] ?? 'table') === 'matrix'
             && ! $request->has('view')
             && ! empty($uiConfig['directory']['matrix'])
-            && \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))) {
+            && Route::has($this->resolveRouteName('matrix'))) {
             return redirect()->route(
                 $this->resolveRouteName('matrix'),
                 array_merge($this->routeParameters(), $request->query())
@@ -101,6 +109,7 @@ abstract class BaseSliceWebController extends Controller
                     if ($existsValue !== null) {
                         $criteria[$existsKey] = $existsValue;
                     }
+
                     continue;
                 }
                 if ($request->filled($handle)) {
@@ -112,7 +121,7 @@ abstract class BaseSliceWebController extends Controller
                         // chosen option carrying `criteria`
                         // replaces the plain equality with its
                         // condition group (Overdue, buckets).
-                        $optionConditions = \LaraSlice\Support\DirectoryUi::optionConditions($declared, $request->input($handle), auth()->id());
+                        $optionConditions = DirectoryUi::optionConditions($declared, $request->input($handle), auth()->id());
                         if ($optionConditions !== null) {
                             $criteria['__conditions'] = array_merge($criteria['__conditions'] ?? [], $optionConditions);
                         } else {
@@ -131,7 +140,7 @@ abstract class BaseSliceWebController extends Controller
                 // any interaction (a tab click always carries the
                 // key, even empty or '__all__') suppresses it.
                 if (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
-                    $optionConditions = \LaraSlice\Support\DirectoryUi::optionConditions($declared, $filterDefaults[$handle], auth()->id());
+                    $optionConditions = DirectoryUi::optionConditions($declared, $filterDefaults[$handle], auth()->id());
                     if ($optionConditions !== null) {
                         $criteria['__conditions'] = array_merge($criteria['__conditions'] ?? [], $optionConditions);
                     } else {
@@ -200,7 +209,7 @@ abstract class BaseSliceWebController extends Controller
         // Resolve quick filter options from distinct values
         foreach ($quickFilters as &$qf) {
             if (isset($qf['options']) && is_array($qf['options'])) {
-                $qf['options'] = \LaraSlice\Support\DirectoryUi::optionsList($qf['options']);
+                $qf['options'] = DirectoryUi::optionsList($qf['options']);
             }
             if (isset($qf['options_from']) && str_starts_with($qf['options_from'], 'distinct:')) {
                 $field = substr($qf['options_from'], 9);
@@ -216,7 +225,7 @@ abstract class BaseSliceWebController extends Controller
         foreach ($sidebarFilters as &$sf) {
             if (($sf['type'] ?? null) === 'relation_exists' && ($sf['relation'] ?? null) === 'users') {
                 try {
-                    $sf['options'] = \Illuminate\Support\Facades\DB::table('users')
+                    $sf['options'] = DB::table('users')
                         ->orderBy('name')
                         ->get(['id', 'name'])
                         ->map(fn ($u) => ['value' => $u->id, 'label' => (string) $u->name])
@@ -224,6 +233,7 @@ abstract class BaseSliceWebController extends Controller
                 } catch (\Throwable $e) {
                     $sf['options'] = [];
                 }
+
                 continue;
             }
             $from = $sf['options_from'] ?? null;
@@ -234,7 +244,7 @@ abstract class BaseSliceWebController extends Controller
             } elseif (is_string($from) && str_starts_with($from, 'relation:')) {
                 $field = substr($from, 9);
                 $base = str_ends_with($field, '_id') ? substr($field, 0, -3) : $field;
-                $map = $relationshipOptions[\Illuminate\Support\Str::camel($base).'Options'] ?? [];
+                $map = $relationshipOptions[Str::camel($base).'Options'] ?? [];
                 $sf['options'] = collect($map)->map(fn ($label, $value) => ['value' => $value, 'label' => (string) $label])->values()->toArray();
             } elseif (! empty($sf['options']) && is_array($sf['options'])) {
                 // Declared static options: normalize the map form
@@ -247,7 +257,7 @@ abstract class BaseSliceWebController extends Controller
                     } elseif (is_string($k)) {
                         $normalized[] = ['value' => $k, 'label' => (string) $v];
                     } else {
-                        $normalized[] = ['value' => $v, 'label' => \Illuminate\Support\Str::headline((string) $v)];
+                        $normalized[] = ['value' => $v, 'label' => Str::headline((string) $v)];
                     }
                 }
                 $sf['options'] = $normalized;
@@ -278,11 +288,11 @@ abstract class BaseSliceWebController extends Controller
                         $params[$param] = $criteria[$param];
                     }
                 }
-                $href = \Illuminate\Support\Facades\Route::has((string) $action['route'])
+                $href = Route::has((string) $action['route'])
                     ? route((string) $action['route'], $params)
                     : null;
             } elseif ($kind === 'seed' && ! empty($action['set'])) {
-                $href = \Illuminate\Support\Facades\Route::has($this->resolveRouteName('seed_action'))
+                $href = Route::has($this->resolveRouteName('seed_action'))
                     ? route($this->resolveRouteName('seed_action'), $this->routeParameters())
                     : null;
                 if ($href !== null) {
@@ -296,9 +306,10 @@ abstract class BaseSliceWebController extends Controller
                         'confirm' => isset($action['confirm']) ? (string) $action['confirm'] : null,
                     ];
                 }
+
                 continue;
             } elseif ($kind === 'invite') {
-                $href = \Illuminate\Support\Facades\Route::has($this->resolveRouteName('invite'))
+                $href = Route::has($this->resolveRouteName('invite'))
                     ? route($this->resolveRouteName('invite'), $this->routeParameters())
                     : null;
             } elseif (! empty($action['url'])) {
@@ -364,25 +375,25 @@ abstract class BaseSliceWebController extends Controller
                 'summaryData' => $summaryData,
                 'presentation' => $this->presentationModes(),
                 'drawerSize' => $this->presentationDrawerSize(),
-                'reportUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('report'))
+                'reportUrl' => Route::has($this->resolveRouteName('report'))
                     ? route($this->resolveRouteName('report'), $this->routeParameters())
                     : null,
-                'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
+                'matrixUrl' => Route::has($this->resolveRouteName('matrix'))
                     ? route($this->resolveRouteName('matrix'), $this->routeParameters())
                     : null,
-                'importUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('import'))
+                'importUrl' => Route::has($this->resolveRouteName('import'))
                     ? route($this->resolveRouteName('import'), $this->routeParameters())
                     : null,
-                'bulkEntryLabel' => ($be = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($this->ownManifest())) !== null
+                'bulkEntryLabel' => ($be = DirectoryUi::bulkEntryFromManifest($this->ownManifest())) !== null
                     ? ($be['title'] ?? 'Bulk Entry')
                     : 'Bulk Entry',
-                'bulkEntryUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('bulk_entry'))
+                'bulkEntryUrl' => Route::has($this->resolveRouteName('bulk_entry'))
                     ? route($this->resolveRouteName('bulk_entry'), $this->routeParameters())
                     : null,
                 // Relative path: the template is consumed by a
                 // same-origin fetch, and route()'s absolute form
                 // would pin APP_URL's host into the page.
-                'inlineUpdateUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('inline'))
+                'inlineUpdateUrl' => Route::has($this->resolveRouteName('inline'))
                     ? route($this->resolveRouteName('inline'), $this->routeParameters(['id' => '__ID__']), false)
                     : null,
                 'quickFilters' => $quickFilters,
@@ -400,7 +411,7 @@ abstract class BaseSliceWebController extends Controller
                 'density' => (string) ($uiConfig['directory']['density'] ?? 'compact'),
                 'demoSeed' => (bool) ($uiConfig['directory']['demo_seed'] ?? false),
                 'columnsMenu' => (bool) ($uiConfig['directory']['columns_menu'] ?? true),
-                'placement' => \LaraSlice\Support\DirectoryUi::listPlacement($uiConfig),
+                'placement' => DirectoryUi::listPlacement($uiConfig),
                 'tableViews' => $dirViews,
                 'defaultView' => $componentDefaultView,
             ]
@@ -452,7 +463,7 @@ abstract class BaseSliceWebController extends Controller
         $rowKey = (string) $decl['row_key'];
         $base = str_ends_with($rowKey, '_id') ? substr($rowKey, 0, -3) : $rowKey;
         $labelMap = [];
-        foreach ([$rowKey, \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)).'Options', \Illuminate\Support\Str::camel($base).'Options', \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)).'Options'] as $candidateKey) {
+        foreach ([$rowKey, Str::camel(Str::plural($base)).'Options', Str::camel($base).'Options', Str::studly(Str::plural($base)).'Options'] as $candidateKey) {
             if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
                 $labelMap = $options[$candidateKey];
                 break;
@@ -476,7 +487,7 @@ abstract class BaseSliceWebController extends Controller
             $population = $decl['roster_population'] ?? null;
             if (is_array($population) && ! empty($population['table']) && ! empty($population['key'])) {
                 try {
-                    $memberIds = \Illuminate\Support\Facades\DB::table((string) $population['table'])
+                    $memberIds = DB::table((string) $population['table'])
                         ->pluck((string) $population['key'])
                         ->map(fn ($v) => (int) $v)
                         ->all();
@@ -496,6 +507,7 @@ abstract class BaseSliceWebController extends Controller
                 }
                 if ((string) $sf['handle'] === $rowKey) {
                     $labelMap = array_intersect_key($labelMap, array_flip([(int) $value]));
+
                     continue;
                 }
                 if (($sf['type'] ?? null) === 'relation_exists' && ! empty($sf['relation']) && ! empty($sf['key'])) {
@@ -507,10 +519,10 @@ abstract class BaseSliceWebController extends Controller
                             // related table either way: a BelongsTo
                             // names it the owner key, a HasOne /
                             // HasMany names it the foreign key.
-                            $memberColumn = $relation instanceof \Illuminate\Database\Eloquent\Relations\BelongsTo
+                            $memberColumn = $relation instanceof BelongsTo
                                 ? $relation->getOwnerKeyName()
                                 : $relation->getForeignKeyName();
-                            $ids = \Illuminate\Support\Facades\DB::table($relation->getRelated()->getTable())
+                            $ids = DB::table($relation->getRelated()->getTable())
                                 ->where((string) $sf['key'], $value)
                                 ->pluck($memberColumn)
                                 ->map(fn ($v) => (int) $v)
@@ -525,7 +537,7 @@ abstract class BaseSliceWebController extends Controller
             }
         }
 
-        $matrix = \LaraSlice\Support\DirectoryUi::matrixFromManifest($manifest, $items, $month, $year, is_array($labelMap) ? $labelMap : []);
+        $matrix = DirectoryUi::matrixFromManifest($manifest, $items, $month, $year, is_array($labelMap) ? $labelMap : []);
         if ($matrix === null) {
             abort(404);
         }
@@ -536,7 +548,7 @@ abstract class BaseSliceWebController extends Controller
         // When the matrix is the declared default view, the
         // List-view link must carry ?view=table or index()
         // would redirect straight back here (backlog D4).
-        $indexUrl = \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+        $indexUrl = Route::has($this->resolveRouteName('index'))
             ? route($this->resolveRouteName('index'), $this->routeParameters())
             : url('/');
         if (($manifest['ui']['directory']['default_view'] ?? 'table') === 'matrix') {
@@ -572,11 +584,11 @@ abstract class BaseSliceWebController extends Controller
                 'active' => $request->query((string) $sf['handle']),
             ];
         }
-        $be = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($this->ownManifest());
-        $bulkEntryUrl = $be !== null && \Illuminate\Support\Facades\Route::has($this->resolveRouteName('bulk_entry'))
+        $be = DirectoryUi::bulkEntryFromManifest($this->ownManifest());
+        $bulkEntryUrl = $be !== null && Route::has($this->resolveRouteName('bulk_entry'))
             ? route($this->resolveRouteName('bulk_entry'), $this->routeParameters())
             : null;
-        $importUrl = \Illuminate\Support\Facades\Route::has($this->resolveRouteName('import'))
+        $importUrl = Route::has($this->resolveRouteName('import'))
             ? route($this->resolveRouteName('import'), $this->routeParameters())
             : null;
 
@@ -636,7 +648,7 @@ abstract class BaseSliceWebController extends Controller
         if ($other <= 0 || $other === $me) {
             abort(422);
         }
-        $userClass = app(\LaraSlice\Core\Discovery\SliceManager::class)->modelClass('User');
+        $userClass = app(SliceManager::class)->modelClass('User');
         if ($userClass === null || ! $userClass::query()->whereKey($other)->exists()) {
             abort(422);
         }
@@ -731,7 +743,7 @@ abstract class BaseSliceWebController extends Controller
         $selectedId = (int) $request->query('c', 0);
         $selected = $selectedId > 0 ? $conversations->firstWhere('id', $selectedId) : null;
 
-        $userClass = app(\LaraSlice\Core\Discovery\SliceManager::class)->modelClass('User');
+        $userClass = app(SliceManager::class)->modelClass('User');
         $users = $userClass === null ? [] : $userClass::query()
             ->whereKeyNot($me)
             ->orderBy('name')
@@ -739,7 +751,7 @@ abstract class BaseSliceWebController extends Controller
             ->map(fn ($u) => ['id' => $u->getKey(), 'name' => (string) $u->name])
             ->all();
 
-        $route = fn (string $action, array $params = []) => \Illuminate\Support\Facades\Route::has($this->resolveRouteName($action))
+        $route = fn (string $action, array $params = []) => Route::has($this->resolveRouteName($action))
             ? route($this->resolveRouteName($action), array_merge($this->routeParameters(), $params))
             : null;
 
@@ -798,7 +810,7 @@ abstract class BaseSliceWebController extends Controller
                 }
                 $dateField = (string) ($source['date_field'] ?? 'created_at');
                 $amountField = (string) ($source['amount'] ?? 'amount');
-                $rows = \Illuminate\Support\Facades\DB::table((string) $source['table'])
+                $rows = DB::table((string) $source['table'])
                     ->select([$dateField, $amountField])
                     ->get()
                     ->map(fn ($r) => ['date' => $r->{$dateField} ?? null, 'amount' => $r->{$amountField} ?? null])
@@ -809,7 +821,7 @@ abstract class BaseSliceWebController extends Controller
                     'rows' => $rows,
                 ];
             }
-            $report = \LaraSlice\Support\DirectoryUi::compareFromManifest($decl, $sources);
+            $report = DirectoryUi::compareFromManifest($decl, $sources);
             if ($report === null) {
                 abort(404);
             }
@@ -821,7 +833,7 @@ abstract class BaseSliceWebController extends Controller
                 'hasPeriod' => false,
                 'month' => (int) $request->query('month', (int) date('n')),
                 'year' => (int) $request->query('year', (int) date('Y')),
-                'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+                'indexUrl' => Route::has($this->resolveRouteName('index'))
                     ? route($this->resolveRouteName('index'), $this->routeParameters())
                     : url('/'),
                 'routePrefix' => $this->getRoutePrefix(),
@@ -853,14 +865,14 @@ abstract class BaseSliceWebController extends Controller
         $groupBy = (string) $decl['group_by'];
         $base = str_ends_with($groupBy, '_id') ? substr($groupBy, 0, -3) : $groupBy;
         $labelMap = [];
-        foreach ([$groupBy, \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)).'Options', \Illuminate\Support\Str::camel($base).'Options', \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)).'Options'] as $candidateKey) {
+        foreach ([$groupBy, Str::camel(Str::plural($base)).'Options', Str::camel($base).'Options', Str::studly(Str::plural($base)).'Options'] as $candidateKey) {
             if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
                 $labelMap = $options[$candidateKey];
                 break;
             }
         }
 
-        $report = \LaraSlice\Support\DirectoryUi::reportFromManifest($manifest, $items, $labelMap);
+        $report = DirectoryUi::reportFromManifest($manifest, $items, $labelMap);
         if ($report === null) {
             abort(404);
         }
@@ -873,13 +885,12 @@ abstract class BaseSliceWebController extends Controller
             'hasPeriod' => ! empty($decl['date_field']),
             'month' => (int) $request->query('month', (int) date('n')),
             'year' => (int) $request->query('year', (int) date('Y')),
-            'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+            'indexUrl' => Route::has($this->resolveRouteName('index'))
                 ? route($this->resolveRouteName('index'), $this->routeParameters())
                 : url('/'),
             'routePrefix' => $this->getRoutePrefix(),
         ]);
     }
-
 
     /**
      * Bulk entry (G8): one-date grid for slices declaring
@@ -893,7 +904,7 @@ abstract class BaseSliceWebController extends Controller
         $this->authorizeSlice('view');
 
         $manifest = $this->ownManifest();
-        $decl = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($manifest);
+        $decl = DirectoryUi::bulkEntryFromManifest($manifest);
         if ($decl === null) {
             abort(404);
         }
@@ -907,7 +918,7 @@ abstract class BaseSliceWebController extends Controller
         $rowKey = $decl['row_key'];
         $base = str_ends_with($rowKey, '_id') ? substr($rowKey, 0, -3) : $rowKey;
         $labelMap = [];
-        foreach ([$rowKey, \Illuminate\Support\Str::camel(\Illuminate\Support\Str::plural($base)).'Options', \Illuminate\Support\Str::camel($base).'Options', \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural($base)).'Options'] as $candidateKey) {
+        foreach ([$rowKey, Str::camel(Str::plural($base)).'Options', Str::camel($base).'Options', Str::studly(Str::plural($base)).'Options'] as $candidateKey) {
             if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
                 $labelMap = $options[$candidateKey];
                 break;
@@ -951,13 +962,13 @@ abstract class BaseSliceWebController extends Controller
             'bulk' => $decl,
             'rows' => $rows,
             'date' => $date,
-            'storeUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('bulk_entry_store'))
+            'storeUrl' => Route::has($this->resolveRouteName('bulk_entry_store'))
                 ? route($this->resolveRouteName('bulk_entry_store'), $this->routeParameters())
                 : url()->current(),
-            'indexUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('index'))
+            'indexUrl' => Route::has($this->resolveRouteName('index'))
                 ? route($this->resolveRouteName('index'), $this->routeParameters())
                 : url('/'),
-            'matrixUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('matrix'))
+            'matrixUrl' => Route::has($this->resolveRouteName('matrix'))
                 ? route($this->resolveRouteName('matrix'), $this->routeParameters())
                 : null,
             'routePrefix' => $this->getRoutePrefix(),
@@ -976,7 +987,7 @@ abstract class BaseSliceWebController extends Controller
         $this->authorizeSlice('create');
 
         $manifest = $this->ownManifest();
-        $decl = \LaraSlice\Support\DirectoryUi::bulkEntryFromManifest($manifest);
+        $decl = DirectoryUi::bulkEntryFromManifest($manifest);
         if ($decl === null) {
             abort(404);
         }
@@ -1040,7 +1051,7 @@ abstract class BaseSliceWebController extends Controller
             $holidayDates = [];
             if (! empty($decl['holidays'])) {
                 try {
-                    $holidayClass = app(\LaraSlice\Core\Discovery\SliceManager::class)->modelClass($decl['holidays']['slice']);
+                    $holidayClass = app(SliceManager::class)->modelClass($decl['holidays']['slice']);
                     if (is_string($holidayClass) && class_exists($holidayClass)) {
                         $holidayDates = $holidayClass::query()
                             ->whereDate($decl['holidays']['date_field'], '>=', $data['from'])
@@ -1080,7 +1091,7 @@ abstract class BaseSliceWebController extends Controller
             if ($skippedWeekends > 0) {
                 $notes[] = "skipped {$skippedWeekends} weekend date(s)";
             }
-            $message = "Saved {$saved} record(s) across {$days} date(s)" . ($notes === [] ? '.' : ' (' . implode(', ', $notes) . ').');
+            $message = "Saved {$saved} record(s) across {$days} date(s)".($notes === [] ? '.' : ' ('.implode(', ', $notes).').');
 
             return redirect()
                 ->route($this->resolveRouteName('bulk_entry'), $this->routeParameters(['date' => $data['from']]))
@@ -1088,7 +1099,7 @@ abstract class BaseSliceWebController extends Controller
         }
 
         if (empty($data['date'])) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'date' => 'A date (or a from/to range) is required.',
             ]);
         }
@@ -1100,7 +1111,6 @@ abstract class BaseSliceWebController extends Controller
             ->with('success', "Saved {$saved} record(s) for {$date}.");
     }
 
-
     /**
      * Timer state for the show page (G8): the declared timer's
      * totals + the current user's active session on this record
@@ -1108,7 +1118,7 @@ abstract class BaseSliceWebController extends Controller
      */
     protected function timerState(array $manifest, mixed $record): ?array
     {
-        $decl = \LaraSlice\Support\DirectoryUi::timerFromManifest($manifest);
+        $decl = DirectoryUi::timerFromManifest($manifest);
         if ($decl === null || ! is_object($record) || ! method_exists($record, $decl['relation'])) {
             return null;
         }
@@ -1137,10 +1147,10 @@ abstract class BaseSliceWebController extends Controller
             'activeHere' => $activeHere,
             'activeElsewhere' => $activeAnywhere && ! $activeHere,
             'totalMinutes' => $totalMinutes,
-            'startUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('timer_start'))
+            'startUrl' => Route::has($this->resolveRouteName('timer_start'))
                 ? route($this->resolveRouteName('timer_start'), $this->routeParameters(['id' => $record->getKey()]))
                 : null,
-            'stopUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('timer_stop'))
+            'stopUrl' => Route::has($this->resolveRouteName('timer_stop'))
                 ? route($this->resolveRouteName('timer_stop'), $this->routeParameters(['id' => $record->getKey()]))
                 : null,
         ];
@@ -1163,7 +1173,7 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('view');
 
-        $decl = \LaraSlice\Support\DirectoryUi::importFromManifest($this->ownManifest());
+        $decl = DirectoryUi::importFromManifest($this->ownManifest());
         if ($decl === null) {
             abort(404);
         }
@@ -1183,7 +1193,7 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('view');
 
-        $decl = \LaraSlice\Support\DirectoryUi::importFromManifest($this->ownManifest());
+        $decl = DirectoryUi::importFromManifest($this->ownManifest());
         if ($decl === null) {
             abort(404);
         }
@@ -1202,7 +1212,7 @@ abstract class BaseSliceWebController extends Controller
         $this->authorizeSlice('create');
 
         $manifest = $this->ownManifest();
-        $decl = \LaraSlice\Support\DirectoryUi::importFromManifest($manifest);
+        $decl = DirectoryUi::importFromManifest($manifest);
         if ($decl === null) {
             abort(404);
         }
@@ -1267,6 +1277,7 @@ abstract class BaseSliceWebController extends Controller
                     if ($existing !== null) {
                         $existing->fill($attrs)->save();
                         $updated++;
+
                         continue;
                     }
                 }
@@ -1304,7 +1315,7 @@ abstract class BaseSliceWebController extends Controller
         if (! is_file($dataFile)) {
             abort(404);
         }
-        $rows = \Symfony\Component\Yaml\Yaml::parseFile($dataFile);
+        $rows = Yaml::parseFile($dataFile);
         if (! is_array($rows)) {
             abort(422);
         }
@@ -1336,7 +1347,7 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('create');
 
-        $decl = \LaraSlice\Support\DirectoryUi::inviteFromManifest($this->ownManifest());
+        $decl = DirectoryUi::inviteFromManifest($this->ownManifest());
         if ($decl === null) {
             abort(404);
         }
@@ -1362,7 +1373,7 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('create');
 
-        $decl = \LaraSlice\Support\DirectoryUi::inviteFromManifest($this->ownManifest());
+        $decl = DirectoryUi::inviteFromManifest($this->ownManifest());
         if ($decl === null) {
             abort(404);
         }
@@ -1378,7 +1389,7 @@ abstract class BaseSliceWebController extends Controller
         if (! empty($record->{$decl['link']})) {
             return back()->with('invite_report', ['error' => 'That record is already linked to a user.']);
         }
-        $userClass = app(\LaraSlice\Core\Discovery\SliceManager::class)->modelClass('User');
+        $userClass = app(SliceManager::class)->modelClass('User');
         if ($userClass === null || ! class_exists($userClass)) {
             abort(500, 'Invite: user model not resolvable.');
         }
@@ -1388,15 +1399,15 @@ abstract class BaseSliceWebController extends Controller
         $user = (new $userClass)->forceFill([
             'name' => (string) ($record->{$decl['name_field']} ?? 'Invited user'),
             'email' => $data['email'],
-            'password' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(40)),
+            'password' => Hash::make(Str::random(40)),
         ]);
         $user->save();
         if ($decl['role'] !== null) {
             try {
-                $roleId = \Illuminate\Support\Facades\DB::table('roles')->where('name', $decl['role'])->value('id')
-                    ?? \Illuminate\Support\Facades\DB::table('roles')->where('display_name', $decl['role'])->value('id');
+                $roleId = DB::table('roles')->where('name', $decl['role'])->value('id')
+                    ?? DB::table('roles')->where('display_name', $decl['role'])->value('id');
                 if ($roleId) {
-                    \Illuminate\Support\Facades\DB::table('role_user')->insert(['role_id' => $roleId, 'user_id' => $user->getKey()]);
+                    DB::table('role_user')->insert(['role_id' => $roleId, 'user_id' => $user->getKey()]);
                 }
             } catch (\Throwable) {
                 // Role assignment is best-effort; the account exists.
@@ -1404,7 +1415,7 @@ abstract class BaseSliceWebController extends Controller
         }
         $record->forceFill([$decl['link'] => $user->getKey()])->save();
         try {
-            \Illuminate\Support\Facades\Password::broker()->sendResetLink(['email' => $data['email']]);
+            Password::broker()->sendResetLink(['email' => $data['email']]);
         } catch (\Throwable) {
             // Mail transport may be unconfigured; the link still stands.
         }
@@ -1416,7 +1427,7 @@ abstract class BaseSliceWebController extends Controller
     public function timerStart(Request $request, string|int $id)
     {
         $this->authorizeSlice('create');
-        $decl = \LaraSlice\Support\DirectoryUi::timerFromManifest($this->ownManifest());
+        $decl = DirectoryUi::timerFromManifest($this->ownManifest());
         $record = $this->getService()->findModel($id);
         if ($decl === null || $record === null || ! method_exists($record, $decl['relation'])) {
             abort(404);
@@ -1442,7 +1453,7 @@ abstract class BaseSliceWebController extends Controller
     public function timerStop(Request $request, string|int $id)
     {
         $this->authorizeSlice('create');
-        $decl = \LaraSlice\Support\DirectoryUi::timerFromManifest($this->ownManifest());
+        $decl = DirectoryUi::timerFromManifest($this->ownManifest());
         $record = $this->getService()->findModel($id);
         if ($decl === null || $record === null || ! method_exists($record, $decl['relation'])) {
             abort(404);
@@ -1459,7 +1470,7 @@ abstract class BaseSliceWebController extends Controller
         // total_hours / total_minutes are the log vocabulary of
         // the source domain — fill them when the table has them.
         // The start value may be an uncast string on the model.
-        $startedAt = \Illuminate\Support\Carbon::parse($log->{$decl['start_field']});
+        $startedAt = Carbon::parse($log->{$decl['start_field']});
         $schema = $log->getConnection()->getSchemaBuilder();
         if ($schema->hasColumn($log->getTable(), 'total_minutes')) {
             $log->total_minutes = (string) (int) $startedAt->diffInMinutes($end);
@@ -1501,7 +1512,7 @@ abstract class BaseSliceWebController extends Controller
 
         $open = $modelClass::query()
             ->where($userField, $uid)
-            ->whereDate($inField, \Illuminate\Support\Carbon::today())
+            ->whereDate($inField, Carbon::today())
             ->whereNull($outField)
             ->orderBy($inField)
             ->first();
@@ -1610,7 +1621,7 @@ abstract class BaseSliceWebController extends Controller
                         }
                         // Convention fallback: *_name columns (leave_types.type_name, ...)
                         if ($labelCol === 'id') {
-                            $segmentName = Str::afterLast($base, '_') . '_name';
+                            $segmentName = Str::afterLast($base, '_').'_name';
                             $nameCols = array_values(array_filter($columns, static fn ($cl) => str_ends_with($cl, '_name')));
                             foreach (array_merge([$segmentName], $nameCols) as $candidate) {
                                 if (in_array($candidate, $columns, true)) {
@@ -1807,7 +1818,7 @@ abstract class BaseSliceWebController extends Controller
         // hub. The /document route keeps the print layout.
         $docDef = $ownManifest['ui']['show']['document'] ?? null;
         if (is_array($docDef) && ! empty($docDef['primary'])) {
-            $document = \LaraSlice\Support\DirectoryUi::documentFromManifest($ownManifest, $record);
+            $document = DirectoryUi::documentFromManifest($ownManifest, $record);
             if ($document !== null) {
                 $own = $this->ownViewName('document');
                 $view = view()->exists($own) ? $own : 'laraslice::documents.default';
@@ -1820,11 +1831,11 @@ abstract class BaseSliceWebController extends Controller
                     'routeParameters' => $this->routeParameters(['id' => $id]),
                     'layout' => 'app',
                     'can' => $this->sliceAbilities(),
-                    'indexUrl' => \Illuminate\Support\Facades\Route::has($prefix.'index')
+                    'indexUrl' => Route::has($prefix.'index')
                         ? route($prefix.'index', $this->routeParameters()) : null,
-                    'editUrl' => \Illuminate\Support\Facades\Route::has($prefix.'edit')
+                    'editUrl' => Route::has($prefix.'edit')
                         ? route($prefix.'edit', $this->routeParameters(['id' => $id])) : null,
-                    'printUrl' => \Illuminate\Support\Facades\Route::has($prefix.'document')
+                    'printUrl' => Route::has($prefix.'document')
                         ? route($prefix.'document', $this->routeParameters(['id' => $id])) : null,
                 ]);
             }
@@ -1840,21 +1851,21 @@ abstract class BaseSliceWebController extends Controller
                 // controller's own manifest (duplicate slice names make
                 // name-based lookup unreliable) so the show view can
                 // render related-record tabs with live counts.
-                'relatedTabs' => \LaraSlice\Support\DirectoryUi::relatedTabsFromManifest($ownManifest, $record),
+                'relatedTabs' => DirectoryUi::relatedTabsFromManifest($ownManifest, $record),
                 // F3c: declared header stats (ui.show.stats) computed
                 // over the record's relations.
-                'showStats' => \LaraSlice\Support\DirectoryUi::showStatsFromManifest($ownManifest, $record),
-                'showWidgets' => \LaraSlice\Support\DirectoryUi::showWidgetsFromManifest($ownManifest, $record),
+                'showStats' => DirectoryUi::showStatsFromManifest($ownManifest, $record),
+                'showWidgets' => DirectoryUi::showWidgetsFromManifest($ownManifest, $record),
                 // Layout kit step 3: declared show composition
                 // (ui.show.composition) for the view's branches.
-                'showComposition' => \LaraSlice\Support\DirectoryUi::showCompositionFromManifest($ownManifest),
+                'showComposition' => DirectoryUi::showCompositionFromManifest($ownManifest),
                 // Hub tab curation: the declared fields-tab label
                 // (ui.show.tabs type: fields) — show views render it
                 // in place of the hard-coded 'Overview' when declared.
-                'fieldsTabLabel' => \LaraSlice\Support\DirectoryUi::fieldsTabLabelFromManifest($ownManifest),
+                'fieldsTabLabel' => DirectoryUi::fieldsTabLabelFromManifest($ownManifest),
                 'timerState' => $this->timerState($ownManifest, $record),
                 ...$this->overlayLayoutData(request()),
-                'documentUrl' => \Illuminate\Support\Facades\Route::has($this->resolveRouteName('document'))
+                'documentUrl' => Route::has($this->resolveRouteName('document'))
                     ? route($this->resolveRouteName('document'), $this->routeParameters(['id' => $id]))
                     : null,
             ]);
@@ -1948,7 +1959,7 @@ abstract class BaseSliceWebController extends Controller
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
         }
 
-        $document = \LaraSlice\Support\DirectoryUi::documentFromManifest($this->ownManifest(), $record);
+        $document = DirectoryUi::documentFromManifest($this->ownManifest(), $record);
         if ($document === null) {
             abort(404);
         }
@@ -2161,6 +2172,7 @@ abstract class BaseSliceWebController extends Controller
         if (! empty($manifest['owner_field'])) {
             return (string) $manifest['owner_field'];
         }
+
         return isset($manifest['fields']['user_id']) ? 'user_id' : null;
     }
 
@@ -2277,7 +2289,7 @@ abstract class BaseSliceWebController extends Controller
             foreach (['slice.yaml', 'slice.yml'] as $file) {
                 $path = $sliceDir.DIRECTORY_SEPARATOR.$file;
                 if (is_file($path)) {
-                    $data = \Symfony\Component\Yaml\Yaml::parseFile($path);
+                    $data = Yaml::parseFile($path);
 
                     return is_array($data) ? $data : [];
                 }
@@ -2332,7 +2344,7 @@ abstract class BaseSliceWebController extends Controller
                     break; // another slice shadows the shared namespace
                 }
             }
-            $unique = \LaraSlice\Core\Discovery\SliceManager::viewNamespaceForPath($sliceDir).'::'.$view;
+            $unique = SliceManager::viewNamespaceForPath($sliceDir).'::'.$view;
 
             return view()->exists($unique) ? $unique : $default;
         } catch (\Throwable) {
@@ -2394,15 +2406,17 @@ abstract class BaseSliceWebController extends Controller
             $ctrlPath = $ref->getFileName();
             // Controllers/XxxController.php -> slice manifest (two levels up)
             $sliceDir = dirname($ctrlPath, 2);
-            $yamlPath = $sliceDir . '/slice.yaml';
+            $yamlPath = $sliceDir.'/slice.yaml';
             if (file_exists($yamlPath)) {
-                $data = \Symfony\Component\Yaml\Yaml::parseFile($yamlPath);
+                $data = Yaml::parseFile($yamlPath);
+
                 return $data['ui'] ?? [];
             }
             // Core framework slices declare ui in slice.yaml
-            $jsonPath = $sliceDir . '/slice.yaml';
+            $jsonPath = $sliceDir.'/slice.yaml';
             if (file_exists($jsonPath)) {
                 $data = json_decode(file_get_contents($jsonPath), true);
+
                 return $data['ui'] ?? [];
             }
         } catch (\Throwable $e) {
@@ -2410,8 +2424,8 @@ abstract class BaseSliceWebController extends Controller
         }
 
         try {
-            $slice = app(\LaraSlice\Core\Discovery\SliceManager::class)->getSliceByRoutePrefix($this->getRoutePrefix());
-            if (!empty($slice->ui)) {
+            $slice = app(SliceManager::class)->getSliceByRoutePrefix($this->getRoutePrefix());
+            if (! empty($slice->ui)) {
                 return (array) $slice->ui;
             }
         } catch (\Throwable $e) {
@@ -2440,7 +2454,7 @@ abstract class BaseSliceWebController extends Controller
                 $ref->setAccessible(true);
                 $modelClass = $ref->invoke($service);
                 if ($modelClass && class_exists($modelClass)) {
-                    $model = new $modelClass();
+                    $model = new $modelClass;
                 }
             } catch (\Throwable $e) {
                 // Try alternative: get from filter or form class
@@ -2478,7 +2492,7 @@ abstract class BaseSliceWebController extends Controller
                     $dataKey = (string) ($card['key'] ?? $handle);
                     // Format money values
                     if (($card['formatter'] ?? '') === 'money') {
-                        $data[$dataKey] = '$' . number_format((float) $value, 2);
+                        $data[$dataKey] = '$'.number_format((float) $value, 2);
                     } else {
                         $data[$dataKey] = is_numeric($value) ? number_format($value) : $value;
                     }
@@ -2515,7 +2529,7 @@ abstract class BaseSliceWebController extends Controller
             return [];
         }
         try {
-            return \Illuminate\Support\Facades\DB::table($table)
+            return DB::table($table)
                 ->whereNotNull($labelCol)
                 ->where($labelCol, '!=', '')
                 ->distinct()
@@ -2543,7 +2557,8 @@ abstract class BaseSliceWebController extends Controller
             }
             if ($model) {
                 $values = $model->newQuery()->distinct()->pluck($field)->filter()->take(20);
-                return $values->map(fn ($v) => ['value' => $v, 'label' => \Illuminate\Support\Str::headline((string) $v)])->toArray();
+
+                return $values->map(fn ($v) => ['value' => $v, 'label' => Str::headline((string) $v)])->toArray();
             }
         } catch (\Throwable $e) {
             // Silently fail

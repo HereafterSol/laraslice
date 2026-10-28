@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Blueprint;
 
+use Illuminate\Support\Str;
 use LaraSlice\Generator\BladeSafeText;
 use LaraSlice\Schema\FieldType;
 
@@ -93,7 +94,7 @@ final class BlueprintValidator
 
             $modelHandle = $model['handle'] ?? null;
             if (is_string($modelHandle) && preg_match('/^[A-Z][A-Za-z0-9_]{0,62}$/', $modelHandle)) {
-                $modelHandle = \Illuminate\Support\Str::snake($modelHandle);
+                $modelHandle = Str::snake($modelHandle);
                 $model['handle'] = $modelHandle;
             }
             if (! $this->isHandle($modelHandle)) {
@@ -362,7 +363,7 @@ final class BlueprintValidator
             $errors[] = 'navigation must be a map.';
         }
 
-                if (isset($blueprint['ui'])) {
+        if (isset($blueprint['ui'])) {
             $this->validateUiBlock($blueprint['ui'], $blueprint, $errors);
         }
 
@@ -391,6 +392,7 @@ final class BlueprintValidator
 
         return $blueprint;
     }
+
     /**
      * Validate an isolated sub-part of a blueprint.
      */
@@ -633,7 +635,7 @@ final class BlueprintValidator
         }
 
         if (empty($blueprint['handle']) && ! empty($blueprint['name']) && is_string($blueprint['name'])) {
-            $blueprint['handle'] = \Illuminate\Support\Str::snake($blueprint['name']);
+            $blueprint['handle'] = Str::snake($blueprint['name']);
         }
 
         // Map-style fields: → models[0].fields list
@@ -649,12 +651,12 @@ final class BlueprintValidator
                 }
                 $list[] = array_merge($f, [
                     'handle' => $handle,
-                    'label' => $f['label'] ?? \Illuminate\Support\Str::headline((string) $handle),
+                    'label' => $f['label'] ?? Str::headline((string) $handle),
                     'type' => $f['type'] ?? 'string',
                     'required' => (bool) ($f['required'] ?? ! ($f['nullable'] ?? true)),
                 ]);
             }
-            $table = $blueprint['table'] ?? \Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($blueprint['handle'] ?? 'items'));
+            $table = $blueprint['table'] ?? Str::snake(Str::plural($blueprint['handle'] ?? 'items'));
             $blueprint['models'] = [[
                 'handle' => $blueprint['handle'] ?? 'item',
                 'table' => is_string($table) ? $table : 'items',
@@ -674,7 +676,7 @@ final class BlueprintValidator
                     $col['handle'] = $col['key'];
                 }
                 if (empty($col['label']) && ! empty($col['handle'] ?? $col['key'] ?? null)) {
-                    $blueprint['ui']['directory']['columns'][$i]['label'] = \Illuminate\Support\Str::headline((string) ($col['handle'] ?? $col['key']));
+                    $blueprint['ui']['directory']['columns'][$i]['label'] = Str::headline((string) ($col['handle'] ?? $col['key']));
                 }
             }
         }
@@ -700,7 +702,6 @@ final class BlueprintValidator
     }
 
     private function isHandle(mixed $value): bool
-
     {
         return is_string($value) && preg_match('/^[a-z][a-z0-9_]{0,62}$/', $value) === 1;
     }

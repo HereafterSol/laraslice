@@ -41,6 +41,7 @@ final class PermissionOverrides
         } catch (\Throwable) {
             // No table / no DB: no overrides.
         }
+
         return self::$memo[$userId] = $out;
     }
 
@@ -49,6 +50,7 @@ final class PermissionOverrides
         if (! is_object($user) || ! isset($user->id)) {
             return false;
         }
+
         return self::slugMatches(self::forUser((int) $user->id)['grant'], $ability);
     }
 
@@ -57,6 +59,7 @@ final class PermissionOverrides
         if (! is_object($user) || ! isset($user->id)) {
             return false;
         }
+
         return self::slugMatches(self::forUser((int) $user->id)['revoke'], $ability);
     }
 
@@ -71,6 +74,7 @@ final class PermissionOverrides
                 return true;
             }
         }
+
         return false;
     }
 

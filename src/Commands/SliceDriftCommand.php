@@ -24,6 +24,7 @@ class SliceDriftCommand extends Command
         $hasMind = is_file($path);
         if (! $hasMind && ! $this->option('structure')) {
             $this->warn('No Mind found at porting/system.yaml — nothing to audit against. Draft one with slice:plan:draft.');
+
             return self::SUCCESS;
         }
         if (! $hasMind) {
@@ -89,6 +90,7 @@ class SliceDriftCommand extends Command
 
         if ($findings === []) {
             $this->info('No drift: the Mind\'s promises, the Bodies\' access declarations, and the roles\' grants agree.');
+
             return self::SUCCESS;
         }
 
@@ -182,9 +184,9 @@ class SliceDriftCommand extends Command
      * permissions the registry lacks (view-own forms) and grant
      * each mapped role the slugs its club promises.
      *
-     * @param array<string, mixed> $mind
-     * @param array<string, list<string>> $roleGrants
-     * @param list<string> $registry
+     * @param  array<string, mixed>  $mind
+     * @param  array<string, list<string>>  $roleGrants
+     * @param  list<string>  $registry
      */
     private function reconcile(array $mind, array $roleGrants, array $registry): void
     {
@@ -199,10 +201,12 @@ class SliceDriftCommand extends Command
         foreach ($plan as $action) {
             if ($action['action'] === 'unresolvable') {
                 $this->warn("Unresolvable: club {$action['club']} pattern '{$action['pattern']}' names nothing in the registry — fix the Mind's vocabulary.");
+
                 continue;
             }
             if ($action['action'] === 'unmapped-club' || $action['role'] === null) {
                 $this->warn("Unmapped club {$action['club']}: declare maps_to in the Mind to reconcile '{$action['pattern']}'.");
+
                 continue;
             }
             $roleId = $roleIds[$action['role']] ?? null;
@@ -215,6 +219,7 @@ class SliceDriftCommand extends Command
                     $missing[$key] = true;
                     $this->warn("Mapped role missing: club {$action['club']} maps_to '{$action['role']}', but no role with that name exists — nothing was granted for this club. maps_to must name a role in THIS system.");
                 }
+
                 continue;
             }
             $slug = $action['slug'];

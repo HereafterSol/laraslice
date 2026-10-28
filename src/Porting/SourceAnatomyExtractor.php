@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace LaraSlice\Porting;
 
+use Illuminate\Support\Str;
+
 /**
  * Source anatomy extractor (P2 of the page-structure plan):
  * turns a rendered-page probe — landmarks and structure
@@ -151,6 +153,7 @@ class SourceAnatomyExtractor
                 }
                 if ($title !== '' && $label === $title) {
                     $identityObserved = $label;
+
                     continue;
                 }
                 $fields[] = [
@@ -170,6 +173,7 @@ class SourceAnatomyExtractor
             // its lines are identity highlights.
             if ($title !== '' && $sectionTitle === $title) {
                 $identityObserved = $identityObserved ?? $title;
+
                 continue;
             }
             $sections[] = [
@@ -390,7 +394,7 @@ class SourceAnatomyExtractor
             }
         }
         if ($text !== '' && strlen($text) <= 40) {
-            $singular = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slug));
+            $singular = Str::studly(Str::singular($slug));
             if ($text !== 'Add '.$singular) {
                 $hints['create_label'] = $text;
             }

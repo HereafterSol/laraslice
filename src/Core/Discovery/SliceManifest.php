@@ -161,7 +161,7 @@ class SliceManifest
 
         // Canonical ID: e.g. erp.finance.ledger or adjudication.complaints
         $idParts = array_filter([$this->app, $this->module, $this->name]);
-        $slugParts = array_map(fn ($p) => \Illuminate\Support\Str::slug($p), $idParts);
+        $slugParts = array_map(fn ($p) => Str::slug($p), $idParts);
         $this->canonical_id = $data['canonical_id'] ?? implode('.', $slugParts);
 
         $this->table_prefix = $data['table_prefix'] ?? null;
@@ -187,7 +187,7 @@ class SliceManifest
         if ($realApp && $realPath && str_starts_with($realPath, $realApp)) {
             $relative = trim(substr($realPath, strlen($realApp)), DIRECTORY_SEPARATOR);
             $parts = array_filter(explode(DIRECTORY_SEPARATOR, $relative));
-            $studlyParts = array_map(fn ($p) => \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($p)), $parts);
+            $studlyParts = array_map(fn ($p) => Str::studly(Str::slug($p)), $parts);
 
             return config('laraslice.slices_namespace', 'App\\Slices').'\\'.implode('\\', $studlyParts);
         }
@@ -195,13 +195,13 @@ class SliceManifest
         if ($realCore && $realPath && str_starts_with($realPath, $realCore)) {
             $relative = trim(substr($realPath, strlen($realCore)), DIRECTORY_SEPARATOR);
             $parts = array_filter(explode(DIRECTORY_SEPARATOR, $relative));
-            $studlyParts = array_map(fn ($p) => \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($p)), $parts);
+            $studlyParts = array_map(fn ($p) => Str::studly(Str::slug($p)), $parts);
 
             return 'LaraSlice\\Slices\\'.implode('\\', $studlyParts);
         }
 
         if ($this->domain) {
-            $domainPart = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::slug($this->domain));
+            $domainPart = Str::studly(Str::slug($this->domain));
 
             return config('laraslice.slices_namespace', 'App\\Slices')."\\{$domainPart}\\{$this->name}";
         }

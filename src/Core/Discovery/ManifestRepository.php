@@ -2,6 +2,9 @@
 
 namespace LaraSlice\Core\Discovery;
 
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\Yaml\Yaml;
+
 /**
  * Reads and writes slice manifests in one canonical shape.
  *
@@ -60,11 +63,12 @@ final class ManifestRepository
                 $manifest = self::read($yaml);
                 // Round-trip check: re-dump and parse must match
                 self::assertRoundTrip($manifest, $yaml);
+
                 return $manifest;
             } catch (\Throwable $e) {
                 throw new \RuntimeException(
                     "Malformed YAML at {$yaml}: ".$e->getMessage()
-                    ." — fix the YAML or restore from git. JSON fallback was removed in Phase 4."
+                    .' — fix the YAML or restore from git. JSON fallback was removed in Phase 4.'
                 );
             }
         }
@@ -72,7 +76,7 @@ final class ManifestRepository
         if ($hasJson) {
             throw new \RuntimeException(
                 "Slice at {$dir} is JSON-only. YAML is required. "
-                ."Run: php artisan slice:migrate-json-to-yaml"
+                .'Run: php artisan slice:migrate-json-to-yaml'
             );
         }
 
@@ -82,6 +86,7 @@ final class ManifestRepository
     private static function isYamlPath(string $file): bool
     {
         $lower = strtolower($file);
+
         return str_ends_with($lower, '.yaml') || str_ends_with($lower, '.yml');
     }
 
@@ -90,13 +95,14 @@ final class ManifestRepository
      */
     private static function parseYaml(string $contents, string $file): array
     {
-        if (! class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+        if (! class_exists(Yaml::class)) {
             throw new \RuntimeException("symfony/yaml is required to read {$file}");
         }
-        $data = \Symfony\Component\Yaml\Yaml::parse($contents);
+        $data = Yaml::parse($contents);
         if (! is_array($data)) {
             throw new \RuntimeException("YAML manifest must be a map: {$file}");
         }
+
         return self::normalize($data);
     }
 
@@ -105,16 +111,16 @@ final class ManifestRepository
      */
     private static function assertRoundTrip(array $manifest, string $yamlFile): void
     {
-        if (! class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+        if (! class_exists(Yaml::class)) {
             return;
         }
-        $dumped = \Symfony\Component\Yaml\Yaml::dump(
+        $dumped = Yaml::dump(
             self::normalize($manifest),
             8,
             2,
-            \Symfony\Component\Yaml\Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+            Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
         );
-        $reparsed = \Symfony\Component\Yaml\Yaml::parse($dumped);
+        $reparsed = Yaml::parse($dumped);
         if (! is_array($reparsed)) {
             throw new \RuntimeException("YAML round-trip failed for {$yamlFile}");
         }
@@ -139,9 +145,10 @@ final class ManifestRepository
 
     private static function warn(string $message): void
     {
-        if (class_exists(\Illuminate\Support\Facades\Log::class)) {
+        if (class_exists(Log::class)) {
             try {
-                \Illuminate\Support\Facades\Log::warning('[LaraSlice] '.$message);
+                Log::warning('[LaraSlice] '.$message);
+
                 return;
             } catch (\Throwable $e) {
                 // fall through
@@ -208,15 +215,15 @@ final class ManifestRepository
             $yamlPath = $pathOrDir;
         }
 
-        if (! class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+        if (! class_exists(Yaml::class)) {
             throw new \RuntimeException('symfony/yaml is required to write slice.yaml');
         }
 
-        $yaml = \Symfony\Component\Yaml\Yaml::dump(
+        $yaml = Yaml::dump(
             self::normalize($manifest),
             8,
             2,
-            \Symfony\Component\Yaml\Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+            Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
         );
         if (file_put_contents($yamlPath, $yaml, LOCK_EX) === false) {
             throw new \RuntimeException("Unable to write slice YAML: {$yamlPath}");
@@ -271,6 +278,7 @@ final class ManifestRepository
                 $manifest = self::read($jsonPath);
             } catch (\Throwable $e) {
                 $skipped++;
+
                 continue;
             }
             $paths[] = $dir;
@@ -315,7 +323,7 @@ final class ManifestRepository
                 $out[] = '+'.$right;
             }
         }
+
         return $changes === 0 ? '(no changes)' : implode("\n", $out);
     }
-
 }

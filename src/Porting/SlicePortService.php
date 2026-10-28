@@ -2,9 +2,17 @@
 
 namespace LaraSlice\Porting;
 
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
+use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Generator\SliceGenerator;
+use LaraSlice\Generator\SliceName;
+use LaraSlice\Slices\Workflows\Services\WorkflowEngineService;
+use LaraSlice\Support\FieldInference;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;
 
@@ -49,7 +57,7 @@ class SlicePortService
      * @param  string  $repoUrl  e.g. https://github.com/acme/legacy-erp.git
      * @param  string|null  $branch  Branch or tag to check out (null = default)
      * @param  string|null  $token  Personal access token for private repos
-     * @return string  Local path of the cloned repository
+     * @return string Local path of the cloned repository
      *
      * @throws \InvalidArgumentException on invalid URL or failed clone
      */
@@ -147,6 +155,7 @@ class SlicePortService
                 return $meta;
             }
         }
+
         return [];
     }
 
@@ -390,7 +399,7 @@ class SlicePortService
                     $sourceConnection['username'] ?? 'root',
                     $sourceConnection['password'] ?? ''
                 );
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $dataImport = ['success' => false, 'error' => $e->getMessage()];
             }
         }
@@ -514,7 +523,7 @@ class SlicePortService
             'Settings' => ['setting', 'config', 'dashboard', 'document', 'category', 'custom_field'],
         ];
 
-        $lower = strtolower($sliceName . '_' . $primaryTable);
+        $lower = strtolower($sliceName.'_'.$primaryTable);
         foreach ($clusters as $domain => $keywords) {
             foreach ($keywords as $kw) {
                 if (str_contains($lower, $kw)) {
@@ -567,7 +576,7 @@ class SlicePortService
             // target name.
             try {
                 $table = isset($info['primary_table']) ? self::targetTableName((string) $info['primary_table']) : null;
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $table = isset($info['primary_table']) ? (string) $info['primary_table'] : null;
             }
             $incumbent = $claimed[$normalize($name)] ?? null;
@@ -579,10 +588,11 @@ class SlicePortService
             if ($incumbent === null || $sameSlice) {
                 $mapping[$name] = $info;
                 $claimed[$normalize($name)] = ['name' => $name, 'primary_table' => $table, 'app' => $app, 'path' => null];
+
                 continue;
             }
 
-            $base = \Illuminate\Support\Str::studly($app).$name;
+            $base = Str::studly($app).$name;
             $candidate = $base;
             $n = 2;
             while (isset($claimed[$normalize($candidate)])) {
@@ -611,7 +621,7 @@ class SlicePortService
         if (! is_dir($slicesPath)) {
             return $existing;
         }
-        $repo = new \LaraSlice\Core\Discovery\ManifestRepository;
+        $repo = new ManifestRepository;
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($slicesPath, \FilesystemIterator::SKIP_DOTS)
         );
@@ -622,7 +632,7 @@ class SlicePortService
             $dir = $file->getPath();
             try {
                 $raw = $repo->readFromSliceDir($dir);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 continue;
             }
             if (! is_array($raw)) {
@@ -652,7 +662,7 @@ class SlicePortService
      */
     public function scaffoldSlices(array $inspection, string $app = 'ERP', ?string $superDomain = null): array
     {
-        $generator = new \LaraSlice\Generator\SliceGenerator;
+        $generator = new SliceGenerator;
         $created = [];
         $errors = [];
 
@@ -684,14 +694,14 @@ class SlicePortService
             foreach ($wf['states'] as $state) {
                 $states[] = [
                     'slug' => $state,
-                    'label' => \Illuminate\Support\Str::headline($state),
+                    'label' => Str::headline($state),
                     'initial' => $state === ($wf['initial_state'] ?? 'draft'),
                 ];
             }
             $transitions = [];
             foreach ($wf['transitions'] as $t) {
                 $transitions[] = [
-                    'slug' => \Illuminate\Support\Str::snake($t['name']),
+                    'slug' => Str::snake($t['name']),
                     'name' => $t['label'],
                     'from' => ['draft'], // Conservative: allow from draft
                     'to' => $t['to_state'],
@@ -699,7 +709,7 @@ class SlicePortService
             }
             $workflowConfigs[$sliceName] = [
                 'enabled' => true,
-                'slug' => \Illuminate\Support\Str::slug($sliceName),
+                'slug' => Str::slug($sliceName),
                 'name' => "{$sliceName} Workflow",
                 'state_field' => 'status',
                 'initial_state' => $wf['initial_state'] ?? 'draft',
@@ -724,7 +734,7 @@ class SlicePortService
                     }
                     $seenFields[$fName] = true;
 
-                    $type = match($f['type']) {
+                    $type = match ($f['type']) {
                         'integer' => 'integer',
                         'boolean' => 'boolean',
                         'datetime', 'date' => 'timestamp',
@@ -774,10 +784,10 @@ class SlicePortService
                 $sliceDir = $generator->generate($sliceName, $generatorFields, ! empty($workflowConfigs[$sliceName]), $options);
                 $nsParts = [];
                 if ($superDomain) {
-                    $nsParts[] = \Illuminate\Support\Str::studly($superDomain);
+                    $nsParts[] = Str::studly($superDomain);
                 }
-                $nsParts[] = \Illuminate\Support\Str::studly($app);
-                $nsParts[] = \Illuminate\Support\Str::studly($module);
+                $nsParts[] = Str::studly($app);
+                $nsParts[] = Str::studly($module);
                 $nsParts[] = $sliceName;
                 $sliceNamespace = 'App\\Slices\\'.implode('\\', $nsParts);
 
@@ -805,7 +815,7 @@ class SlicePortService
                     'child_tables' => $scaffoldedChildren,
                     'path' => $sliceDir,
                 ];
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $errors[$sliceName] = $e->getMessage();
             }
         }
@@ -849,7 +859,7 @@ class SlicePortService
                 continue;
             }
             $seen[$fn] = true;
-            $t = match($f['type']) {
+            $t = match ($f['type']) {
                 'integer' => 'unsignedBigInteger',
                 'boolean' => 'boolean',
                 'datetime', 'date' => 'timestamp',
@@ -889,8 +899,8 @@ return new class extends Migration {
 };
 PHP;
 
-        File::ensureDirectoryExists($sliceDir . '/Migrations');
-        File::put($sliceDir . "/Migrations/{$timestamp}_create_{$targetChildTable}_table.php", $migrationContent);
+        File::ensureDirectoryExists($sliceDir.'/Migrations');
+        File::put($sliceDir."/Migrations/{$timestamp}_create_{$targetChildTable}_table.php", $migrationContent);
 
         // 2. Generate child model
         $tenantTraitUse = $multitenant ? "\nuse LaraSlice\\Core\\Tenancy\\Traits\\HasTenant;" : '';
@@ -916,8 +926,8 @@ class {$childModelName} extends Model
 }
 PHP;
 
-        File::ensureDirectoryExists($sliceDir . '/Models');
-        File::put($sliceDir . "/Models/{$childModelName}.php", $childModelContent);
+        File::ensureDirectoryExists($sliceDir.'/Models');
+        File::put($sliceDir."/Models/{$childModelName}.php", $childModelContent);
     }
 
     /**
@@ -939,8 +949,8 @@ PHP;
         }
 
         try {
-            $yaml = \Symfony\Component\Yaml\Yaml::parseFile($yamlPath);
-        } catch (\Throwable) {
+            $yaml = Yaml::parseFile($yamlPath);
+        } catch (Throwable) {
             return;
         }
         if (! is_array($yaml)) {
@@ -952,11 +962,11 @@ PHP;
             $existingHandles[] = $m['handle'] ?? null;
         }
 
-        $rootHandle = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($primaryTable));
+        $rootHandle = Str::snake(Str::singular($primaryTable));
         $relations = [];
 
         foreach ($childTables as $childTable) {
-            $childHandle = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($childTable));
+            $childHandle = Str::snake(Str::singular($childTable));
             if (in_array($childHandle, $existingHandles, true)) {
                 continue;
             }
@@ -974,13 +984,13 @@ PHP;
                 $seen[$fn] = true;
                 $fields[] = [
                     'handle' => $fn,
-                    'label' => $f['label'] ?? \Illuminate\Support\Str::headline($fn),
+                    'label' => $f['label'] ?? Str::headline($fn),
                     'type' => $f['type'],
                     'required' => false,
                 ];
             }
 
-            $fk = \Illuminate\Support\Str::singular($primaryTable).'_id';
+            $fk = Str::singular($primaryTable).'_id';
             // Only wire the relation if the FK column actually exists on the child.
             // Lookup tables (e.g. invoice_statuses with only name/code) are scaffolded
             // as standalone models but do not belong in this aggregate's manifest.
@@ -1025,7 +1035,7 @@ PHP;
             $yaml['porting_notes'] = $portingNotes;
         }
 
-        File::put($yamlPath, \Symfony\Component\Yaml\Yaml::dump($yaml, 10, 2));
+        File::put($yamlPath, Yaml::dump($yaml, 10, 2));
     }
 
     /**
@@ -1036,7 +1046,7 @@ PHP;
     {
         $tables = [];
         try {
-            $conn = \Illuminate\Support\Facades\DB::connection($connection);
+            $conn = DB::connection($connection);
             $pdo = $conn->getPdo();
             $driver = $conn->getDriverName();
 
@@ -1052,7 +1062,7 @@ PHP;
                 $tableNames = $stmt->fetchAll(\PDO::FETCH_COLUMN);
             } else {
                 // Portable fallback
-                $tableNames = \Illuminate\Support\Facades\Schema::connection($connection)->getTableListing();
+                $tableNames = Schema::connection($connection)->getTableListing();
             }
 
             foreach ($tableNames as $t) {
@@ -1063,7 +1073,7 @@ PHP;
                 $cols = [];
                 $fks = [];
                 try {
-                    $rawCols = \Illuminate\Support\Facades\Schema::connection($connection)->getColumns($t);
+                    $rawCols = Schema::connection($connection)->getColumns($t);
                     foreach ($rawCols as $rc) {
                         $colName = $rc['name'] ?? '';
                         $cols[] = [
@@ -1077,7 +1087,8 @@ PHP;
                             $fks[] = $colName;
                         }
                     }
-                } catch (Throwable $e) {}
+                } catch (Throwable $e) {
+                }
 
                 $tables[$t] = [
                     'name' => $t,
@@ -1087,7 +1098,8 @@ PHP;
                     'table_source' => 'source_database',
                 ];
             }
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+        }
 
         return $tables;
     }
@@ -1161,6 +1173,7 @@ PHP;
             }
             if (is_file($root) && str_ends_with(strtolower($root), '.sql')) {
                 $files[] = $root;
+
                 continue;
             }
             if (! is_dir($root)) {
@@ -1231,7 +1244,6 @@ PHP;
     }
 
     private function extractTablesFromMigrations(string $migDir): array
-
     {
         $tables = [];
         if (! File::isDirectory($migDir)) {
@@ -1240,9 +1252,9 @@ PHP;
 
         $q = chr(39);
         $dq = chr(34);
-        $patternCreate = "/Schema::create\\s*\\(\\s*[" . $q . $dq . "]([^" . $q . $dq . "]+)[" . $q . $dq . "]/";
-        $patternCol = "/\\\$table->([a-zA-Z0-9_]+)\\s*\\(\\s*[" . $q . $dq . "]([^" . $q . $dq . "]+)[" . $q . $dq . "]/";
-        $patternFk = "/(?:foreignId|foreign)\\s*\\(\\s*[" . $q . $dq . "]([^" . $q . $dq . "]+)[" . $q . $dq . "]\\)/";
+        $patternCreate = '/Schema::create\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
+        $patternCol = '/\\$table->([a-zA-Z0-9_]+)\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
+        $patternFk = '/(?:foreignId|foreign)\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']\\)/';
 
         foreach (File::files($migDir) as $file) {
             $content = $file->getContents();
@@ -1315,7 +1327,8 @@ PHP;
                             'type' => $rc['type_name'] ?? 'string',
                         ];
                     }
-                } catch (Throwable $e) {}
+                } catch (Throwable $e) {
+                }
 
                 $tables[$t] = [
                     'name' => $t,
@@ -1324,7 +1337,8 @@ PHP;
                     'migration' => 'database_live',
                 ];
             }
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+        }
 
         return $tables;
     }
@@ -1355,7 +1369,7 @@ PHP;
             $name = $tableName;
         }
 
-        return \Illuminate\Support\Str::studly($name);
+        return Str::studly($name);
     }
 
     /**
@@ -1392,7 +1406,6 @@ PHP;
     }
 
     private function classifyTables(array $tables, array $servedRoots = []): array
-
     {
         $classified = [
             'roots' => [],
@@ -1445,6 +1458,7 @@ PHP;
         foreach ($tables as $tName => $tInfo) {
             if (preg_match($systemPattern, $tName) || in_array(strtolower($tName), self::FRAMEWORK_INFRASTRUCTURE_TABLES, true)) {
                 $classified['system'][$tName] = $tInfo;
+
                 continue;
             }
 
@@ -1461,6 +1475,7 @@ PHP;
                 || in_array($tName, $settingsExact, true)
             ) {
                 $classified['settings'][$tName] = $tInfo;
+
                 continue;
             }
 
@@ -1472,9 +1487,10 @@ PHP;
                 fn ($fk) => ! preg_match($actorOrTenantFkPattern, $fk)
             ));
 
-            $nonFkColumns = array_filter($tInfo['columns'] ?? [], function($c) {
+            $nonFkColumns = array_filter($tInfo['columns'] ?? [], function ($c) {
                 $cn = is_array($c) ? ($c['name'] ?? '') : ($c->name ?? '');
-                return !in_array($cn, ['id', 'created_at', 'updated_at', 'deleted_at'], true) && !str_ends_with($cn, '_id');
+
+                return ! in_array($cn, ['id', 'created_at', 'updated_at', 'deleted_at'], true) && ! str_ends_with($cn, '_id');
             });
 
             $pivotExact = ['role_user', 'permission_role', 'model_has_roles', 'model_has_permissions', 'role_has_permissions', 'user_role', 'role_permission'];
@@ -1484,6 +1500,7 @@ PHP;
                 || (count($relationshipFks) >= 2 && count($nonFkColumns) === 0)
             ) {
                 $classified['pivots'][$tName] = $tInfo;
+
                 continue;
             }
 
@@ -1492,6 +1509,7 @@ PHP;
             // Taxonomy detection: lookup tables match taxonomy pattern
             if (! $isCanonicalRoot && preg_match($taxonomyPattern, $tName)) {
                 $classified['taxonomies'][$tName] = $tInfo;
+
                 continue;
             }
 
@@ -1587,15 +1605,17 @@ PHP;
 
                 // Pass 1: Exact singular/plural match (e.g. project_id -> Projects, task_id -> Tasks)
                 foreach (array_keys($mapping) as $sName) {
-                    if (strcasecmp($sName, $parentBase) === 0 
-                        || strcasecmp($sName, Str::plural($parentBase)) === 0 
+                    if (strcasecmp($sName, $parentBase) === 0
+                        || strcasecmp($sName, Str::plural($parentBase)) === 0
                         || strcasecmp(Str::singular($sName), $parentBase) === 0) {
                         $mapping[$sName]['child_tables'][] = $cName;
                         $attached = true;
                         break;
                     }
                 }
-                if ($attached) break;
+                if ($attached) {
+                    break;
+                }
 
                 // Pass 2: Prefix match only if no exact slice exists
                 foreach (array_keys($mapping) as $sName) {
@@ -1605,15 +1625,17 @@ PHP;
                         break;
                     }
                 }
-                if ($attached) break;
+                if ($attached) {
+                    break;
+                }
             }
 
             // Fallback: name prefix match (e.g. project_time_logs -> Projects, invoice_items -> Invoices)
             if (! $attached) {
                 $cPrefix = Str::studly(explode('_', $cName)[0] ?? '');
                 foreach (array_keys($mapping) as $sName) {
-                    if (strcasecmp($sName, $cPrefix) === 0 
-                        || strcasecmp($sName, Str::plural($cPrefix)) === 0 
+                    if (strcasecmp($sName, $cPrefix) === 0
+                        || strcasecmp($sName, Str::plural($cPrefix)) === 0
                         || strcasecmp(Str::singular($sName), $cPrefix) === 0) {
                         $mapping[$sName]['child_tables'][] = $cName;
                         $attached = true;
@@ -1669,8 +1691,8 @@ PHP;
             $attached = false;
             $tPrefix = Str::studly(explode('_', $tName)[0] ?? '');
             foreach (array_keys($mapping) as $sName) {
-                if (strcasecmp($sName, $tPrefix) === 0 
-                    || strcasecmp($sName, Str::plural($tPrefix)) === 0 
+                if (strcasecmp($sName, $tPrefix) === 0
+                    || strcasecmp($sName, Str::plural($tPrefix)) === 0
                     || strcasecmp(Str::singular($sName), $tPrefix) === 0) {
                     $mapping[$sName]['child_tables'][] = $tName;
                     $attached = true;
@@ -1712,7 +1734,9 @@ PHP;
                         break;
                     }
                 }
-                if ($attached) break;
+                if ($attached) {
+                    break;
+                }
             }
             if (! $attached) {
                 $unmappedPivots[] = $pName;
@@ -1721,8 +1745,13 @@ PHP;
 
         // 4. Sort slices by child count descending (most important core aggregate root first, MasterData last)
         uasort($mapping, function ($a, $b) {
-            if (($a['taxonomy'] ?? false) && ! ($b['taxonomy'] ?? false)) return 1;
-            if (! ($a['taxonomy'] ?? false) && ($b['taxonomy'] ?? false)) return -1;
+            if (($a['taxonomy'] ?? false) && ! ($b['taxonomy'] ?? false)) {
+                return 1;
+            }
+            if (! ($a['taxonomy'] ?? false) && ($b['taxonomy'] ?? false)) {
+                return -1;
+            }
+
             return count($b['child_tables'] ?? []) <=> count($a['child_tables'] ?? []);
         });
 
@@ -1829,7 +1858,7 @@ PHP;
         $hostSeederDir = database_path('seeders');
         File::ensureDirectoryExists($hostSeederDir);
         $hostSeederPath = $hostSeederDir.DIRECTORY_SEPARATOR.$className.'.php';
-        File::put($hostSeederPath, str_replace("namespace App\\Slices\\{$domain}\\MasterData\\Database\\Seeders;", "namespace Database\\Seeders;", $code));
+        File::put($hostSeederPath, str_replace("namespace App\\Slices\\{$domain}\\MasterData\\Database\\Seeders;", 'namespace Database\\Seeders;', $code));
         $created[] = $hostSeederPath;
 
         return $created;
@@ -2119,7 +2148,7 @@ PHP;
             if (! $isTaxonomy) {
                 foreach ($childTables as $childTable) {
                     $childHandle = Str::snake(Str::singular($childTable));
-                    $fk = Str::singular($primaryTable) . '_id';
+                    $fk = Str::singular($primaryTable).'_id';
                     $rootRelations[] = [
                         'name' => Str::snake($childTable),
                         'type' => 'hasMany',
@@ -2158,7 +2187,7 @@ PHP;
                 $childCols = $tables[$childTable]['columns'] ?? [];
                 $childFields = $this->convertColumnsToFields($childCols);
                 $childHandle = Str::snake(Str::singular($childTable));
-                $fk = Str::singular($primaryTable) . '_id';
+                $fk = Str::singular($primaryTable).'_id';
 
                 $childRelations = $isTaxonomy ? [] : [
                     [
@@ -2264,7 +2293,7 @@ PHP;
             ];
 
             // 6. Navigation Icon & Grouping
-            $icon = match(strtolower($sliceName)) {
+            $icon = match (strtolower($sliceName)) {
                 'projects' => 'briefcase',
                 'tasks' => 'check-square',
                 'timelogs', 'projecttimelogs' => 'clock',
@@ -2313,7 +2342,7 @@ PHP;
                     'icon' => $icon,
                     // Module group (Work/Finance/HR) — not the ERP domain namespace
                     'group' => $info['module'] ?? $info['navigation']['group'] ?? $this->detectModuleForSlice($sliceName, $primaryTable),
-                    'route' => Str::slug($domain) . '/' . Str::slug($sliceHandle),
+                    'route' => Str::slug($domain).'/'.Str::slug($sliceHandle),
                     // Akaunting-style: numeric ordering for easy insertion, permission-gated
                     'order' => $info['nav_order'] ?? 50,
                     'permission' => Str::snake(Str::singular($sliceName)).'.view',
@@ -2376,7 +2405,7 @@ PHP;
             'total_slices' => count($studioSlices),
             'tenancy' => $inspection['tenancy'] ?? ['enabled' => false],
             'generated_at' => date('Y-m-d H:i:s'),
-            'slices' => array_map(function($s) {
+            'slices' => array_map(function ($s) {
                 return $s['blueprint'] ?? $s;
             }, $studioSlices),
         ];
@@ -2391,7 +2420,7 @@ PHP;
      * Analyze source system's navigation structure.
      * Detects how the source groups menu items (dropdowns, order, icons, permissions).
      */
-    
+
     /**
      * Merge proposed module sidebar with authentic source navigation (legacy menu.blade / x-menu-item sidebars).
      *
@@ -2505,7 +2534,7 @@ PHP;
         ];
     }
 
-public function analyzeSourceNavigation(string $sourcePath): array
+    public function analyzeSourceNavigation(string $sourcePath): array
     {
         $navigation = [
             'groups' => [],
@@ -2532,7 +2561,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $navigation['source'] = 'menu_listener';
                 $navigation['groups'] = array_merge(
                     $navigation['groups'],
-                    array_map(fn($g) => array_merge($g, ['context' => $isPortal ? 'portal' : 'admin']), $groups)
+                    array_map(fn ($g) => array_merge($g, ['context' => $isPortal ? 'portal' : 'admin']), $groups)
                 );
             }
         }
@@ -2585,7 +2614,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
         }
 
-        usort($groups, fn($a, $b) => $a['order'] <=> $b['order']);
+        usort($groups, fn ($a, $b) => $a['order'] <=> $b['order']);
+
         return $groups;
     }
 
@@ -2609,7 +2639,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     ];
                 }
             }
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+        }
 
         return $groups;
     }
@@ -2642,7 +2673,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $key = $m[1];
                 $parts = explode('.', $key);
 
-                return \Illuminate\Support\Str::headline(str_replace(['_', '-'], ' ', end($parts)));
+                return Str::headline(str_replace(['_', '-'], ' ', end($parts)));
             }
             if (preg_match('/:text\s*=\s*"([^"]+)"/', $attrs, $m)) {
                 return trim($m[1]);
@@ -2769,7 +2800,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
     private function parseBladeNavigation(string $sourcePath): array
     {
         $sidebarFiles = [];
-        $viewsDir = $sourcePath . '/resources/views';
+        $viewsDir = $sourcePath.'/resources/views';
         if (! is_dir($viewsDir)) {
             return ['items' => [], 'contexts' => []];
         }
@@ -2849,7 +2880,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
 
             // Split into <li> elements with optional @if wrap
-            $liPattern = chr(47) . '(?:@if\s*\((.*?)\)\s*)?<li>\s*<a\s+[^>]*href=["\x27]{{\s*route\(\s*["\x27]([^"\x27]+)["\x27](?:\s*,\s*[^)]+)?\s*\)\s*}}["\x27][^>]*>(.*?)<\/a>\s*<\/li>(?:\s*@endif)?' . chr(47) . 's';
+            $liPattern = chr(47).'(?:@if\s*\((.*?)\)\s*)?<li>\s*<a\s+[^>]*href=["\x27]{{\s*route\(\s*["\x27]([^"\x27]+)["\x27](?:\s*,\s*[^)]+)?\s*\)\s*}}["\x27][^>]*>(.*?)<\/a>\s*<\/li>(?:\s*@endif)?'.chr(47).'s';
             if (preg_match_all($liPattern, $rawContent, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $m) {
                     $cond = trim($m[1] ?? '');
@@ -2857,7 +2888,9 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     $innerHtml = $m[3];
 
                     // Skip non-nav routes
-                    if (in_array($route, ['logout'], true)) continue;
+                    if (in_array($route, ['logout'], true)) {
+                        continue;
+                    }
 
                     // Extract roles from condition: in_array($role, ['Assistant Registrar', ...])
                     $roles = [];
@@ -2978,7 +3011,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $sourceConn = config('laraslice.porting.source_connection');
         if ($sourceConn) {
             try {
-                $conn = \Illuminate\Support\Facades\DB::connection($sourceConn);
+                $conn = DB::connection($sourceConn);
                 $conn->getPdo();
                 $sources['real_data'] = [
                     'available' => true,
@@ -3033,7 +3066,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     [
                         'label' => 'Dashboard',
                         'icon' => 'layout-dashboard',
-                        'route' => '/' . Str::slug($domain) . '/dashboard',
+                        'route' => '/'.Str::slug($domain).'/dashboard',
                         'badge' => null,
                         'description' => 'System executive KPIs, workload summaries, and analytics',
                     ],
@@ -3085,7 +3118,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $formattedModules = [];
         foreach ($modulesMap as $mName => $slices) {
             $mSlug = Str::slug($mName);
-            $icon = match(strtolower($mName)) {
+            $icon = match (strtolower($mName)) {
                 'work', 'projectexecution' => 'briefcase',
                 'salescrm', 'crm' => 'target',
                 'financialaccounting', 'finance' => 'landmark',
@@ -3116,7 +3149,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $sidebarItems[] = [
                     'slice' => $s['name'],
                     'label' => Str::headline($s['name']),
-                    'icon' => match(strtolower($s['name'])) {
+                    'icon' => match (strtolower($s['name'])) {
                         'projects' => 'briefcase',
                         'tasks' => 'check-square',
                         'invoices', 'estimates' => 'file-text',
@@ -3137,9 +3170,9 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'masterdata', 'referencedata' => 'database',
                         default => 'circle',
                     },
-                    'route' => '/' . Str::slug($domain) . '/' . $mSlug . '/' . $s['handle'],
+                    'route' => '/'.Str::slug($domain).'/'.$mSlug.'/'.$s['handle'],
                     'badge' => $badge,
-                    'tabs' => array_merge(['Overview'], array_map(function($c) {
+                    'tabs' => array_merge(['Overview'], array_map(function ($c) {
                         return Str::headline($c['table']);
                     }, array_slice($s['child_tables'], 0, 5))),
                 ];
@@ -3160,10 +3193,12 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $key = strtolower((string) ($g['name'] ?? $g['label'] ?? ''));
             if ($key === '') {
                 $deduped[] = $g;
+
                 continue;
             }
             if (! isset($deduped[$key])) {
                 $deduped[$key] = $g;
+
                 continue;
             }
             // merge items
@@ -3213,6 +3248,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     $key = strtolower((string) ($g['name'] ?? $g['label'] ?? ''));
                     if ($key === '' || ! isset($deduped[$key])) {
                         $deduped[$key === '' ? (count($deduped)) : $key] = $g;
+
                         continue;
                     }
                     $existing = $deduped[$key]['items'] ?? [];
@@ -3230,6 +3266,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     $deduped[$key]['items'] = $existing;
                 }
                 $preview['groups'] = array_values($deduped);
+
                 return $preview;
             })(),
             'modules' => $formattedModules,
@@ -3270,12 +3307,12 @@ public function analyzeSourceNavigation(string $sourcePath): array
 
         // 1. Run standard migrate (host + package + already-registered slice paths)
         try {
-            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            $out = trim((string) \Illuminate\Support\Facades\Artisan::output());
+            Artisan::call('migrate', ['--force' => true]);
+            $out = trim((string) Artisan::output());
             if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
                 $outputs[] = $out;
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $errors['default'] = $e->getMessage();
         }
 
@@ -3304,31 +3341,32 @@ public function analyzeSourceNavigation(string $sourcePath): array
             // silent no-op in the migrator, not an error).
             $useRealpath = $relative === str_replace('\\', '/', $mp);
             try {
-                \Illuminate\Support\Facades\Artisan::call('migrate', array_filter([
+                Artisan::call('migrate', array_filter([
                     '--force' => true,
                     '--realpath' => $useRealpath ? true : null,
                     '--path' => $useRealpath ? $mp : $relative,
                 ]));
-                $out = trim((string) \Illuminate\Support\Facades\Artisan::output());
+                $out = trim((string) Artisan::output());
                 if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
                     $outputs[] = $out;
                 }
-            } catch (\Throwable $pe) {
+            } catch (Throwable $pe) {
                 if ($useRealpath) {
                     $errors[$relative] = $pe->getMessage();
+
                     continue;
                 }
                 try {
-                    \Illuminate\Support\Facades\Artisan::call('migrate', [
+                    Artisan::call('migrate', [
                         '--force' => true,
                         '--realpath' => true,
                         '--path' => $mp,
                     ]);
-                    $out = trim((string) \Illuminate\Support\Facades\Artisan::output());
+                    $out = trim((string) Artisan::output());
                     if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
                         $outputs[] = $out;
                     }
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $errors[$relative] = $e->getMessage();
                 }
             }
@@ -3357,13 +3395,13 @@ public function analyzeSourceNavigation(string $sourcePath): array
     public function detectTargetCollisions(array $modules): array
     {
         try {
-            if (! function_exists('app') || ! app()->bound(\LaraSlice\Core\Discovery\SliceManager::class)) {
+            if (! function_exists('app') || ! app()->bound(SliceManager::class)) {
                 return [];
             }
-            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $manager = app(SliceManager::class);
             $manager->discover();
             $existing = $manager->getSlices();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [];
         }
 
@@ -3399,6 +3437,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'existing_slice' => $hit['slice']->name,
                         'existing_path' => $hit['slice']->path,
                     ];
+
                     continue;
                 }
                 $tableHit = $byTable[$rootTable] ?? null;
@@ -3427,7 +3466,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $multitenant = $plan['summary']['multi_tenancy']['enabled'] ?? false;
         $tenantKey = $plan['summary']['multi_tenancy']['tenant_key'] ?? 'company_id';
 
-        $generator = new \LaraSlice\Generator\SliceGenerator;
+        $generator = new SliceGenerator;
         $createdSlices = [];
         $scaffoldedChildren = [];
         $errors = [];
@@ -3535,17 +3574,17 @@ public function analyzeSourceNavigation(string $sourcePath): array
                             $slug = Str::snake(Str::plural(Str::studly($sliceName)));
                             $hintFile = base_path("porting/ui-spec/{$slug}.anatomy.ui.yaml");
                             if (is_file($hintFile)) {
-                                $anatomy = \Symfony\Component\Yaml\Yaml::parseFile($hintFile);
+                                $anatomy = Yaml::parseFile($hintFile);
                                 $createLabel = $anatomy['declaration_hints']['create_label'] ?? null;
                                 if (is_string($createLabel) && $createLabel !== '') {
-                                    $manifest = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
+                                    $manifest = ManifestRepository::readFromSliceDir($sliceDir);
                                     if (empty($manifest['ui']['directory']['create_label'])) {
                                         $manifest['ui']['directory']['create_label'] = $createLabel;
-                                        \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifest);
+                                        ManifestRepository::writeYaml($sliceDir, $manifest);
                                     }
                                 }
                             }
-                        } catch (\Throwable $hintEx) {
+                        } catch (Throwable $hintEx) {
                             $errors[$sliceName.'_hints'] = $hintEx->getMessage();
                         }
                     }
@@ -3571,11 +3610,11 @@ public function analyzeSourceNavigation(string $sourcePath): array
                                 }
                             }
                             if ($sections !== []) {
-                                $manifest = \LaraSlice\Core\Discovery\ManifestRepository::readFromSliceDir($sliceDir);
+                                $manifest = ManifestRepository::readFromSliceDir($sliceDir);
                                 $manifest['settings'] = $sections;
-                                \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifest);
+                                ManifestRepository::writeYaml($sliceDir, $manifest);
                             }
-                        } catch (\Throwable $settingsEx) {
+                        } catch (Throwable $settingsEx) {
                             $errors[$sliceName.'_settings'] = $settingsEx->getMessage();
                         }
                     }
@@ -3583,21 +3622,21 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     // Materialize workflow into DB engine so /admin/workflows lists ported machines
                     if (! empty($wf) && is_array($wf)) {
                         try {
-                            $engine = app(\LaraSlice\Slices\Workflows\Services\WorkflowEngineService::class);
-                            $studly = \LaraSlice\Generator\SliceName::canonical($sliceName);
+                            $engine = app(WorkflowEngineService::class);
+                            $studly = SliceName::canonical($sliceName);
                             $plural = Str::plural($studly);
-                            $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
-                            $moduleFolder = \LaraSlice\Generator\SliceName::domainSegment($moduleName);
+                            $appFolder = SliceName::domainSegment($domain);
+                            $moduleFolder = SliceName::domainSegment($moduleName);
                             $modelClass = "App\\Slices\\{$appFolder}\\{$moduleFolder}\\{$plural}\\Models\\{$studly}";
                             $engine->syncWorkflowFromManifest($wf, $sliceName, class_exists($modelClass) ? $modelClass : null);
-                        } catch (\Throwable $syncEx) {
+                        } catch (Throwable $syncEx) {
                             $errors[$sliceName.'_workflow'] = $syncEx->getMessage();
                         }
                     }
-                    $studlyName = \LaraSlice\Generator\SliceName::canonical($sliceName);
+                    $studlyName = SliceName::canonical($sliceName);
                     $pluralName = Str::plural($studlyName);
-                    $appFolder = \LaraSlice\Generator\SliceName::domainSegment($domain);
-                    $moduleFolder = \LaraSlice\Generator\SliceName::domainSegment($moduleName);
+                    $appFolder = SliceName::domainSegment($domain);
+                    $moduleFolder = SliceName::domainSegment($moduleName);
                     $sliceNamespace = "App\\Slices\\{$appFolder}\\{$moduleFolder}\\{$pluralName}";
 
                     foreach ($childTables as $childDef) {
@@ -3617,7 +3656,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'child_tables' => $childTables,
                         'path' => $sliceDir,
                     ];
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $errors[$sliceName] = $e->getMessage();
                 }
             }
@@ -3648,7 +3687,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $dataPortService = new SliceDataPortService;
                 $dataPortService->setImportAuth($importAuth);
                 $dataImportResult = $dataPortService->importFromDatabase($sourceDb, $sourceHost, $sourcePort, $sourceUser, $sourcePass);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $errors['data_import'] = $e->getMessage();
             }
         }
@@ -3679,7 +3718,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $conn = $connection
                 ?? config('laraslice.porting.source_connection')
                 ?? config('database.default');
-            $pdo = \Illuminate\Support\Facades\DB::connection($conn)->getPdo();
+            $pdo = DB::connection($conn)->getPdo();
 
             if ($pdo) {
                 $stmt = $pdo->query('SHOW TABLES');
@@ -3690,10 +3729,12 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         if ($c > 0) {
                             $counts[$t] = $c;
                         }
-                    } catch (Throwable) {}
+                    } catch (Throwable) {
+                    }
                 }
             }
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
 
         return $counts;
     }
@@ -3720,7 +3761,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             // listing BO then cast 74 to true and rendered "1%".
             $rawType = (string) ($c['type'] ?? 'string');
             $baseType = strtolower((string) preg_replace('/\(.*$/', '', $rawType));
-            $type = match($baseType) {
+            $type = match ($baseType) {
                 'integer', 'bigint', 'int' => 'integer',
                 'boolean' => 'boolean',
                 'tinyint' => str_contains($rawType, '(1)') ? 'boolean' : 'integer',
@@ -3762,8 +3803,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $conn = $connection
                 ?? config('laraslice.porting.source_connection')
                 ?? config('database.default');
-            $pdo = \Illuminate\Support\Facades\DB::connection($conn)->getPdo();
-            $driver = \Illuminate\Support\Facades\DB::connection($conn)->getDriverName();
+            $pdo = DB::connection($conn)->getPdo();
+            $driver = DB::connection($conn)->getDriverName();
 
             if ($driver === 'mysql') {
                 $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
@@ -3774,18 +3815,21 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'type' => $rc['Type'],
                     ];
                 }
+
                 return $cols;
             }
 
             // Portable fallback via the schema builder for non-MySQL drivers.
-            foreach (\Illuminate\Support\Facades\Schema::connection($conn)->getColumns($table) as $sc) {
+            foreach (Schema::connection($conn)->getColumns($table) as $sc) {
                 $cols[] = [
                     'name' => $sc['name'],
                     'type' => $sc['type_name'] ?? $sc['type'] ?? 'string',
                 ];
             }
+
             return $cols;
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
 
         return $cols;
     }
@@ -3808,8 +3852,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'Extract active filter dimensions from legacy forms (status, date range, client_id, employee_id).',
                         'Calculate 4 top-level aggregate KPI cards (Total, In-Flight, Blocked/Overdue, Completed).',
                         'Render responsive BlatUI table with sortable columns, color-coded badges, and avatar stacks.',
-                        'Provide bulk action toolbar (Export CSV, Batch Status Transition, Delete Selected).'
-                    ]
+                        'Provide bulk action toolbar (Export CSV, Batch Status Transition, Delete Selected).',
+                    ],
                 ],
                 [
                     'step' => 2,
@@ -3821,8 +3865,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'Manage reactive tab switching using pure Alpine.js (x-data="{ activeTab: \'overview\' }").',
                         'Render overview card with primary metadata, progress bar, and executive metrics.',
                         'Render child aggregate lists (Milestones, Tasks, Timelogs, Invoices) via embedded BlatUI tables.',
-                        'Provide quick-add slide-overs or modals for child items without context switching.'
-                    ]
+                        'Provide quick-add slide-overs or modals for child items without context switching.',
+                    ],
                 ],
                 [
                     'step' => 3,
@@ -3833,8 +3877,8 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'Group legacy input fields into logical fieldsets (General, Schedule, Financials, Permissions).',
                         'Replace legacy jQuery Select2 with native BlatUI searchable selects.',
                         'Implement Alpine-powered dynamic validation and server-side FormRequest validation rules.',
-                        'Include drag-and-drop file upload dropzone for document attachments.'
-                    ]
+                        'Include drag-and-drop file upload dropzone for document attachments.',
+                    ],
                 ],
                 [
                     'step' => 4,
@@ -3845,10 +3889,10 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         'Map state column to discrete status badges and allowed transitions.',
                         'Guard state machine changes with Laravel authorization policies and roles.',
                         'Dispatch domain events on transition (e.g. ProjectFinished, InvoiceSent, TicketResolved).',
-                        'Log every transition automatically in the slice activity audit table.'
-                    ]
-                ]
-            ]
+                        'Log every transition automatically in the slice activity audit table.',
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -3858,7 +3902,9 @@ public function analyzeSourceNavigation(string $sourcePath): array
     public function generateDefaultPagesSpecification(string $name, string $handle, string $rootTable, int $recordsCount, array $childTables, ?array $workflow = null): array
     {
         $titleSingular = rtrim($name, 's');
-        if (substr($name, -3) === 'ies') $titleSingular = substr($name, 0, -3) . 'y';
+        if (substr($name, -3) === 'ies') {
+            $titleSingular = substr($name, 0, -3).'y';
+        }
 
         $pages = [
             'index' => [
@@ -3942,7 +3988,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $tableName = is_array($ct) ? ($ct['table'] ?? '') : (string) $ct;
             $recs = is_array($ct) ? ($ct['records'] ?? 0) : 0;
             if (! empty($tableName)) {
-                $tabLabel = ucwords(str_replace(['_', $rootTable . '_'], [' ', ''], $tableName));
+                $tabLabel = ucwords(str_replace(['_', $rootTable.'_'], [' ', ''], $tableName));
                 $tabId = str_replace(['_', '-'], '', strtolower($tabLabel));
                 $pages['show']['sub_tabs'][] = [
                     'id' => $tabId,
@@ -4005,7 +4051,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         if (! empty($pages['index']['columns'])) {
             foreach ($pages['index']['columns'] as $c) {
                 $fType = $c['type'] ?? 'text';
-                $formatter = match($fType) {
+                $formatter = match ($fType) {
                     'title_with_subtitle', 'avatar_stack', 'composite_user' => 'composite_user',
                     'badge', 'badge_outline', 'code_badge' => 'code_badge',
                     'priority_pill', 'status_pill', 'badge_pill' => 'status_pill',
@@ -4043,7 +4089,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $sFields = [];
                 foreach ($sec['fields'] ?? [] as $f) {
                     $fHandle = is_array($f) ? ($f['handle'] ?? $f['name'] ?? '') : (string) $f;
-                    $isSearchable = is_array($f) ? (!empty($f['is_searchable']) || !empty($f['searchable'])) : (str_contains($fHandle, '_id') || in_array($fHandle, ['user_id', 'client_id', 'project_id', 'department_id', 'category_id']));
+                    $isSearchable = is_array($f) ? (! empty($f['is_searchable']) || ! empty($f['searchable'])) : (str_contains($fHandle, '_id') || in_array($fHandle, ['user_id', 'client_id', 'project_id', 'department_id', 'category_id']));
                     $sFields[] = [
                         'handle' => $fHandle,
                         'span' => 1,
@@ -4052,7 +4098,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 }
                 $sections[] = [
                     'key' => Str::slug($sec['name'] ?? "section_{$sIdx}"),
-                    'title' => $sec['name'] ?? "Section " . ($sIdx + 1),
+                    'title' => $sec['name'] ?? 'Section '.($sIdx + 1),
                     'grid' => 2,
                     'fields' => $sFields,
                 ];
@@ -4066,20 +4112,20 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 if ($relName) {
                     $sections[] = [
                         'key' => 'items_'.$relName,
-                        'title' => \Illuminate\Support\Str::headline($relName),
+                        'title' => Str::headline($relName),
                         'grid' => 1,
                         'fields' => [
                             [
                                 'handle' => $relName,
                                 'type' => 'repeater',
-                                'label' => \Illuminate\Support\Str::headline($relName),
-                                'model' => $rel['model'] ?? \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($relName)),
+                                'label' => Str::headline($relName),
+                                'model' => $rel['model'] ?? Str::snake(Str::singular($relName)),
                                 'table' => $rel['table'] ?? $relName,
                                 'foreign_key' => $rel['foreign_key'] ?? '',
                                 // Sub-fields come from the child table's columns
                                 'repeater_fields' => $rel['fields'] ?? [],
                                 'document' => $rel['document'] ?? null,
-                                'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
+                                'add_button_text' => 'Add '.Str::singular(Str::headline($relName)),
                             ],
                         ],
                     ];
@@ -4143,14 +4189,14 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 continue;
             }
 
-            $label = $f['label'] ?? \Illuminate\Support\Str::headline($handle);
+            $label = $f['label'] ?? Str::headline($handle);
             $type = $f['type'] ?? 'string';
             $lower = strtolower($handle);
 
             // Infer formatter + signals from the shared FieldInference
             // rules (F5: the same inference the generator's default UI
             // uses, so ported and hand-made slices render identically).
-            $signals = \LaraSlice\Support\FieldInference::analyze($handle, (string) $type);
+            $signals = FieldInference::analyze($handle, (string) $type);
             $formatter = $signals['formatter'];
             $isMoney = $signals['is_money'];
             $isStatus = $signals['is_status'];
@@ -4169,7 +4215,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     'sortable' => true,
                 ];
                 if ($isAssignee) {
-                    $col['relation'] = \Illuminate\Support\Str::camel(str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle);
+                    $col['relation'] = Str::camel(str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle);
                 }
                 $columns[] = $col;
             }
@@ -4243,20 +4289,20 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 if ($relName) {
                     $sections[] = [
                         'key' => 'items_'.$relName,
-                        'title' => \Illuminate\Support\Str::headline($relName),
+                        'title' => Str::headline($relName),
                         'grid' => 1,
                         'fields' => [
                             [
                                 'handle' => $relName,
                                 'type' => 'repeater',
-                                'label' => \Illuminate\Support\Str::headline($relName),
-                                'model' => $rel['model'] ?? \Illuminate\Support\Str::snake(\Illuminate\Support\Str::singular($relName)),
+                                'label' => Str::headline($relName),
+                                'model' => $rel['model'] ?? Str::snake(Str::singular($relName)),
                                 'table' => $rel['table'] ?? $relName,
                                 'foreign_key' => $rel['foreign_key'] ?? '',
                                 // Sub-fields come from the child table's columns
                                 'repeater_fields' => $rel['fields'] ?? [],
                                 'document' => $rel['document'] ?? null,
-                                'add_button_text' => 'Add ' . \Illuminate\Support\Str::singular(\Illuminate\Support\Str::headline($relName)),
+                                'add_button_text' => 'Add '.Str::singular(Str::headline($relName)),
                             ],
                         ],
                     ];
@@ -4446,7 +4492,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 if (! empty($hints['columns'])) {
                     $ui = $parser->mergeIntoUi($ui, $hints);
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // Never fail scaffold/port on parser issues
             }
         }
@@ -4475,7 +4521,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             }
             $tabs[] = [
                 'handle' => $name,
-                'label' => \Illuminate\Support\Str::headline($name),
+                'label' => Str::headline($name),
                 'type' => 'relation',
                 'relation' => $name,
             ];
@@ -4563,7 +4609,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         foreach ($sliceMapping as $name => &$info) {
             $type = $info['type'] ?? 'aggregate_root';
             $nav = $info['navigation'] ?? [];
-            $primary = $info['primary_table'] ?? \Illuminate\Support\Str::snake($name);
+            $primary = $info['primary_table'] ?? Str::snake($name);
             $module = $this->detectModuleForSlice($name, $primary);
 
             if ($type === 'settings_hub' || $type === 'settings' || $type === 'taxonomy'
@@ -4631,12 +4677,14 @@ public function analyzeSourceNavigation(string $sourcePath): array
                         $settings[] = $ct;
                     }
                 }
+
                 continue;
             }
             if ($type === 'taxonomy_catalog') {
                 if ($primary && ! in_array($primary, $tax, true)) {
                     $tax[] = $primary;
                 }
+
                 continue;
             }
             if ($primary) {
@@ -4665,7 +4713,6 @@ public function analyzeSourceNavigation(string $sourcePath): array
             ['phase' => 5, 'name' => 'pivots', 'tables' => $pivots, 'slices' => []],
         ];
     }
-
 
     /**
      * Native + workflow bulk actions for index multi-select bar (Studio-editable).
@@ -4718,7 +4765,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $dead = [];
         $modelsDir = $sourcePath.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Models';
 
-        if (! \Illuminate\Support\Facades\File::isDirectory($modelsDir)) {
+        if (! File::isDirectory($modelsDir)) {
             return [];
         }
 
@@ -4731,7 +4778,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             } else {
                 // Infer from class name (e.g., Document.php → documents)
                 $base = basename($modelFile, '.php');
-                $activeTables[] = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::plural($base));
+                $activeTables[] = Str::snake(Str::plural($base));
             }
         }
 
@@ -4763,7 +4810,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $notes = [];
         $controllersDir = $sourcePath.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers';
 
-        if (! \Illuminate\Support\Facades\File::isDirectory($controllersDir)) {
+        if (! File::isDirectory($controllersDir)) {
             return [];
         }
 
@@ -4802,19 +4849,19 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 preg_match_all('/public\s+function\s+(\w+)\s*\(/', $content, $matches);
                 foreach ($matches[1] as $method) {
                     if (! in_array($method, $crudMethods, true)) {
-                        $sliceNotes[] = "Source controller ".basename($file->getPathname())." has custom method `{$method}()` — implement manually in {$sliceName}Service";
+                        $sliceNotes[] = 'Source controller '.basename($file->getPathname())." has custom method `{$method}()` — implement manually in {$sliceName}Service";
                     }
                 }
 
                 // Detect common business patterns
                 if (str_contains($content, 'PDF') || str_contains($content, 'dompdf') || str_contains($content, '->pdf(')) {
-                    $sliceNotes[] = "Source generates PDF documents — implement PDF generation manually";
+                    $sliceNotes[] = 'Source generates PDF documents — implement PDF generation manually';
                 }
                 if (preg_match('/Mail::|->mail\(|Mailable/', $content)) {
-                    $sliceNotes[] = "Source sends emails — implement mail integration manually";
+                    $sliceNotes[] = 'Source sends emails — implement mail integration manually';
                 }
                 if (str_contains($content, 'Stripe') || str_contains($content, 'PayPal') || str_contains($content, 'gateway')) {
-                    $sliceNotes[] = "Source integrates payment gateways — implement payment integration manually";
+                    $sliceNotes[] = 'Source integrates payment gateways — implement payment integration manually';
                 }
             }
 
@@ -4837,12 +4884,13 @@ public function analyzeSourceNavigation(string $sourcePath): array
      * @return array UI structure with fields, sections, and detected patterns
      */
     public function analyzeSourceUi(string $sourcePath, string $table): array
-    {        $viewsDir = $sourcePath.DIRECTORY_SEPARATOR.'resources'.DIRECTORY_SEPARATOR.'views';
-        if (! \Illuminate\Support\Facades\File::isDirectory($viewsDir)) {
+    {
+        $viewsDir = $sourcePath.DIRECTORY_SEPARATOR.'resources'.DIRECTORY_SEPARATOR.'views';
+        if (! File::isDirectory($viewsDir)) {
             return ['fields' => [], 'sections' => [], 'has_modals' => false];
         }
 
-        $singular = \Illuminate\Support\Str::singular($table);
+        $singular = Str::singular($table);
         $fields = [];
         $sections = [];
         $hasModals = false;
@@ -4921,7 +4969,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         $workflows = [];
         $controllersDir = $sourcePath.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers';
 
-        if (! \Illuminate\Support\Facades\File::isDirectory($controllersDir)) {
+        if (! File::isDirectory($controllersDir)) {
             return [];
         }
 
@@ -4961,7 +5009,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     $targetState = strtolower(preg_replace('/^mark/', '', $method));
                     $transitions[] = [
                         'name' => $method,
-                        'label' => \Illuminate\Support\Str::headline($method),
+                        'label' => Str::headline($method),
                         'to_state' => $targetState,
                     ];
                     if (! in_array($targetState, $states, true)) {
@@ -5032,6 +5080,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                     return $availableControllers[$lower];
                 }
             }
+
             return null;
         };
 
@@ -5127,7 +5176,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             return $canonical[$slug];
         }
 
-        return \Illuminate\Support\Str::studly(\Illuminate\Support\Str::plural(\Illuminate\Support\Str::singular($base)));
+        return Str::studly(Str::plural(Str::singular($base)));
     }
 
     protected function buildOperationalJourneysFromSource(string $sourcePath, string $domain, array $availableControllers): array
@@ -5236,6 +5285,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             } elseif (! empty($s['slice'])) {
                 $s['slice'] = $this->routeBaseToSliceName((string) $s['slice']);
             }
+
             return $s;
         }, $stepsFromNav);
 
@@ -5267,6 +5317,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $pb = array_search($b['slice'], $employeePriority, true);
             $pa = $pa === false ? 100 : $pa;
             $pb = $pb === false ? 100 : $pb;
+
             return $pa <=> $pb;
         });
         // Drop pure admin HR catalogs from employee journey
@@ -5298,6 +5349,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
             $pb = array_search($b['slice'], $clientPriority, true);
             $pa = $pa === false ? 100 : $pa;
             $pb = $pb === false ? 100 : $pb;
+
             return $pa <=> $pb;
         });
         $clientSteps = array_values(array_filter($clientSteps, function ($s) {
@@ -5335,8 +5387,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
         ];
     }
 
-
-/**
+    /**
      * Build process-core operational journeys for complaint/adjudication domains.
      * Persona steps derived from source nav and controllers — not BRD essays.
      */
@@ -5356,7 +5407,7 @@ public function analyzeSourceNavigation(string $sourcePath): array
                 $slice = $c['slice'] ?? null;
                 if (! $slice && ! empty($c['route'])) {
                     $base = explode('.', (string) $c['route'])[0];
-                    $slice = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular(str_replace(['-', '_'], ' ', $base)));
+                    $slice = Str::studly(Str::singular(str_replace(['-', '_'], ' ', $base)));
                 }
                 if ($slice) {
                     $steps[] = [
@@ -5432,5 +5483,4 @@ public function analyzeSourceNavigation(string $sourcePath): array
         // Same executable contract as ERP — nav-driven when possible, controller fallback
         return $this->buildOperationalJourneysFromSource($sourcePath, $domain, $availableControllers);
     }
-
 }

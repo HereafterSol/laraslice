@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Generator;
 
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
@@ -233,10 +234,10 @@ class SliceGenerator
         // Declarative Schema Table columns
         $schemaTableList = ["            Column::make('id')->label('ID')->sortable()"];
         if ($searchColumn !== 'id' && isset($fieldsByName[$searchColumn])) {
-            $schemaTableList[] = "            Column::make('{$searchColumn}')->label(".var_export($fieldsByName[$searchColumn]['label'], true).")->sortable()->searchable()";
+            $schemaTableList[] = "            Column::make('{$searchColumn}')->label(".var_export($fieldsByName[$searchColumn]['label'], true).')->sortable()->searchable()';
         }
         if ($statusField && empty($statusField['hidden']) && ($statusField['show_in_list'] ?? true)) {
-            $schemaTableList[] = "            Column::make('status')->label(".var_export($statusField['label'], true).")->badge()";
+            $schemaTableList[] = "            Column::make('status')->label(".var_export($statusField['label'], true).')->badge()';
         }
         foreach ($fields as $f) {
             if ($f['name'] === $searchColumn || $f['name'] === 'status') {
@@ -274,21 +275,21 @@ class SliceGenerator
             $otherColsAdded++;
         }
         $dtCols[] = $dataTableColumn('created_at', 'Created');
-        $dataTableColumns = implode("
-", $dtCols);
+        $dataTableColumns = implode('
+', $dtCols);
 
         // Check if declarative UI configuration is passed
         $uiConfig = $options['ui'] ?? [];
-        if (!empty($uiConfig['directory']['columns']) && is_array($uiConfig['directory']['columns'])) {
+        if (! empty($uiConfig['directory']['columns']) && is_array($uiConfig['directory']['columns'])) {
             $dtCols = [];
             foreach ($uiConfig['directory']['columns'] as $c) {
                 $handle = $c['handle'] ?? $c['key'] ?? 'id';
-                $label = $c['label'] ?? \Illuminate\Support\Str::headline($handle);
+                $label = $c['label'] ?? Str::headline($handle);
                 $isHtml = in_array($c['type'] ?? '', ['code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'badge', 'text_with_badge', 'date_overdue', 'lines'], true);
-                $dtCols[] = "            ['key' => '{$handle}', 'label' => '{$label}', 'sortable' => true" . ($isHtml ? ", 'html' => true" : '') . "],";
+                $dtCols[] = "            ['key' => '{$handle}', 'label' => '{$label}', 'sortable' => true".($isHtml ? ", 'html' => true" : '').'],';
             }
-            $dataTableColumns = implode("
-", $dtCols);
+            $dataTableColumns = implode('
+', $dtCols);
         }
 
         // Form elements for Blade view (only visible, non-audit fields in responsive grid)
@@ -388,10 +389,10 @@ HTML;
 HTML;
         }
 
-        if (!empty($uiConfig['forms']['sections']) && is_array($uiConfig['forms']['sections'])) {
+        if (! empty($uiConfig['forms']['sections']) && is_array($uiConfig['forms']['sections'])) {
             $customCards = [];
             foreach ($uiConfig['forms']['sections'] as $sIdx => $sec) {
-                $sTitle = $sec['title'] ?? ('Section ' . ($sIdx + 1));
+                $sTitle = $sec['title'] ?? ('Section '.($sIdx + 1));
                 $sDesc = $sec['description'] ?? 'Configure record attributes';
                 $sIcon = $sec['icon'] ?? 'layers';
                 $sCols = (int) ($sec['columns'] ?? 3);
@@ -406,13 +407,13 @@ HTML;
                 foreach ($sec['fields'] ?? [] as $fld) {
                     $fHandle = is_array($fld) ? ($fld['handle'] ?? '') : (string) $fld;
                     $fSpan = is_array($fld) ? (int) ($fld['span'] ?? 1) : 1;
-                    $isSearchable = is_array($fld) && !empty($fld['searchable']);
+                    $isSearchable = is_array($fld) && ! empty($fld['searchable']);
                     $fType = is_array($fld) ? ($fld['type'] ?? '') : '';
 
                     // Repeater field (e.g., invoice line items) — render x-ui.repeater
                     if ($fType === 'repeater') {
-                        $repLabel = $fld['label'] ?? \Illuminate\Support\Str::headline($fHandle);
-                        $addBtn = $fld['add_button_text'] ?? ('Add ' . \Illuminate\Support\Str::singular($repLabel));
+                        $repLabel = $fld['label'] ?? Str::headline($fHandle);
+                        $addBtn = $fld['add_button_text'] ?? ('Add '.Str::singular($repLabel));
                         $repFields = $fld['repeater_fields'] ?? [];
                         // Build sub-field definitions for the repeater
                         $subFieldDefs = [];
@@ -423,19 +424,20 @@ HTML;
                             }
                             $subFieldDefs[] = preg_replace('/\s+/', ' ', var_export([
                                 'name' => $rfName,
-                                'label' => $rf['label'] ?? \Illuminate\Support\Str::headline($rfName),
+                                'label' => $rf['label'] ?? Str::headline($rfName),
                                 'type' => $rf['type'] ?? 'string',
                                 'required' => (bool) ($rf['required'] ?? false),
                                 'options' => $rf['options'] ?? [],
                             ], true));
                         }
-                        $subFieldsStr = '[' . implode(', ', $subFieldDefs) . ']';
+                        $subFieldsStr = '['.implode(', ', $subFieldDefs).']';
                         $docProp = '';
                         if (is_array($fld['document'] ?? null) && $fld['document'] !== []) {
                             $docStr = preg_replace('/\s+/', ' ', var_export($fld['document'], true));
                             $docProp = " :document=\"{$docStr}\"";
                         }
                         $cardInputs[] = "<x-ui.repeater name=\"{$fHandle}\" label=\"{$repLabel}\" :fields=\"{$subFieldsStr}\" :initial-items=\"old('{$fHandle}', \$form->{$fHandle} ?? [])\" addButtonText=\"{$addBtn}\"{$docProp} class=\"md:col-span-2 lg:col-span-3\" />";
+
                         continue;
                     }
 
@@ -444,8 +446,8 @@ HTML;
                     // the controller-resolved {handle}Options; the service
                     // syncs the selection to the relation on save.
                     if ($fType === 'relation_multi') {
-                        $multiLabel = $fld['label'] ?? \Illuminate\Support\Str::headline($fHandle);
-                        $optionsVar = \Illuminate\Support\Str::camel($fHandle).'Options';
+                        $multiLabel = $fld['label'] ?? Str::headline($fHandle);
+                        $optionsVar = Str::camel($fHandle).'Options';
                         $spanClass = ($fSpan >= 3 || $fSpan >= $sCols) ? ' md:col-span-2 lg:col-span-3' : ($fSpan === 2 ? ' md:col-span-2' : '');
                         $cardInputs[] = "<div class=\"space-y-1.5{$spanClass}\">\n"
                             ."                    <x-ui.label for=\"{$fHandle}\">{$multiLabel}</x-ui.label>\n"
@@ -455,13 +457,14 @@ HTML;
                             ."                        @endforeach\n"
                             ."                    </select>\n"
                             ."                    @error('{$fHandle}') <p class=\"text-xs text-destructive font-medium\">{{ \$message }}</p> @enderror\n"
-                            ."                </div>";
+                            .'                </div>';
+
                         continue;
                     }
 
                     // Find field matching handle
                     $fieldObj = collect($fields)->firstWhere('name', $fHandle);
-                    if ($fieldObj && !empty($fieldObj['form'])) {
+                    if ($fieldObj && ! empty($fieldObj['form'])) {
                         $markup = $fieldObj['form'];
                         if ($fSpan >= 3 || $fSpan >= $sCols) {
                             $markup = preg_replace('/<div class="space-y-1\.5"/', '<div class="space-y-1.5 md:col-span-2 lg:col-span-3"', $markup, 1);
@@ -476,9 +479,9 @@ HTML;
                     }
                 }
 
-                $inputsCombined = implode("
+                $inputsCombined = implode('
 
-", $cardInputs);
+', $cardInputs);
                 $customCards[] = <<<CARD
         <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
             <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
@@ -499,10 +502,10 @@ HTML;
         </x-ui.card>
 CARD;
             }
-            if (!empty($customCards)) {
-                $formSectionsHtml = implode("
+            if (! empty($customCards)) {
+                $formSectionsHtml = implode('
 
-", $customCards);
+', $customCards);
             }
         }
 
@@ -516,7 +519,7 @@ CARD;
 
         if (file_exists($targetDir)) {
             if (! empty($options['force'])) {
-                \Illuminate\Support\Facades\File::deleteDirectory($targetDir);
+                File::deleteDirectory($targetDir);
             } else {
                 throw new SliceExistsException("Slice '{$pluralName}' already exists at {$targetDir}; generation stopped to protect its files.");
             }
@@ -677,7 +680,7 @@ CARD;
             $manifestData['tenant_key'] = $tenantKey;
 
             // Phase 2: YAML only. Do not create a JSON twin.
-            \LaraSlice\Core\Discovery\ManifestRepository::writeYaml($sliceDir, $manifestData);
+            ManifestRepository::writeYaml($sliceDir, $manifestData);
 
             if (! empty($manifestData['roles']) && is_array($manifestData['roles'])) {
                 try {
@@ -769,6 +772,7 @@ REL;
     }
 REL;
                     $emittedRelationMethods[$declMethod] = true;
+
                     continue;
                 }
                 $declFk = (string) ($declaredRelation['foreign_key'] ?? ($declType === 'hasMany'
@@ -1250,10 +1254,10 @@ ACTIONS;
             </x-slot:actions>
 ACTIONS;
             }
-                        $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\') . '/slice.yaml'));
+            $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\').'/slice.yaml'));
             $sliceYamlAbs = str_replace('slice.yaml', 'slice.yaml', $sliceJsonAbs);
 
-$bladeIndex = <<<BLADE
+            $bladeIndex = <<<BLADE
 @extends('layouts.app')
 
 @section('content')

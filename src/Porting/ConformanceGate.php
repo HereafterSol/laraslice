@@ -29,7 +29,7 @@ class ConformanceGate
 {
     /**
      * @param  array<string, mixed>  $anatomy  pages.list (+ pages.detail) from the anatomy spec
-     * @param  array<string, mixed>  $ui       the Heart's `ui` array
+     * @param  array<string, mixed>  $ui  the Heart's `ui` array
      * @return list<array{id: string, kind: string, source: string, port: string}>
      */
     public static function compare(array $anatomy, array $ui, string $slug): array
@@ -61,6 +61,7 @@ class ConformanceGate
             foreach ($ui['directory'][$zone] ?? [] as $filter) {
                 if (! is_array($filter)) {
                     $portFilters[] = self::normFacet((string) $filter);
+
                     continue;
                 }
                 // A facet's identity is what the user sees AND
@@ -207,6 +208,7 @@ class ConformanceGate
                 // broken capture once passed every page by
                 // skipping (P4 build, 24 Oct).
                 $diffs[] = ['key' => $key, 'source' => (string) $source, 'port' => 'not captured'];
+
                 continue;
             }
             if ((string) $source !== (string) $port) {
@@ -221,6 +223,7 @@ class ConformanceGate
             }
             if ($port === null) {
                 $diffs[] = ['key' => $key, 'source' => (string) $source, 'port' => 'not captured'];
+
                 continue;
             }
             $s = is_numeric($source) ? (float) $source : (float) preg_replace('/[^0-9.]/', '', (string) $source);
@@ -296,6 +299,7 @@ class ConformanceGate
             $entry = $byId[$candidate['id']] ?? null;
             if ($entry === null) {
                 $errors[] = "{$candidate['id']}: UNRECORDED deviation — source has '{$candidate['source']}', port has '{$candidate['port']}'. Fix it or record it in porting/deviations.yaml.";
+
                 continue;
             }
             $status = (string) ($entry['status'] ?? 'open');

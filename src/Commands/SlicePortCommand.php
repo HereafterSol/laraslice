@@ -3,8 +3,11 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use LaraSlice\Porting\PermissionMatrixExtractor;
+use LaraSlice\Porting\SliceDataPortService;
 use LaraSlice\Porting\SlicePortService;
 use LaraSlice\Porting\SourceAnatomyExtractor;
 use Symfony\Component\Yaml\Yaml;
@@ -65,6 +68,7 @@ class SlicePortCommand extends Command
                     $planPath = $cand;
                 } else {
                     $this->error("Architecture plan file not found: {$planPath}");
+
                     return self::FAILURE;
                 }
             }
@@ -73,6 +77,7 @@ class SlicePortCommand extends Command
             $plan = json_decode(File::get($planPath), true);
             if (! is_array($plan) || empty($plan['modules'])) {
                 $this->error("Invalid architecture plan format: missing 'modules' array.");
+
                 return self::FAILURE;
             }
 
@@ -84,8 +89,8 @@ class SlicePortCommand extends Command
             $tenancy = $summary['multi_tenancy'] ?? [];
 
             $this->info("✓ Target Domain: {$domain}");
-            $this->info("✓ Canonical Slices: {$totalSlices} across " . count($modules) . " modules");
-            $this->info("✓ Legacy Database Records: " . number_format($totalRecords));
+            $this->info("✓ Canonical Slices: {$totalSlices} across ".count($modules).' modules');
+            $this->info('✓ Legacy Database Records: '.number_format($totalRecords));
             if (! empty($tenancy['enabled'])) {
                 $this->info("✓ Multi-Tenancy Scoping: {$tenancy['tenant_key']} ({$tenancy['coverage_percentage']}% coverage)");
             }
@@ -95,7 +100,7 @@ class SlicePortCommand extends Command
             foreach ($modules as $mod) {
                 $modName = $mod['name'] ?? 'Core';
                 foreach ($mod['slices'] ?? [] as $sl) {
-                    $cTables = empty($sl['child_tables']) ? '-' : implode(', ', array_map(fn($c) => is_array($c) ? ($c['table'] ?? '') : (string)$c, $sl['child_tables']));
+                    $cTables = empty($sl['child_tables']) ? '-' : implode(', ', array_map(fn ($c) => is_array($c) ? ($c['table'] ?? '') : (string) $c, $sl['child_tables']));
                     $rows[] = [
                         $modName,
                         $sl['name'] ?? '',
@@ -109,11 +114,13 @@ class SlicePortCommand extends Command
 
             if ($this->option('dry-run')) {
                 $this->warn('Dry-run mode: skipping slice generation and migrations.');
+
                 return self::SUCCESS;
             }
 
             if (! $this->option('no-interaction') && ! $this->confirm('Execute slice generation and migrations from this plan?', true)) {
                 $this->warn('Porting aborted by user.');
+
                 return self::SUCCESS;
             }
 
@@ -135,21 +142,21 @@ class SlicePortCommand extends Command
                     ],
                     'real'
                 );
-                $this->comment("  → Seeders may be outdated. Live database is always current.");
+                $this->comment('  → Seeders may be outdated. Live database is always current.');
             }
             $dataSource = $dataSource ?: 'real';
 
             $withFiles = (bool) $this->option('with-files');
 
-            $this->comment("⚙️  Scaffolding vertical slices, migrations, and models from plan...");
+            $this->comment('⚙️  Scaffolding vertical slices, migrations, and models from plan...');
             $importAuth = (bool) $this->option('import-auth');
             $result = $portService->executeFromPlan($plan, $importData, $withFiles, $importAuth, $sourceConnection ?? null);
 
             if (! empty($result['slices_created'])) {
-                $this->info("✓ Scaffolded " . count($result['slices_created']) . " canonical slices!");
+                $this->info('✓ Scaffolded '.count($result['slices_created']).' canonical slices!');
             }
             if (! empty($result['child_tables_created'])) {
-                $this->info("✓ Scaffolded " . count($result['child_tables_created']) . " child tables & models!");
+                $this->info('✓ Scaffolded '.count($result['child_tables_created']).' child tables & models!');
             }
             if (! empty($result['errors'])) {
                 foreach ($result['errors'] as $s => $err) {
@@ -165,13 +172,14 @@ class SlicePortCommand extends Command
 
             if (! empty($result['data_import'])) {
                 $di = $result['data_import'];
-                $this->info("✓ ETL Data Streaming: {$di['tables_imported']} tables imported, " . number_format($di['total_rows']) . " rows migrated!");
+                $this->info("✓ ETL Data Streaming: {$di['tables_imported']} tables imported, ".number_format($di['total_rows']).' rows migrated!');
                 $this->surfaceDataImportWarnings($di);
             }
 
             $this->line('');
             $this->info('🎉 Porting from architecture plan completed successfully!');
             $this->comment('Next: Run `php artisan slice:install` to sync super-admin permissions and access.');
+
             return self::SUCCESS;
         }
 
@@ -231,6 +239,7 @@ class SlicePortCommand extends Command
             $inspection = $portService->inspect($source, $domain);
         } catch (\Throwable $e) {
             $this->error("Inspection failed: {$e->getMessage()}");
+
             return self::FAILURE;
         }
 
@@ -242,9 +251,9 @@ class SlicePortCommand extends Command
             $pct = $inspection['tenancy']['coverage_percentage'];
             $aff = $inspection['tenancy']['affected_tables'];
             $this->info("✓ Enterprise Multi-Tenancy Detected: Key '{$tKey}' present across {$aff} tables ({$pct}% database coverage).");
-            $this->comment("  -> Models and slices will automatically be equipped with HasTenant isolation.");
+            $this->comment('  -> Models and slices will automatically be equipped with HasTenant isolation.');
         } else {
-            $this->line("  Multi-Tenancy: Single-tenant schema (no tenant key scoping required).");
+            $this->line('  Multi-Tenancy: Single-tenant schema (no tenant key scoping required).');
         }
         $this->line('');
 
@@ -258,16 +267,18 @@ class SlicePortCommand extends Command
         $this->table(['Target Slice', 'Architecture Type', 'Primary Table', 'Attached Child / Pivot Tables'], $rows);
 
         if (! empty($inspection['unmapped_pivots'])) {
-            $this->warn('Pivot tables not attached to any slice (review manually): ' . implode(', ', $inspection['unmapped_pivots']));
+            $this->warn('Pivot tables not attached to any slice (review manually): '.implode(', ', $inspection['unmapped_pivots']));
         }
 
         if ($this->option('dry-run')) {
             $this->warn('Dry-run mode: skipping blueprint and seeder generation.');
+
             return self::SUCCESS;
         }
 
         if (! $this->confirm('Proceed with porting and blueprint generation?', true)) {
             $this->info('Porting aborted by user.');
+
             return self::SUCCESS;
         }
 
@@ -280,6 +291,7 @@ class SlicePortCommand extends Command
             $connConfig = config("database.connections.{$sourceConnectionName}");
             if (! $connConfig) {
                 $this->error("Source connection [{$sourceConnectionName}] is not defined in config/database.php.");
+
                 return self::FAILURE;
             }
             $sourceConnection = [
@@ -335,24 +347,25 @@ class SlicePortCommand extends Command
             $result = $portService->execute($source, $domain, $mode, $withFiles, $mode === 'full-data' && ! $deferredImport, $sourceConnection, $importAuth);
         } catch (\Throwable $e) {
             $this->error("Porting execution failed: {$e->getMessage()}");
+
             return self::FAILURE;
         }
 
         $this->info("✓ Domain blueprint synthesized: {$result['domain_blueprint']}");
-        $this->info("✓ Vertical Slices mapped: " . implode(', ', $result['slices_generated']));
+        $this->info('✓ Vertical Slices mapped: '.implode(', ', $result['slices_generated']));
 
         if (! empty($result['data_import']) && is_array($result['data_import'])) {
             $di = $result['data_import'];
             if (! empty($di['error'])) {
                 $this->error("Data import failed: {$di['error']}");
             } else {
-                $this->info("✓ ETL Data Streaming: " . ($di['tables_imported'] ?? 0) . " tables imported, " . number_format($di['total_rows'] ?? 0) . " rows migrated!");
+                $this->info('✓ ETL Data Streaming: '.($di['tables_imported'] ?? 0).' tables imported, '.number_format($di['total_rows'] ?? 0).' rows migrated!');
                 $this->surfaceDataImportWarnings($di);
             }
         }
 
         if (! empty($result['seeders_generated'])) {
-            $this->info("✓ Master seeders generated: " . count($result['seeders_generated']) . " file(s)");
+            $this->info('✓ Master seeders generated: '.count($result['seeders_generated']).' file(s)');
         }
 
         if ($withFiles) {
@@ -364,18 +377,18 @@ class SlicePortCommand extends Command
             $targetPath = $superDomain ? "app/Slices/{$superDomain}/{$domain}/" : "app/Slices/{$domain}/";
             $this->comment("⚙️  Scaffolding physical vertical slices into {$targetPath}...");
             $scaffoldResult = $portService->scaffoldSlices($inspection, $domain, $superDomain);
-            $this->info("✓ Successfully scaffolded " . count($scaffoldResult['created']) . " physical vertical slices!");
+            $this->info('✓ Successfully scaffolded '.count($scaffoldResult['created']).' physical vertical slices!');
 
             $moduleGroups = [];
             foreach ($scaffoldResult['created'] as $s) {
                 $moduleGroups[$s['module']][] = $s['slice'];
             }
             foreach ($moduleGroups as $mod => $sls) {
-                $this->line("   [{$mod}] -> " . implode(', ', $sls));
+                $this->line("   [{$mod}] -> ".implode(', ', $sls));
             }
 
             if (! empty($scaffoldResult['errors'])) {
-                $this->warn("Skipped " . count($scaffoldResult['errors']) . " slice(s) due to existing directories or conflicts:");
+                $this->warn('Skipped '.count($scaffoldResult['errors']).' slice(s) due to existing directories or conflicts:');
                 foreach ($scaffoldResult['errors'] as $s => $err) {
                     $this->warn("  [{$s}] {$err}");
                 }
@@ -387,7 +400,7 @@ class SlicePortCommand extends Command
             // slices' tables did not exist yet — it imported 0 rows and
             // reported success.
             if ($this->option('import-data') || $deferredImport) {
-                $this->comment("⚙️  Running migrations for scaffolded slices (before data import)...");
+                $this->comment('⚙️  Running migrations for scaffolded slices (before data import)...');
                 $migrationRun = $portService->runTargetMigrations();
                 if (! empty($migrationRun['errors'])) {
                     foreach ($migrationRun['errors'] as $mp => $err) {
@@ -395,9 +408,9 @@ class SlicePortCommand extends Command
                     }
                 }
 
-                $this->comment("⚙️  Importing data via ETL...");
+                $this->comment('⚙️  Importing data via ETL...');
                 try {
-                    $dataPortService = new \LaraSlice\Porting\SliceDataPortService;
+                    $dataPortService = new SliceDataPortService;
                     $dataPortService->setImportAuth($importAuth);
                     $dataImport = $dataPortService->importFromDatabase(
                         $sourceConnection['database'] ?? 'erp',
@@ -407,20 +420,20 @@ class SlicePortCommand extends Command
                         $sourceConnection['password'] ?? ''
                     );
                     if ($dataImport['success'] ?? false) {
-                        $this->info("✓ Imported " . ($dataImport['total_rows'] ?? 0) . " rows across " . ($dataImport['tables_imported'] ?? 0) . " tables.");
+                        $this->info('✓ Imported '.($dataImport['total_rows'] ?? 0).' rows across '.($dataImport['tables_imported'] ?? 0).' tables.');
                     } else {
-                        $this->warn("Data import completed with issues.");
+                        $this->warn('Data import completed with issues.');
                     }
                     $this->surfaceDataImportWarnings($dataImport);
                 } catch (\Throwable $e) {
-                    $this->error("Data import failed: " . $e->getMessage());
+                    $this->error('Data import failed: '.$e->getMessage());
                 }
             }
         }
 
         $this->line('');
         $this->info('🎉 Porting analysis, blueprint synthesis & slice scaffolding completed successfully!');
-        $this->info("You can now open /laraslice/wizard in your browser to view the active modules and slices.");
+        $this->info('You can now open /laraslice/wizard in your browser to view the active modules and slices.');
 
         return self::SUCCESS;
     }
@@ -437,13 +450,13 @@ class SlicePortCommand extends Command
     {
         $missing = $dataImport['missing_target_tables'] ?? [];
         if (is_array($missing) && $missing !== []) {
-            $this->warn('⚠ Data import skipped ' . count($missing) . ' table(s) whose target tables do not exist: '
-                . implode(', ', $missing)
-                . '. Those rows were NOT imported — run the target migrations and re-run the import.');
+            $this->warn('⚠ Data import skipped '.count($missing).' table(s) whose target tables do not exist: '
+                .implode(', ', $missing)
+                .'. Those rows were NOT imported — run the target migrations and re-run the import.');
         }
 
         if (! empty($dataImport['auth_warning'])) {
-            $this->warn('⚠ ' . $dataImport['auth_warning']);
+            $this->warn('⚠ '.$dataImport['auth_warning']);
         }
     }
 
@@ -469,10 +482,10 @@ class SlicePortCommand extends Command
     {
         $stats = ['declared_permissions' => 0, 'proposed' => 0, 'resolved' => 0, 'resolved_via_alt' => 0];
         try {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('permissions')) {
+            if (! Schema::hasTable('permissions')) {
                 return $stats;
             }
-            $declared = array_flip(\Illuminate\Support\Facades\DB::table('permissions')->pluck('slug')->all());
+            $declared = array_flip(DB::table('permissions')->pluck('slug')->all());
             $stats['declared_permissions'] = count($declared);
             $resolves = static function (?string $slug) use ($declared): bool {
                 if ($slug === null || $slug === '*') {
@@ -594,6 +607,7 @@ class SlicePortCommand extends Command
         $specDir = base_path('porting/ui-spec');
         if (! is_dir($probeDir)) {
             $this->warn('No probes at porting/probes/ — capture the source pages first (the probe harness writes <slug>.json / <slug>-detail.json there).');
+
             return self::SUCCESS;
         }
 
@@ -651,8 +665,8 @@ class SlicePortCommand extends Command
             }
             $header = "# Source anatomy (slice:port --anatomy) — {$slug} · probed from the running source app
 "
-                ."# Evidence only: ports declare from this; decisions stay in the reviewed ui-spec.
-";
+                .'# Evidence only: ports declare from this; decisions stay in the reviewed ui-spec.
+';
             $anatomyPayload = ['slice' => $slug, 'pages' => $pages];
             $sliceInteractions = null;
             foreach ($interactions as $path => $entry) {
