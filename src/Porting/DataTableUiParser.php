@@ -22,6 +22,32 @@ class DataTableUiParser
         'Project' => 'ProjectsDataTable',
         'Invoices' => 'InvoicesDataTable',
         'Invoice' => 'InvoicesDataTable',
+        'EmployeeDetails' => 'EmployeesDataTable',
+        'EmployeeDetail' => 'EmployeesDataTable',
+        'Employees' => 'EmployeesDataTable',
+        'Employee' => 'EmployeesDataTable',
+        'LeadContacts' => 'LeadContactDataTable',
+        'LeadContact' => 'LeadContactDataTable',
+        'CreditNotes' => 'CreditNotesDataTable',
+        'CreditNote' => 'CreditNotesDataTable',
+        'Estimates' => 'EstimatesDataTable',
+        'Estimate' => 'EstimatesDataTable',
+        'Payments' => 'PaymentsDataTable',
+        'Payment' => 'PaymentsDataTable',
+        'TimeLogs' => 'TimeLogsDataTable',
+        'TimeLog' => 'TimeLogsDataTable',
+        'Leaves' => 'LeaveDataTable',
+        'Leave' => 'LeaveDataTable',
+        'Tickets' => 'TicketDataTable',
+        'Ticket' => 'TicketDataTable',
+        'Designations' => 'DesignationDataTable',
+        'Designation' => 'DesignationDataTable',
+        'Departments' => 'DepartmentDataTable',
+        'Department' => 'DepartmentDataTable',
+        'Holidays' => 'HolidayDataTable',
+        'Holiday' => 'HolidayDataTable',
+        'Expenses' => 'ExpensesDataTable',
+        'Expense' => 'ExpensesDataTable',
     ];
 
     /** Closed formatter list aligned with Slice YAML v0.1 */
@@ -75,11 +101,11 @@ class DataTableUiParser
     }
 
     /**
-     * @return array{columns: array<string, array>, filters: list, computed: list, skipped: list, file: ?string}
+     * @return array{columns: array<string, array>, filters: list, computed: list, skipped: list, file: ?string, get_columns?: list}
      */
     public function parseForSlice(string $sourcePath, string $sliceName): array
     {
-        $empty = ['columns' => [], 'filters' => [], 'computed' => [], 'skipped' => [], 'file' => null];
+        $empty = ['columns' => [], 'filters' => [], 'computed' => [], 'skipped' => [], 'file' => null, 'get_columns' => []];
         $file = $this->resolveDataTableFile($sourcePath, $sliceName);
         if ($file === null) {
             return $empty;
@@ -118,6 +144,15 @@ class DataTableUiParser
         if (! str_ends_with($studly, 's')) {
             $candidates[] = $studly.'sDataTable.php';
         }
+        if (str_ends_with($studly, 'Details')) {
+            $baseStem = substr($studly, 0, -7);
+            $candidates[] = $baseStem.'DataTable.php';
+            $candidates[] = $baseStem.'sDataTable.php';
+        } elseif (str_ends_with($studly, 'Detail')) {
+            $baseStem = substr($studly, 0, -6);
+            $candidates[] = $baseStem.'DataTable.php';
+            $candidates[] = $baseStem.'sDataTable.php';
+        }
 
         $base = rtrim($sourcePath, '/\\');
         $roots = [
@@ -141,19 +176,20 @@ class DataTableUiParser
     }
 
     /**
-     * @return array{columns: array<string, array>, filters: list, computed: list, skipped: list}
+     * @return array{columns: array<string, array>, filters: list, computed: list, skipped: list, get_columns: list}
      */
     public function parseFile(string $filePath): array
     {
         $src = @file_get_contents($filePath);
         if ($src === false || $src === '') {
-            return ['columns' => [], 'filters' => [], 'computed' => [], 'skipped' => []];
+            return ['columns' => [], 'filters' => [], 'computed' => [], 'skipped' => [], 'get_columns' => []];
         }
 
         $columns = [];
         $filters = [];
         $computed = [];
         $skipped = [];
+        $get_columns = $this->parseGetColumns($src);
 
         if (preg_match_all('/->\s*editColumn\s*\(\s*[\'"]([a-zA-Z0-9_]+)[\'"]\s*,/s', $src, $m, PREG_OFFSET_CAPTURE)) {
             foreach ($m[1] as $match) {
@@ -214,7 +250,118 @@ class DataTableUiParser
             }
         }
 
-        return compact('columns', 'filters', 'computed', 'skipped');
+        return compact('columns', 'filters', 'computed', 'skipped', 'get_columns');
+    }
+
+    /**
+     * Extract columns defined in getColumns() method of Yajra DataTable.
+     *
+     * @return list<array{handle: string, visible: bool, title: ?string, raw: string}>
+     */
+    public function parseGetColumns(string $src): array
+    {
+        if (! preg_match('/(?:public|protected|private)?\s*function\s+getColumns\s*\([^\)]*\)\s*[:\w\s]*\{/i', $src, $m, PREG_OFFSET_CAPTURE)) {
+            return [];
+        }
+
+        $startPos = $m[0][1] + strlen($m[0][0]);
+        $depth = 1;
+        $len = strlen($src);
+        $body = '';
+        for ($i = $startPos; $i < $len; $i++) {
+            $ch = $src[$i];
+            if ($ch === '{') {
+                $depth++;
+            } elseif ($ch === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    $body = substr($src, $startPos, $i - $startPos);
+                    break;
+                }
+            }
+        }
+
+        if ($body === '') {
+            return [];
+        }
+
+        $columns = [];
+        $seen = [];
+
+        // 1. Associative array entries: e.g. __('app.name') => ['data' => 'name', ...]
+        if (preg_match_all('/(?:(?:__\(|[\'"])(.*?)(?:\)|[\'"])\s*=>\s*)?\[([^\]]+)\]/s', $body, $arrayMatches, PREG_SET_ORDER)) {
+            foreach ($arrayMatches as $match) {
+                $inner = $match[2];
+
+                $dataHandle = null;
+                if (preg_match('/[\'"]data[\'"]\s*=>\s*[\'"]([a-zA-Z0-9_]+)[\'"]/', $inner, $dm)) {
+                    $dataHandle = $dm[1];
+                } elseif (preg_match('/[\'"]name[\'"]\s*=>\s*[\'"]([a-zA-Z0-9_]+)[\'"]/', $inner, $nm)) {
+                    $dataHandle = $nm[1];
+                }
+
+                if (! $dataHandle || isset($seen[$dataHandle])) {
+                    continue;
+                }
+
+                if (in_array($dataHandle, ['DT_RowIndex', 'check', 'checkbox', 'action'], true)) {
+                    continue;
+                }
+
+                $visible = true;
+                if (preg_match('/[\'"]visible[\'"]\s*=>\s*([^,\n\r]+)/', $inner, $vm)) {
+                    $val = trim($vm[1]);
+                    if ($val === 'false' || str_starts_with($val, '!')) {
+                        $visible = false;
+                    }
+                }
+
+                $title = null;
+                if (preg_match('/[\'"]title[\'"]\s*=>\s*(?:__\([\'"]([^\'"]+)[\'"]\)|[\'"]([^\'"]+)[\'"])/', $inner, $tm)) {
+                    $titleRaw = $tm[1] ?: $tm[2];
+                    $title = $this->formatTitle($titleRaw);
+                }
+
+                $seen[$dataHandle] = true;
+                $columns[] = [
+                    'handle' => $dataHandle,
+                    'visible' => $visible,
+                    'title' => $title,
+                    'raw' => trim($inner),
+                ];
+            }
+        }
+
+        // 2. Column::make / Column::computed
+        if (preg_match_all('/Column::(make|computed)\s*\(\s*[\'"]([a-zA-Z0-9_]+)[\'"](?:\s*,\s*(?:__\([\'"]([^\'"]+)[\'"]\)|[\'"]([^\'"]+)[\'"]))?\s*\)/', $body, $colMatches, PREG_SET_ORDER)) {
+            foreach ($colMatches as $cm) {
+                $dataHandle = $cm[2];
+                if (in_array($dataHandle, ['DT_RowIndex', 'check', 'checkbox', 'action'], true) || isset($seen[$dataHandle])) {
+                    continue;
+                }
+                $titleRaw = $cm[3] ?: ($cm[4] ?? null);
+                $title = $titleRaw ? $this->formatTitle($titleRaw) : null;
+
+                $seen[$dataHandle] = true;
+                $columns[] = [
+                    'handle' => $dataHandle,
+                    'visible' => true,
+                    'title' => $title,
+                    'raw' => $cm[0],
+                ];
+            }
+        }
+
+        return $columns;
+    }
+
+    protected function formatTitle(string $raw): string
+    {
+        $base = str_contains($raw, '.') ? basename(str_replace('.', '/', $raw)) : $raw;
+        $headline = Str::headline($base);
+
+        // Normalize acronyms
+        return preg_replace('/\bId\b/', 'ID', $headline);
     }
 
     protected function extractClosureBody(string $src, int $nameOffset): string
@@ -247,7 +394,7 @@ class DataTableUiParser
     }
 
     /**
-     * @return array{handle: string, formatter: string, source: string, confidence: string}|null
+     * @return array{handle: string, formatter: string, source: string, confidence: string, inline_edit?: bool}|null
      */
     protected function classifyBody(string $handle, string $body, string $via): ?array
     {
@@ -285,13 +432,23 @@ class DataTableUiParser
 
         if (
             str_contains($lower, '<img') || str_contains($lower, 'avatar') || str_contains($lower, 'user-image') || str_contains($lower, 'userimage')
+            || str_contains($lower, 'components.employee') || str_contains($lower, 'components.user')
         ) {
             if (
                 str_contains($h, 'user') || str_contains($h, 'member') || str_contains($h, 'assignee')
                 || str_contains($h, 'employee') || str_contains($lower, 'member') || str_contains($lower, 'user')
+                || $h === 'name' || $h === 'full_name'
             ) {
                 return $this->hint($handle, 'composite_user', $via, 'high');
             }
+        }
+
+        // Inline editable select (e.g. role assignment dropdown in employee table)
+        if (
+            str_contains($lower, 'assign_role')
+            || (str_contains($lower, '<select') && (str_contains($lower, 'select-picker') || str_contains($lower, 'form-control')))
+        ) {
+            return $this->hint($handle, 'text', $via, 'high', ['inline_edit' => true]);
         }
 
         // Title/heading with badges appended (private, pin, labels, timer) → text_with_badge
@@ -312,13 +469,13 @@ class DataTableUiParser
         if (
             str_contains($lower, 'change-status')
             || str_contains($lower, 'status_name')
+            || str_contains($lower, 'fa-circle')
+            || str_contains($lower, 'text-light-green')
+            || str_contains($lower, 'text-red')
             || ($isStatusHandle && (
-                str_contains($lower, 'fa-circle')
-                || str_contains($lower, 'label_color')
+                str_contains($lower, 'label_color')
                 || str_contains($lower, 'board_column')
                 || str_contains($lower, 'badge')
-                || str_contains($lower, 'text-red')
-                || str_contains($lower, 'text-success')
                 || str_contains($lower, 'text-dark-green')
                 || str_contains($lower, 'select-picker')
             ))
@@ -327,8 +484,14 @@ class DataTableUiParser
             return $this->hint($handle, 'status_pill', $via, 'high');
         }
 
-        if (str_contains($h, 'short_code') || str_contains($h, 'invoice_number') || $h === 'code') {
-            return $this->hint($handle, 'code_badge', $via, 'medium');
+        if (
+            str_contains($h, 'short_code') || str_contains($h, 'invoice_number') || $h === 'code'
+            || str_ends_with($h, '_code') || str_ends_with($h, '_id')
+            || (str_contains($lower, 'route(') && (str_contains($lower, 'show') || str_contains($lower, 'view')))
+        ) {
+            if (! str_contains($lower, '<select') && ! str_contains($lower, '<img') && ! str_contains($lower, 'components.employee')) {
+                return $this->hint($handle, 'code_badge', $via, 'high');
+            }
         }
 
         return $this->classifyByHandleName($handle);
@@ -387,47 +550,83 @@ class DataTableUiParser
     public function mergeIntoUi(array $ui, array $hints): array
     {
         $hintCols = $hints['columns'] ?? [];
-        if ($hintCols === []) {
-            return $ui;
-        }
+        $getCols = array_values(array_filter($hints['get_columns'] ?? [], fn ($c) => ($c['visible'] ?? true) === true));
 
         $ui['directory'] = $ui['directory'] ?? [];
         $ui['directory']['columns'] = $ui['directory']['columns'] ?? [];
 
-        $byHandle = [];
-        foreach ($ui['directory']['columns'] as $i => $col) {
-            $h = $col['handle'] ?? $col['key'] ?? null;
-            if ($h) {
-                $byHandle[$h] = $i;
-            }
-        }
+        // If getColumns() discovered visible columns, use them as the primary definition of the directory grid
+        if (! empty($getCols)) {
+            $newColumns = [];
+            $inlineEdits = $ui['directory']['inline_edit'] ?? [];
+            foreach ($getCols as $gc) {
+                $handle = $gc['handle'];
+                $meta = $hintCols[$handle] ?? $this->classifyByHandleName($handle) ?? ['formatter' => 'text'];
+                $formatter = $meta['formatter'] ?? 'text';
+                $label = $gc['title'] ?? Str::headline($handle);
+                $isInline = ($meta['inline_edit'] ?? false) === true;
+                if ($isInline && ! in_array($handle, $inlineEdits, true)) {
+                    $inlineEdits[] = $handle;
+                }
 
-        foreach ($hintCols as $handle => $meta) {
-            $formatter = $meta['formatter'] ?? null;
-            if (! $formatter || ! in_array($formatter, self::FORMATTERS, true)) {
-                continue;
-            }
-            if (isset($byHandle[$handle])) {
-                $i = $byHandle[$handle];
-                $ui['directory']['columns'][$i]['formatter'] = $formatter;
-                $ui['directory']['columns'][$i]['type'] = $formatter;
-                $ui['directory']['columns'][$i]['inferred_from'] = $meta['source'] ?? 'datatable';
-                if (! empty($meta['breakdown'])) {
-                    $ui['directory']['columns'][$i]['breakdown'] = $meta['breakdown'];
-                }
-                if (! empty($meta['badge_from'])) {
-                    $ui['directory']['columns'][$i]['badge_from'] = $meta['badge_from'];
-                }
-            } else {
-                $ui['directory']['columns'][] = [
+                $colDef = [
                     'handle' => $handle,
                     'key' => $handle,
-                    'label' => Str::headline($handle),
+                    'label' => $label,
                     'formatter' => $formatter,
                     'type' => $formatter,
-                    'sortable' => false,
-                    'inferred_from' => $meta['source'] ?? 'datatable',
+                    'sortable' => true,
+                    'inferred_from' => $meta['source'] ?? 'getColumns',
                 ];
+                if (! empty($meta['breakdown'])) {
+                    $colDef['breakdown'] = $meta['breakdown'];
+                }
+                if (! empty($meta['badge_from'])) {
+                    $colDef['badge_from'] = $meta['badge_from'];
+                }
+                if ($isInline) {
+                    $colDef['inline_edit'] = true;
+                }
+                $newColumns[] = $colDef;
+            }
+            $ui['directory']['columns'] = $newColumns;
+            $ui['directory']['inline_edit'] = $inlineEdits;
+        } elseif (! empty($hintCols)) {
+            $byHandle = [];
+            foreach ($ui['directory']['columns'] as $i => $col) {
+                $h = $col['handle'] ?? $col['key'] ?? null;
+                if ($h) {
+                    $byHandle[$h] = $i;
+                }
+            }
+
+            foreach ($hintCols as $handle => $meta) {
+                $formatter = $meta['formatter'] ?? null;
+                if (! $formatter || ! in_array($formatter, self::FORMATTERS, true)) {
+                    continue;
+                }
+                if (isset($byHandle[$handle])) {
+                    $i = $byHandle[$handle];
+                    $ui['directory']['columns'][$i]['formatter'] = $formatter;
+                    $ui['directory']['columns'][$i]['type'] = $formatter;
+                    $ui['directory']['columns'][$i]['inferred_from'] = $meta['source'] ?? 'datatable';
+                    if (! empty($meta['breakdown'])) {
+                        $ui['directory']['columns'][$i]['breakdown'] = $meta['breakdown'];
+                    }
+                    if (! empty($meta['badge_from'])) {
+                        $ui['directory']['columns'][$i]['badge_from'] = $meta['badge_from'];
+                    }
+                } else {
+                    $ui['directory']['columns'][] = [
+                        'handle' => $handle,
+                        'key' => $handle,
+                        'label' => Str::headline($handle),
+                        'formatter' => $formatter,
+                        'type' => $formatter,
+                        'sortable' => false,
+                        'inferred_from' => $meta['source'] ?? 'datatable',
+                    ];
+                }
             }
         }
 

@@ -24,6 +24,7 @@ use LaraSlice\Commands\SliceAiCommand;
 use LaraSlice\Commands\SliceCacheCommand;
 use LaraSlice\Commands\SliceClearCommand;
 use LaraSlice\Commands\SliceConformanceCommand;
+use LaraSlice\Commands\SliceDeriveSurfaceCommand;
 use LaraSlice\Commands\SliceDestroyCommand;
 use LaraSlice\Commands\SliceDiffCommand;
 use LaraSlice\Commands\SliceDriftCommand;
@@ -165,6 +166,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 SliceQualifyRoutesCommand::class,
                 SliceMigrateJsonToYamlCommand::class,
                 SlicePortCommand::class,
+                SliceDeriveSurfaceCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
                 SliceRegenFormCommand::class,
