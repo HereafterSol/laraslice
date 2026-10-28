@@ -9,7 +9,7 @@ class SliceCacheCommand extends Command
 {
     protected $signature = 'slice:cache';
 
-    protected $description = 'Create a slice discovery cache file for faster boot times in production';
+    protected $description = 'Create a slice discovery cache file for faster boot times in production (paths stored relative to base_path for portable clones)';
 
     public function handle(SliceManager $manager): int
     {

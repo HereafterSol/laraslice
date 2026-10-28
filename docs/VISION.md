@@ -68,7 +68,7 @@ Wanting a **full benchmark port** is **correct strategy** for the foundation. Sa
 
 **VSA + DDD (pragmatic):** Slices are **bounded contexts**, not tables. Aggregates, settings hub, and hidden child tables are **architecture**, not optional UX polish. The early “one table = one slice” phase was a **porter bug class**, not a reason to abandon VSA.
 
-**Soul:** Design system + density + JEV in Mind — keeps UI identity out of a fourth competing file tree. Good for multi-runtime **if** Body stays pattern-based (P1–P16), not framework-specific component names.
+**Soul:** Design system + density + **internal JEV** (Body→kit synthesis, `docs/KIT-CONTRACT.md`) in Mind — keeps UI identity out of a fourth competing file tree. **Today:** BlatUI + declarative `ui:`; **not** TypeSafe Jev API or Workday-style runtime UI. Good for multi-runtime **if** Body stays pattern-based (P1–P16), not framework-specific component names.
 
 ---
 

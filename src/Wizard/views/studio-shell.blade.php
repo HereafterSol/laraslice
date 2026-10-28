@@ -78,7 +78,7 @@
                     <button type="button" @click="setMode('port')" class="group rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition hover:shadow-md">
                         <span class="flex size-8 items-center justify-center rounded-lg bg-muted text-base">🔀</span>
                         <p class="mt-2.5 text-sm font-semibold text-foreground">Port a legacy app</p>
-                        <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">Reverse-engineer an existing Laravel app or SQL database into slices.</p>
+                        <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">Analyze a legacy Laravel app or database, review journeys, then execute when ready — no files written until you confirm.</p>
                         <p class="mt-2 text-xs font-semibold text-primary">Open Port →</p>
                     </button>
                     <button type="button" @click="setMode('design')" class="group rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition hover:shadow-md">

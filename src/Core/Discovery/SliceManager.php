@@ -124,16 +124,18 @@ class SliceManager
      */
     protected function loadManifest(string $manifestPath): SliceManifest
     {
+        $manifestPath = $this->resolveCachedManifestPath($manifestPath);
         $cache = $this->manifestDataCache();
-        if (isset($cache[$manifestPath]) && is_array($cache[$manifestPath]['data'] ?? null)) {
+        $cacheKey = $this->normalizeManifestPathForCache($manifestPath);
+        if (isset($cache[$cacheKey]) && is_array($cache[$cacheKey]['data'] ?? null)) {
             // Same-process writers (tests, Octane, queue workers) leave
             // PHP's stat cache holding the pre-edit values; without a
             // clear, the freshness guard blesses the stale entry.
             clearstatcache(true, $manifestPath);
             $mtime = @filemtime($manifestPath);
             $size = @filesize($manifestPath);
-            if ($mtime === ($cache[$manifestPath]['mtime'] ?? null) && $size === ($cache[$manifestPath]['size'] ?? null)) {
-                return SliceManifest::fromParsed($manifestPath, $cache[$manifestPath]['data']);
+            if ($mtime === ($cache[$cacheKey]['mtime'] ?? null) && $size === ($cache[$cacheKey]['size'] ?? null)) {
+                return SliceManifest::fromParsed($manifestPath, $cache[$cacheKey]['data']);
             }
         }
 
@@ -163,8 +165,12 @@ class SliceManager
                 // legacy map's keys could not represent as
                 // separate entries on the write side.
                 foreach ($cached as $manifestPath) {
-                    if (is_string($manifestPath) && file_exists($manifestPath)) {
-                        $manifest = $this->loadManifest($manifestPath);
+                    if (! is_string($manifestPath)) {
+                        continue;
+                    }
+                    $resolved = $this->resolveCachedManifestPath($manifestPath);
+                    if (file_exists($resolved)) {
+                        $manifest = $this->loadManifest($resolved);
                         $this->registerManifest($manifest);
                         if ($manifest->active) {
                             $this->bootSlice($manifest);
@@ -259,6 +265,66 @@ class SliceManager
     }
 
     /**
+     * Store manifest paths relative to base_path() so a copied app tree
+     * does not keep pointing at another install (erp-replica vs erp-port-v201).
+     */
+    protected function normalizeManifestPathForCache(string $absolutePath): string
+    {
+        $real = realpath($absolutePath);
+        if ($real === false) {
+            return $absolutePath;
+        }
+
+        $base = realpath(base_path());
+        if ($base !== false && str_starts_with($real, $base)) {
+            return ltrim(str_replace('\\', '/', substr($real, strlen($base))), '/');
+        }
+
+        return $real;
+    }
+
+    /**
+     * Resolve a cached manifest path (relative or legacy absolute from another clone).
+     */
+    protected function resolveCachedManifestPath(string $storedPath): string
+    {
+        if ($storedPath === '') {
+            return $storedPath;
+        }
+
+        $normalized = str_replace('\\', '/', $storedPath);
+        $isAbsolute = preg_match('#^(?:[A-Za-z]:/|/)#', $normalized) === 1;
+        if (! $isAbsolute) {
+            $candidate = base_path(str_replace('/', DIRECTORY_SEPARATOR, $storedPath));
+            if (file_exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        if (file_exists($storedPath)) {
+            return $storedPath;
+        }
+
+        $markers = [
+            'app/Slices',
+            'vendor/hereafter/laraslice/src/Slices',
+        ];
+        foreach ($markers as $marker) {
+            $pos = stripos($normalized, $marker);
+            if ($pos === false) {
+                continue;
+            }
+            $suffix = substr($normalized, $pos);
+            $rebasing = base_path(str_replace('/', DIRECTORY_SEPARATOR, $suffix));
+            if (file_exists($rebasing)) {
+                return $rebasing;
+            }
+        }
+
+        return $storedPath;
+    }
+
+    /**
      * Check if slice discovery is cached.
      */
     public function isCached(): bool
@@ -289,7 +355,7 @@ class SliceManager
                     'writing the cache would silently drop it from the registry.'
                 );
             }
-            $paths[] = $manifestFile;
+            $paths[] = $this->normalizeManifestPathForCache($manifestFile);
         }
 
         $cachePath = $this->getCachedSlicesPath();
@@ -311,7 +377,8 @@ class SliceManager
         foreach ($this->discoveredSlices as $manifest) {
             $manifestFile = $this->findManifest($manifest->path);
             if ($manifestFile && file_exists($manifestFile)) {
-                $dataCache[$manifestFile] = [
+                $cacheKey = $this->normalizeManifestPathForCache($manifestFile);
+                $dataCache[$cacheKey] = [
                     'mtime' => filemtime($manifestFile),
                     'size' => filesize($manifestFile),
                     'data' => $manifest->raw,
@@ -404,10 +471,12 @@ class SliceManager
             }
             if ($foreachIdx === null && str_contains($line, '@foreach($quickFilters as $qf)')) {
                 $foreachIdx = $i;
+
                 continue;
             }
             if ($foreachIdx !== null && $endforeachIdx === null && str_contains($line, '@endforeach')) {
                 $endforeachIdx = $i;
+
                 continue;
             }
             if ($endforeachIdx !== null && trim($line) === '@endif') {
@@ -435,6 +504,7 @@ class SliceManager
         foreach ($lines as $i => $line) {
             if ($dtIdx === null && str_contains($line, '<x-ui.data-table')) {
                 $dtIdx = $i;
+
                 continue;
             }
             if ($dtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -533,9 +603,9 @@ class SliceManager
 
         // Broken intermediate (first (ah) run): the @if ended up
         // BOTH before and inside the div. Drop the inner one.
-        $brokenPattern = "        ".$ifLine."\n    ".$divOpen."\n        ".$ifLine;
+        $brokenPattern = '        '.$ifLine."\n    ".$divOpen."\n        ".$ifLine;
         if (str_contains($content, $brokenPattern)) {
-            return str_replace($brokenPattern, "    ".$ifLine."\n    ".$divOpen, $content);
+            return str_replace($brokenPattern, '    '.$ifLine."\n    ".$divOpen, $content);
         }
 
         // Original shape: div (with empty:hidden) wrapping the
@@ -561,7 +631,7 @@ class SliceManager
         if (! preg_match('/^\s*<div class="ml-auto flex flex-wrap items-center gap-2">/', (string) $inner)) {
             return null;
         }
-        $bar = "    ".$ifLine."\n    ".$divOpen.$inner."    </div>\n    @endif";
+        $bar = '    '.$ifLine."\n    ".$divOpen.$inner."    </div>\n    @endif";
 
         return substr($content, 0, $pos).$bar.substr($content, $closePos + strlen($closePair));
     }
@@ -962,6 +1032,7 @@ BLADE;
 
     /**
      * Repair rule (z): widen the slots guard. Finds the narrow
+     *
      * @if(!empty($quickFilters)) line that opens the block
      * containing <x-slot:toolbar-lead> or <x-slot:quick-filters>
      * (within the next two non-blank lines) and widens it to
@@ -1025,6 +1096,7 @@ BLADE;
         foreach ($lines as $i => $line) {
             if ($gtIdx === null && str_contains($line, '<x-ui.data-table')) {
                 $gtIdx = $i;
+
                 continue;
             }
             if ($gtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -1097,6 +1169,7 @@ BLADE;
             foreach ($lines as $i => $line) {
                 if ($gtIdx === null && str_contains($line, '<x-ui.data-table')) {
                     $gtIdx = $i;
+
                     continue;
                 }
                 if ($gtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -1212,6 +1285,7 @@ BLADE;
             $l = $blockLines[$i];
             if (trim($l) === '') {
                 $i++;
+
                 continue;
             }
             if (str_contains($l, "\$can['seed']")) {
@@ -1285,6 +1359,7 @@ BLADE;
         foreach ($lines as $i => $line) {
             if ($dtIdx === null && str_contains($line, '<x-ui.data-table')) {
                 $dtIdx = $i;
+
                 continue;
             }
             if ($dtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -1330,7 +1405,6 @@ BLADE;
 
         return true;
     }
-
 
     /**
      * Register the G2 declared routes (document, matrix) for a slice.
@@ -1658,7 +1732,7 @@ BLADE;
             ."    <div class=\"flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2\">\n"
             .$cluster."\n"
             ."    </div>\n"
-            ."    @endif";
+            .'    @endif';
         $content = substr($content, 0, $insertAt).$commandBar.substr($content, $insertAt);
 
         // 3) Toolbar-lead slot inside the data-table invocation.
@@ -1717,7 +1791,7 @@ BLADE;
             ."        <div class=\"ml-auto flex flex-wrap items-center gap-2\">\n"
             .$headerCluster."\n"
             ."        </div>\n"
-            ."        @endif";
+            .'        @endif';
 
         // Insert into the title row: shape A (title + breadcrumb
         // in one flex row) and shape B (Compact Top Bar: inner
@@ -1869,7 +1943,7 @@ BLADE;
                                 ."        </x-ui.card>\n"
                                 ."        @endforeach\n"
                                 ."    </div>\n"
-                                ."    @endif";
+                                .'    @endif';
                         }
                         if ($inject !== '') {
                             $lines = explode("\n", $vContent);
@@ -2237,7 +2311,7 @@ BLADE;
                         if (str_contains($vContent, '<x-ui.filter-tabs') && ! str_contains($vContent, 'filterDefaults')) {
                             $vContent = str_replace(
                                 ':param="$qf[\'handle\']"',
-                                ':param="$qf[\'handle\']"' . "\n" . '                :activeTab="$activeFilters[$qf[\'handle\']] ?? null"' . "\n" . '                :default="$filterDefaults[$qf[\'handle\']] ?? null"',
+                                ':param="$qf[\'handle\']"'."\n".'                :activeTab="$activeFilters[$qf[\'handle\']] ?? null"'."\n".'                :default="$filterDefaults[$qf[\'handle\']] ?? null"',
                                 $vContent
                             );
                             $vChanged = true;
@@ -2344,7 +2418,7 @@ BLADE;
                             $manifestData = ManifestRepository::read($slice->path.'/slice.yaml');
                             $createLabel = $manifestData['ui']['directory']['create_label'] ?? null;
                             if (is_string($createLabel) && $createLabel !== '') {
-                                $generated = 'Add '.\Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slice->name));
+                                $generated = 'Add '.Str::studly(Str::singular($slice->name));
                                 if ($generated !== $createLabel && str_contains($vContent, $generated)) {
                                     // Idempotency (fixed 25 Oct
                                     // 2026): when the declared
@@ -2489,13 +2563,13 @@ BLADE;
                         if ($base === 'show.blade.php') {
                             $compacted = str_replace(
                                 ['<x-ui.card class="p-6 bg-card border shadow-xs">',
-                                 'size-14 rounded-2xl bg-primary/10 text-primary font-bold text-lg',
-                                 '<div class="space-y-6" x-data="{ activeTab:',
-                                 'px-4 py-2.5 text-[13px] font-medium border-b-2'],
+                                    'size-14 rounded-2xl bg-primary/10 text-primary font-bold text-lg',
+                                    '<div class="space-y-6" x-data="{ activeTab:',
+                                    'px-4 py-2.5 text-[13px] font-medium border-b-2'],
                                 ['<x-ui.card class="p-4 bg-card border shadow-xs">',
-                                 'size-11 rounded-xl bg-primary/10 text-primary font-bold text-base',
-                                 '<div class="space-y-4" x-data="{ activeTab:',
-                                 'px-4 py-2 text-[13px] font-medium border-b-2'],
+                                    'size-11 rounded-xl bg-primary/10 text-primary font-bold text-base',
+                                    '<div class="space-y-4" x-data="{ activeTab:',
+                                    'px-4 py-2 text-[13px] font-medium border-b-2'],
                                 $vContent
                             );
                             if ($compacted !== $vContent) {
@@ -2881,6 +2955,7 @@ BLADE;
                                         $webContent = $stripped;
                                         $contentChanged = true;
                                     }
+
                                     continue;
                                 }
 
@@ -2943,7 +3018,6 @@ BLADE;
 
             }
         }
-
 
         // Ensure index data-table reflects YAML ui.directory (views, inline_edit, date-key)
         $this->repairIndexDirectoryUi($slice);
@@ -3382,14 +3456,15 @@ PHP;
             return array_intersect($roleSlugs, $user->roleSlugs()) !== [];
         }
         try {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('role_user') || ! \Illuminate\Support\Facades\Schema::hasTable('roles')) {
+            if (! Schema::hasTable('role_user') || ! Schema::hasTable('roles')) {
                 return false;
             }
             $uid = $user->id ?? $user->getAuthIdentifier();
             if (! $uid) {
                 return false;
             }
-            return \Illuminate\Support\Facades\DB::table('role_user')
+
+            return DB::table('role_user')
                 ->join('roles', 'role_user.role_id', '=', 'roles.id')
                 ->where('role_user.user_id', $uid)
                 ->whereIn('roles.slug', $roleSlugs)
@@ -3470,6 +3545,7 @@ PHP;
             if (is_array($allowedRoles) && $allowedRoles !== [] && $currentUser && ! $isSuperAdmin) {
                 $normalized = array_values(array_filter(array_map(static function ($r) {
                     $r = strtolower(trim((string) $r));
+
                     // accept "role:employee" from journeys.v2 gates
                     return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
                 }, $allowedRoles)));
@@ -3557,6 +3633,7 @@ PHP;
                     if (is_array($childRoles) && $childRoles !== [] && $currentUser && ! $isSuperAdmin) {
                         $cn = array_values(array_filter(array_map(static function ($r) {
                             $r = strtolower(trim((string) $r));
+
                             return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
                         }, $childRoles)));
                         if ($cn !== [] && ! $this->userHasAnyRole($currentUser, $cn)) {
@@ -4155,8 +4232,8 @@ PHP;
             $sJson = json_decode(@file_get_contents($slice->path.'/slice.yaml'), true) ?: [];
             $sliceManifestRoles = $sJson['roles'] ?? ($sJson['workflow']['roles'] ?? []);
         }
-        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)) {
-            $sYaml = \Symfony\Component\Yaml\Yaml::parse(@file_get_contents($slice->path.'/slice.yaml')) ?: [];
+        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml') && class_exists(Yaml::class)) {
+            $sYaml = Yaml::parse(@file_get_contents($slice->path.'/slice.yaml')) ?: [];
             $sliceManifestRoles = $sYaml['roles'] ?? ($sYaml['workflow']['roles'] ?? []);
         }
         foreach ($sliceManifestRoles as $r) {
@@ -4453,5 +4530,4 @@ BLADE;
 
         return $content;
     }
-
 }

@@ -5,6 +5,8 @@ Branch: `master` (feature branch merged)
 
 Goal: ERP-class porting that is **usable for admin / employee / client**, with **demo-aligned IA**, **Slice Studio as daily driver**, and **JSON + YAML + DB** sync.
 
+**Port / greenfield programme (v2):** [PORT-100-PLAYBOOK.md](PORT-100-PLAYBOOK.md) · Gate truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) · Backlog epic: [BACKLOG.md](BACKLOG.md#port-programme-v2).
+
 **v1.7.0 shipped (2026-10-20):** Slice YAML v0.1 spec + validator, formatter pipeline (YAML → pixels), Phase 2 DataTable parser, non-Laravel porting (SQL-dump legacy apps), Dev Studio Standard. Verified by porting a **production Laravel ERP** (85 slices) and a **non-Laravel legacy suite** via SQL dumps (407 tables). Next: Slice Studio progressive disclosure (first post-merge PR), YAML elimination (JSON → YAML-only), Phase B spec publishing, FlutterSlice proof-of-concept.
 
 ---

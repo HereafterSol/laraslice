@@ -2,10 +2,10 @@
     <!-- Panel chrome lives in the Dev Studio shell; the panel keeps only its action row + tabs. -->
     <div class="sticky top-0 z-30 bg-background/95 backdrop-blur -mx-1 px-1">
     <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
-        <p class="max-w-3xl text-xs text-muted-foreground">Reverse-engineer a legacy app into vertical slices. After Analyze → Apply, ongoing customization (fields, UI, personas, bulk actions, history) continues in <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button>.</p>
-        <button @click="analyze()" :disabled="analyzing" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 md:px-4 md:text-sm">
-            <span x-show="!analyzing">🔍 Analyze</span>
-            <span x-show="analyzing" class="animate-pulse">Analyzing...</span>
+        <p class="max-w-3xl text-xs text-muted-foreground">Turn a legacy app into vertical slices. <strong class="text-foreground">Analyze</strong> builds a read-only plan; <strong class="text-foreground">Execute</strong> writes code under <code class="rounded bg-muted px-1 font-mono text-[10px]">app/Slices</code>. Day-to-day edits live in <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button>.</p>
+        <button @click="analyze()" :disabled="analyzing" title="Inspect the source and build a port plan (does not write files yet)" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 md:px-4 md:text-sm">
+            <span x-show="!analyzing">🔍 Analyze source</span>
+            <span x-show="analyzing" class="animate-pulse">Analyzing…</span>
         </button>
     </div>
     <div class="border-b border-border">
@@ -88,6 +88,10 @@
             </div>
             <div x-show="error" class="mt-3 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-400" x-text="error"></div>
 
+            <div x-show="!planData && !analyzing" class="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span class="font-semibold text-foreground">Start here:</span> pick a source path or Git URL, set a short domain name (e.g. <span class="font-mono">ERP</span>), then click <strong class="text-foreground">Analyze source</strong>. You can review journeys and navigation before anything is written to disk.
+            </div>
+
             <!-- Saved presets + cached sources -->
             <div class="mt-3 flex flex-wrap items-center gap-2">
                 <button type="button" @click="savePreset()" :disabled="!planData"
@@ -135,6 +139,26 @@
                     </template>
                 </div>
             </div>
+        </div>
+
+        <!-- Post-analyze: plain-language next steps (SKILL §16 review before Execute) -->
+        <div x-show="planData" x-cloak class="rounded-xl border border-primary/25 bg-primary/5 p-4 md:p-5">
+            <p class="text-sm font-bold text-foreground">What happens next?</p>
+            <p class="mt-1 text-xs text-muted-foreground">Analyze only previews the plan. Nothing is copied into your app until you choose one of the paths below.</p>
+            <ol class="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                <li class="rounded-lg border border-border/60 bg-card/80 p-3">
+                    <span class="font-bold text-foreground">1 · Review</span>
+                    <p class="mt-1">Walk the <button type="button" @click="activeTab = 'journeys'" class="font-semibold text-primary underline">User Journeys</button> and <button type="button" @click="activeTab = 'sidebar'" class="font-semibold text-primary underline">Sidebar</button> tabs with stakeholders.</p>
+                </li>
+                <li class="rounded-lg border border-border/60 bg-card/80 p-3">
+                    <span class="font-bold text-foreground">2 · Optional: Design</span>
+                    <p class="mt-1"><button type="button" @click="loadIntoBlueprint()" class="font-semibold text-primary underline">Open in Design</button> to tweak YAML before scaffolding.</p>
+                </li>
+                <li class="rounded-lg border border-border/60 bg-card/80 p-3">
+                    <span class="font-bold text-foreground">3 · Execute</span>
+                    <p class="mt-1">When the plan looks right, run <strong class="text-foreground">Execute Porting</strong> (writes slices). Then open <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button> for fields, UI, and workflows.</p>
+                </li>
+            </ol>
         </div>
 
         <!-- Tab: Workflow Guide -->
@@ -803,15 +827,18 @@
         <div x-show="activeTab === 'log'" class="rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-[11px] text-emerald-400 h-[300px] overflow-y-auto">
             <template x-for="(log, idx) in logs" :key="idx"><div x-text="log"></div></template>
             <div x-show="executing" class="animate-pulse text-indigo-400">Processing...</div>
-            <div x-show="!logs.length && !executing" class="text-slate-500">No execution yet.</div>
+            <div x-show="!logs.length && !executing" class="space-y-1 text-slate-500">
+                <p>No execution yet.</p>
+                <p class="text-[10px] leading-relaxed">After you run <strong class="text-slate-400">Execute Porting</strong>, this log shows scaffold progress. Use <strong class="text-slate-400">Open in Design</strong> first if you want to edit the plan without writing files.</p>
+            </div>
         </div>
 
         <!-- Action bar (sticky bottom on mobile) -->
         <div x-show="planData" class="sticky bottom-0 -mx-4 px-4 py-3 bg-card/95 backdrop-blur border-t border-border md:static md:mx-0 md:px-0 md:bg-transparent md:border-0">
-            <div class="flex gap-2">
-                <button @click="loadIntoBlueprint()" class="flex-1 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500">📥 Load into Blueprint Studio</button>
-                <button @click="execute()" :disabled="executing || !planData" class="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50">⚡ Execute Porting (scaffold slices)</button>
-                <p class="text-[10px] text-muted-foreground w-full mt-1">Analyze plans only. <strong>Execute</strong> writes <code class="font-mono">app/Slices</code> from the plan. Then customize in Slice Studio + <code class="font-mono">slice:sync</code>.</p>
+            <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button type="button" @click="loadIntoBlueprint()" title="Load the analyzed plan into Design mode (still no disk write until Apply/Execute)" class="flex-1 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500">📐 Open in Design</button>
+                <button type="button" @click="execute()" :disabled="executing || !planData" title="Write slice code from the current plan — confirm journeys first" class="flex-1 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50">⚡ Execute Porting</button>
+                <p class="w-full text-[10px] text-muted-foreground">Analyze is safe to rerun. Execute creates files under <code class="font-mono">app/Slices</code>; refine live data and UI in Manage, then <code class="font-mono">slice:sync</code> if the DB drifted.</p>
             </div>
         </div>
     </div>
@@ -895,6 +922,14 @@ function portingStudio() {
         activeNodes: {},
         highlightedStep: null,
         copiedKey: null,
+
+        setMode(id) {
+            if (window.__oneStudioSetMode) {
+                window.__oneStudioSetMode(id);
+                return;
+            }
+            window.location.href = '/laraslice/studio?mode=' + encodeURIComponent(id);
+        },
 
         toggleMermaid(key) {
             this.showMermaid[key] = !this.showMermaid[key];
@@ -1389,6 +1424,7 @@ function portingStudio() {
                 } else {
                     this.logs.push('✓ ' + (data.message || 'Porting completed'));
                     this.logs.push('  slices written: ' + (data.slices_created_count ?? Object.keys(data.result?.slices_created || {}).length));
+                    this.logs.push('→ Next: open Manage (⌘4) for fields/UI, or Design to adjust YAML and re-apply.');
                 }
             } catch (e) {
                 this.logs.push('✗ Error: ' + e.message);

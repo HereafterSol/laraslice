@@ -7,6 +7,11 @@ description: Architectural standards, CLI commands, Declarative Schemas, multi-t
 
 > **Release baseline:** Prefer **`hereafter/laraslice` v2.0.1+** ([Verification Patch](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1)) for ports and replicas. Use `--import-auth` on data import, run `slice:drift` (zero errors) before parity claims, and maintain `porting/REPLICA-STATUS.md` per §22 (lowest gate = status). **Do not confuse framework architecture with a finished replica:** `docs/ARCHITECTURE-VS-PORT-TRUTH.md`. **Vision & benchmark crucible:** `docs/VISION.md`. **Naming:** `docs/NAMING.md` (no competitor product names in public docs). Framework backlog: `docs/BACKLOG.md` in the package repo.
 
+### Port 100% programme & Studio (owners + agents)
+
+- **Ordered playbook:** `docs/PORT-100-PLAYBOOK.md` — Analyze → Phase 0 composition → Phase D nav → Gates S/D/F/T/V → Studio handoff; replica **100%** = lowest gate PASS on signed scope; greenfield branch in the same doc (Skill §24).
+- **Non-technical users:** Plan mode Mind is the requirements contract (plain language, human sign-off; drafts never self-promoted). Operate mode is run-state (health, access review, operator manual). Do not quote replica % from chat — point to `REPLICA-STATUS.md` (ports) or release checklist (greenfield). Standard pages stay YAML + Studio — not ad-hoc Blade tours.
+- **JEV honesty:** Internal UI synthesis is Body→kit (`docs/KIT-CONTRACT.md`), not the TypeSafe Jev product API; optional TypeSafe closed-choice helper is backlog-only and separate from `JevDecisionService` (see `docs/BACKLOG.md` UI/JEV items).
 
 This skill provides comprehensive instructions for AI agents and developers working on **LaraSlice** applications. It covers the Three-Layer Packaging Model (ADR-001), Vertical Slice Architecture, Pure BlatUI tokens, Declarative Schema Builder, multi-table aggregate patterns, cross-slice communication, and deep integration with **Laravel Boost**.
 
@@ -1041,6 +1046,7 @@ When an AI agent or developer is tasked with porting an existing monolithic appl
 8. **100% port checklist (ERP benchmark)**: aggregates + settings hub (`type: settings_hub`) + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order (taxonomies → settings → roots → children → pivots). Apply must leave Porting/Blueprint/Slice Studio useful for customization.
 9. **Workflow bulk actions**: Seed `ui.directory.bulk_actions` from detected transitions; Studios remain the place to add/remove bulk and row actions.
 10. **Parity claim language (24 Oct 2026)**: A port claim must name its tiers — data, availability, structure, behaviour, appearance. Structural/behavioural gates passing does NOT license "100% replica" in any release, doc, or landing copy unless the appearance tier (source design tokens + form presentations, captured by `slice:port --anatomy` design capture and checked by the visual gate) also passes or its deviations are recorded and approved. When in doubt, write "structural replica" — it is the stronger claim because it is the true one.
+11. **Post-analyze original fidelity (mandatory)**: Initial Analyze / `slice:port --dry-run` / schema scaffolding is **not** a finished port. For benchmark replicas (ERP-class), the agent MUST run **§16.5.1** immediately after Analyze — compile nav and compositions from the **source** menu, routes, and pages; hide child slices; map create/edit/show/hub/dialog patterns to Body `ui:` — before treating list CRUD as parity. Stopping at "N slices generated" with every table in the sidebar is a **process failure**, not a framework limitation.
 
 Over **50% to 60% of an application's architecture can be accurately reverse-engineered directly from its database schema, foreign keys, and seeders**.
 
@@ -1434,6 +1440,55 @@ porting_notes:
   - "Source has 10 custom routes (markSent, markCancelled, email) — add as slice actions"
   - "Tables invoice_histories is v1 legacy (2017), no active model — excluded from aggregate"
 ```
+
+### 16.5.1 Post-Analyze Original Fidelity Mandate (follow the source — mandatory for replicas)
+
+**Purpose:** Analyze tells you *what exists* in the database; it does **not** license shipping the default porter output (one navigable slice per table, generic CRUD labels, BlatUI shell only). For any port that targets **behavioural or visual parity** with a legacy system, the AI agent MUST treat Analyze as **Phase 0 input** and execute this mandate **before** claiming Gate F/T progress or stopping work.
+
+**When this applies:** ERP / multi-module suites, explicit "replica" or "match original" goals, or any project with `porting/REPLICA-STATUS.md`. Skip only when the owner documents **greenfield** (no source UI to follow).
+
+**Hard stops (do not declare port "done" if any are true):**
+
+| Signal | Meaning |
+| --- | --- |
+| Sidebar item count ≫ source primary menu count | Table explosion still visible — run nav compile + `visible: false` on children |
+| Nav label is table name (`Employee Details`) not source label (`Employees`) | Remap `navigation.label` / Mind map from source menu |
+| Create is per-child slice while source uses one composed form | Missing §22 Phase 0 composition (account-backed directory) |
+| `ui.show.tabs` has only Overview + Activity on a source **hub** | Hub parity not started — §16.6 Step 2 + §19 |
+| No `porting/source-nav-inventory` or equivalent artifact | Analyze was not tied to real menu |
+
+**Phase D — Original fidelity (run in order after §16.5 Phases A–C):**
+
+1. **Source nav inventory (authoritative over slice discovery)**
+   - Extract the gated menu from `menu.blade.php`, `x-menu-item`, layout sidebars, and module permission keys — same order as §12 rule 1.
+   - Write `porting/source-nav-inventory.json` (or Mind `navigation:` in `system.yaml`) with: `group`, `label`, `legacy_route`, `permission`, `children[]`.
+   - **Sidebar groups** use demo-aligned names only: Work, Finance, HR, CRM, Orders, Tickets, Events, Messages, Settings (`docs/PORTING_FOUNDATION_RULES.md`).
+
+2. **Composition map (§22 Phase 0 — before celebrating schema)**
+   - For each primary nav item, name the **owner slice** and every model the source **create / show / edit** touches (e.g. Employees = `users` + `employee_details` + role attach; Invoice document = header + items + totals).
+   - Record in `porting/composition-map.json` or the port plan `compositions[]`. Child tables NEVER get their own sidebar row unless the source menu has a dedicated link.
+
+3. **Nav convergence on Hearts**
+   - Primary roots: `navigation.visible: true`, `navigation.label` = source label, `navigation.group` = compiled group, `navigation.roles` / `personas` from source guards.
+   - Auxiliary / child / `*_items` / `*_lines` / taxonomies / histories: `navigation.visible: false`; expose via parent `ui.show.tabs`, Settings hub, or document workspace.
+   - Run: `php artisan slice:repair --remap-nav --publish-ui` then `php artisan slice:cache`.
+   - **Port-tree helper (example):** policy YAML + `porting/apply-phase-d-nav.php` on benchmark ports (e.g. `erp-port-v201` HR group) — replicate pattern per `navigation.group`.
+   - **Acceptance:** navigable slice count in sidebar ≈ source primary menu (± Settings/Studio entries), not "one row per migrated table".
+
+4. **Page-level fidelity per primary surface (original behaviour, BlatUI presentation)**
+   - **Directory:** Match source columns, filters, bulk actions, and row actions in `ui.directory` — not only DB `show_in_list` flags.
+   - **Create / edit:** One transaction when the source uses one form (`ui.forms` sections + account-backed create in owner slice); map modal vs full-page from source (`ui.presentation`).
+   - **Show / hub:** `ui.show.tabs` for every sub-entity the source shows as tabs on the profile/workspace (§16.6 Step 2, §19).
+   - **Dialogs / AJAX:** Map to BlatUI drawer/modal patterns; document unmigrated legacy JS in `porting_notes` and Gate T matrix — do not silently drop Invite / Import / custom row actions.
+
+5. **Evidence & gates**
+   - Update `porting/REPLICA-STATUS.md`: lowest gate wins; name **T** and **V** explicitly for nav/hub/CRUD gaps.
+   - Pair flagship surfaces (side-by-side URLs or PNG pairs); classify deltas **D / M / S** per §22 Gate V.
+   - Run Gate T journeys from the composition map (full form fill, same DB outcome in source and port).
+
+**AI workflow rule:** After Porting Studio **Analyze** or chat-based schema review, the **next** user-visible plan MUST include Phase D steps 1–5 — not "apply migrations" alone. If the user asks only for data import, still flag nav/composition debt in `REPLICA-STATUS.md`.
+
+**Relationship to skills vs core:** LaraSlice **core** supplies gated nav, Body `ui:`, hub tabs, and repair commands. **Failure to run this mandate** is an agent/port-programme gap (erp-port-v201 lesson: 148 slices, 0 `visible: false`). **BlatUI chrome** vs legacy theme remains Gate **S** unless appearance tier is in scope.
 
 ### 16.6 AI-Guided 4-Step Page & UI Porting Methodology (BlatUI Parity)
 When transitioning from database/schema migration to full UI feature parity, follow the standardized **4-Step BlatUI Methodology** for every ported slice. Never generate ad-hoc HTML or non-BlatUI dependencies (0% Metronic, Livewire, or Flux):
@@ -2224,6 +2279,8 @@ v4". The rules an agent must follow on ANY page work:
 
 ## 22. The 100% Replica Protocol — porting any existing system
 
+**Playbook (phases + agent checklist + greenfield branch):** `docs/PORT-100-PLAYBOOK.md`.
+
 A replica claim is a MEASURED state, never an impression.
 "100%" is earned gate by gate, and a port's status is its
 LOWEST unverified gate. Five gates, in order; each produces
@@ -2232,8 +2289,11 @@ porter workflow (§12/§16) does the building; this protocol
 decides when building may call itself a replica.
 
 **Phase 0 — the composition map (before any table work).**
-Tables are not the unit of porting; surfaces are. From the
-source's routes, controllers and views, list every surface
+Tables are not the unit of porting; surfaces are. After
+Analyze, agents MUST execute **§16.5.1** so nav and pages
+follow the source — not the default one-table-one-sidebar
+porter layout. From the source's routes, controllers and
+views, list every surface
 whose read or write spans more than one model: users-backed
 directories (employees = users + details; clients = users +
 client details), documents (invoice = header + items +

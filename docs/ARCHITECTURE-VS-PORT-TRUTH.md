@@ -23,7 +23,7 @@ This page keeps them separate so marketing, AI agents, and project owners quote 
 
 The framework does **not** promise that running `slice:port` once yields a finished replica. It promises a **mechanical path** to get there if you walk the gates.
 
-Full protocol: [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) · Trilogy: [MIND_BODY_HEART.md](MIND_BODY_HEART.md) · Porting rules: [PORTING_FOUNDATION_RULES.md](PORTING_FOUNDATION_RULES.md) · Lifecycle: [SDLC.md](SDLC.md)
+Full protocol: [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) · Ordered programme: [PORT-100-PLAYBOOK.md](PORT-100-PLAYBOOK.md) · Trilogy: [MIND_BODY_HEART.md](MIND_BODY_HEART.md) · Porting rules: [PORTING_FOUNDATION_RULES.md](PORTING_FOUNDATION_RULES.md) · Lifecycle: [SDLC.md](SDLC.md)
 
 ---
 
@@ -44,6 +44,8 @@ Every port keeps **`porting/REPLICA-STATUS.md`** at the application root (not in
 ---
 
 ## Mandatory order (do not skip)
+
+Playbook: [PORT-100-PLAYBOOK.md](PORT-100-PLAYBOOK.md) (Analyze → Phase 0 → Phase D nav → gates → Studio handoff).
 
 1. **Phase 0 — composition map** — cross-model surfaces (e.g. employee = user + `employee_details` + directory). See protocol Phase 0.
 2. **Mind** — operational `laraslice.journeys.v2` personas; no invented BRD essays ([PORTING_FOUNDATION_RULES.md](PORTING_FOUNDATION_RULES.md)).
