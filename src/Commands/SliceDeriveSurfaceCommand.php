@@ -58,7 +58,7 @@ class SliceDeriveSurfaceCommand extends Command
             }
         }
 
-        $existingManifest = $slice->manifestData;
+        $existingManifest = ! empty($slice->raw) ? $slice->raw : $slice->toArray();
         $derived = $pipeline->derive($sourcePath, $sliceName, $probe, $existingManifest);
 
         $this->info("Derived surface declarations for [{$sliceName}]:");
@@ -87,15 +87,14 @@ class SliceDeriveSurfaceCommand extends Command
         }
 
         if ($this->option('apply')) {
-            $manifestPath = $slice->manifestPath;
-            if (str_ends_with($manifestPath, '.json')) {
-                $yamlPath = substr($manifestPath, 0, -5).'.yaml';
-            } else {
-                $yamlPath = $manifestPath;
-            }
+            $manifestPath = is_file($slice->path . DIRECTORY_SEPARATOR . 'slice.yaml')
+                ? $slice->path . DIRECTORY_SEPARATOR . 'slice.yaml'
+                : (is_file($slice->path . DIRECTORY_SEPARATOR . 'slice.json')
+                    ? $slice->path . DIRECTORY_SEPARATOR . 'slice.json'
+                    : $slice->path . DIRECTORY_SEPARATOR . 'slice.yaml');
 
             ManifestRepository::writeBoth($manifestPath, $derived);
-            $this->info("<fg=green>Applied derived declarations to {$yamlPath}</>");
+            $this->info("<fg=green>Applied derived declarations to {$manifestPath}</>");
         } else {
             $this->comment('Dry-run complete. Run with --apply to write to slice.yaml.');
         }
