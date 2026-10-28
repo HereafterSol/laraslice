@@ -2,8 +2,16 @@
 
 namespace LaraSlice\Support;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use LaraSlice\Core\Audit\AuditLogger;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Discovery\SliceManifest;
+use LaraSlice\Core\Security\Access;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -93,7 +101,7 @@ final class DirectoryUi
                 continue;
             }
             $fmt = $c['formatter'] ?? $c['type'] ?? 'text';
-            $label = (string) ($c['label'] ?? \Illuminate\Support\Str::headline((string) $key));
+            $label = (string) ($c['label'] ?? Str::headline((string) $key));
             // Display labels drop the storage suffix: "Leave Type Id" -> "Leave Type".
             if (str_ends_with((string) $key, '_id') && $key !== 'id') {
                 $label = (string) preg_replace('/\s+Id$/', '', $label);
@@ -133,7 +141,6 @@ final class DirectoryUi
 
         return $columns !== [] ? $columns : $fallback;
     }
-
 
     /**
      * Build display rows for a record's detail (show) view from the slice
@@ -270,7 +277,7 @@ final class DirectoryUi
                     default => (string) DataTableRows::display($value),
                 };
                 $rows[] = [
-                    'label' => (string) ($entry['label'] ?? \Illuminate\Support\Str::headline((string) $entry['from'])),
+                    'label' => (string) ($entry['label'] ?? Str::headline((string) $entry['from'])),
                     'value' => $text === '' ? '—' : $text,
                     'html' => false,
                 ];
@@ -299,7 +306,7 @@ final class DirectoryUi
             if (in_array($name, $skip, true) || str_ends_with($name, '_by') || str_ends_with($name, '_ip') || ! array_key_exists($name, $attributes) || ! empty($def['hidden'])) {
                 continue;
             }
-            $label = (string) ($def['label'] ?? \Illuminate\Support\Str::headline($name));
+            $label = (string) ($def['label'] ?? Str::headline($name));
             if (str_ends_with($name, '_id') && $name !== 'id') {
                 $label = (string) preg_replace('/\s+Id$/', '', $label);
             }
@@ -405,7 +412,7 @@ final class DirectoryUi
             $seen[$key] = true;
             $tabs[] = array_merge([
                 'handle' => $isRenderMode ? $key : $relation,
-                'label' => $label !== null && $label !== '' ? $label : \Illuminate\Support\Str::headline($relation),
+                'label' => $label !== null && $label !== '' ? $label : Str::headline($relation),
                 'type' => 'relation',
                 'relation' => $relation,
             ], $extras);
@@ -426,6 +433,7 @@ final class DirectoryUi
                 if (! empty($tab['handle'])) {
                     $exclude[(string) $tab['handle']] = true;
                 }
+
                 continue;
             }
             if (($tab['type'] ?? '') === 'relation') {
@@ -692,7 +700,7 @@ final class DirectoryUi
             $sliceOwnsTable = $columns !== [] && self::columnsDescribeTable($columns, $related->getTable());
             if (! $sliceOwnsTable) {
                 $foreignKey = null;
-                if ($query instanceof \Illuminate\Database\Eloquent\Relations\HasOneOrMany) {
+                if ($query instanceof HasOneOrMany) {
                     $foreignKey = $query->getForeignKeyName();
                 }
                 $columns = self::modelDerivedColumns($related->getTable(), $foreignKey);
@@ -741,11 +749,10 @@ final class DirectoryUi
         }
     }
 
-
-    /** @var array<string, \LaraSlice\Core\Discovery\SliceManifest|null> slice name => manifest */
+    /** @var array<string, SliceManifest|null> slice name => manifest */
     private static array $manifestByName = [];
 
-    private static function manifestForSlice(string $sliceName): ?\LaraSlice\Core\Discovery\SliceManifest
+    private static function manifestForSlice(string $sliceName): ?SliceManifest
     {
         if (! array_key_exists($sliceName, self::$manifestByName)) {
             self::$manifestByName[$sliceName] = null;
@@ -844,34 +851,34 @@ final class DirectoryUi
             $editSlugs = array_values(array_filter($tabPerms, fn ($s) => str_ends_with((string) $s, '.edit') || str_ends_with((string) $s, '.update')));
             $deleteSlugs = array_values(array_filter($tabPerms, fn ($s) => str_ends_with((string) $s, '.delete') || str_ends_with((string) $s, '.destroy')));
             $tabUser = function_exists('auth') ? auth()->user() : null;
-            $canEditTab = $editSlugs === [] || ($tabUser !== null && \LaraSlice\Core\Security\Access::allows($tabUser, $editSlugs));
-            $canDeleteTab = $deleteSlugs === [] || ($tabUser !== null && \LaraSlice\Core\Security\Access::allows($tabUser, $deleteSlugs));
-            if (\Illuminate\Support\Facades\Route::has($prefix.'.show')
-                || \Illuminate\Support\Facades\Route::has($prefix.'.edit')
-                || \Illuminate\Support\Facades\Route::has($prefix.'.destroy')) {
+            $canEditTab = $editSlugs === [] || ($tabUser !== null && Access::allows($tabUser, $editSlugs));
+            $canDeleteTab = $deleteSlugs === [] || ($tabUser !== null && Access::allows($tabUser, $deleteSlugs));
+            if (Route::has($prefix.'.show')
+                || Route::has($prefix.'.edit')
+                || Route::has($prefix.'.destroy')) {
                 $out['extra'] = static function ($item) use ($prefix, $canEditTab, $canDeleteTab) {
-                    $id = $item instanceof \Illuminate\Database\Eloquent\Model ? $item->getKey() : ($item->id ?? null);
+                    $id = $item instanceof Model ? $item->getKey() : ($item->id ?? null);
                     if ($id === null) {
                         return [];
                     }
 
                     return [
-                        'show_url' => \Illuminate\Support\Facades\Route::has($prefix.'.show') ? route($prefix.'.show', $id) : null,
-                        'edit_url' => $canEditTab && \Illuminate\Support\Facades\Route::has($prefix.'.edit') ? route($prefix.'.edit', $id) : null,
-                        'delete_url' => $canDeleteTab && \Illuminate\Support\Facades\Route::has($prefix.'.destroy') ? route($prefix.'.destroy', $id) : null,
+                        'show_url' => Route::has($prefix.'.show') ? route($prefix.'.show', $id) : null,
+                        'edit_url' => $canEditTab && Route::has($prefix.'.edit') ? route($prefix.'.edit', $id) : null,
+                        'delete_url' => $canDeleteTab && Route::has($prefix.'.destroy') ? route($prefix.'.destroy', $id) : null,
                     ];
                 };
             }
-            if (\Illuminate\Support\Facades\Route::has($prefix.'.create')) {
+            if (Route::has($prefix.'.create')) {
                 $params = [];
-                if ($query instanceof \Illuminate\Database\Eloquent\Relations\HasOneOrMany) {
+                if ($query instanceof HasOneOrMany) {
                     $local = $query->getLocalKeyName();
                     $params[$query->getForeignKeyName()] = $record->{$local};
                 }
                 $out['tab']['create_url'] = route($prefix.'.create', $params);
                 $label = (string) ($tab['label'] ?? $sliceName);
-                $out['tab']['create_label'] = 'Add '.\Illuminate\Support\Str::singular($label);
-                $out['tab']['export_name'] = \Illuminate\Support\Str::slug($label);
+                $out['tab']['create_label'] = 'Add '.Str::singular($label);
+                $out['tab']['export_name'] = Str::slug($label);
             }
             // Inline editor: the related slice's declared
             // inline_edit fields, restricted to fields that are
@@ -890,14 +897,14 @@ final class DirectoryUi
                 if ($options === []) {
                     continue;
                 }
-                if (\Illuminate\Support\Facades\Route::has($prefix.'.inline')) {
+                if (Route::has($prefix.'.inline')) {
                     $out['tab']['inline'] = [
                         'field' => $field,
                         'options' => $options,
                         'url' => route($prefix.'.inline', ['id' => '__ID__']),
                     ];
                     foreach ($rows as $row) {
-                        $rid = $row instanceof \Illuminate\Database\Eloquent\Model ? $row->getKey() : ($row->id ?? null);
+                        $rid = $row instanceof Model ? $row->getKey() : ($row->id ?? null);
                         if ($rid !== null) {
                             $out['raw'][$rid] = is_object($row) ? ($row->{$field} ?? null) : null;
                         }
@@ -966,7 +973,7 @@ final class DirectoryUi
     {
         if (! isset(self::$tableColumnsCache[$table])) {
             try {
-                self::$tableColumnsCache[$table] = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+                self::$tableColumnsCache[$table] = Schema::getColumnListing($table);
             } catch (\Throwable $e) {
                 self::$tableColumnsCache[$table] = [];
             }
@@ -1026,7 +1033,7 @@ final class DirectoryUi
         }
         $columns = [];
         foreach (array_slice(array_merge($labelish, $fks, $scalars), 0, 6) as $key) {
-            $label = \Illuminate\Support\Str::headline($key);
+            $label = Str::headline($key);
             if (str_ends_with($key, '_id')) {
                 $label = (string) preg_replace('/\s+Id$/', '', $label);
             }
@@ -1062,8 +1069,8 @@ final class DirectoryUi
                 $slice = $manager->getSlice($sliceName);
                 $ns = $slice?->namespace;
                 if (is_string($ns) && $ns !== '') {
-                    $singular = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($sliceName));
-                    $plural = \Illuminate\Support\Str::studly($sliceName);
+                    $singular = Str::studly(Str::singular($sliceName));
+                    $plural = Str::studly($sliceName);
                     foreach (array_unique([$singular, $plural]) as $base) {
                         $class = rtrim($ns, '\\').'\\Services\\'.$base.'SliceService';
                         if (class_exists($class)) {
@@ -1131,7 +1138,7 @@ final class DirectoryUi
             $def = $index[$k];
             $columns[] = array_filter([
                 'key' => $k,
-                'label' => (string) ($def['label'] ?? \Illuminate\Support\Str::headline($k)),
+                'label' => (string) ($def['label'] ?? Str::headline($k)),
                 'formatter' => $k === 'status' ? 'status_pill' : 'text',
                 'html' => $k === 'status',
                 'options' => self::normalizeOptions($def['options'] ?? null) ?: null,
@@ -1233,7 +1240,7 @@ final class DirectoryUi
                         'handle' => $handle,
                         'placement' => (string) ($def['placement'] ?? 'main'),
                         'type' => 'gauge',
-                        'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                        'title' => (string) ($def['title'] ?? Str::headline($handle)),
                         'value' => $value,
                         'max' => $max,
                         'percent' => max(0.0, min(100.0, round($value / $max * 100, 1))),
@@ -1262,7 +1269,7 @@ final class DirectoryUi
                             'handle' => $handle,
                             'placement' => (string) ($def['placement'] ?? 'main'),
                             'type' => 'stats',
-                            'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                            'title' => (string) ($def['title'] ?? Str::headline($handle)),
                             'rows' => $rows,
                         ];
                     }
@@ -1293,7 +1300,7 @@ final class DirectoryUi
                         'handle' => $handle,
                         'placement' => (string) ($def['placement'] ?? 'main'),
                         'type' => 'list',
-                        'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                        'title' => (string) ($def['title'] ?? Str::headline($handle)),
                         'rows' => $rows,
                         'empty' => (string) ($def['empty_text'] ?? 'Nothing to show.'),
                     ];
@@ -1333,7 +1340,7 @@ final class DirectoryUi
                     $labels = [];
                     $series = [];
                     foreach ($counts as $k => $n) {
-                        $labels[] = (string) ($labelsMap[$k] ?? \Illuminate\Support\Str::headline($k));
+                        $labels[] = (string) ($labelsMap[$k] ?? Str::headline($k));
                         $series[] = $n;
                     }
                     $widgets[] = [
@@ -1341,7 +1348,7 @@ final class DirectoryUi
                         'placement' => (string) ($def['placement'] ?? 'main'),
                         'type' => 'chart',
                         'chart' => (string) ($def['chart'] ?? 'donut'),
-                        'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                        'title' => (string) ($def['title'] ?? Str::headline($handle)),
                         'labels' => $labels,
                         'series' => $series,
                     ];
@@ -1385,7 +1392,7 @@ final class DirectoryUi
                             'handle' => $handle,
                             'placement' => (string) ($def['placement'] ?? 'main'),
                             'type' => 'bars',
-                            'title' => (string) ($def['title'] ?? \Illuminate\Support\Str::headline($handle)),
+                            'title' => (string) ($def['title'] ?? Str::headline($handle)),
                             'bars' => $bars,
                         ];
                     }
@@ -1490,11 +1497,32 @@ final class DirectoryUi
             }
             $relation = (string) ($def['relation'] ?? '');
             $handle = (string) ($def['handle'] ?? $relation);
-            if ($relation === '' || $handle === '' || ! method_exists($record, $relation)) {
+            if ($relation === '' || $handle === '') {
                 continue;
             }
             try {
-                $query = $record->{$relation}();
+                $query = null;
+                if (method_exists($record, $relation)) {
+                    $query = $record->{$relation}();
+                } else {
+                    $aliasMap = [
+                        'projects' => ['projectMembers', 'members'],
+                        'tickets' => ['ticketAgents', 'ticketAgentGroups', 'assignedTickets', 'agentTickets'],
+                    ];
+                    foreach ($aliasMap[$relation] ?? [] as $alias) {
+                        if (method_exists($record, $alias)) {
+                            $query = $record->{$alias}();
+                            break;
+                        }
+                    }
+                    if ($query === null && isset($record->user_id) && class_exists(DB::class)) {
+                        if (($relation === 'projects' || $handle === 'projects') && Schema::hasTable('project_members')) {
+                            $query = DB::table('project_members')->where('user_id', $record->user_id);
+                        } elseif (($relation === 'tickets' || $handle === 'tickets') && Schema::hasTable('tickets')) {
+                            $query = DB::table('tickets')->where('agent_id', $record->user_id);
+                        }
+                    }
+                }
                 if (! is_object($query)) {
                     continue;
                 }
@@ -1527,7 +1555,7 @@ final class DirectoryUi
             }
             $stats[] = [
                 'handle' => $handle,
-                'label' => (string) ($def['label'] ?? \Illuminate\Support\Str::headline($handle)),
+                'label' => (string) ($def['label'] ?? Str::headline($handle)),
                 'value' => $aggregate === 'count'
                     ? number_format((int) $raw)
                     : rtrim(rtrim(number_format((float) $raw, 2, '.', ''), '0'), '.'),
@@ -1572,7 +1600,7 @@ final class DirectoryUi
                 continue;
             }
             $header[] = [
-                'label' => (string) (($fields[$handle]['label'] ?? null) ?? \Illuminate\Support\Str::headline($handle)),
+                'label' => (string) (($fields[$handle]['label'] ?? null) ?? Str::headline($handle)),
                 'value' => self::documentValue($handle, $fields[$handle] ?? [], $attributes[$handle]),
             ];
         }
@@ -1596,7 +1624,7 @@ final class DirectoryUi
                 if (is_array($repeaterFields) && $repeaterFields !== []) {
                     foreach ($repeaterFields as $rf) {
                         if (is_array($rf) && ! empty($rf['handle'])) {
-                            $columns[] = ['handle' => (string) $rf['handle'], 'label' => (string) ($rf['label'] ?? \Illuminate\Support\Str::headline((string) $rf['handle']))];
+                            $columns[] = ['handle' => (string) $rf['handle'], 'label' => (string) ($rf['label'] ?? Str::headline((string) $rf['handle']))];
                         }
                     }
                 }
@@ -1608,7 +1636,7 @@ final class DirectoryUi
                             if (in_array($key, $skip, true) || str_ends_with((string) $key, '_id')) {
                                 continue;
                             }
-                            $columns[] = ['handle' => (string) $key, 'label' => \Illuminate\Support\Str::headline((string) $key)];
+                            $columns[] = ['handle' => (string) $key, 'label' => Str::headline((string) $key)];
                             if (count($columns) >= 6) {
                                 break;
                             }
@@ -1635,13 +1663,13 @@ final class DirectoryUi
                 continue;
             }
             $totals[] = [
-                'label' => (string) (($fields[$handle]['label'] ?? null) ?? \Illuminate\Support\Str::headline($handle)),
+                'label' => (string) (($fields[$handle]['label'] ?? null) ?? Str::headline($handle)),
                 'value' => self::documentValue($handle, $fields[$handle] ?? [], $attributes[$handle]),
             ];
         }
 
         return [
-            'title' => (string) ($decl['title'] ?? \Illuminate\Support\Str::headline((string) ($manifest['name'] ?? 'Document'))),
+            'title' => (string) ($decl['title'] ?? Str::headline((string) ($manifest['name'] ?? 'Document'))),
             'header' => $header,
             'items' => $items,
             'totals' => $totals,
@@ -1656,7 +1684,7 @@ final class DirectoryUi
         if (is_bool($raw)) {
             return $raw ? 'Yes' : 'No';
         }
-        $inference = \LaraSlice\Support\FieldInference::analyze($handle, (string) ($def['type'] ?? 'string'));
+        $inference = FieldInference::analyze($handle, (string) ($def['type'] ?? 'string'));
         if ((($inference['is_money'] ?? false) || ($inference['formatter'] ?? null) === 'money') && is_numeric($raw)) {
             return number_format((float) $raw, 2);
         }
@@ -1758,7 +1786,7 @@ final class DirectoryUi
         usort($rows, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
 
         return [
-            'title' => (string) ($decl['title'] ?? \Illuminate\Support\Str::headline((string) ($manifest['name'] ?? 'Matrix'))),
+            'title' => (string) ($decl['title'] ?? Str::headline((string) ($manifest['name'] ?? 'Matrix'))),
             'days' => $days,
             'rows' => $rows,
             'month' => $month,
@@ -1769,8 +1797,6 @@ final class DirectoryUi
             'row_label' => is_string($decl['row_label'] ?? null) && $decl['row_label'] !== '' ? $decl['row_label'] : 'Employee',
         ];
     }
-
-
 
     /**
      * Resolve a declared record timer (G8): a start/stop work
@@ -1884,7 +1910,7 @@ final class DirectoryUi
         $labels = [];
         foreach (($manifest['ui']['directory']['columns'] ?? []) as $col) {
             if (is_array($col) && ! empty($col['key'])) {
-                $labels[(string) $col['key']] = (string) ($col['label'] ?? \Illuminate\Support\Str::headline((string) $col['key']));
+                $labels[(string) $col['key']] = (string) ($col['label'] ?? Str::headline((string) $col['key']));
             }
         }
 
@@ -1914,7 +1940,7 @@ final class DirectoryUi
             }
             $fields[] = [
                 'handle' => $handle,
-                'label' => (string) ($f['label'] ?? $labels[$handle] ?? \Illuminate\Support\Str::headline($handle)),
+                'label' => (string) ($f['label'] ?? $labels[$handle] ?? Str::headline($handle)),
                 'input' => (string) ($f['input'] ?? 'text'),
                 'options' => $options,
                 'option_labels' => $optionLabels,
@@ -1975,7 +2001,7 @@ final class DirectoryUi
                 $aggregates[] = [
                     'fn' => in_array($agg['fn'], ['sum', 'avg'], true) ? $agg['fn'] : 'count',
                     'column' => isset($agg['column']) ? (string) $agg['column'] : null,
-                    'label' => (string) ($agg['label'] ?? \Illuminate\Support\Str::headline((string) ($agg['column'] ?? 'count'))),
+                    'label' => (string) ($agg['label'] ?? Str::headline((string) ($agg['column'] ?? 'count'))),
                 ];
             }
         }
@@ -2004,6 +2030,7 @@ final class DirectoryUi
             foreach ($aggregates as $agg) {
                 if ($agg['fn'] === 'count' || $agg['column'] === null) {
                     $values[] = number_format(count($rows));
+
                     continue;
                 }
                 $col = $agg['column'];
@@ -2022,8 +2049,8 @@ final class DirectoryUi
         usort($rows, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
 
         return [
-            'title' => (string) ($decl['title'] ?? \Illuminate\Support\Str::headline((string) ($manifest['name'] ?? 'Report')).' Report'),
-            'groupLabel' => (string) ($decl['group_label'] ?? ($groupDef['label'] ?? \Illuminate\Support\Str::headline($groupBy))),
+            'title' => (string) ($decl['title'] ?? Str::headline((string) ($manifest['name'] ?? 'Report')).' Report'),
+            'groupLabel' => (string) ($decl['group_label'] ?? ($groupDef['label'] ?? Str::headline($groupBy))),
             'columns' => array_column($aggregates, 'label'),
             'rows' => $rows,
             'totals' => $compute($all),
@@ -2174,17 +2201,17 @@ final class DirectoryUi
                 if (str_starts_with($from, 'distinct:')) {
                     $column = substr($from, strlen('distinct:'));
                     try {
-                        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                        $manager = app(SliceManager::class);
                         // Models are usually the singular of the
                         // slice name (Leaves -> Leaf).
-                        $modelClass = $manager->modelClass(\Illuminate\Support\Str::studly($sliceName))
-                            ?? $manager->modelClass(\Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($sliceName)));
+                        $modelClass = $manager->modelClass(Str::studly($sliceName))
+                            ?? $manager->modelClass(Str::studly(Str::singular($sliceName)));
                         if ($modelClass && class_exists($modelClass)) {
                             $values = $modelClass::query()->distinct()->pluck($column);
                             $map = [];
                             foreach ($values as $value) {
                                 if (is_scalar($value) && (string) $value !== '') {
-                                    $map[(string) $value] = \Illuminate\Support\Str::headline((string) $value);
+                                    $map[(string) $value] = Str::headline((string) $value);
                                 }
                             }
 
@@ -2210,7 +2237,7 @@ final class DirectoryUi
     public static function optionsList(mixed $options): array
     {
         $list = [];
-        foreach (static::normalizeOptions($options) as $value => $label) {
+        foreach (self::normalizeOptions($options) as $value => $label) {
             $list[] = ['value' => $value, 'label' => $label];
         }
 

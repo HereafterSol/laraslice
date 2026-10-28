@@ -88,9 +88,12 @@ class SurfaceDerivationPipeline
                 $ui['pages']['list']['placement'] = $placement;
             }
 
-            // 3b. Quick Filters (facets above the table)
+            // 3b. Quick Filters (facets strictly in the primary toolbar above the table)
             $quickFilters = [];
             foreach ($listAnatomy['facets'] ?? [] as $facet) {
+                if (($facet['scope'] ?? 'toolbar') !== 'toolbar') {
+                    continue;
+                }
                 $handle = (string) ($facet['item'] ?? '');
                 if ($handle === '' || $handle === 'select' || $handle === 'tabs') {
                     continue;
