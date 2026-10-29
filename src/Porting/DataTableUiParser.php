@@ -285,6 +285,9 @@ class DataTableUiParser
             return [];
         }
 
+        // Strip single line comments so commented-out columns are ignored
+        $body = preg_replace('~//.*?$~m', '', $body);
+
         $columns = [];
         $seen = [];
 
@@ -311,7 +314,7 @@ class DataTableUiParser
                 $visible = true;
                 if (preg_match('/[\'"]visible[\'"]\s*=>\s*([^,\n\r]+)/', $inner, $vm)) {
                     $val = trim($vm[1]);
-                    if ($val === 'false' || str_starts_with($val, '!')) {
+                    if ($val === 'false' || $val === '0') {
                         $visible = false;
                     }
                 }
