@@ -44,7 +44,7 @@ class PageStructureContractTest extends TestCase
         $this->assertStringContainsString('<x-slot:toolbar-lead>', $generator);
         // The controller supplies the resolved placement to every index view.
         $controller = file_get_contents(__DIR__.'/../../../src/Core/Base/BaseSliceWebController.php');
-        $this->assertStringContainsString('placement\' => \LaraSlice\Support\DirectoryUi::listPlacement($uiConfig)', $controller);
+        $this->assertStringContainsString('placement\' => DirectoryUi::listPlacement($uiConfig)', $controller);
         // The data-table renders no empty actions band.
         $stub = file_get_contents(__DIR__.'/../../../resources/stubs/starter/views/components/ui/data-table.blade.php');
         $this->assertStringContainsString('$belowToolbar->isNotEmpty()', $stub);

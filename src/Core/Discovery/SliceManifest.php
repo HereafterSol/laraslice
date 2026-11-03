@@ -27,6 +27,13 @@ class SliceManifest
 
     public array $navigation;
 
+    /**
+     * The feature module this slice belongs to (manifest key
+     * `feature_module`), matched against the host app's
+     * module_settings switches — see Support\ModuleSettings.
+     */
+    public ?string $featureModule = null;
+
     public array $tables;
 
     public array $relations;
@@ -110,6 +117,9 @@ class SliceManifest
         $this->dependencies = $data['dependencies'] ?? [];
         $this->permissions = $data['permissions'] ?? [];
         $this->navigation = $data['navigation'] ?? [];
+        $this->featureModule = isset($data['feature_module']) && is_string($data['feature_module'])
+            ? $data['feature_module']
+            : null;
         $this->tables = $data['tables'] ?? [];
         $this->relations = $data['relations'] ?? [];
 

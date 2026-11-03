@@ -78,7 +78,13 @@ HTML;
                 </select>
             </div>
 HTML;
-                } elseif (str_ends_with($snakeField, '_id')) {
+                } elseif (str_ends_with($snakeField, '_id') && (in_array($type, ['integer', 'int', 'biginteger', 'smallinteger', 'tinyinteger', 'bigint', 'mediuminteger'], true) || ! empty($field['relation']) || ! empty($field['foreign_key']) || ! empty($field['options_from']))) {
+                    // A *_id column becomes a relationship combobox
+                    // only when it is FK-shaped (integer family or a
+                    // declared relation). A string code that merely
+                    // ENDS in _id (an employee code like EMP-12)
+                    // keeps a plain input — as a combobox it renders
+                    // empty and silently NULLs the value on save.
                     $relatedTable = Str::plural(str_replace('_id', '', $snakeField));
                     $snippet = <<<HTML
 
@@ -126,11 +132,21 @@ HTML;
                         default => 'text',
                     };
 
+                    // Date-family inputs only accept their own
+                    // format — a raw stored timestamp renders EMPTY
+                    // in the browser and the next save silently
+                    // NULLs the value. Emit the parsed format.
+                    $valueExpr = match ($htmlType) {
+                        'date' => "{{ old('{$snakeField}', ! empty(\$form->{$snakeField}) ? \\Illuminate\\Support\\Carbon::parse(\$form->{$snakeField})->format('Y-m-d') : '') }}",
+                        'datetime-local' => "{{ old('{$snakeField}', ! empty(\$form->{$snakeField}) ? \\Illuminate\\Support\\Carbon::parse(\$form->{$snakeField})->format('Y-m-d\\TH:i') : '') }}",
+                        default => "{{ old('{$snakeField}', \$form->{$snakeField} ?? '') }}",
+                    };
+
                     $snippet = <<<HTML
 
             <div class="space-y-1.5">
                 <x-ui.label for="{$snakeField}">{$label}</x-ui.label>
-                <x-ui.input id="{$snakeField}" type="{$htmlType}" name="{$snakeField}" value="{{ old('{$snakeField}', \$form->{$snakeField} ?? '') }}" placeholder="Enter {$label}..." />
+                <x-ui.input id="{$snakeField}" type="{$htmlType}" name="{$snakeField}" value="{$valueExpr}" placeholder="Enter {$label}..." />
             </div>
 HTML;
                 }

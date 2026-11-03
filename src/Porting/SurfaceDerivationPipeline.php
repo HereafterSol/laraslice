@@ -137,6 +137,75 @@ class SurfaceDerivationPipeline
             }
             if (! empty($actions)) {
                 $ui['directory']['actions'] = $actions;
+
+                // An invite action only renders when the slice also
+                // declares the invite provisioning contract
+                // (ui.directory.invite) — the route registration is
+                // gated on it. Derive the declaration alongside:
+                // link = the profile table's user_id column.
+                foreach ($actions as $action) {
+                    if (($action['kind'] ?? null) !== 'invite' || ! empty($ui['directory']['invite'])) {
+                        continue;
+                    }
+                    $handles = [];
+                    foreach (($existingManifest['models'] ?? []) as $model) {
+                        foreach (($model['fields'] ?? []) as $field) {
+                            if (is_array($field) && ! empty($field['handle'])) {
+                                $handles[] = (string) $field['handle'];
+                            }
+                        }
+                    }
+                    if (in_array('user_id', $handles, true)) {
+                        $invite = ['link' => 'user_id'];
+                        foreach (['full_name', 'name'] as $nameField) {
+                            if (in_array($nameField, $handles, true)) {
+                                $invite['name_field'] = $nameField;
+                                break;
+                            }
+                        }
+                        $role = trim((string) preg_replace('/^invite\s+/i', '', (string) ($action['label'] ?? '')));
+                        if ($role !== '') {
+                            $invite['role'] = $role;
+                        }
+                        $ui['directory']['invite'] = $invite;
+                    }
+                }
+            }
+
+            // 3e. Create label — the source's own words for the
+            // primary action, when they differ from the generator's
+            // "Add <Singular>" default (declarationHints is the same
+            // evidence the port flow consumes).
+            $hints = SourceAnatomyExtractor::declarationHints($probe, Str::snake($sliceName));
+            if (! empty($hints['create_label']) && empty($ui['directory']['create_label'])) {
+                $ui['directory']['create_label'] = $hints['create_label'];
+            }
+
+            // 3f. Default sort — the source grids land on their
+            // first data column, descending. Declare it when that
+            // column is a plain scalar DB column (a code, a date);
+            // badge/FK handles (employee_id, client_id) are not
+            // value-ordered in the source, so those slices keep
+            // the runtime's newest-first fallback instead.
+            if (empty($ui['directory']['default_sort'])) {
+                $rootFields = [];
+                foreach (($existingManifest['models'] ?? []) as $model) {
+                    if (! empty($model['root'])) {
+                        foreach (($model['fields'] ?? []) as $field) {
+                            if (is_array($field) && ! empty($field['handle'])) {
+                                $rootFields[(string) $field['handle']] = (string) ($field['type'] ?? '');
+                            }
+                        }
+                        break;
+                    }
+                }
+                $first = $ui['directory']['columns'][0] ?? null;
+                $firstHandle = is_array($first) ? (string) ($first['handle'] ?? '') : '';
+                if ($firstHandle !== '' && ! str_ends_with($firstHandle, '_id')
+                    && isset($rootFields[$firstHandle])
+                    && in_array($rootFields[$firstHandle], ['string', 'integer', 'date', 'datetime', 'decimal'], true)) {
+                    $ui['directory']['default_sort'] = ['field' => $firstHandle, 'direction' => 'desc'];
+                }
             }
 
             // 3d. Import declaration if observed

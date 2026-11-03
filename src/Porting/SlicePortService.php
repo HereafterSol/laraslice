@@ -723,7 +723,7 @@ class SlicePortService
                 $primaryTable = $info['primary_table'];
                 $module = $this->detectModuleForSlice($sliceName, $primaryTable);
                 $cols = $tables[$primaryTable]['columns'] ?? [];
-                $fields = $this->convertColumnsToFields($cols);
+                $fields = $this->convertColumnsToFields($cols, $tables[$primaryTable]['foreign_key_targets'] ?? []);
 
                 $generatorFields = [];
                 $seenFields = [];
@@ -752,6 +752,7 @@ class SlicePortService
                         'required' => ! $nullable,
                         'rules' => $nullable ? ['nullable'] : ['required'],
                         'options' => $f['options'] ?? [],
+                        'relation' => $f['relation'] ?? null,
                     ];
                 }
 
@@ -1098,6 +1099,17 @@ PHP;
                     'table_source' => 'source_database',
                 ];
             }
+
+            // Referenced-table evidence from the live FK constraints
+            // (department_id -> teams, not the name-derived guess).
+            if ($driver === 'mysql') {
+                $fkRows = $pdo->query('SELECT table_name AS t, column_name AS c, referenced_table_name AS r FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND referenced_table_name IS NOT NULL')->fetchAll(\PDO::FETCH_OBJ);
+                foreach ($fkRows as $row) {
+                    if (isset($tables[$row->t])) {
+                        $tables[$row->t]['foreign_key_targets'][$row->c] = $row->r;
+                    }
+                }
+            }
         } catch (Throwable $e) {
         }
 
@@ -1256,7 +1268,12 @@ PHP;
         $patternCol = '/\\$table->([a-zA-Z0-9_]+)\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
         $patternFk = '/(?:foreignId|foreign)\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']\\)/';
 
-        foreach (File::files($migDir) as $file) {
+        $files = File::files($migDir);
+        // Migration filenames carry their chronology; alter passes
+        // below must replay in that order.
+        usort($files, static fn ($a, $b) => strcmp($a->getFilename(), $b->getFilename()));
+
+        foreach ($files as $file) {
             $content = $file->getContents();
             if (! preg_match_all($patternCreate, $content, $createMatches, PREG_OFFSET_CAPTURE)) {
                 continue;
@@ -1297,12 +1314,103 @@ PHP;
                     }
                 }
 
+                // Referenced-table evidence: foreign(...)->on('tbl')
+                // and foreignId(...)->constrained('tbl') name the
+                // REAL target, which can differ from the column's
+                // own stem (department_id -> teams).
+                $fkTargets = [];
+                $patternFkTarget = '/\\$table->foreign\\s*\\(\\s*(?:\\[\\s*)?['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.'](?:\\s*\\])?\\s*\\)\\s*->references\\s*\\([^)]*\\)\\s*->on\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
+                if (preg_match_all($patternFkTarget, $blockContent, $ftMatches, PREG_SET_ORDER)) {
+                    foreach ($ftMatches as $ft) {
+                        $fkTargets[$ft[1]] = $ft[2];
+                    }
+                }
+                $patternConstrained = '/\\$table->foreignId\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']\\s*\\)\\s*->constrained\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
+                if (preg_match_all($patternConstrained, $blockContent, $fcMatches, PREG_SET_ORDER)) {
+                    foreach ($fcMatches as $fc) {
+                        $fkTargets[$fc[1]] = $fc[2];
+                    }
+                }
+
                 $tables[$tableName] = [
                     'name' => $tableName,
                     'columns' => $cols,
                     'foreign_keys' => array_values(array_unique($fks)),
+                    'foreign_key_targets' => $fkTargets,
                     'migration' => $file->getFilename(),
                 ];
+            }
+        }
+
+        // Alter pass: columns added by later Schema::table
+        // migrations belong to the table's real schema. Reading
+        // only Schema::create blocks silently dropped every
+        // later-added column (the Gate S schema-closure defect:
+        // a port scaffolded from the create-migration column set
+        // while the live table carried more, and the ETL then had
+        // nowhere to put those values). Replay adds, drops and
+        // renames in filename (chronological) order.
+        $patternAlter = '/Schema::table\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
+        $patternDrop = '/\\$table->dropColumn\\s*\\(\\s*(?:\\[([^\\]]+)\\]|['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.'])/';
+        $patternRename = '/\\$table->renameColumn\\s*\\(\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']\\s*,\\s*['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/';
+        foreach ($files as $file) {
+            $content = $file->getContents();
+            // Replay only the up() region: a migration's down()
+            // drops what its up() added, and scanning the whole
+            // file would apply the rollback too (it silently
+            // removed every added column again).
+            $downPos = strpos($content, 'function down');
+            if ($downPos !== false) {
+                $content = substr($content, 0, $downPos);
+            }
+            if (! preg_match_all($patternAlter, $content, $alterMatches, PREG_OFFSET_CAPTURE)) {
+                continue;
+            }
+            $count = count($alterMatches[0]);
+            for ($i = 0; $i < $count; $i++) {
+                $tableName = $alterMatches[1][$i][0];
+                if (! isset($tables[$tableName])) {
+                    continue;
+                }
+                $startPos = $alterMatches[0][$i][1];
+                $endPos = ($i + 1 < $count) ? $alterMatches[0][$i + 1][1] : strlen($content);
+                $block = substr($content, $startPos, $endPos - $startPos);
+
+                $existing = array_column($tables[$tableName]['columns'], 'name');
+                if (preg_match_all($patternCol, $block, $colMatches, PREG_SET_ORDER)) {
+                    foreach ($colMatches as $cm) {
+                        if (! in_array($cm[2], $existing, true)) {
+                            $tables[$tableName]['columns'][] = ['name' => $cm[2], 'type' => $cm[1]];
+                            $existing[] = $cm[2];
+                        }
+                    }
+                }
+                if (preg_match_all($patternRename, $block, $renMatches, PREG_SET_ORDER)) {
+                    foreach ($renMatches as $rm) {
+                        foreach ($tables[$tableName]['columns'] as $ci => $col) {
+                            if ($col['name'] === $rm[1]) {
+                                $tables[$tableName]['columns'][$ci]['name'] = $rm[2];
+                            }
+                        }
+                    }
+                }
+                if (preg_match_all($patternDrop, $block, $dropMatches, PREG_SET_ORDER)) {
+                    $dropped = [];
+                    foreach ($dropMatches as $dm) {
+                        if (! empty($dm[1])) {
+                            preg_match_all('/['.$q.$dq.']([^'.$q.$dq.']+)['.$q.$dq.']/', $dm[1], $names);
+                            $dropped = array_merge($dropped, $names[1]);
+                        } elseif (! empty($dm[2])) {
+                            $dropped[] = $dm[2];
+                        }
+                    }
+                    if ($dropped !== []) {
+                        $tables[$tableName]['columns'] = array_values(array_filter(
+                            $tables[$tableName]['columns'],
+                            static fn ($col) => ! in_array($col['name'], $dropped, true)
+                        ));
+                    }
+                }
             }
         }
 
@@ -1892,7 +2000,7 @@ PHP;
     /**
      * Convert migration columns into Studio Field objects with UI and Form widgets.
      */
-    protected function convertColumnsToFields(array $columns): array
+    protected function convertColumnsToFields(array $columns, array $fkTargets = []): array
     {
         $fields = [];
         $typeMap = [
@@ -1962,7 +2070,7 @@ PHP;
             if (! array_key_exists('nullable', $col) && in_array($cName, ['title', 'name', 'email', 'code', 'invoice_number', 'project_name', 'heading', 'subject'], true)) {
                 $isNullable = false;
             }
-            $fields[] = [
+            $field = [
                 'handle' => $cName,
                 'label' => Str::headline($cName),
                 'type' => $studioType,
@@ -1975,6 +2083,22 @@ PHP;
                     : '',
                 'options' => $enumOptions ?? [],
             ];
+
+            // FK target evidence: when the schema says this column
+            // references a DIFFERENT table than its name suggests
+            // (department_id -> teams), record the real target so
+            // the generator emits the relation against the model
+            // that actually exists. Name-derived targets silently
+            // produced relations that throw at first use.
+            $fkTarget = $fkTargets[$cName] ?? null;
+            if (is_string($fkTarget) && $fkTarget !== '' && str_ends_with($cName, '_id')) {
+                $targetHandle = Str::snake(Str::singular($fkTarget));
+                if ($targetHandle !== Str::replaceLast('_id', '', $cName)) {
+                    $field['relation'] = ['model' => $targetHandle];
+                }
+            }
+
+            $fields[] = $field;
         }
 
         return $fields;
@@ -4342,12 +4466,42 @@ PHP;
                 $col['formatter'] = 'progress_bar';
                 $col['type'] = 'progress_bar';
             }
-            if (in_array($h, ['user_id', 'assignee_id', 'assigned_to', 'employee_id'], true)) {
+            if (in_array($h, ['user_id', 'assignee_id', 'assigned_to', 'employee_id', 'client_id'], true)) {
                 $col['formatter'] = 'composite_user';
                 $col['type'] = 'composite_user';
             }
         }
         unset($col);
+
+        // Status-over-progress composition: when the source's
+        // status column renders as a progress bar over a status
+        // select (the parser hints progress_bar from the bar
+        // markup), the column is NOT itself a percentage —
+        // composing it as a bare progress_bar renders the status
+        // string as 0%. Compose instead: the bar rides above the
+        // cell from the table's completion field (progress_field,
+        // the applyProgress idiom) and the cell keeps the status
+        // value for its inline editor.
+        $progressField = null;
+        foreach (['completion_percent', 'progress_percent', 'progress', 'completion'] as $candidate) {
+            if (in_array($candidate, $handles, true)) {
+                $progressField = $candidate;
+                break;
+            }
+        }
+        if ($progressField !== null) {
+            foreach ($columns as &$col) {
+                $h = strtolower((string) ($col['handle'] ?? ''));
+                if (($col['formatter'] ?? '') === 'progress_bar'
+                    && in_array($h, ['status', 'state', 'workflow_state'], true)) {
+                    $col['formatter'] = 'text';
+                    $col['type'] = 'text';
+                    $col['progress_field'] = $progressField;
+                    $col['inline_edit'] = true;
+                }
+            }
+            unset($col);
+        }
 
         // Priority badge in title (ERP tasks)
         $hasPriority = in_array('priority', $handles, true);

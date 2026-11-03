@@ -777,6 +777,17 @@ class SliceDataPortService
                     $results[$table] = ['status' => 'error', 'error' => $e->getMessage()];
                 }
             }
+
+            // Identity remap: merged users received fresh target ids, so
+            // imported user references still carry source-space ids.
+            // Rewrite them by email before constraints come back on.
+            // (This path previously never remapped — the logic only ran
+            // inside importTables(), which the CLI port flow does not use.)
+            $identityRemap = $this->remapUserIdentities(
+                array_map(fn ($t) => SlicePortService::targetTableName($t), $this->priorityTables),
+                $sourcePdo,
+                $driver
+            );
         } finally {
             Schema::enableForeignKeyConstraints();
         }
@@ -786,6 +797,7 @@ class SliceDataPortService
             'tables_imported' => count(array_filter($results, fn ($r) => ($r['status'] ?? '') === 'success')),
             'total_rows' => $totalRowsImported,
             'details' => $results,
+            'identity_remap' => $identityRemap ?? [],
             'skipped_tables' => array_values(array_unique($skippedTables)),
             'skipped_tables_note' => 'These source tables are not in the ETL priority list and were not imported. Extend SliceDataPortService::$priorityTables or import them manually.',
             // Tables whose TARGET table did not exist at import time
@@ -1068,11 +1080,182 @@ class SliceDataPortService
                     'note' => "role_user remapped via email/slug: {$linked} links created, {$unmapped} unmapped (user or role not present)."];
             }
 
-            // permission_role: remap via permission slug (legacy perms were normalized on import)
-            $sourceRows = $sourcePdo->query('SELECT permission_id, role_id FROM permission_role')->fetchAll(PDO::FETCH_ASSOC);
+            // permission_role: carry the legacy grants. Legacy
+            // permission names (view_employees) are translated onto
+            // framework permission slugs (employee_detail.view) by
+            // token evidence against the SEEDED permission set —
+            // never invented: a name that does not translate stays
+            // unmapped and is reported. Scope: the legacy grant
+            // scope is carried FAITHFULLY by type NAME (added /
+            // owned / both / all; 'none' rows are skipped) — type
+            // ids differ across installs, so ids are never read
+            // as meanings (the earlier binary carry did exactly
+            // that and inverted none/added on this install).
+            $permCols = $this->getSourceColumns($sourcePdo, $driver, 'permission_role');
+            $hasType = in_array('permission_type_id', $permCols, true);
+            $typeSelect = $hasType ? ', permission_type_id' : '';
+            $sourceTypeNameById = [];
+            if ($hasType) {
+                try {
+                    foreach ($sourcePdo->query('SELECT id, name FROM permission_types')->fetchAll(PDO::FETCH_ASSOC) as $t) {
+                        $sourceTypeNameById[(int) $t['id']] = strtolower((string) $t['name']);
+                    }
+                } catch (Throwable) {
+                    $sourceTypeNameById = [];
+                }
+            }
+            $targetTypeIdByName = [];
+            $targetHasScope = false;
+            try {
+                $targetHasScope = Schema::hasTable('permission_types')
+                    && Schema::hasColumn('permission_role', 'permission_type_id');
+                if ($targetHasScope) {
+                    foreach (DB::table('permission_types')->select('id', 'name')->get() as $t) {
+                        $targetTypeIdByName[strtolower((string) $t->name)] = (int) $t->id;
+                    }
+                }
+            } catch (Throwable) {
+                $targetHasScope = false;
+            }
+            $sourceRows = $sourcePdo->query("SELECT permission_id, role_id{$typeSelect} FROM permission_role")->fetchAll(PDO::FETCH_ASSOC);
 
-            return ['status' => 'skipped', 'rows' => 0,
-                'note' => 'permission_role remap requires legacy permission slugs; assign permissions to imported roles in the UI.'];
+            $legacyNameById = [];
+            foreach ($sourcePdo->query('SELECT id, name FROM permissions')->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $legacyNameById[(int) $r['id']] = (string) $r['name'];
+            }
+            $roleSlugById = [];
+            $roleCols = $this->getSourceColumns($sourcePdo, $driver, 'roles');
+            $roleNameCol = in_array('name', $roleCols, true) ? 'name' : (in_array('display_name', $roleCols, true) ? 'display_name' : null);
+            if ($roleNameCol) {
+                foreach ($sourcePdo->query("SELECT id, `{$roleNameCol}` AS n FROM roles")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                    $roleSlugById[(int) $r['id']] = Str::slug((string) $r['n']);
+                }
+            }
+            $targetRoleIdBySlug = [];
+            foreach (DB::table('roles')->select('id', 'slug')->get() as $r) {
+                $targetRoleIdBySlug[(string) $r->slug] = (int) $r->id;
+            }
+            $targetPermIdBySlug = [];
+            foreach (DB::table('permissions')->select('id', 'slug')->get() as $p) {
+                $targetPermIdBySlug[(string) $p->slug] = (int) $p->id;
+            }
+            // Legacy nouns name source ENTITIES; entities are
+            // slices. Build noun => root-base evidence from the
+            // discovered manifests (slice name + root table keys).
+            $entityBases = [];
+            try {
+                $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                foreach ($manager->getSlices() as $slice) {
+                    foreach (($slice->raw['models'] ?? []) as $m) {
+                        if (! ($m['root'] ?? false) || empty($m['handle'])) {
+                            continue;
+                        }
+                        $base = Str::snake((string) $m['handle']);
+                        // The navigation label is the strongest
+                        // key: it is the name users (and legacy
+                        // permission nouns) call the entity.
+                        $keys = [
+                            Str::snake((string) ($slice->raw['navigation']['label'] ?? '')),
+                            Str::snake((string) $slice->name),
+                            Str::snake((string) ($slice->raw['title'] ?? '')),
+                            (string) ($m['table'] ?? ''),
+                        ];
+                        foreach ($keys as $key) {
+                            if ($key === '') {
+                                continue;
+                            }
+                            foreach ([$key, Str::plural($key), Str::singular($key)] as $variant) {
+                                if (! isset($entityBases[$variant])) {
+                                    $entityBases[$variant] = $base;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                $entityBases = [];
+            }
+            $translation = $this->translateLegacyPermissions(array_values(array_unique($legacyNameById)), array_keys($targetPermIdBySlug), $entityBases);
+
+            $linked = 0;
+            $unmappedPerms = [];
+            $skippedNone = 0;
+            $pendingGrants = [];
+            foreach ($sourceRows as $row) {
+                $scopeName = 'all';
+                if ($hasType) {
+                    $scopeName = $sourceTypeNameById[(int) ($row['permission_type_id'] ?? 0)] ?? 'all';
+                    if ($scopeName === 'none') {
+                        $skippedNone++;
+
+                        continue;
+                    }
+                }
+                $roleSlug = $roleSlugById[(int) $row['role_id']] ?? null;
+                if ($roleSlug && ! isset($targetRoleIdBySlug[$roleSlug]) && isset($targetRoleIdBySlug['legacy-'.$roleSlug])) {
+                    $roleSlug = 'legacy-'.$roleSlug;
+                }
+                $legacyName = $legacyNameById[(int) $row['permission_id']] ?? null;
+                $targetSlug = $legacyName ? ($translation[$legacyName] ?? null) : null;
+                if (! $roleSlug || ! isset($targetRoleIdBySlug[$roleSlug]) || ! $targetSlug || ! isset($targetPermIdBySlug[$targetSlug])) {
+                    if ($legacyName && ! $targetSlug) {
+                        $unmappedPerms[$legacyName] = true;
+                    }
+
+                    continue;
+                }
+                // Accumulate per role+slug. Several legacy
+                // grants can translate onto one slug; the
+                // stored scope is the EXACT-entity grant's
+                // scope when one exists (view_projects owns
+                // project.view's scope) — a compound
+                // sub-resource grant (view_project_discussions)
+                // must not widen its parent slice's scope,
+                // though it still confers the grant itself.
+                $pairKey = $targetRoleIdBySlug[$roleSlug].'|'.$targetPermIdBySlug[$targetSlug];
+                $noun = preg_replace('/^[^_]+_/', '', (string) $legacyName);
+                $slugBase = Str::beforeLast($targetSlug, '.');
+                $isExact = Str::singular((string) $noun) === Str::singular($slugBase) || $noun === $slugBase;
+                $pendingGrants[$pairKey] ??= [
+                    'role_id' => $targetRoleIdBySlug[$roleSlug],
+                    'permission_id' => $targetPermIdBySlug[$targetSlug],
+                    'exact' => null,
+                    'widest' => 'none',
+                ];
+                if ($isExact) {
+                    $pendingGrants[$pairKey]['exact'] = $pendingGrants[$pairKey]['exact'] === null
+                        ? $scopeName
+                        : \LaraSlice\Core\Security\Access::widerScope($pendingGrants[$pairKey]['exact'], $scopeName);
+                }
+                $pendingGrants[$pairKey]['widest'] = \LaraSlice\Core\Security\Access::widerScope($pendingGrants[$pairKey]['widest'], $scopeName);
+            }
+            foreach ($pendingGrants as $grant) {
+                $scopeName = $grant['exact'] ?? $grant['widest'];
+                $existing = DB::table('permission_role')
+                    ->where('permission_id', $grant['permission_id'])
+                    ->where('role_id', $grant['role_id'])
+                    ->first();
+                if (! $existing) {
+                    $insert = [
+                        'permission_id' => $grant['permission_id'],
+                        'role_id' => $grant['role_id'],
+                    ];
+                    if ($targetHasScope && isset($targetTypeIdByName[$scopeName])) {
+                        $insert['permission_type_id'] = $targetTypeIdByName[$scopeName];
+                    }
+                    DB::table('permission_role')->insert($insert);
+                    $linked++;
+                } elseif ($targetHasScope && isset($targetTypeIdByName[$scopeName])) {
+                    DB::table('permission_role')
+                        ->where('permission_id', $grant['permission_id'])
+                        ->where('role_id', $grant['role_id'])
+                        ->update(['permission_type_id' => $targetTypeIdByName[$scopeName]]);
+                }
+            }
+            $unmappedList = array_keys($unmappedPerms);
+
+            return ['status' => 'remapped', 'rows' => $linked, 'unmapped' => count($unmappedList),
+                'note' => "permission_role carried (scope by type name): {$linked} grants created, {$skippedNone} explicit-none grants skipped, ".count($unmappedList).' legacy permissions unmapped'.($unmappedList ? ': '.implode(', ', array_slice($unmappedList, 0, 12)) : '').'.'];
         } catch (Throwable $e) {
             return ['status' => 'error', 'rows' => 0, 'error' => $e->getMessage()];
         }
@@ -1086,6 +1269,114 @@ class SliceDataPortService
      *  2. Re-seeds all framework permissions via SliceManager::syncPermissions().
      *  3. Re-attaches all permissions to both privileged roles.
      */
+    /**
+     * Translate legacy permission names (view_employees, add_tasks)
+     * onto framework permission slugs (employee_detail.view,
+     * task.create) using only the SEEDED slug set as evidence.
+     * A name translates when exactly one base wins the token vote
+     * AND the resulting slug exists; otherwise it stays unmapped.
+     *
+     * @param  array<int, string>  $legacyNames
+     * @param  array<int, string>  $targetSlugs
+     * @param  array<string, string>  $entityBases  noun variant => root permission base
+     * @return array<string, string> legacy name => slug
+     */
+    protected function translateLegacyPermissions(array $legacyNames, array $targetSlugs, array $entityBases = []): array
+    {
+        $slugSet = array_fill_keys($targetSlugs, true);
+        $bases = [];
+        foreach ($targetSlugs as $slug) {
+            $pos = strrpos($slug, '.');
+            if ($pos !== false) {
+                $bases[substr($slug, 0, $pos)] = true;
+            }
+        }
+        $bases = array_keys($bases);
+        $verbActions = [
+            'view' => ['view'], 'add' => ['create'], 'create' => ['create'],
+            'edit' => ['edit'], 'update' => ['edit'], 'delete' => ['delete'],
+            'remove' => ['delete'], 'manage' => ['manage', 'view'],
+        ];
+        $map = [];
+        foreach ($legacyNames as $name) {
+            $parts = explode('_', Str::snake($name));
+            if (count($parts) < 2) {
+                continue;
+            }
+            $verb = $parts[0];
+            $actions = $verbActions[$verb] ?? [$verb];
+            $noun = implode('_', array_slice($parts, 1));
+            // Entity evidence first: the noun (or its number
+            // variants) naming a slice lands on that slice's root.
+            $entityBase = $entityBases[$noun] ?? $entityBases[Str::plural($noun)] ?? $entityBases[Str::singular($noun)] ?? null;
+            if ($entityBase !== null) {
+                foreach ($actions as $action) {
+                    $slug = $entityBase.'.'.$action;
+                    if (isset($slugSet[$slug])) {
+                        $map[$name] = $slug;
+                        continue 2;
+                    }
+                }
+            }
+            $nounSingular = Str::singular($noun);
+            $nounTokens = explode('_', $nounSingular);
+            $squashedNouns = array_unique([
+                str_replace('_', '', $nounSingular),
+                str_replace('_', '', $noun),
+            ]);
+            $best = null;
+            $bestScore = 0;
+            $tied = false;
+            foreach ($bases as $base) {
+                $baseTokens = explode('_', $base);
+                $score = 0;
+                if ($base === $noun || $base === $nounSingular) {
+                    $score = 100;
+                } elseif (array_slice($baseTokens, 0, count($nounTokens)) === $nounTokens
+                    || array_slice($nounTokens, 0, count($baseTokens)) === $baseTokens) {
+                    $score = 60 + 10 * count(array_intersect($baseTokens, $nounTokens));
+                } elseif (($baseTokens[0] ?? null) === ($nounTokens[0] ?? null)) {
+                    $score = 30;
+                }
+                // Squashed containment: a legacy noun that
+                // spans a compound base's tokens (timelogs →
+                // project_time_log) still names that entity.
+                // The least compound match wins (project_time_log
+                // over project_time_log_break), so the score
+                // decays with the base's extra tokens.
+                if ($score < 80) {
+                    $squashedBase = str_replace('_', '', $base);
+                    foreach ($squashedNouns as $squashedNoun) {
+                        if (strlen($squashedNoun) >= 5
+                            && (str_contains($squashedBase, $squashedNoun) || str_contains($squashedNoun, $squashedBase))) {
+                            $score = max(65, 80 - 2 * (count($baseTokens) - count($nounTokens)));
+                            break;
+                        }
+                    }
+                }
+                if ($score > $bestScore) {
+                    $best = $base;
+                    $bestScore = $score;
+                    $tied = false;
+                } elseif ($score === $bestScore && $score > 0) {
+                    $tied = true;
+                }
+            }
+            if ($best === null || $tied || $bestScore < 60) {
+                continue;
+            }
+            foreach ($actions as $action) {
+                $slug = $best.'.'.$action;
+                if (isset($slugSet[$slug])) {
+                    $map[$name] = $slug;
+                    break;
+                }
+            }
+        }
+
+        return $map;
+    }
+
     /**
      * Remap user references in imported tables from source user ids
      * to target user ids, matched by email. Runs once per import,

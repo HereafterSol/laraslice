@@ -1432,11 +1432,12 @@ BLADE;
                 break;
             }
         }
+        $export = ($slice->raw['ui']['directory']['export'] ?? true) !== false;
         $import = is_array($slice->raw['ui']['directory']['import'] ?? null);
         $seed = is_array($slice->raw['ui']['directory']['reference_sets'] ?? null);
         $invite = is_array($slice->raw['ui']['directory']['invite'] ?? null);
         $conversation = is_array($slice->raw['ui']['conversation'] ?? null);
-        if (! $document && ! $matrix && ! $report && $namedReports === [] && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite && ! $punch && ! $conversation) {
+        if (! $document && ! $matrix && ! $report && $namedReports === [] && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite && ! $punch && ! $conversation && ! $export) {
             return;
         }
         try {
@@ -1515,6 +1516,11 @@ BLADE;
                 Route::middleware($middleware)
                     ->post($uriPrefix.'/{id}/timer/stop', [$controllerClass, 'timerStop'])
                     ->name($namePrefix.'.timer_stop');
+            }
+            if ($export && ! Route::has($namePrefix.'.export')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/export', [$controllerClass, 'export'])
+                    ->name($namePrefix.'.export');
             }
             if ($import && ! Route::has($namePrefix.'.import')) {
                 Route::middleware($middleware)
@@ -2420,26 +2426,40 @@ BLADE;
                             if (is_string($createLabel) && $createLabel !== '') {
                                 $generated = 'Add '.Str::studly(Str::singular($slice->name));
                                 if ($generated !== $createLabel && str_contains($vContent, $generated)) {
-                                    // Idempotency (fixed 25 Oct
-                                    // 2026): when the declared
+                                    // Idempotency, both containment
+                                    // directions: when the declared
                                     // label CONTAINS the generated
-                                    // string ('Add Lead Contact'
-                                    // vs 'Add Lead'), a plain
-                                    // str_replace re-matches its
-                                    // own output and appends the
-                                    // suffix on EVERY run. Shield
-                                    // already-correct occurrences,
-                                    // replace the rest, unshield.
+                                    // string ('Add Lead Contact' vs
+                                    // 'Add Lead'), shield the declared
+                                    // occurrences first or every run
+                                    // appends the suffix again. When
+                                    // the GENERATED string contains
+                                    // the declared one ('Add
+                                    // EmployeeDetail' vs 'Add
+                                    // Employee'), shielding the
+                                    // declared text would eat the
+                                    // generated string's head and
+                                    // nothing would ever replace —
+                                    // tokenize the generated string
+                                    // and swap the token instead.
                                     $shield = "\u{0001}LSLABEL\u{0001}";
-                                    $relabeled = str_replace(
-                                        $shield,
-                                        $createLabel,
-                                        str_replace(
-                                            $generated,
+                                    if (str_contains($generated, $createLabel)) {
+                                        $relabeled = str_replace(
+                                            $shield,
                                             $createLabel,
-                                            str_replace($createLabel, $shield, $vContent)
-                                        )
-                                    );
+                                            str_replace($generated, $shield, $vContent)
+                                        );
+                                    } else {
+                                        $relabeled = str_replace(
+                                            $shield,
+                                            $createLabel,
+                                            str_replace(
+                                                $generated,
+                                                $createLabel,
+                                                str_replace($createLabel, $shield, $vContent)
+                                            )
+                                        );
+                                    }
                                     if ($relabeled !== $vContent) {
                                         $vContent = $relabeled;
                                         $vChanged = true;
@@ -2734,6 +2754,9 @@ BLADE;
                     }
                 }
             } catch (\Throwable $e) {
+                // Never swallow silently: a throwing repair step
+                // aborts the remaining view upgrades for the slice.
+                \Illuminate\Support\Facades\Log::warning('LaraSlice repairSlice view upgrades aborted: '.$e->getMessage(), ['slice' => $slice->name]);
             }
         }
 
@@ -3022,7 +3045,162 @@ BLADE;
         // Ensure index data-table reflects YAML ui.directory (views, inline_edit, date-key)
         $this->repairIndexDirectoryUi($slice);
 
+        // Heal belongsTo lookups older generators emitted from the
+        // FK stem alone ('Category' for project_category) — the
+        // target model often carries a different name and the
+        // relation throws the moment anything traverses it.
+        $this->repairModelRelations($slice);
+
         return $this->repairedFiles;
+    }
+
+    /**
+     * Rewrite belongsTo modelClass('…') lookups that do not resolve
+     * to any discovered model, deriving the real target from schema
+     * evidence — the same chain the generator now uses at birth:
+     * record-prefixed table → conventional table → fused form →
+     * unique *_stem table → client→User. Unresolvable lookups are
+     * left untouched (reported by drift tooling, never guessed).
+     */
+    protected function repairModelRelations(SliceManifest $slice): void
+    {
+        $modelsDir = $slice->path.'/Models';
+        if (! is_dir($modelsDir)) {
+            return;
+        }
+        // Global handle → table map across every discovered slice.
+        $byTable = [];
+        foreach ($this->slices as $s) {
+            foreach (($s->raw['models'] ?? []) as $m) {
+                if (! empty($m['handle']) && ! empty($m['table'])) {
+                    $byTable[(string) $m['table']] = Str::studly((string) $m['handle']);
+                }
+            }
+        }
+        if ($byTable === []) {
+            return;
+        }
+        foreach (glob($modelsDir.'/*.php') ?: [] as $file) {
+            $src = (string) file_get_contents($file);
+            if (! str_contains($src, 'modelClass(') || ! str_contains($src, 'belongsTo')) {
+                continue;
+            }
+            $recordTable = null;
+            if (preg_match("/protected \\\$table = '([^']+)'/", $src, $tm)) {
+                $recordTable = $tm[1];
+            } else {
+                foreach (($slice->raw['models'] ?? []) as $m) {
+                    if (($m['handle'] ?? '') !== '' && Str::studly((string) $m['handle']) === basename($file, '.php')) {
+                        $recordTable = (string) ($m['table'] ?? '') ?: null;
+                        break;
+                    }
+                }
+            }
+            if ($recordTable === null) {
+                continue;
+            }
+            $changed = false;
+            $out = preg_replace_callback(
+                '/function\s+(\w+)\s*\([^)]*\)\s*(?::\s*[^\{]+)?\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/s',
+                function (array $m) use ($byTable, $recordTable, &$changed) {
+                    $block = $m[0];
+                    if (! str_contains($block, 'belongsTo') || ! str_contains($block, 'modelClass(')) {
+                        return $block;
+                    }
+                    if (! preg_match_all("/modelClass\(\s*'([^']+)'\s*\)/", $block, $mc)) {
+                        return $block;
+                    }
+                    $fk = preg_match("/belongsTo\([^,]+,\s*'([^']+)'/", $block, $fm)
+                        ? $fm[1]
+                        : Str::snake($m[1]).'_id';
+                    foreach (array_unique($mc[1]) as $target) {
+                        if ($this->modelClass($target) !== null) {
+                            continue;
+                        }
+                        $fixed = $this->foreignTargetFromEvidence($fk, $recordTable, $byTable);
+                        if ($fixed !== null && $fixed !== $target) {
+                            $block = str_replace("modelClass('{$target}')", "modelClass('{$fixed}')", $block);
+                            $block = str_replace('modelClass("'.$target.'")', "modelClass('{$fixed}')", $block);
+                            $changed = true;
+                        }
+                    }
+
+                    return $block;
+                },
+                $src
+            );
+            if ($out !== null && $changed && $out !== $src) {
+                $this->writeRepair($file, $out);
+            }
+        }
+    }
+
+    /**
+     * The generator's FK evidence chain, mirrored for repairs.
+     * Every candidate must actually RESOLVE through modelClass():
+     * a manifest can declare a handle whose generated class carries
+     * a different name (a 'client' handle living in ClientDetail),
+     * and accepting the phantom would rewrite a throwing lookup
+     * into another throwing lookup.
+     */
+    protected function foreignTargetFromEvidence(string $fkName, string $recordTable, array $byTable): ?string
+    {
+        $base = Str::replaceLast('_id', '', $fkName);
+        if ($base === '' || $base === $fkName) {
+            return null;
+        }
+        $candidates = [];
+        $prefixed = Str::singular($recordTable).'_'.$base;
+        if (isset($byTable[$prefixed])) {
+            $candidates[] = $byTable[$prefixed];
+        }
+        foreach ([Str::plural($base), $base] as $candidateTable) {
+            if (isset($byTable[$candidateTable])) {
+                $candidates[] = $byTable[$candidateTable];
+            }
+        }
+        $fused = str_replace('_', '', Str::singular($recordTable).Str::plural($base));
+        foreach ($byTable as $table => $handle) {
+            if (str_replace('_', '', $table) === $fused) {
+                $candidates[] = $handle;
+            }
+        }
+        $pluralPrefixed = Str::singular($recordTable).'_'.Str::plural($base);
+        if (isset($byTable[$pluralPrefixed])) {
+            $candidates[] = $byTable[$pluralPrefixed];
+        }
+        $suffixMatches = [];
+        foreach ($byTable as $table => $handle) {
+            if (str_ends_with($table, '_'.$base) || str_ends_with($table, '_'.Str::plural($base))) {
+                $suffixMatches[] = $handle;
+            }
+        }
+        if (count($suffixMatches) === 1) {
+            $candidates[] = $suffixMatches[0];
+        }
+        // Sibling rows of the same table family: a recurring or
+        // dependent task is a task; the stem carries the record's
+        // own singular as its tail.
+        $recordSingular = Str::singular($recordTable);
+        if (str_ends_with($base, '_'.$recordSingular) || $base === $recordSingular) {
+            foreach ($byTable as $table => $handle) {
+                if ($table === $recordTable) {
+                    $candidates[] = $handle;
+                }
+            }
+        }
+        // People stems are users in this domain family (the same
+        // family the data porter remaps by email), clients included.
+        if ($base === 'client' || in_array($base, ['agent', 'member', 'created_by', 'updated_by', 'added_by', 'approved_by', 'assigned_to', 'assigned_by', 'owner', 'from_user', 'to_user'], true)) {
+            $candidates[] = 'User';
+        }
+        foreach (array_unique($candidates) as $candidate) {
+            if ($this->modelClass($candidate) !== null) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -3496,6 +3674,11 @@ PHP;
                 continue;
             }
             if (isset($slice->navigation['show_in_navigation']) && $slice->navigation['show_in_navigation'] === false) {
+                continue;
+            }
+            // Feature-module switch (module_settings): a module
+            // deactivated for the user's type leaves the menu.
+            if ($currentUser && \LaraSlice\Support\ModuleSettings::isHiddenFor($currentUser, $slice->featureModule)) {
                 continue;
             }
 

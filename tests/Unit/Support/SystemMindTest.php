@@ -36,6 +36,33 @@ class SystemMindTest extends TestCase
         $this->assertSame([['label' => 'HR']], $updated['navigation']);
     }
 
+    public function test_success_metrics_round_trip_through_the_plan_form(): void
+    {
+        $mind = [
+            'system' => ['name' => 'Ops', 'purpose' => 'Runs the place.'],
+            'success_metrics' => [
+                ['name' => 'Weekly active teams', 'target' => '500 by month 3'],
+                'Ad-hoc string metric',
+            ],
+        ];
+
+        $form = SystemMind::toForm($mind);
+        $this->assertStringContainsString('Weekly active teams | 500 by month 3', $form['metrics']);
+        $this->assertStringContainsString('Ad-hoc string metric', $form['metrics'], 'string-shaped metrics survive the flatten');
+
+        $form['metrics'] = "Weekly active teams | 750 by month 6\nChurn | under 2%";
+        $updated = SystemMind::applyForm($mind, $form);
+        $this->assertSame(
+            [['name' => 'Weekly active teams', 'target' => '750 by month 6'], ['name' => 'Churn', 'target' => 'under 2%']],
+            $updated['success_metrics']
+        );
+
+        // A form that never heard of metrics must not wipe them.
+        unset($form['metrics']);
+        $untouched = SystemMind::applyForm($mind, $form);
+        $this->assertSame($mind['success_metrics'], $untouched['success_metrics']);
+    }
+
     public function test_diff_marks_changes_and_render_round_trips(): void
     {
         $a = ['system' => ['purpose' => 'One.']];
@@ -70,5 +97,48 @@ class SystemMindTest extends TestCase
         $this->assertStringContainsString('system_fields: [approved_by, approved_at, added_by]', $body);
         $this->assertStringContainsString('workflow: {state_field: status, initial: pending, on_create: apply-initial}', $body);
         $this->assertStringContainsString('leave_date: {input: date}', $body);
+    }
+
+    public function test_actors_round_trip_through_the_plan_form(): void
+    {
+        $mind = [
+            'system' => ['name' => 'Ops', 'purpose' => 'Run it.'],
+            'actors' => [
+                ['name' => 'Admin', 'kind' => 'internal', 'description' => 'Runs it.'],
+                ['name' => 'Client', 'kind' => 'external', 'description' => 'Uses the portal.'],
+            ],
+            'roles' => ['model' => 'role-clubs-with-user-overrides', 'clubs' => []],
+            'journeys' => [],
+            'operations' => [],
+        ];
+
+        $form = SystemMind::toForm($mind);
+        $this->assertSame("Admin | internal | Runs it.\nClient | external | Uses the portal.", $form['actors']);
+
+        $updated = SystemMind::applyForm($mind, $form);
+        $this->assertSame($mind['actors'], $updated['actors'], 'actors survive the form round trip unchanged');
+    }
+
+    public function test_actors_are_only_touched_when_the_form_supplies_them(): void
+    {
+        $mind = [
+            'system' => ['name' => 'Ops', 'purpose' => 'Run it.'],
+            'actors' => [['name' => 'Admin', 'kind' => 'internal', 'description' => 'Runs it.']],
+            'roles' => ['model' => 'role-clubs-with-user-overrides', 'clubs' => []],
+            'journeys' => [],
+            'operations' => [],
+        ];
+
+        $form = SystemMind::toForm($mind);
+        unset($form['actors']);
+        $preserved = SystemMind::applyForm($mind, $form);
+        $this->assertSame($mind['actors'], $preserved['actors'], 'a form without the field never wipes the cast');
+
+        $form['actors'] = "Partner | external | Helps clients\nGreeter | INTERNAL | Front desk\nNoKind | Welcomes people";
+        $edited = SystemMind::applyForm($mind, $form);
+        $this->assertSame('Partner', $edited['actors'][0]['name']);
+        $this->assertSame('internal', $edited['actors'][1]['kind'], 'kind is case-insensitive');
+        $this->assertSame('external', $edited['actors'][2]['kind'], 'a missing or unknown kind defaults to external');
+        $this->assertSame('', $edited['actors'][2]['description'], 'a missing description stays empty');
     }
 }

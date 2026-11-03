@@ -15,19 +15,37 @@ class SkillPublishCommand extends Command
     {
         $this->info('🚀 Publishing LaraSlice AI Skills and MCP configuration...');
 
-        // 1. Locate source SKILL.md
-        $sourceSkill = dirname(__DIR__, 2).'/skills/laraslice/SKILL.md';
-
-        // 2. Publish to .agents/skills/laraslice/SKILL.md
-        $agentsDir = base_path('.agents/skills/laraslice');
-        if (! is_dir($agentsDir)) {
-            mkdir($agentsDir, 0755, true);
-        }
-        $targetSkill = $agentsDir.'/SKILL.md';
-
-        if (file_exists($sourceSkill)) {
-            copy($sourceSkill, $targetSkill);
-            $this->line('✅ Published Agent Skill: <comment>.agents/skills/laraslice/SKILL.md</comment>');
+        // 1+2. Publish the whole skill family: every skills/<name>/
+        // directory (SKILL.md + examples/ + references/) lands in
+        // .agents/skills/<name>/, the layout agent runtimes and
+        // skills.sh discover. The core `laraslice` skill keeps its
+        // historic path, so existing installs keep working.
+        $skillsRoot = dirname(__DIR__, 2).'/skills';
+        foreach (glob($skillsRoot.'/*', GLOB_ONLYDIR) ?: [] as $skillDir) {
+            $name = basename($skillDir);
+            $sourceSkill = $skillDir.'/SKILL.md';
+            if (! file_exists($sourceSkill)) {
+                continue;
+            }
+            $targetDir = base_path('.agents/skills/'.$name);
+            if (! is_dir($targetDir)) {
+                mkdir($targetDir, 0755, true);
+            }
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($skillDir, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::SELF_FIRST
+            );
+            foreach ($iterator as $item) {
+                $dest = $targetDir.'/'.str_replace('\\', '/', $iterator->getSubPathname());
+                if ($item->isDir()) {
+                    if (! is_dir($dest)) {
+                        mkdir($dest, 0755, true);
+                    }
+                } else {
+                    copy($item->getPathname(), $dest);
+                }
+            }
+            $this->line("✅ Published Agent Skill: <comment>.agents/skills/{$name}/SKILL.md</comment>");
         }
 
         // 3. Publish to .cursor/rules/laraslice.mdc

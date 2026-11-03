@@ -98,6 +98,30 @@ class SettingsUi
         return $sections;
     }
 
+    /**
+     * The toggle conventions settings tables actually use:
+     * a stored value counts as ON for 1 / '1' / 'yes' /
+     * 'true' / true / 'active' / 'enabled', and writing a
+     * toggle preserves the convention the existing value
+     * already uses (yes/no stays yes/no, active/deactive
+     * stays active/deactive, ints stay ints).
+     */
+    public static function toggleIsOn(mixed $value): bool
+    {
+        return in_array($value, [1, '1', 'yes', 'true', true, 'active', 'enabled'], true);
+    }
+
+    public static function toggleValueFor(mixed $current, bool $on): mixed
+    {
+        return match (true) {
+            $current === 'yes' || $current === 'no' => $on ? 'yes' : 'no',
+            $current === 'active' || $current === 'deactive' => $on ? 'active' : 'deactive',
+            $current === 'enabled' || $current === 'disabled' => $on ? 'enabled' : 'disabled',
+            is_int($current) => $on ? 1 : 0,
+            default => $on ? '1' : '0',
+        };
+    }
+
     protected static function normalizeOptions(mixed $options): array
     {
         $map = [];

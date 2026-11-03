@@ -1,0 +1,29 @@
+# Worked example — a complete Mind (system.yaml) for the library
+# project whose first slice is examples/books.slice.yaml.
+# Drafted shape per SKILL §28 (the dossier): purpose, actors,
+# journeys, success metrics — plain language an owner can sign.
+system:
+  name: City Library
+  purpose: 'Members discover and borrow books; staff run the catalogue and loans without spreadsheets.'
+  owner: 'Library manager'
+actors:
+  - {name: Member, kind: external, description: 'Borrows and returns books.'}
+  - {name: Librarian, kind: internal, description: 'Runs catalogue, loans, and fines.'}
+roles:
+  model: role-clubs-with-user-overrides
+  clubs:
+    - {name: Librarian, permissions: [book.*, loan.*]}
+    - {name: Member, permissions: [book.view, loan.view-own]}
+journeys:
+  - name: Borrow a book
+    actor: Member
+    steps: ['Search the catalogue', 'Open the book', 'Borrow at the desk']
+    outcome: 'The loan is recorded; the due date is on the member''s list.'
+  - name: Return a book
+    actor: Member
+    steps: ['Hand the book in', 'Loan closes']
+    outcome: 'The book is available again; any fine is on the member''s account.'
+success_metrics:
+  - {name: Loans per week, target: '300 by month 2'}
+  - {name: Overdue rate, target: 'under 5%'}
+operations: {backups: daily, updates: monthly}

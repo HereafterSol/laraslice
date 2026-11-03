@@ -29,6 +29,11 @@ class PageStructureDrift
     {
         $findings = [];
 
+        // Blade comments never render: a contract comment that
+        // MENTIONS a control ("Seed Demo stays band-only…") is
+        // not the control. Strip comments before any text scan.
+        $blade = preg_replace('/\{\{--.*?\--\}\}/s', '', $blade) ?? $blade;
+
         // Invalid placement: the resolver falls back silently;
         // the audit must not.
         $declared = $ui['pages']['list']['placement'] ?? $ui['directory']['placement'] ?? null;

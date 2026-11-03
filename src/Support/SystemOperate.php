@@ -22,16 +22,20 @@ class SystemOperate
     {
         $checks = [];
         try {
+            $t0 = microtime(true);
             DB::select('select 1');
-            $checks[] = ['name' => 'Database', 'ok' => true, 'detail' => 'Connected ('.DB::connection()->getDriverName().')'];
+            $dbMs = (microtime(true) - $t0) * 1000;
+            $checks[] = ['name' => 'Database', 'ok' => true, 'detail' => 'Connected ('.DB::connection()->getDriverName().') · '.number_format($dbMs, 1).' ms round-trip'];
         } catch (\Throwable $e) {
             $checks[] = ['name' => 'Database', 'ok' => false, 'detail' => 'Unreachable'];
         }
 
         $manager = app(SliceManager::class);
+        $t0 = microtime(true);
         $manager->discover();
+        $discoverMs = (microtime(true) - $t0) * 1000;
         $count = count($manager->discoveredSlices());
-        $checks[] = ['name' => 'Slices', 'ok' => $count > 0, 'detail' => $count.' discovered'];
+        $checks[] = ['name' => 'Slices', 'ok' => $count > 0, 'detail' => $count.' discovered · '.number_format($discoverMs, 0).' ms'];
 
         $writable = is_writable(storage_path('app'));
         $checks[] = ['name' => 'Storage', 'ok' => $writable, 'detail' => $writable ? 'storage/app writable' : 'storage/app NOT writable'];
@@ -220,5 +224,143 @@ class SystemOperate
         $out[] = '_Generated from the system Mind by Operate mode. The Mind is intent; slices are the runtime truth._';
 
         return implode("\n", $out)."\n";
+    }
+
+    /**
+     * The trust layer, on the surface: conformance evidence,
+     * declaration drift and declaration history — the same
+     * facts the CLI gates report (slice:conformance,
+     * slice:drift, slice:history), assembled for the Operate
+     * panel. Read-only; every block degrades to an honest
+     * "not available" instead of failing the panel.
+     *
+     * @return array{evidence: array, drift: array, history: array}
+     */
+    public static function quality(): array
+    {
+        $quality = [
+            'evidence' => ['available' => false],
+            'drift' => ['available' => false],
+            'history' => ['available' => false],
+            'portability' => ['available' => false],
+        ];
+
+        try {
+            // PortEvidence::load() returns the summary
+            // itself: suites (each with its failed ids),
+            // checks/passed/failed_count/percent, errors.
+            $summary = \LaraSlice\Porting\PortEvidence::load();
+            $quality['evidence'] = [
+                'available' => true,
+                'suites' => count($summary['suites']),
+                'checks' => $summary['checks'],
+                'passed' => $summary['passed'],
+                'percent' => $summary['percent'],
+                'failed' => collect($summary['suites'])->flatMap(fn ($s) => $s['failed'] ?? [])->values()->all(),
+                'errors' => $summary['errors'],
+                'latest_at' => collect($summary['suites'])->max('recorded_at'),
+            ];
+        } catch (\Throwable) {
+            // leave unavailable
+        }
+
+        try {
+            $ledger = new DeclarationHistory;
+            $entries = $ledger->entries();
+            $quality['history'] = [
+                'available' => true,
+                'entries' => count($entries),
+                'tracked' => count($ledger->trackedFiles()),
+                'latest' => array_map(fn ($e) => [
+                    'id' => $e['id'],
+                    'recorded_at' => $e['recorded_at'],
+                    'actor' => $e['actor'],
+                    'by' => $e['by'] ?? null,
+                    'changes' => count($e['changes']),
+                ], array_slice($entries, 0, 3)),
+            ];
+        } catch (\Throwable) {
+            // a corrupt index reports as unavailable here;
+            // slice:history itself surfaces the error.
+        }
+
+        try {
+            $mind = SystemMind::load();
+            if ($mind !== null) {
+                $registry = [];
+                $roleGrants = [];
+                if (Schema::hasTable('permissions')) {
+                    $registry = DB::table('permissions')->pluck('slug')->map(fn ($s) => (string) $s)->all();
+                }
+                if (Schema::hasTable('permission_role') && Schema::hasTable('roles')) {
+                    $byRoleId = [];
+                    foreach (DB::table('permission_role')
+                        ->join('permissions', 'permissions.id', '=', 'permission_role.permission_id')
+                        ->select('permission_role.role_id', 'permissions.slug')->get() as $row) {
+                        $byRoleId[(int) $row->role_id][] = (string) $row->slug;
+                    }
+                    foreach (DB::table('roles')->get() as $role) {
+                        $roleGrants[(string) ($role->display_name ?? $role->name)] = $byRoleId[(int) $role->id] ?? [];
+                    }
+                }
+                $bodies = [];
+                $dir = base_path('porting/ui-spec');
+                if (is_dir($dir)) {
+                    foreach (glob($dir.'/*.ui.yaml') ?: [] as $file) {
+                        try {
+                            $parsed = \Symfony\Component\Yaml\Yaml::parseFile($file);
+                            if (is_array($parsed) && isset($parsed['slice'])) {
+                                $bodies[(string) $parsed['slice']] = $parsed;
+                            }
+                        } catch (\Throwable) {
+                            // unparsable Body: the form audit's
+                            // finding, skipped here as in CLI.
+                        }
+                    }
+                }
+                $findings = SystemDrift::audit($mind, $roleGrants, $registry, $bodies);
+                $errors = count(array_filter($findings, fn ($f) => ($f['severity'] ?? null) === 'error'));
+                $quality['drift'] = [
+                    'available' => true,
+                    'errors' => $errors,
+                    'warnings' => count($findings) - $errors,
+                ];
+            }
+        } catch (\Throwable) {
+            // leave unavailable
+        }
+
+        try {
+            // Runtime portability of the declarations: the
+            // same audit slice:portability gates on.
+            $audit = PortabilityAudit::run();
+            if ($audit['available'] ?? false) {
+                $quality['portability'] = [
+                    'available' => true,
+                    'files_scanned' => $audit['files_scanned'],
+                    'findings' => count($audit['findings']),
+                    'bindings' => $audit['bindings'] ?? 0,
+                    'clean' => $audit['clean'],
+                ];
+            }
+        } catch (\Throwable) {
+            // leave unavailable
+        }
+
+        return $quality;
+    }
+
+    /**
+     * Git state of the declarations (read-only) — the
+     * team-facing half of the trust layer: which branch,
+     * and which Mind/Body/Heart files are uncommitted.
+     */
+    public static function git(): array
+    {
+        try {
+            return GitStatus::forDeclarations();
+        } catch (\Throwable) {
+            return ['available' => false, 'reason' => 'Git state could not be read. Declaration History still tracks every change offline.'];
+        }
     }
 }

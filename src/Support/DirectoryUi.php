@@ -23,7 +23,7 @@ final class DirectoryUi
     /** @var list<string> */
     public const HTML_FORMATTERS = [
         'code_badge', 'composite_user', 'user_stack', 'status_pill', 'money_breakdown', 'lines',
-        'progress_bar', 'badge', 'text_with_badge', 'date_overdue', 'timer'];
+        'progress_bar', 'badge', 'text_with_badge', 'date_overdue', 'timer', 'icon_text'];
 
     /**
      * Merge ui.directory.columns from the live slice manifest over $fallback.
@@ -91,6 +91,28 @@ final class DirectoryUi
 
         $fieldIndex = self::fieldIndex($manifest);
 
+        // The slice's root table rides every column as
+        // parent_table: value resolvers (conventional pivots,
+        // declared aggregates) key off it, and directories
+        // generated before the row pipeline took a table
+        // argument still get the context from here.
+        $rootTable = null;
+        foreach ((array) ($manifest['models'] ?? []) as $modelDef) {
+            if (is_array($modelDef) && ! empty($modelDef['table'])
+                && (! isset($modelDef['root']) || $modelDef['root'])) {
+                $rootTable = (string) $modelDef['table'];
+                break;
+            }
+        }
+        if ($rootTable === null) {
+            foreach ((array) ($manifest['models'] ?? []) as $modelDef) {
+                if (is_array($modelDef) && ! empty($modelDef['table'])) {
+                    $rootTable = (string) $modelDef['table'];
+                    break;
+                }
+            }
+        }
+
         $columns = [];
         foreach ($dirCols as $c) {
             if (! is_array($c)) {
@@ -104,7 +126,7 @@ final class DirectoryUi
             $label = (string) ($c['label'] ?? Str::headline((string) $key));
             // Display labels drop the storage suffix: "Leave Type Id" -> "Leave Type".
             if (str_ends_with((string) $key, '_id') && $key !== 'id') {
-                $label = (string) preg_replace('/\s+Id$/', '', $label);
+                $label = (string) preg_replace('/\s+Id$/i', '', $label);
             }
             $def = $fieldIndex[(string) $key] ?? [];
             $options = self::normalizeOptions($c['options'] ?? null);
@@ -119,19 +141,39 @@ final class DirectoryUi
                 // column itself.
                 $options = self::filterDeclaredOptions($manifest, (string) $key, $sliceName);
             }
+            if ($options === []) {
+                // An FK column's value set is its target table's
+                // rows (board_column_id -> taskboard_columns):
+                // resolve id => label so inline editors on FK
+                // columns are never blank.
+                $options = self::foreignKeyOptions($c, (string) $key);
+            }
+            if ($options === [] && in_array((string) $key, ['role', 'user_role'], true)) {
+                // Role editors on ported slices declare no options;
+                // the value set is the app's roles table by convention.
+                $options = self::roleOptions();
+            }
             $columns[] = array_filter([
                 'key' => $key,
                 'label' => $label,
+                'class' => $c['class'] ?? null,
                 'sortable' => $c['sortable'] ?? true,
                 'alwaysVisible' => ! empty($c['always_visible']),
                 'formatter' => $fmt,
                 'html' => in_array($fmt, self::HTML_FORMATTERS, true),
                 'badge_from' => $c['badge_from'] ?? null,
+                'thread' => $c['thread'] ?? null,
                 'progress_field' => $c['progress_field'] ?? null,
+                'subtitle_from' => $c['subtitle_from'] ?? null,
+                'value_from' => $c['value_from'] ?? null,
+                'compute' => $c['compute'] ?? null,
+                'icon_from' => $c['icon_from'] ?? null,
                 'breakdown' => $c['breakdown'] ?? null,
                 'label_table' => $c['label_table'] ?? null,
                 'label_column' => $c['label_column'] ?? null,
                 'color_from' => $c['color_from'] ?? null,
+                'aggregate' => $c['aggregate'] ?? null,
+                'parent_table' => $rootTable,
                 'relation' => $c['relation'] ?? null,
                 'lines' => $c['lines'] ?? null,
                 'options' => $options !== [] ? $options : null,
@@ -245,6 +287,119 @@ final class DirectoryUi
         return is_string($title) && $title !== '' ? $title : 'Attribute Parameters';
     }
 
+    /**
+     * The empty-value marker. House rendering uses an em
+     * dash; the replica kit renders the source's double
+     * hyphen — a kit-level rendering difference applied at
+     * the formatter seam (detail rows, pairs, anniversaries).
+     */
+    public static function emptyDash(): string
+    {
+        try {
+            return Kit::current() === 'replica' ? '--' : '—';
+        } catch (\Throwable $e) {
+            return '—';
+        }
+    }
+
+    /**
+     * The deployment's display timezone, declared in the Mind
+     * (localization.timezone) — stored datetimes are UTC and are
+     * presented in the company's timezone, the way the source
+     * systems render them. Falls back to the app timezone.
+     */
+    public static function displayTimezone(): string
+    {
+        try {
+            $mind = SystemMind::load();
+            $tz = is_array($mind) ? ($mind['localization']['timezone'] ?? null) : null;
+            if (is_string($tz) && $tz !== '') {
+                return $tz;
+            }
+        } catch (\Throwable $e) {
+            // No readable Mind: fall through to the app timezone.
+        }
+        try {
+            $app = function_exists('config') ? config('app.timezone') : null;
+        } catch (\Throwable $e) {
+            $app = null;
+        }
+
+        return is_string($app) && $app !== '' ? $app : 'UTC';
+    }
+
+    /**
+     * The deployment's currency code, declared in the Mind
+     * (localization.currency); the fallback matches the money
+     * display convention already used by DataTableRows.
+     */
+    public static function currencyCode(): string
+    {
+        try {
+            $mind = SystemMind::load();
+            $code = is_array($mind) ? ($mind['localization']['currency'] ?? null) : null;
+            if (is_string($code) && $code !== '') {
+                return $code;
+            }
+        } catch (\Throwable $e) {
+            // No readable Mind: fall through to the convention.
+        }
+
+        return 'PKR';
+    }
+
+    /**
+     * A recurring annual date (a joining date shown as a work
+     * anniversary) rendered as its next occurrence, humanized —
+     * "6 months from now". The derivation is declared per field
+     * (type: anniversary); the stored date itself never changes.
+     */
+    private static function anniversaryText(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return self::emptyDash();
+        }
+        try {
+            $date = \Illuminate\Support\Carbon::parse((string) $value);
+        } catch (\Throwable $e) {
+            return self::emptyDash();
+        }
+        $next = $date->copy()->setYear(\Illuminate\Support\Carbon::now()->year);
+        if ($next->isPast()) {
+            $next->addYear();
+        }
+
+        return $next->diffForHumans();
+    }
+
+    /**
+     * The declared presentation of the detail card (ui.show
+     * .detail_style): 'grid' (default) is the two-column small-caps
+     * grid; 'list' is the source hubs' definition list — one row
+     * per field, muted label left, value right, under the declared
+     * detail_title.
+     */
+    public static function detailStyle(string $sliceName): string
+    {
+        $manifest = self::readManifest($sliceName);
+
+        return ($manifest['ui']['show']['detail_style'] ?? 'grid') === 'list' ? 'list' : 'grid';
+    }
+
+    /**
+     * Whether the slice declared `ui.show.detail_fields: none` —
+     * its overview carries no detail card at all (a fully
+     * widget-composed hub). Views gate the card on this because
+     * an empty detailRows() otherwise falls back to a raw
+     * attribute grid.
+     */
+    public static function detailsSuppressed(string $sliceName): bool
+    {
+        $manifest = self::readManifest($sliceName);
+
+        return ($manifest['ui']['show']['detail_fields'] ?? null) === 'none';
+    }
+
     public static function detailRows(string $sliceName, mixed $record): array
     {
         $manifest = self::readManifest($sliceName);
@@ -256,6 +411,17 @@ final class DirectoryUi
         // page can present a curated profile that spans the record's
         // relations instead of one table's columns.
         $declared = $manifest['ui']['show']['detail_fields'] ?? null;
+        // (Suppression is also exposed as detailsSuppressed() —
+        // the views gate the whole detail card on it, since an
+        // empty row set otherwise falls back to a raw attribute
+        // grid.)
+        // A declared 'none' suppresses the detail card entirely —
+        // hubs whose overview is fully composed of widgets (the
+        // project hub: progress, charts, and a summary text card)
+        // carry no field grid at all.
+        if ($declared === 'none') {
+            return [];
+        }
         if (is_array($declared) && $declared !== [] && is_object($record)) {
             $rows = [];
             foreach ($declared as $entry) {
@@ -270,15 +436,47 @@ final class DirectoryUi
                 } catch (\Throwable $e) {
                     $value = null;
                 }
+                // Profile delegation: a bare field the record itself
+                // does not carry may live on its linked user (the
+                // profile tables — employee_details, client_details —
+                // store identity on the user row; the source's detail
+                // blades read it through that link).
+                if ($value === null && ! str_contains((string) $entry['from'], '.')) {
+                    try {
+                        $value = data_get($record, 'user.'.(string) $entry['from']);
+                    } catch (\Throwable $e) {
+                        $value = null;
+                    }
+                }
                 $type = (string) ($entry['type'] ?? 'text');
+                if ($type === 'datetime' && $value !== null && $value !== '') {
+                    try {
+                        $dtv = $value instanceof \DateTimeInterface ? $value : new \DateTimeImmutable((string) $value);
+                        $value = $dtv->setTimezone(new \DateTimeZone(self::displayTimezone()));
+                    } catch (\Throwable $e) {
+                        // Keep the raw value; formatting falls through.
+                    }
+                }
                 $text = match ($type) {
                     'date', 'datetime' => DataTableRows::formatDateValue($value, $type),
-                    'status' => (string) ($value ?? '—'),
+                    'money' => is_numeric($value)
+                        ? self::currencyCode().rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.')
+                        : (string) ($value ?? self::emptyDash()),
+                    'anniversary' => self::anniversaryText($value),
+                    'status' => (string) ($value ?? self::emptyDash()),
                     default => (string) DataTableRows::display($value),
                 };
+                // A declared value map translates stored codes to
+                // their presented labels (gender male → Male, locale
+                // en → English) — presentation vocabulary belongs to
+                // the declaration, not to a formatter's guess.
+                if (is_array($entry['map'] ?? null) && is_scalar($value)
+                    && array_key_exists((string) $value, $entry['map'])) {
+                    $text = (string) $entry['map'][(string) $value];
+                }
                 $rows[] = [
                     'label' => (string) ($entry['label'] ?? Str::headline((string) $entry['from'])),
-                    'value' => $text === '' ? '—' : $text,
+                    'value' => $text === '' ? self::emptyDash() : $text,
                     'html' => false,
                 ];
             }
@@ -1236,6 +1434,25 @@ final class DirectoryUi
                     if ($value === null || $max === null || $max <= 0) {
                         continue;
                     }
+                    // Declared side fields (label/from/type) render
+                    // as label-over-value columns beside the gauge —
+                    // the source progress card's Start Date /
+                    // Deadline arrangement.
+                    $gaugeFields = [];
+                    foreach ((array) ($def['fields'] ?? []) as $fieldDef) {
+                        if (! is_array($fieldDef) || empty($fieldDef['label']) || empty($fieldDef['from'])) {
+                            continue;
+                        }
+                        $fv = data_get($record, (string) $fieldDef['from']);
+                        $ftype = (string) ($fieldDef['type'] ?? 'text');
+                        $ftext = ($ftype === 'date' || $ftype === 'datetime')
+                            ? DataTableRows::formatDateValue($fv, $ftype)
+                            : (string) DataTableRows::display($fv);
+                        $gaugeFields[] = [
+                            'label' => (string) $fieldDef['label'],
+                            'value' => $ftext === '' ? self::emptyDash() : $ftext,
+                        ];
+                    }
                     $widgets[] = [
                         'handle' => $handle,
                         'placement' => (string) ($def['placement'] ?? 'main'),
@@ -1245,6 +1462,11 @@ final class DirectoryUi
                         'max' => $max,
                         'percent' => max(0.0, min(100.0, round($value / $max * 100, 1))),
                         'display' => self::trimNumber($value).' / '.self::trimNumber($max),
+                        // 'ring' (default) or 'semicircle' — the
+                        // source progress card's half-gauge.
+                        'variant' => (string) ($def['variant'] ?? 'ring'),
+                        'color' => (string) ($def['color'] ?? ''),
+                        'fields' => $gaugeFields,
                     ];
                 } elseif ($type === 'stats' && $handle !== '') {
                     $rows = [];
@@ -1262,6 +1484,7 @@ final class DirectoryUi
                         $rows[] = [
                             'label' => (string) $measure['label'],
                             'value' => (string) ($measure['prefix'] ?? '').$text.(string) ($measure['suffix'] ?? ''),
+                            'icon' => (string) ($measure['icon'] ?? ''),
                         ];
                     }
                     if ($rows !== []) {
@@ -1270,15 +1493,97 @@ final class DirectoryUi
                             'placement' => (string) ($def['placement'] ?? 'main'),
                             'type' => 'stats',
                             'title' => (string) ($def['title'] ?? Str::headline($handle)),
+                            // 'rows' (default): one card, label/value
+                            // rows. 'cards': each measure its own
+                            // small card in a two-column grid — the
+                            // source rails' Late Attendance / Leaves
+                            // Taken arrangement.
+                            'layout' => (string) ($def['layout'] ?? 'rows'),
+                            // Cards grid width (2 default; 3 for a
+                            // three-across money row) and an optional
+                            // section heading rendered above the
+                            // cards — the source Statistics block.
+                            'columns' => (int) ($def['columns'] ?? 2),
+                            'heading' => (string) ($def['heading'] ?? ''),
                             'rows' => $rows,
                         ];
                     }
-                } elseif ($type === 'list' && $handle !== '') {
-                    $relation = (string) ($def['relation'] ?? '');
-                    if ($relation === '' || ! method_exists($record, $relation)) {
+                } elseif ($type === 'pairs' && $handle !== '') {
+                    // Labelled text pairs (a reporting card, a
+                    // contacts card): each row resolves a dotted
+                    // path like a detail field; anything missing
+                    // renders as an em dash — the card is a surface
+                    // even when every value is empty (the source
+                    // renders it with "--" rows).
+                    $rows = [];
+                    foreach ((array) ($def['rows'] ?? []) as $rowDef) {
+                        if (! is_array($rowDef) || empty($rowDef['label'])) {
+                            continue;
+                        }
+                        $value = null;
+                        if (! empty($rowDef['from'])) {
+                            try {
+                                $value = data_get($record, (string) $rowDef['from']);
+                            } catch (\Throwable $e) {
+                                $value = null;
+                            }
+                            if ($value === null && ! str_contains((string) $rowDef['from'], '.')) {
+                                try {
+                                    $value = data_get($record, 'user.'.(string) $rowDef['from']);
+                                } catch (\Throwable $e) {
+                                    $value = null;
+                                }
+                            }
+                        }
+                        $rows[] = [
+                            'label' => (string) $rowDef['label'],
+                            'value' => is_scalar($value) && trim((string) $value) !== '' ? (string) $value : self::emptyDash(),
+                        ];
+                    }
+                    if ($rows !== []) {
+                        $widgets[] = [
+                            'handle' => $handle,
+                            'placement' => (string) ($def['placement'] ?? 'main'),
+                            'type' => 'pairs',
+                            'title' => (string) ($def['title'] ?? ''),
+                            // 'rows' (default): label/value rows.
+                            // 'columns': label-over-value cells in
+                            // a two-column grid — the source's
+                            // Reporting card arrangement.
+                            'layout' => (string) ($def['layout'] ?? 'rows'),
+                            'rows' => $rows,
+                        ];
+                    }
+                } elseif ($type === 'text' && $handle !== '') {
+                    // A narrative card: one record text field under
+                    // a title — the source's Project Details block
+                    // (the record summary as a paragraph, not a
+                    // field grid). An empty text skips the widget.
+                    $from = (string) ($def['from'] ?? '');
+                    if ($from === '') {
                         continue;
                     }
-                    $query = self::applyWidgetFilters($record->{$relation}(), (array) ($def['filter'] ?? []));
+                    $tv = data_get($record, $from);
+                    if (! is_scalar($tv) || trim((string) $tv) === '') {
+                        continue;
+                    }
+                    $widgets[] = [
+                        'handle' => $handle,
+                        'placement' => (string) ($def['placement'] ?? 'main'),
+                        'type' => 'text',
+                        'title' => (string) ($def['title'] ?? Str::headline($handle)),
+                        'text' => (string) $tv,
+                    ];
+                } elseif ($type === 'list' && $handle !== '') {
+                    $relation = (string) ($def['relation'] ?? '');
+                    if ($relation === '') {
+                        continue;
+                    }
+                    $baseQuery = self::widgetRelationQuery($record, $relation);
+                    if (! is_object($baseQuery)) {
+                        continue;
+                    }
+                    $query = self::applyWidgetFilters($baseQuery, (array) ($def['filter'] ?? []));
                     $items = $query
                         ->orderBy((string) ($def['order_by'] ?? 'id'), (string) ($def['direction'] ?? 'desc'))
                         ->limit((int) ($def['limit'] ?? 5))
@@ -1287,6 +1592,18 @@ final class DirectoryUi
                     $rows = [];
                     foreach ($items as $item) {
                         $label = data_get($item, $labelField);
+                        // Fallback (table) rows cannot traverse a
+                        // dotted label path — resolve one hop via
+                        // the row's foreign key.
+                        if (($label === null || ! is_scalar($label)) && ! $item instanceof \Illuminate\Database\Eloquent\Model
+                            && str_contains($labelField, '.')) {
+                            [$relName, $relColumn] = explode('.', $labelField, 2);
+                            $relTable = Str::snake(Str::plural($relName));
+                            $relKey = data_get($item, $relName.'_id');
+                            if ($relKey !== null && Schema::hasTable($relTable)) {
+                                $label = DB::table($relTable)->where('id', $relKey)->value($relColumn);
+                            }
+                        }
                         if (! is_scalar($label) || (string) $label === '') {
                             $label = data_get($item, 'title') ?? data_get($item, 'name') ?? ('#'.data_get($item, 'id'));
                         }
@@ -1303,14 +1620,19 @@ final class DirectoryUi
                         'title' => (string) ($def['title'] ?? Str::headline($handle)),
                         'rows' => $rows,
                         'empty' => (string) ($def['empty_text'] ?? 'Nothing to show.'),
+                        'empty_icon' => (string) ($def['empty_icon'] ?? ''),
                     ];
                 } elseif ($type === 'chart' && $handle !== '') {
                     $relation = (string) ($def['relation'] ?? '');
                     $groupBy = (string) ($def['group_by'] ?? '');
-                    if ($relation === '' || $groupBy === '' || ! method_exists($record, $relation)) {
+                    if ($relation === '' || $groupBy === '') {
                         continue;
                     }
-                    $items = $record->{$relation}()->limit(500)->get();
+                    $chartQuery = self::widgetRelationQuery($record, $relation);
+                    if (! is_object($chartQuery)) {
+                        continue;
+                    }
+                    $items = $chartQuery->limit(500)->get();
                     $counts = [];
                     foreach ($items as $item) {
                         $gv = data_get($item, $groupBy);
@@ -1320,28 +1642,53 @@ final class DirectoryUi
                         $counts[(string) $gv] = ($counts[(string) $gv] ?? 0) + 1;
                     }
                     if ($counts === []) {
+                        // A declared empty state is a surface, not
+                        // an absence (the source renders the card
+                        // with "Not enough data").
+                        if (! empty($def['empty_text'])) {
+                            $widgets[] = [
+                                'handle' => $handle,
+                                'placement' => (string) ($def['placement'] ?? 'main'),
+                                'type' => 'chart',
+                                'chart' => (string) ($def['chart'] ?? 'donut'),
+                                'title' => (string) ($def['title'] ?? Str::headline($handle)),
+                                'labels' => [],
+                                'series' => [],
+                                'colors' => [],
+                                'legend' => (string) ($def['legend'] ?? 'values'),
+                                'empty' => (string) $def['empty_text'],
+                            ];
+                        }
                         continue;
                     }
                     $labelsMap = (array) ($def['labels'] ?? []);
                     if ($labelsMap !== []) {
                         // Declared label maps also declare the
-                        // group order (board columns, statuses).
+                        // group order (board columns, statuses) —
+                        // and the full vocabulary: a declared group
+                        // with no rows still belongs in the legend
+                        // at zero (the source boards list every
+                        // column; an absent slice, not an absent
+                        // entry).
                         $ordered = [];
                         foreach ($labelsMap as $k => $_) {
-                            if (isset($counts[(string) $k])) {
-                                $ordered[(string) $k] = $counts[(string) $k];
-                            }
+                            $ordered[(string) $k] = $counts[(string) $k] ?? 0;
                         }
                         foreach ($counts as $k => $n) {
                             $ordered[$k] ??= $n;
                         }
                         $counts = $ordered;
                     }
+                    $colorsMap = (array) ($def['colors'] ?? []);
                     $labels = [];
                     $series = [];
+                    $colors = [];
                     foreach ($counts as $k => $n) {
                         $labels[] = (string) ($labelsMap[$k] ?? Str::headline($k));
                         $series[] = $n;
+                        if (isset($colorsMap[$k])) {
+                            $colors[] = (string) $colorsMap[$k];
+                        }
                     }
                     $widgets[] = [
                         'handle' => $handle,
@@ -1351,6 +1698,8 @@ final class DirectoryUi
                         'title' => (string) ($def['title'] ?? Str::headline($handle)),
                         'labels' => $labels,
                         'series' => $series,
+                        'colors' => $colors,
+                        'legend' => (string) ($def['legend'] ?? 'values'),
                     ];
                 } elseif ($type === 'bars' && $handle !== '') {
                     // Planned-vs-actual style comparisons: each bar is
@@ -1393,6 +1742,11 @@ final class DirectoryUi
                             'placement' => (string) ($def['placement'] ?? 'main'),
                             'type' => 'bars',
                             'title' => (string) ($def['title'] ?? Str::headline($handle)),
+                            // 'rows' (default): horizontal meter
+                            // rows. 'columns': vertical chart
+                            // columns with value labels — the
+                            // source's chart-card arrangement.
+                            'style' => (string) ($def['style'] ?? 'rows'),
                             'bars' => $bars,
                         ];
                     }
@@ -1414,9 +1768,81 @@ final class DirectoryUi
      * The declared-stats filter semantics ('!' excludes),
      * shared by widget aggregates and widget lists.
      */
+    /**
+     * A query for a declared widget relation. The model's own
+     * relation method wins; when the model does not carry one
+     * (generated port models declare belongsTo fields, not the
+     * reverse collections their hubs reference), fall back to
+     * convention, in order: a user-scope column on the target
+     * table (user_id, then the domain's other user-key names),
+     * a foreign key back to the record, or the conventional
+     * {thing}_users pivot. Mirrors the stats fallback — a
+     * declared widget must not silently vanish because the
+     * generator did not emit a method.
+     */
+    protected static function widgetRelationQuery(mixed $record, string $relation): mixed
+    {
+        if (! is_object($record) || $relation === '') {
+            return null;
+        }
+        if (method_exists($record, $relation)) {
+            $query = $record->{$relation}();
+
+            return is_object($query) ? $query : null;
+        }
+        try {
+            $table = Str::snake(Str::plural($relation));
+            if (! Schema::hasTable($table)) {
+                return null;
+            }
+            $userId = null;
+            if (isset($record->user_id) && is_numeric($record->user_id)) {
+                $userId = (int) $record->user_id;
+            } elseif (method_exists($record, 'getTable') && $record->getTable() === 'users' && $record->getKey()) {
+                $userId = (int) $record->getKey();
+            }
+            if ($userId !== null) {
+                foreach (['user_id', 'award_to', 'agent_id', 'employee_id'] as $scopeColumn) {
+                    if (Schema::hasColumn($table, $scopeColumn)) {
+                        return DB::table($table)->where($scopeColumn, $userId);
+                    }
+                }
+            }
+            if (method_exists($record, 'getTable') && $record->getKey()) {
+                $backFk = Str::singular($record->getTable()).'_id';
+                if (Schema::hasColumn($table, $backFk)) {
+                    return DB::table($table)->where($backFk, $record->getKey());
+                }
+            }
+            $pivot = Str::singular($table).'_users';
+            if ($userId !== null && Schema::hasTable($pivot)
+                && Schema::hasColumn($pivot, 'user_id') && Schema::hasColumn($pivot, Str::singular($table).'_id')) {
+                return DB::table($pivot)
+                    ->join($table, "{$table}.id", '=', "{$pivot}.".Str::singular($table).'_id')
+                    ->where("{$pivot}.user_id", $userId)
+                    ->select("{$table}.*");
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
+    }
+
     protected static function applyWidgetFilters(mixed $query, array $filter): mixed
     {
         foreach ($filter as $column => $value) {
+            if ($column === '_period' && is_array($value) && count($value) === 2
+                && preg_match('/^[a-z0-9_]+$/', (string) $value[0]) && $value[1] === 'month') {
+                // Reserved key: current-month scope on a date
+                // column (the source's profile widgets count the
+                // current month, not all time).
+                $query = $query->whereRaw('DATE('.$value[0].') BETWEEN ? AND ?', [
+                    now()->startOfMonth()->toDateString(),
+                    now()->endOfMonth()->toDateString(),
+                ]);
+                continue;
+            }
             if (is_array($value)) {
                 $exclude = array_values(array_filter($value, fn ($v) => is_string($v) && str_starts_with($v, '!')));
                 $include = array_values(array_diff($value, $exclude));
@@ -1441,31 +1867,34 @@ final class DirectoryUi
      */
     protected static function measureValue(mixed $record, array $measure): ?float
     {
+        $value = null;
         if (isset($measure['field'])) {
             $v = data_get($record, (string) $measure['field']);
-
-            return is_numeric($v) ? (float) $v : null;
-        }
-        if (isset($measure['minus']) && is_array($measure['minus']) && count($measure['minus']) === 2) {
+            $value = is_numeric($v) ? (float) $v : null;
+        } elseif (isset($measure['minus']) && is_array($measure['minus']) && count($measure['minus']) === 2) {
             $a = self::widgetAggregate($record, (array) $measure['minus'][0]);
             $b = self::widgetAggregate($record, (array) $measure['minus'][1]);
-            if ($a === null || $b === null) {
-                return null;
-            }
-
-            return $a - $b;
+            $value = ($a === null || $b === null) ? null : $a - $b;
+        } else {
+            $value = self::widgetAggregate($record, $measure);
+        }
+        // A declared default turns "unset" into a number — the
+        // source's arithmetic treats an empty budget as 0, and a
+        // statistics card that silently drops the row misreports.
+        if ($value === null && isset($measure['default']) && is_numeric($measure['default'])) {
+            return (float) $measure['default'];
         }
 
-        return self::widgetAggregate($record, $measure);
+        return $value;
     }
 
     protected static function widgetAggregate(mixed $record, array $spec): ?float
     {
         $relation = (string) ($spec['relation'] ?? '');
-        if ($relation === '' || ! is_object($record) || ! method_exists($record, $relation)) {
+        if ($relation === '' || ! is_object($record)) {
             return null;
         }
-        $query = $record->{$relation}();
+        $query = self::widgetRelationQuery($record, $relation);
         if (! is_object($query)) {
             return null;
         }
@@ -1483,10 +1912,258 @@ final class DirectoryUi
         return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
     }
 
+    /**
+     * User-scoped query for a show stat whose relation method does not
+     * exist on the record: the target table's own user_id column, or a
+     * conventional {singular}_users pivot (counts only via pivot).
+     */
+    protected static function userScopedStatQuery(string $relation, int $userId, string $aggregate = 'count'): mixed
+    {
+        try {
+            $table = Str::snake(Str::plural($relation));
+            if (Schema::hasTable($table) && Schema::hasColumn($table, 'user_id')) {
+                return DB::table($table)->where('user_id', $userId);
+            }
+            if ($aggregate === 'count') {
+                $pivot = Str::singular($table).'_users';
+                if (Schema::hasTable($pivot) && Schema::hasColumn($pivot, 'user_id')) {
+                    // Join the target table so declared filters (which
+                    // name target columns, e.g. board_column_id) apply.
+                    if (Schema::hasTable($table) && Schema::hasColumn($pivot, Str::singular($table).'_id')) {
+                        return DB::table($pivot)
+                            ->join($table, "{$table}.id", '=', "{$pivot}.".Str::singular($table).'_id')
+                            ->where("{$pivot}.user_id", $userId);
+                    }
+
+                    return DB::table($pivot)->where('user_id', $userId);
+                }
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * The hub identity card (ui.show.identity): the person/record
+     * the hub is about — name, a subtitle of resolved paths, one
+     * meta line, and the About text — rendered at the head of the
+     * overview's main column in hub composition, the way profile
+     * hubs in the source systems open. Bare paths delegate to the
+     * linked user, exactly like detail fields. Returns null when
+     * undeclared or when no name resolves: no declaration, no
+     * fabricated card.
+     */
+    /**
+     * Last-resort resolution for a dotted identity path whose
+     * middle segment is not an Eloquent relation: walk the
+     * segments, and for a segment that does not resolve, look
+     * the row up by the foreign-key convention — the segment's
+     * table, keyed by the current model's snake name + '_id'
+     * (users -> client_details via user_id) — the same
+     * convention the FK evidence chain generates relations
+     * from. Guarded by schema checks; any failure returns null.
+     */
+    public static function resolveDottedByForeignKey(mixed $record, string $path): mixed
+    {
+        try {
+            $current = $record;
+            $segments = explode('.', $path);
+            $last = count($segments) - 1;
+            foreach ($segments as $i => $segment) {
+                $next = data_get($current, $segment);
+                if ($next === null && $i < $last) {
+                    $next = self::foreignKeyHop($current, $segment);
+                }
+                if ($next === null) {
+                    return null;
+                }
+                $current = $next;
+            }
+
+            return $current;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * One hop of the foreign-key walk, for a segment that did
+     * not resolve directly. Two conventions, both schema-guarded:
+     * (a) the segment is a DETAIL of the current record — its
+     * table keyed by the current record's id (users ->
+     * client_details via user_id; for plain listing rows, whose
+     * class name carries no stem, the person-detail convention
+     * user_id is tried); (b) the current record carries the
+     * segment's foreign key (<segment>_id) — the segment is the
+     * referenced record (a listing row's client_id -> the
+     * client, a user in this schema family).
+     */
+    private static function foreignKeyHop(mixed $current, string $segment): mixed
+    {
+        try {
+            $table = Str::snake(Str::plural($segment));
+
+            $currentId = null;
+            if (is_object($current) && method_exists($current, 'getKey')) {
+                $currentId = $current->getKey();
+            } elseif (is_object($current) || is_array($current)) {
+                $id = data_get($current, 'id');
+                $currentId = is_numeric($id) ? $id : null;
+            }
+            if ($currentId !== null && Schema::hasTable($table)) {
+                $fkCandidates = (is_object($current) && method_exists($current, 'getKey'))
+                    ? [Str::snake(class_basename($current)).'_id']
+                    : ['user_id'];
+                foreach ($fkCandidates as $fk) {
+                    if (Schema::hasColumn($table, $fk)) {
+                        $row = DB::table($table)->where($fk, $currentId)->first();
+                        if ($row !== null) {
+                            return $row;
+                        }
+                    }
+                }
+            }
+
+            $fkVal = (is_object($current) || is_array($current))
+                ? data_get($current, $segment.'_id')
+                : null;
+            if (is_numeric($fkVal)) {
+                $tables = [$table];
+                if (in_array($segment, ['client', 'employee', 'user', 'customer', 'member', 'assignee', 'owner', 'author'], true)) {
+                    $tables[] = 'users';
+                }
+                if (! Schema::hasTable($table)) {
+                    // Unique-suffix fallback (the generator's FK
+                    // evidence chain has the same step): an
+                    // `agent_id` whose rows live in lead_agents,
+                    // not agents — adopt the one table whose
+                    // name ends in the conventional plural.
+                    // Listings arrive schema-qualified on some
+                    // drivers ("erp.lead_agents"), so compare
+                    // bare names, deduped.
+                    $bareNames = array_unique(array_map(
+                        fn ($t) => str_contains($t, '.') ? substr($t, strrpos($t, '.') + 1) : $t,
+                        Schema::getTableListing()
+                    ));
+                    $suffixMatches = array_values(array_filter(
+                        $bareNames,
+                        fn ($t) => str_ends_with($t, '_'.$table)
+                    ));
+                    if (count($suffixMatches) === 1) {
+                        $tables[] = $suffixMatches[0];
+                    }
+                }
+                foreach ($tables as $candidate) {
+                    if (Schema::hasTable($candidate)) {
+                        $row = DB::table($candidate)->where('id', $fkVal)->first();
+                        if ($row !== null) {
+                            return $row;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
+    }
+
+    public static function showIdentity(array $manifest, mixed $record = null): ?array
+    {
+        $def = $manifest['ui']['show']['identity'] ?? null;
+        if (! is_array($def) || ! is_object($record)) {
+            return null;
+        }
+        $resolve = function (string $path) use ($record) {
+            try {
+                $value = data_get($record, $path);
+            } catch (\Throwable $e) {
+                $value = null;
+            }
+            if ($value === null && ! str_contains($path, '.')) {
+                try {
+                    $value = data_get($record, 'user.'.$path);
+                } catch (\Throwable $e) {
+                    $value = null;
+                }
+            }
+            if ($value === null && str_contains($path, '.')) {
+                $value = self::resolveDottedByForeignKey($record, $path);
+            }
+
+            return $value;
+        };
+        $name = $resolve((string) ($def['name'] ?? 'name'));
+        if (! is_scalar($name) || trim((string) $name) === '') {
+            return null;
+        }
+        $subtitleParts = [];
+        foreach ((array) ($def['subtitle'] ?? []) as $path) {
+            $v = $resolve((string) $path);
+            if (is_scalar($v) && trim((string) $v) !== '') {
+                $subtitleParts[] = (string) $v;
+            }
+        }
+        $meta = null;
+        if (! empty($def['meta']['from'])) {
+            $mv = $resolve((string) $def['meta']['from']);
+            if ($mv !== null && $mv !== '') {
+                $type = (string) ($def['meta']['type'] ?? '');
+                if (($type === 'datetime' || $type === 'date')
+                    && ! $mv instanceof \DateTimeInterface && is_string($mv) && strtotime($mv) !== false) {
+                    $mv = new \DateTimeImmutable($mv);
+                }
+                if ($type === 'datetime' && $mv instanceof \DateTimeInterface) {
+                    try {
+                        $mv = $mv->setTimezone(new \DateTimeZone(self::displayTimezone()));
+                    } catch (\Throwable $e) {
+                        // An unresolvable declared timezone keeps the stored reading.
+                    }
+                    $mv = $mv->format('d-m-Y h:i a');
+                } elseif ($type === 'date' && $mv instanceof \DateTimeInterface) {
+                    $mv = $mv->format('d-m-Y');
+                }
+                $meta = [
+                    'label' => (string) ($def['meta']['label'] ?? ''),
+                    'value' => is_scalar($mv) ? (string) $mv : '',
+                ];
+            }
+        }
+        $about = ! empty($def['about']) ? $resolve((string) $def['about']) : null;
+
+        return [
+            'name' => (string) $name,
+            'initial' => Str::upper(Str::substr(trim((string) $name), 0, 1)),
+            'subtitle' => implode(' • ', $subtitleParts),
+            'meta' => $meta,
+            'about' => is_scalar($about) && trim((string) $about) !== '' ? (string) $about : null,
+            'about_title' => (string) ($def['about_title'] ?? 'About'),
+            // Optional card heading (a related-party card: the
+            // project hub's "Client"), column placement ('main'
+            // default, or 'rail'), and the avatar tile toggle —
+            // party cards in the source rail carry no avatar.
+            'title' => (string) ($def['title'] ?? ''),
+            'placement' => ($def['placement'] ?? 'main') === 'rail' ? 'rail' : 'main',
+            'avatar' => (bool) ($def['avatar'] ?? true),
+            // Where the hub's declared stats (ui.show.stats) render:
+            // 'strip' (default) as their own card row above the
+            // composition, or 'inline' inside this identity card —
+            // the source hubs' arrangement (declared
+            // ui.show.identity.kpis: inline).
+            'kpis' => ($def['kpis'] ?? 'strip') === 'inline' ? 'inline' : 'strip',
+        ];
+    }
+
     public static function showStatsFromManifest(array $manifest, mixed $record = null): array
     {
         $defs = $manifest['ui']['show']['stats'] ?? [];
-        if (! is_array($defs) || $defs === [] || ! is_object($record)) {
+        // A declared 'none' is an explicit no-stats hub (the
+        // views' generic fallback strip also steps aside when
+        // the overview declares widgets — see SliceGenerator).
+        if ($defs === 'none' || ! is_array($defs) || $defs === [] || ! is_object($record)) {
             return [];
         }
 
@@ -1520,6 +2197,13 @@ final class DirectoryUi
                             $query = DB::table('project_members')->where('user_id', $record->user_id);
                         } elseif (($relation === 'tickets' || $handle === 'tickets') && Schema::hasTable('tickets')) {
                             $query = DB::table('tickets')->where('agent_id', $record->user_id);
+                        } else {
+                            // Generalized user-scope fallback: ported
+                            // profile slices (e.g. EmployeeDetails) often
+                            // lack the hasMany method for user-owned data.
+                            // Resolve the stat against the target table's
+                            // user_id, or through a {thing}_users pivot.
+                            $query = self::userScopedStatQuery($relation, (int) $record->user_id, (string) ($def['aggregate'] ?? 'count'));
                         }
                     }
                 }
@@ -1700,17 +2384,31 @@ final class DirectoryUi
 
     /**
      * Resolve a declared matrix directory view (G2): records become
-     * a rows x days-of-month grid — the standard pattern behind
+     * a rows x period grid — the standard pattern behind
      * timesheet/attendance-style screens. Declared as
      * ui.directory.matrix { row_key, date_field, cell_field?, marker?,
-     * title? }. Pure transform: the controller fetches the month's
+     * title? }. Pure transform: the controller fetches the period's
      * records (declared-filter criteria), this builds the grid.
+     *
+     * Two source-faithful cell modes extend the base marker grid
+     * (declared `cell_mode:`; context supplied by the controller):
+     * - `attendance` (period month): a record renders a status
+     *   glyph from its late / half_day flags; roster rows also
+     *   resolve approved leaves and holidays for record-less days.
+     * - `roster` (period week): a record renders its shift as a
+     *   colour chip (context `shifts`: id => {code, name, color});
+     *   holidays mark record-less days.
+     * Context may also carry `subtitles` (row key => subtitle,
+     * e.g. the person's designation) and `row_order` (the
+     * population's own order, e.g. employee_details order —
+     * without it rows sort by label as before).
      *
      * @param  array<string, mixed>  $manifest
      * @param  array<int|string, string>  $labelMap  row_key value => label (relationship options)
-     * @return array{title: string, days: list<array{n: int, dow: string, weekend: bool}>, rows: list<array{key: mixed, label: string, cells: array<int, string>, present: int}>, month: int, year: int}|null
+     * @param  array<string, mixed>  $context  window / holidays / leaves / subtitles / row_order / shifts
+     * @return array<string, mixed>|null
      */
-    public static function matrixFromManifest(array $manifest, iterable $records, int $month, int $year, array $labelMap = []): ?array
+    public static function matrixFromManifest(array $manifest, iterable $records, int $month, int $year, array $labelMap = [], array $context = []): ?array
     {
         $decl = $manifest['ui']['directory']['matrix'] ?? null;
         if (! is_array($decl) || empty($decl['row_key']) || empty($decl['date_field'])) {
@@ -1721,15 +2419,41 @@ final class DirectoryUi
         $cellField = isset($decl['cell_field']) ? (string) $decl['cell_field'] : null;
         $marker = (string) ($decl['marker'] ?? 'P');
         $labelField = isset($decl['row_label']) ? (string) $decl['row_label'] : (str_ends_with($rowKey, '_id') ? substr($rowKey, 0, -3).'_name' : $rowKey);
+        $period = (string) ($decl['period'] ?? 'month');
+        $cellMode = (string) ($decl['cell_mode'] ?? '');
 
-        $daysInMonth = (int) date('t', mktime(0, 0, 0, $month, 1, $year));
-        $days = [];
-        for ($d = 1; $d <= $daysInMonth; $d++) {
-            $ts = mktime(0, 0, 0, $month, $d, $year);
-            $dow = (int) date('N', $ts);
-            $days[] = ['n' => $d, 'dow' => date('D', $ts), 'weekend' => $dow >= 6];
+        // Period window: a week window arrives via context (the
+        // controller anchors it); the month window is built here.
+        $window = $context['window'] ?? null;
+        if ($period === 'week' && is_array($window) && ! empty($window[0]) && ! empty($window[1])) {
+            $start = new \DateTimeImmutable((string) $window[0]);
+            $end = new \DateTimeImmutable((string) $window[1]);
+            $anchorLabel = $start->format('j M') . ' - ' . $end->format('d M');
+            $prevAnchor = $start->modify('-7 days')->format('Y-m-d');
+            $nextAnchor = $start->modify('+7 days')->format('Y-m-d');
+        } else {
+            $period = 'month';
+            $start = new \DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month));
+            $end = $start->modify('last day of this month');
+            $anchorLabel = $start->format('F Y');
+            $prevAnchor = $start->modify('-1 month')->format('Y-m-d');
+            $nextAnchor = $start->modify('+1 month')->format('Y-m-d');
         }
+        $days = [];
+        for ($cursor = $start; $cursor <= $end; $cursor = $cursor->modify('+1 day')) {
+            $days[] = [
+                'date' => $cursor->format('Y-m-d'),
+                'n' => (int) $cursor->format('j'),
+                'dow' => $cursor->format('D'),
+                'dow_long' => strtoupper($cursor->format('l')),
+                'mon_short' => strtoupper($cursor->format('M')),
+                'weekend' => (int) $cursor->format('N') >= 6,
+            ];
+        }
+        $daysInMonth = (int) $start->format('t');
+        $inWindow = fn (string $date): bool => $date >= $start->format('Y-m-d') && $date <= $end->format('Y-m-d');
 
+        $subtitles = (array) ($context['subtitles'] ?? []);
         $rows = [];
         // Roster mode (declared `roster: true`): every member of
         // the row-key label map is a row, with or without records
@@ -1741,11 +2465,14 @@ final class DirectoryUi
                 $rows[$key] = [
                     'key' => $key,
                     'label' => (string) $label,
+                    'subtitle' => isset($subtitles[$key]) ? (string) $subtitles[$key] : null,
                     'cells' => [],
                     'present' => 0,
                 ];
             }
         }
+        $shifts = (array) ($context['shifts'] ?? []);
+        $shiftField = (string) ($decl['shift_field'] ?? 'employee_shift_id');
         foreach ($records as $record) {
             // Records arrive as Eloquent models (getAttributes), as
             // listing business objects (typed public properties), or
@@ -1761,41 +2488,125 @@ final class DirectoryUi
             if ($rawDate === null || $key === null) {
                 continue;
             }
-            $ts = strtotime((string) $rawDate);
-            if ($ts === false || (int) date('n', $ts) !== $month || (int) date('Y', $ts) !== $year) {
+            $date = substr((string) $rawDate, 0, 10);
+            if (! $inWindow($date)) {
                 continue;
             }
-            $day = (int) date('j', $ts);
             if (! isset($rows[$key])) {
                 $rows[$key] = [
                     'key' => $key,
                     'label' => (string) ($labelMap[$key] ?? $attrs[$labelField] ?? $key),
+                    'subtitle' => isset($subtitles[$key]) ? (string) $subtitles[$key] : null,
                     'cells' => [],
                     'present' => 0,
                 ];
             }
-            if (! isset($rows[$key]['cells'][$day])) {
-                $cell = $cellField !== null && isset($attrs[$cellField]) && $attrs[$cellField] !== ''
-                    ? mb_strimwidth((string) $attrs[$cellField], 0, 3)
-                    : $marker;
-                $rows[$key]['cells'][$day] = $cell;
+            if (! isset($rows[$key]['cells'][$date])) {
+                $rows[$key]['cells'][$date] = match ($cellMode) {
+                    'attendance' => match (true) {
+                        ($attrs['half_day'] ?? 'no') === 'yes' => ['icon' => 'star-half', 'class' => 'text-rose-500', 'label' => 'Half Day'],
+                        ($attrs['late'] ?? 'no') === 'yes' => ['icon' => 'circle-alert', 'class' => 'text-amber-500', 'label' => 'Late'],
+                        default => ['icon' => 'check', 'class' => 'text-emerald-500', 'label' => 'Present'],
+                    },
+                    'roster' => isset($shifts[(int) ($attrs[$shiftField] ?? 0)])
+                        ? ['chip' => $shifts[(int) $attrs[$shiftField]]]
+                        : $marker,
+                    default => $cellField !== null && isset($attrs[$cellField]) && $attrs[$cellField] !== ''
+                        ? mb_strimwidth((string) $attrs[$cellField], 0, 3)
+                        : $marker,
+                };
                 $rows[$key]['present']++;
             }
         }
+
+        // Roster fills for record-less days: approved leaves and
+        // holidays (attendance), holidays (roster). A record
+        // always wins over both.
+        if (! empty($decl['roster']) && $cellMode === 'attendance') {
+            $leaves = (array) ($context['leaves'] ?? []);
+            $holidays = (array) ($context['holidays'] ?? []);
+            foreach ($rows as $key => &$row) {
+                foreach ($days as $day) {
+                    $date = $day['date'];
+                    if (isset($row['cells'][$date])) {
+                        continue;
+                    }
+                    if (! empty($leaves[$key][$date])) {
+                        $row['cells'][$date] = ['icon' => 'plane', 'class' => 'text-rose-500', 'label' => 'On Leave'];
+                    } elseif (! empty($holidays[$date])) {
+                        $row['cells'][$date] = ['icon' => 'star', 'class' => 'text-amber-400 fill-amber-400', 'label' => 'Holiday'];
+                    }
+                }
+            }
+            unset($row);
+        }
+        if (! empty($decl['roster']) && $cellMode === 'roster') {
+            $holidays = (array) ($context['holidays'] ?? []);
+            foreach ($rows as &$row) {
+                foreach ($days as $day) {
+                    $date = $day['date'];
+                    if (! isset($row['cells'][$date]) && ! empty($holidays[$date])) {
+                        $row['cells'][$date] = ['icon' => 'star', 'class' => 'text-sky-500', 'label' => 'Holiday'];
+                    }
+                }
+            }
+            unset($row);
+        }
+
         $rows = array_values($rows);
-        usort($rows, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
+        $rowOrder = array_values((array) ($context['row_order'] ?? []));
+        if ($rowOrder !== []) {
+            $rank = array_flip(array_map('strval', $rowOrder));
+            usort($rows, function ($a, $b) use ($rank) {
+                $ra = $rank[(string) $a['key']] ?? PHP_INT_MAX;
+                $rb = $rank[(string) $b['key']] ?? PHP_INT_MAX;
+
+                return $ra === $rb ? strcasecmp($a['label'], $b['label']) : ($ra <=> $rb);
+            });
+        } else {
+            usort($rows, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
+        }
+
+        $legendChips = [];
+        if ($cellMode === 'roster') {
+            foreach ($shifts as $shift) {
+                if (is_array($shift) && ($shift['code'] ?? '') !== '') {
+                    $legendChips[] = $shift;
+                }
+            }
+        }
 
         return [
             'title' => (string) ($decl['title'] ?? Str::headline((string) ($manifest['name'] ?? 'Matrix'))),
             'days' => $days,
             'rows' => $rows,
-            'month' => $month,
-            'year' => $year,
+            'month' => (int) $start->format('n'),
+            'year' => (int) $start->format('Y'),
             'days_in_month' => $daysInMonth,
+            'days_in_period' => count($days),
             'roster' => ! empty($decl['roster']),
             'legend' => array_values(array_filter((array) ($decl['legend'] ?? []), 'is_array')),
+            'legend_chips' => $legendChips,
             'row_label' => is_string($decl['row_label'] ?? null) && $decl['row_label'] !== '' ? $decl['row_label'] : 'Employee',
+            'period' => $period,
+            'cell_mode' => $cellMode,
+            'anchor_label' => $anchorLabel,
+            'prev_anchor' => $prevAnchor,
+            'next_anchor' => $nextAnchor,
         ];
+    }
+
+    /** Readable text colour on a hex colour chip. */
+    public static function contrastText(string $hex): string
+    {
+        if (! preg_match('/^#([0-9a-fA-F]{6})$/', trim($hex), $m)) {
+            return '#1e293b';
+        }
+        $lum = 0.2126 * (hexdec(substr($m[1], 0, 2)) / 255)
+            + 0.7152 * (hexdec(substr($m[1], 2, 2)) / 255)
+            + 0.0722 * (hexdec(substr($m[1], 4, 2)) / 255);
+
+        return $lum < 0.45 ? '#ffffff' : '#1e293b';
     }
 
     /**
@@ -2242,6 +3053,107 @@ final class DirectoryUi
         }
 
         return $list;
+    }
+
+    /**
+     * Role option set from the app's roles table (display names),
+     * for role columns that declare no options of their own.
+     *
+     * @return list<string>
+     */
+    /**
+     * Options for an FK column from its target table
+     * (id => label), using the same table/label conventions as
+     * the row pipeline's FK resolution. Empty when no target
+     * table or label column resolves.
+     *
+     * @return array<string, string>
+     */
+    protected static function foreignKeyOptions(array $c, string $key): array
+    {
+        if (! str_ends_with($key, '_id') || $key === 'id') {
+            return [];
+        }
+        $base = substr($key, 0, -3);
+        $candidates = ! empty($c['label_table'])
+            ? [(string) $c['label_table']]
+            : match ($base) {
+                'department' => ['teams', 'departments', 'department'],
+                'client' => ['users', 'client_details', 'clients'],
+                'board_column' => ['taskboard_columns', 'board_columns'],
+                default => [Str::plural($base), $base],
+            };
+        foreach ($candidates as $tbl) {
+            try {
+                if (! Schema::hasTable($tbl)) {
+                    continue;
+                }
+                $cols = Schema::getColumnListing($tbl);
+                if (! in_array('id', $cols, true)) {
+                    continue;
+                }
+                $labelCol = null;
+                if (! empty($c['label_column']) && in_array((string) $c['label_column'], $cols, true)) {
+                    $labelCol = (string) $c['label_column'];
+                }
+                if ($labelCol === null) {
+                    foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
+                        if (in_array($candidate, $cols, true)) {
+                            $labelCol = $candidate;
+                            break;
+                        }
+                    }
+                }
+                if ($labelCol === null) {
+                    continue;
+                }
+                $out = [];
+                foreach (DB::table($tbl)->orderBy('id')->limit(200)->pluck($labelCol, 'id') as $id => $label) {
+                    if (trim((string) $label) !== '') {
+                        $out[(string) $id] = (string) $label;
+                    }
+                }
+                if ($out !== []) {
+                    return $out;
+                }
+            } catch (\Throwable $e) {
+                // An unresolvable target leaves the editor to
+                // its other option sources.
+            }
+        }
+
+        return [];
+    }
+
+    protected static function roleOptions(): array
+    {
+        try {
+            if (! Schema::hasTable('roles')) {
+                return [];
+            }
+            $cols = Schema::getColumnListing('roles');
+            $hasDisplay = in_array('display_name', $cols, true);
+            // Prefer a row's display_name, but fall back to its
+            // name when the display column is empty — ported
+            // role tables carry the framework's display_name
+            // column with the imported rows' names only in
+            // `name`, and plucking display_name alone yielded
+            // an empty option list (blank inline role selects).
+            $names = DB::table('roles')->orderBy('id')->get(['name', ...($hasDisplay ? ['display_name'] : [])])
+                ->map(fn ($r) => ($hasDisplay && trim((string) ($r->display_name ?? '')) !== '')
+                    ? $r->display_name
+                    : $r->name)
+                ->map(fn ($n) => trim((string) $n))
+                ->filter(fn ($n) => $n !== '')
+                ->map(fn ($n) => str_contains($n, ' ') ? $n : Str::headline($n))
+                ->unique()
+                ->values()
+                ->all();
+
+            return $names;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     protected static function normalizeOptions(mixed $options): array

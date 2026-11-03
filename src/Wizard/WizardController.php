@@ -314,7 +314,13 @@ class WizardController extends Controller
     {
         $manager = app(SliceManager::class);
         $slices = [];
-        foreach ($manager->getAllSlices() as $slice) {
+        // Discovery, not the name-keyed index: two slices may
+        // share a name across domains (Settings does), and the
+        // name-keyed map silently hides one of them — the
+        // Studio listed 163 slices while 164 were installed.
+        $discovered = $manager->discoveredSlices();
+        $nameCounts = array_count_values(array_map(fn ($s) => $s->name, $discovered));
+        foreach ($discovered as $slice) {
             $manifestFile = $slice->path.'/slice.yaml';
             // Fields are always keyed by column name for the studio UI
             $raw = file_exists($manifestFile) ? ManifestRepository::read($manifestFile) : ManifestRepository::normalize($slice->toArray());
@@ -434,6 +440,10 @@ class WizardController extends Controller
                 $uiUrl = url('/'.$pluralSnake);
             }
             $raw['ui_url'] = $uiUrl;
+            // Path-exact identity for consumers (Studio, AI
+            // tools): names can collide across domains.
+            $raw['path'] = $slice->path;
+            $raw['name_collision'] = ($nameCounts[$slice->name] ?? 0) > 1;
 
             $raw['tables_data'] = $tablesData;
             $slices[] = $raw;
@@ -445,6 +455,53 @@ class WizardController extends Controller
         ]);
     }
 
+    /**
+     * Build the SliceModifier for a Manage mutation, path-exactly.
+     *
+     * Two installed slices may share a name (Settings does: the
+     * framework core slice and an app slice). Resolving by name
+     * alone guesses — filesystem order decides which twin gets
+     * edited. So: when the caller passes the slice's exact path
+     * (the Studio list provides it), the path must match a
+     * discovered slice of that name and the modifier is pinned
+     * to it; when no path is passed and the name is ambiguous,
+     * the edit is refused rather than guessed. Core package
+     * slices stay unmodifiable either way.
+     */
+    private function modifierFor(Request $request, string $sliceName): SliceModifier
+    {
+        $manager = app(SliceManager::class);
+        $sameName = array_values(array_filter(
+            $manager->discoveredSlices(),
+            fn ($s) => $s->name === $sliceName
+        ));
+        $path = trim((string) $request->input('path', ''));
+
+        if ($path !== '') {
+            $normalized = rtrim(str_replace('\\', '/', $path), '/');
+            $packageSlices = str_replace('\\', '/', (string) realpath(dirname(__DIR__).'/Slices'));
+            foreach ($sameName as $candidate) {
+                $candidatePath = str_replace('\\', '/', (string) $candidate->path);
+                if (rtrim($candidatePath, '/') !== $normalized) {
+                    continue;
+                }
+                if ($packageSlices !== '' && str_starts_with($candidatePath, $packageSlices)) {
+                    throw new \InvalidArgumentException("[{$sliceName}] is a core LaraSlice slice inside the package and cannot be modified from the studio.");
+                }
+
+                return (new SliceModifier)->forSliceDir((string) $candidate->path);
+            }
+
+            throw new \InvalidArgumentException("The slice path given does not match a discovered '{$sliceName}' slice. Reload the slice list and try again.");
+        }
+
+        if (count($sameName) > 1) {
+            throw new \InvalidArgumentException("'{$sliceName}' matches ".count($sameName).' installed slices. Editing by name alone could change the wrong one — reopen the slice from the Studio list so its exact path is used.');
+        }
+
+        return new SliceModifier;
+    }
+
     public function addField(Request $request)
     {
         $validated = $request->validate([
@@ -453,7 +510,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->addField(
                 sliceName: $validated['slice'], fieldName: $validated['field'], fieldType: $validated['type'],
                 nullable: (bool) ($validated['nullable'] ?? true), targetTable: $request->input('targetTable')
@@ -484,7 +541,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->addFieldsBatch(
                 $validated['slice'], $validated['fields'], 'Common User via Slice Studio',
                 $validated['note'] ?? null, $request->input('targetTable')
@@ -518,14 +575,69 @@ class WizardController extends Controller
             'redirect_old' => 'nullable|boolean',
         ]);
 
-        $modifier = new SliceModifier;
-        $nav = $modifier->updateNavigation($validated['slice'], $validated);
+        try {
+            $modifier = $this->modifierFor($request, $validated['slice']);
+            $nav = $modifier->updateNavigation($validated['slice'], $validated);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
 
         return response()->json([
             'success' => true,
             'message' => "Navigation updated for '{$validated['slice']}'!",
             'data' => $nav,
         ]);
+    }
+
+    /**
+     * Declaration history for one slice — the append-only
+     * record `slice:history` reads, filtered to the slice's
+     * files. Read-only; feeds the Manage Activity tab so the
+     * trust layer is visible where the slice is edited.
+     */
+    public function declarationHistory(Request $request)
+    {
+        $name = trim((string) $request->query('name', ''));
+        if ($name === '') {
+            return response()->json(['data' => []]);
+        }
+
+        // Same-name twins share the name segment in file paths, so
+        // a name-only filter mixes both slices' histories. When the
+        // caller passes the slice's exact path, narrow the needle
+        // to its last two segments (Domain/Name), which twins in
+        // different domains do not share.
+        $needle = '/'.$name.'/';
+        $path = trim((string) $request->query('path', ''));
+        if ($path !== '') {
+            $segments = array_values(array_filter(explode('/', str_replace('\\', '/', $path))));
+            if (count($segments) >= 2) {
+                $needle = '/'.implode('/', array_slice($segments, -2)).'/';
+            }
+        }
+        $matches = [];
+        // entries() is newest-first already.
+        foreach ((new \LaraSlice\Support\DeclarationHistory)->entries() as $entry) {
+            $files = [];
+            foreach ($entry['changes'] ?? [] as $change) {
+                $file = (string) ($change['file'] ?? '');
+                if ($file !== '' && str_contains($file, $needle)) {
+                    $files[] = $file;
+                }
+            }
+            if ($files !== []) {
+                $matches[] = [
+                    'id' => (string) ($entry['id'] ?? ''),
+                    'recorded_at' => (string) ($entry['recorded_at'] ?? ''),
+                    'actor' => (string) ($entry['actor'] ?? ''),
+                    'by' => isset($entry['by']) ? (string) $entry['by'] : null,
+                    'command' => (string) ($entry['command'] ?? ''),
+                    'files' => $files,
+                ];
+            }
+        }
+
+        return response()->json(['data' => array_slice($matches, 0, 20)]);
     }
 
     public function rollbackVersion(Request $request)
@@ -538,7 +650,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->rollbackVersion(
                 $validated['slice'],
                 $validated['target_version'],
@@ -564,7 +676,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->syncFields(
                 $validated['slice'],
                 $validated['targetTable'],
@@ -597,7 +709,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->saveRelationships(
                 $validated['slice'],
                 $validated['relations'] ?? [],
@@ -626,7 +738,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->addChildTable(
                 $validated['slice'],
                 $validated['tableName'],
@@ -1393,7 +1505,7 @@ class WizardController extends Controller
         ]);
 
         try {
-            $modifier = new \LaraSlice\Generator\SliceModifier;
+            $modifier = $this->modifierFor($request, $validated['slice']);
             $result = $modifier->saveStudioConfig(
                 $validated['slice'],
                 $validated['ui'] ?? [],
@@ -1422,10 +1534,33 @@ class WizardController extends Controller
         try {
             $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
             $slice = null;
-            foreach ($manager->getAllSlices() as $s) {
-                if (strcasecmp($s->name, $validated['slice']) === 0) {
-                    $slice = $s;
-                    break;
+            // Path-exact when the caller passes a path (same-name
+            // twins make the name-keyed lookup below reach only
+            // one of them); ambiguous names without a path are
+            // refused rather than guessed.
+            $path = trim((string) $request->input('path', ''));
+            if ($path !== '') {
+                $normalized = rtrim(str_replace('\\', '/', $path), '/');
+                foreach ($manager->discoveredSlices() as $s) {
+                    if (strcasecmp($s->name, $validated['slice']) === 0
+                        && rtrim(str_replace('\\', '/', (string) $s->path), '/') === $normalized) {
+                        $slice = $s;
+                        break;
+                    }
+                }
+                if (! $slice) {
+                    return response()->json(['success' => false, 'message' => "The slice path given does not match a discovered '{$validated['slice']}' slice. Reload the slice list and try again."], 422);
+                }
+            } else {
+                $sameName = array_filter($manager->discoveredSlices(), fn ($s) => strcasecmp($s->name, $validated['slice']) === 0);
+                if (count($sameName) > 1) {
+                    return response()->json(['success' => false, 'message' => "'{$validated['slice']}' matches ".count($sameName).' installed slices. Syncing by name alone could change the wrong one — reopen the slice from the Studio list so its exact path is used.'], 422);
+                }
+                foreach ($manager->getAllSlices() as $s) {
+                    if (strcasecmp($s->name, $validated['slice']) === 0) {
+                        $slice = $s;
+                        break;
+                    }
                 }
             }
             if (! $slice) {

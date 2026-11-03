@@ -81,126 +81,23 @@ abstract class BaseSliceWebController extends Controller
         // filter object. Before this, filter tabs/sidebar declarations
         // rendered (or didn't) but never narrowed a single row.
         $relationshipOptions = $this->resolveRelationshipOptions($createForm);
-        $filterDefaults = [];
-        if ($filter instanceof BaseFilter) {
-            $criteria = [];
-            $queryKeys = array_keys($request->query());
-            foreach (array_merge($quickFilters, $sidebarFilters) as $declared) {
-                $handle = $declared['handle'] ?? null;
-                if (! is_string($handle) || $handle === '') {
-                    continue;
-                }
-                if (array_key_exists('default', $declared) && $declared['default'] !== null && $declared['default'] !== '') {
-                    $filterDefaults[$handle] = $declared['default'] === '$user' ? auth()->id() : $declared['default'];
-                }
-                // Relation-exists filters (fidelity): the criterion
-                // targets a RELATED record (assignees via a pivot),
-                // not a column on this table. Translated here into
-                // the __exists:<relation>.<key> criteria key the
-                // base service applies as whereHas.
-                if (($declared['type'] ?? null) === 'relation_exists' && ! empty($declared['relation'])) {
-                    $existsKey = '__exists:'.$declared['relation'].'.'.($declared['key'] ?? 'id');
-                    $existsValue = null;
-                    if ($request->filled($handle) && $request->input($handle) !== '__all__') {
-                        $existsValue = $request->input($handle) === '$user' ? auth()->id() : $request->input($handle);
-                    } elseif (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
-                        $existsValue = $filterDefaults[$handle];
-                    }
-                    if ($existsValue !== null) {
-                        $criteria[$existsKey] = $existsValue;
-                    }
+        $filterDefaults = $this->applyDirectoryCriteria($request, $filter, $uiConfig);
 
-                    continue;
-                }
-                if ($request->filled($handle)) {
-                    // '__all__' is the explicit clear sentinel the
-                    // filter tabs send: no criterion, and the
-                    // declared default stays off for this request.
-                    if ($request->input($handle) !== '__all__') {
-                        // Option-level criteria (fidelity): a
-                        // chosen option carrying `criteria`
-                        // replaces the plain equality with its
-                        // condition group (Overdue, buckets).
-                        $optionConditions = DirectoryUi::optionConditions($declared, $request->input($handle), auth()->id());
-                        if ($optionConditions !== null) {
-                            $criteria['__conditions'] = array_merge($criteria['__conditions'] ?? [], $optionConditions);
-                        } else {
-                            $criteria[$handle] = $request->input($handle);
-                        }
-                    }
-                }
-                foreach (['from', 'to'] as $suffix) {
-                    $rangeKey = $handle.'_'.$suffix;
-                    if ($request->filled($rangeKey)) {
-                        $criteria[$rangeKey] = $request->input($rangeKey);
-                    }
-                }
-                // Declared DEFAULT (fidelity stage): applies only
-                // when the request never mentioned the handle —
-                // any interaction (a tab click always carries the
-                // key, even empty or '__all__') suppresses it.
-                if (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
-                    $optionConditions = DirectoryUi::optionConditions($declared, $filterDefaults[$handle], auth()->id());
-                    if ($optionConditions !== null) {
-                        $criteria['__conditions'] = array_merge($criteria['__conditions'] ?? [], $optionConditions);
-                    } else {
-                        $criteria[$handle] = $filterDefaults[$handle];
-                    }
-                }
-                // Range defaults (progress 0-20% in the source):
-                // default_from / default_to apply while neither
-                // range key appears in the request.
-                if ((array_key_exists('default_from', $declared) || array_key_exists('default_to', $declared))
-                    && ! in_array($handle.'_from', $queryKeys, true) && ! in_array($handle.'_to', $queryKeys, true)) {
-                    if (array_key_exists('default_from', $declared)) {
-                        $criteria[$handle.'_from'] = $declared['default_from'];
-                    }
-                    if (array_key_exists('default_to', $declared)) {
-                        $criteria[$handle.'_to'] = $declared['default_to'];
-                    }
-                }
-            }
-            // date_filter_on translation: a declared range carrying
-            // `columns` applies to the column the request's
-            // column_param names (or its default_column). The
-            // generic <handle>_from/_to criteria are rewritten to
-            // the chosen column for the generic filter engine.
-            foreach (array_merge($quickFilters, $sidebarFilters) as $declaredRange) {
-                if (! is_array($declaredRange) || empty($declaredRange['columns']) || ! is_array($declaredRange['columns'])) {
-                    continue;
-                }
-                $rangeHandle = (string) ($declaredRange['handle'] ?? '');
-                if ($rangeHandle === '' || (! isset($criteria[$rangeHandle.'_from']) && ! isset($criteria[$rangeHandle.'_to']))) {
-                    continue;
-                }
-                $param = (string) ($declaredRange['column_param'] ?? 'date_filter_on');
-                $chosen = (string) $request->query($param, '');
-                if (! in_array($chosen, $declaredRange['columns'], true)) {
-                    $chosen = (string) ($declaredRange['default_column'] ?? $declaredRange['columns'][0]);
-                }
-                foreach (['_from', '_to'] as $suffix) {
-                    if (isset($criteria[$rangeHandle.$suffix])) {
-                        $criteria[$chosen.$suffix] = $criteria[$rangeHandle.$suffix];
-                        unset($criteria[$rangeHandle.$suffix]);
-                    }
-                }
-            }
-            // Own-scope (Body v2 access): a view-own-only grant
-            // narrows the list to the viewer's own records.
-            // The slice's declared access.own_scope clauses
-            // decide what "own" means; a single column clause
-            // stays a plain criterion, anything richer rides
-            // the service's grouped-OR __own_any criterion.
-            if ($this->sliceViewScope() === 'own') {
-                $clauses = $this->ownScopeClauses();
-                if (count($clauses) === 1 && isset($clauses[0]['field'])) {
-                    $criteria[$clauses[0]['field']] = $clauses[0]['value'];
-                } elseif ($clauses !== []) {
-                    $criteria['__own_any'] = $clauses;
-                }
-            }
-            if ($criteria !== []) {
-                $filter->setCriteria($criteria);
+        // Directory landing order. An explicit request sort always
+        // wins; otherwise the declared ui.directory.default_sort;
+        // otherwise newest-first (id desc) — the landing order of
+        // the source grids this runtime mirrors. The filter's own
+        // created_at-desc default reads as oldest-first whenever
+        // timestamps tie (seeded/legacy data ties constantly), so
+        // the directory must state its order, not inherit one.
+        if (! $request->hasAny(['sortBy', 'sort_by', 'sort']) && $filter instanceof BaseFilter) {
+            $declaredSort = $uiConfig['directory']['default_sort'] ?? null;
+            if (is_array($declaredSort) && ! empty($declaredSort['field'])) {
+                $filter->sortBy = (string) $declaredSort['field'];
+                $filter->sortDesc = ($declaredSort['direction'] ?? 'desc') !== 'asc';
+            } else {
+                $filter->sortBy = 'id';
+                $filter->sortDesc = true;
             }
         }
 
@@ -370,7 +267,12 @@ abstract class BaseSliceWebController extends Controller
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(),
                 'parentId' => request()->route('parentId'),
-                'can' => $this->sliceAbilities(),
+                // A directory may declare create_button: false
+                // when its records are created from a parent
+                // context instead (credit notes are raised from
+                // an invoice): the create ROUTE stays authorized,
+                // the directory simply offers no create button.
+                'can' => array_merge($this->sliceAbilities(), ($uiConfig['directory']['create_button'] ?? true) ? [] : ['create' => false]),
                 'summaryCards' => $summaryCards,
                 'summaryData' => $summaryData,
                 'presentation' => $this->presentationModes(),
@@ -383,6 +285,9 @@ abstract class BaseSliceWebController extends Controller
                     : null,
                 'importUrl' => Route::has($this->resolveRouteName('import'))
                     ? route($this->resolveRouteName('import'), $this->routeParameters())
+                    : null,
+                'exportUrl' => Route::has($this->resolveRouteName('export'))
+                    ? route($this->resolveRouteName('export'), $this->routeParameters())
                     : null,
                 'bulkEntryLabel' => ($be = DirectoryUi::bulkEntryFromManifest($this->ownManifest())) !== null
                     ? ($be['title'] ?? 'Bulk Entry')
@@ -400,6 +305,12 @@ abstract class BaseSliceWebController extends Controller
                 'sidebarFilters' => $sidebarFilters,
                 'filterDefaults' => $filterDefaults,
                 'directoryActions' => $directoryActions,
+                // Declared create-button label (ui.directory.create_label):
+                // source directories name the action themselves
+                // ("New Leave", not "Add Leaf"); undeclared slices
+                // keep the generated "Add <Slice>" fallback.
+                'directoryCreateLabel' => $uiConfig['directory']['create_label'] ?? null,
+                'directoryNotice' => $uiConfig['directory']['notice'] ?? null,
                 'activeFilters' => $activeFilters,
                 'uiPresentationCreate' => $uiConfig['presentation']['create'] ?? 'page',
                 // Directory UI values come from the controller's own
@@ -411,6 +322,12 @@ abstract class BaseSliceWebController extends Controller
                 'density' => (string) ($uiConfig['directory']['density'] ?? 'compact'),
                 'demoSeed' => (bool) ($uiConfig['directory']['demo_seed'] ?? false),
                 'columnsMenu' => (bool) ($uiConfig['directory']['columns_menu'] ?? true),
+                'directorySelectable' => (bool) ($uiConfig['directory']['selectable'] ?? true),
+                // Declared export opt-out (ui.directory.export: false):
+                // surfaces whose source has no Export action (event
+                // calendars, article browsers) drop the toolbar
+                // button; undeclared slices keep it.
+                'directoryExport' => (bool) ($uiConfig['directory']['export'] ?? true),
                 'placement' => DirectoryUi::listPlacement($uiConfig),
                 'tableViews' => $dirViews,
                 'defaultView' => $componentDefaultView,
@@ -440,6 +357,23 @@ abstract class BaseSliceWebController extends Controller
         $month = ($month >= 1 && $month <= 12) ? $month : (int) date('n');
         $year = ($year >= 1970 && $year <= 2100) ? $year : (int) date('Y');
 
+        // Period window: month by default; a declared week
+        // period (the shift roster) anchors on ?week=YYYY-MM-DD
+        // and windows Monday..Sunday.
+        $period = (string) ($decl['period'] ?? 'month');
+        $window = null;
+        if ($period === 'week') {
+            $anchorRaw = (string) $request->query('week', date('Y-m-d'));
+            $anchorDt = \DateTimeImmutable::createFromFormat('Y-m-d', $anchorRaw);
+            if ($anchorDt === false || $anchorDt->format('Y-m-d') !== $anchorRaw) {
+                $anchorDt = new \DateTimeImmutable(date('Y-m-d'));
+            }
+            $monday = $anchorDt->modify('monday this week');
+            $window = [$monday->format('Y-m-d'), $monday->modify('+6 days')->format('Y-m-d')];
+            $month = (int) $monday->format('n');
+            $year = (int) $monday->format('Y');
+        }
+
         $filterClass = $this->getFilterClass();
         $filter = new $filterClass($request->all());
         if ($filter instanceof BaseFilter) {
@@ -450,8 +384,8 @@ abstract class BaseSliceWebController extends Controller
             // ride the same criteria as the list — replacing them
             // here silently unfiltered the matrix (25 Oct 2026).
             $filter->setCriteria(array_merge($filter->getCriteria(), [
-                $dateField.'_from' => sprintf('%04d-%02d-01', $year, $month),
-                $dateField.'_to' => date('Y-m-t', mktime(0, 0, 0, $month, 1, $year)).' 23:59:59',
+                $dateField.'_from' => $window !== null ? $window[0] : sprintf('%04d-%02d-01', $year, $month),
+                $dateField.'_to' => ($window !== null ? $window[1] : date('Y-m-t', mktime(0, 0, 0, $month, 1, $year))).' 23:59:59',
             ]));
         }
         $items = $this->getService()->getList($filter)->items;
@@ -478,6 +412,7 @@ abstract class BaseSliceWebController extends Controller
         // relation_exists filters resolve through the model's own
         // relation (its related table carries the row key as the
         // owner key — employee_details.user_id for attendances).
+        $populationOrder = [];
         if (! empty($decl['roster']) && is_array($labelMap) && $labelMap !== []) {
             // Declared population scope: the roster lists members
             // of a named table (e.g. attendances list EMPLOYEES —
@@ -491,6 +426,10 @@ abstract class BaseSliceWebController extends Controller
                         ->pluck((string) $population['key'])
                         ->map(fn ($v) => (int) $v)
                         ->all();
+                    // The population's own order is the grid's row
+                    // order (employee_details order — the order the
+                    // source's people grids use).
+                    $populationOrder = $memberIds;
                     $labelMap = array_intersect_key($labelMap, array_flip($memberIds));
                 } catch (\Throwable $e) {
                     // An unresolvable population leaves the full map.
@@ -537,7 +476,79 @@ abstract class BaseSliceWebController extends Controller
             }
         }
 
-        $matrix = DirectoryUi::matrixFromManifest($manifest, $items, $month, $year, is_array($labelMap) ? $labelMap : []);
+        // Cell-mode context (attendance / roster): holidays and
+        // approved leaves for record-less days, row subtitles
+        // (designations), and the shift chip map — each resolved
+        // defensively; a missing table simply leaves cells to
+        // the base marker behaviour.
+        $cellMode = (string) ($decl['cell_mode'] ?? '');
+        $context = ['window' => $window, 'row_order' => $populationOrder];
+        if ($cellMode === 'attendance' || $cellMode === 'roster') {
+            $winStart = $window !== null ? $window[0] : sprintf('%04d-%02d-01', $year, $month);
+            $winEnd = $window !== null ? $window[1] : date('Y-m-t', mktime(0, 0, 0, $month, 1, $year));
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('holidays')) {
+                    $set = [];
+                    foreach (DB::table('holidays')->whereBetween('date', [$winStart . ' 00:00:00', $winEnd . ' 23:59:59'])->pluck('date') as $d) {
+                        $set[substr((string) $d, 0, 10)] = true;
+                    }
+                    $context['holidays'] = $set;
+                }
+            } catch (\Throwable $e) {
+            }
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('employee_details')) {
+                    $subs = [];
+                    $q = DB::table('employee_details as ed')
+                        ->leftJoin('designations as d', 'd.id', '=', 'ed.designation_id')
+                        ->whereIn('ed.user_id', array_keys(is_array($labelMap) ? $labelMap : []))
+                        ->get(['ed.user_id', 'd.name as designation']);
+                    foreach ($q as $r) {
+                        if ($r->designation !== null) {
+                            $subs[(int) $r->user_id] = (string) $r->designation;
+                        }
+                    }
+                    $context['subtitles'] = $subs;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+        if ($cellMode === 'attendance') {
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('leaves')) {
+                    $map = [];
+                    $approved = DB::table('leaves')
+                        ->where('status', 'approved')
+                        ->whereBetween('leave_date', [$winStart . ' 00:00:00', $winEnd . ' 23:59:59'])
+                        ->get(['user_id', 'leave_date']);
+                    foreach ($approved as $l) {
+                        $map[(int) $l->user_id][substr((string) $l->leave_date, 0, 10)] = true;
+                    }
+                    $context['leaves'] = $map;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+        if ($cellMode === 'roster') {
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('employee_shifts')) {
+                    $map = [];
+                    foreach (DB::table('employee_shifts')->get() as $s) {
+                        $color = (string) ($s->color ?? '#e2e8f0');
+                        $map[(int) $s->id] = [
+                            'code' => (string) ($s->shift_short_code ?? ''),
+                            'name' => (string) ($s->shift_name ?? ''),
+                            'color' => $color,
+                            'text' => DirectoryUi::contrastText($color),
+                        ];
+                    }
+                    $context['shifts'] = $map;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        $matrix = DirectoryUi::matrixFromManifest($manifest, $items, $month, $year, is_array($labelMap) ? $labelMap : [], $context);
         if ($matrix === null) {
             abort(404);
         }
@@ -591,6 +602,9 @@ abstract class BaseSliceWebController extends Controller
         $importUrl = Route::has($this->resolveRouteName('import'))
             ? route($this->resolveRouteName('import'), $this->routeParameters())
             : null;
+        $exportUrl = Route::has($this->resolveRouteName('export'))
+            ? route($this->resolveRouteName('export'), $this->routeParameters())
+            : null;
 
         return view($view, [
             'matrix' => $matrix,
@@ -600,6 +614,7 @@ abstract class BaseSliceWebController extends Controller
             'bulkEntryUrl' => $bulkEntryUrl,
             'bulkEntryLabel' => $be['title'] ?? 'Bulk Entry',
             'importUrl' => $importUrl,
+            'exportUrl' => $exportUrl,
         ]);
     }
 
@@ -652,6 +667,14 @@ abstract class BaseSliceWebController extends Controller
         if ($userClass === null || ! $userClass::query()->whereKey($other)->exists()) {
             abort(422);
         }
+        if (! empty($decl['flat'])) {
+            // Flat mode has no conversation row to create: the
+            // thread materializes with the first message.
+            return redirect()->route($this->resolveRouteName('chat'), array_merge(
+                $this->routeParameters(),
+                ['c' => $other]
+            ));
+        }
         $modelClass = $this->getService()->modelClass();
         $conversation = $modelClass::query()
             ->where(fn ($q) => $q->where(['user_one' => $me, 'user_two' => $other]))
@@ -674,6 +697,19 @@ abstract class BaseSliceWebController extends Controller
         }
         $request->validate(['reply' => ['required', 'string', 'max:5000']]);
         $me = (int) auth()->id();
+        if (! empty($decl['flat'])) {
+            // Flat mode: {id} is the other user's id.
+            $other = (int) $id;
+            if ($other <= 0 || $other === $me) {
+                abort(422);
+            }
+            $this->insertFlatMessage($decl, $me, $other, (string) $request->input('reply'));
+
+            return redirect()->route($this->resolveRouteName('chat'), array_merge(
+                $this->routeParameters(),
+                ['c' => $other]
+            ));
+        }
         $modelClass = $this->getService()->modelClass();
         $conversation = $modelClass::query()->findOrFail($id);
         if ((int) $conversation->user_one !== $me && (int) $conversation->user_two !== $me) {
@@ -710,6 +746,9 @@ abstract class BaseSliceWebController extends Controller
         $repliesRel = (string) ($decl['replies'] ?? 'replies');
         $modelClass = $this->getService()->modelClass();
 
+        if (! empty($decl['flat'])) {
+            $conversations = $this->flatConversations($decl, $modelClass, $me, $request);
+        } else {
         $conversations = $modelClass::query()
             ->where(fn ($q) => $q->where('user_one', $me)->orWhere('user_two', $me))
             ->with([$one, $two, $repliesRel])
@@ -737,6 +776,7 @@ abstract class BaseSliceWebController extends Controller
             })
             ->sortByDesc(fn ($c) => $c['last_at'])
             ->values();
+        }
 
         // No implicit selection: with nothing chosen the surface
         // shows its empty state, exactly like the source page.
@@ -766,6 +806,94 @@ abstract class BaseSliceWebController extends Controller
                 'reply' => $selected ? $route('chat.reply', ['id' => $selected['id']]) : null,
             ],
         ];
+    }
+
+    /**
+     * Flat conversation mode: the slice's model IS the message
+     * table (one row per message — the shape most source chat
+     * modules use, e.g. from/to/message/message_seen).
+     * Conversations are derived by grouping the viewer's rows
+     * on the other party; the conversation id IS the other
+     * user's id. Opening a conversation marks its incoming
+     * rows seen, like the source chat.
+     */
+    private function flatConversations(array $decl, string $modelClass, int $me, Request $request): \Illuminate\Support\Collection
+    {
+        $fromCol = (string) ($decl['from'] ?? 'from');
+        $toCol = (string) ($decl['to'] ?? 'to');
+        $bodyCol = (string) ($decl['body'] ?? 'message');
+        $seenCol = (string) ($decl['seen'] ?? 'message_seen');
+        $userClass = app(SliceManager::class)->modelClass('User');
+        $names = $userClass === null ? [] : $userClass::query()->pluck('name', 'id')->all();
+
+        $messages = $modelClass::query()
+            ->where(fn ($q) => $q->where($fromCol, $me)->orWhere($toCol, $me))
+            ->orderBy('created_at')->orderBy('id')
+            ->get();
+
+        $grouped = [];
+        foreach ($messages as $message) {
+            $from = (int) $message->{$fromCol};
+            $to = (int) $message->{$toCol};
+            $other = $from === $me ? $to : $from;
+            $grouped[$other][] = $message;
+        }
+
+        $selectedId = (int) $request->query('c', 0);
+        if ($selectedId > 0 && isset($grouped[$selectedId])) {
+            $table = (new $modelClass)->getTable();
+            if (Schema::hasColumn($table, $seenCol)) {
+                $modelClass::query()
+                    ->where($fromCol, $selectedId)->where($toCol, $me)
+                    ->where($seenCol, '!=', 'yes')
+                    ->update([$seenCol => 'yes']);
+            }
+        }
+
+        return collect($grouped)->map(function ($msgs, $otherId) use ($me, $names, $fromCol, $bodyCol) {
+            $msgs = collect($msgs);
+            $last = $msgs->last();
+
+            return [
+                'id' => $otherId,
+                'other' => ['id' => $otherId, 'name' => (string) ($names[$otherId] ?? 'User')],
+                'preview' => (string) ($last->{$bodyCol} ?? ''),
+                'last_at' => $last->created_at,
+                'replies' => $msgs->map(fn ($m) => [
+                    'id' => $m->getKey(),
+                    'body' => (string) $m->{$bodyCol},
+                    'mine' => (int) $m->{$fromCol} === $me,
+                    'at' => $m->created_at,
+                ])->all(),
+            ];
+        })->sortByDesc(fn ($c) => $c['last_at'])->values();
+    }
+
+    /**
+     * Insert one flat-mode message row: the declared
+     * from/to/body columns, plus the legacy mirror columns
+     * (user_one/user_id) and the seen flag when the table
+     * carries them, so source-side readers stay consistent.
+     */
+    private function insertFlatMessage(array $decl, int $me, int $other, string $body): void
+    {
+        $modelClass = $this->getService()->modelClass();
+        $table = (new $modelClass)->getTable();
+        $attrs = [
+            (string) ($decl['from'] ?? 'from') => $me,
+            (string) ($decl['to'] ?? 'to') => $other,
+            (string) ($decl['body'] ?? 'message') => $body,
+        ];
+        foreach (['user_one' => $me, 'user_id' => $other] as $mirror => $value) {
+            if (Schema::hasColumn($table, $mirror) && ! isset($attrs[$mirror])) {
+                $attrs[$mirror] = $value;
+            }
+        }
+        $seenCol = (string) ($decl['seen'] ?? 'message_seen');
+        if (Schema::hasColumn($table, $seenCol) && ! isset($attrs[$seenCol])) {
+            $attrs[$seenCol] = 'no';
+        }
+        (new $modelClass)->forceFill($attrs)->save();
     }
 
     /**
@@ -869,6 +997,42 @@ abstract class BaseSliceWebController extends Controller
             if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
                 $labelMap = $options[$candidateKey];
                 break;
+            }
+        }
+        // Relation fallback: when the conventional options miss
+        // (the related table follows the source's naming, e.g.
+        // board_column_id -> taskboard_columns), resolve labels
+        // through the model's own relation instead of printing
+        // raw ids.
+        if ($labelMap === [] && str_ends_with($groupBy, '_id')) {
+            $relation = Str::camel($base);
+            $modelClass = $this->getService()->modelClass();
+            if ($modelClass !== null && method_exists($modelClass, $relation)) {
+                try {
+                    $related = (new $modelClass)->{$relation}()->getRelated();
+                    $table = $related->getTable();
+                    $columns = Schema::getColumnListing($table);
+                    $labelCol = null;
+                    foreach (['name', 'title', 'label', Str::afterLast($base, '_').'_name'] as $candidate) {
+                        if (in_array($candidate, $columns, true)) {
+                            $labelCol = $candidate;
+                            break;
+                        }
+                    }
+                    if ($labelCol === null) {
+                        foreach ($columns as $column) {
+                            if (str_ends_with($column, '_name')) {
+                                $labelCol = $column;
+                                break;
+                            }
+                        }
+                    }
+                    if ($labelCol !== null) {
+                        $labelMap = DB::table($table)->pluck($labelCol, 'id')->all();
+                    }
+                } catch (\Throwable) {
+                    // labels stay raw ids; the report still renders
+                }
             }
         }
 
@@ -1272,16 +1436,21 @@ abstract class BaseSliceWebController extends Controller
                 continue;
             }
             try {
+                // forceFill: the declared column map IS the
+                // allowlist (declaration-driven, schema-checked
+                // above). A mapped field the model's $fillable
+                // omits must not vanish silently while the
+                // report claims the row was imported.
                 if ($decl['key'] !== null && ! empty($attrs[$decl['key']])) {
                     $existing = $modelClass::query()->where($decl['key'], $attrs[$decl['key']])->first();
                     if ($existing !== null) {
-                        $existing->fill($attrs)->save();
+                        $existing->forceFill($attrs)->save();
                         $updated++;
 
                         continue;
                     }
                 }
-                (new $modelClass)->fill($attrs)->save();
+                (new $modelClass)->forceFill($attrs)->save();
                 $created++;
             } catch (\Throwable $e) {
                 $errors[] = "Row {$line}: ".$e->getMessage();
@@ -1291,6 +1460,222 @@ abstract class BaseSliceWebController extends Controller
 
         return redirect()->route($this->resolveRouteName('import'), $this->routeParameters())
             ->with('import_report', ['created' => $created, 'updated' => $updated, 'errors' => $errors]);
+    }
+
+    /**
+     * Build the directory criteria from the declared
+     * filters (quick + sidebar): request values, declared
+     * defaults, range rewrites and the Option B scope
+     * clauses. Shared by index() and export() so both
+     * surfaces narrow identically.
+     */
+    protected function applyDirectoryCriteria(Request $request, $filter, array $uiConfig): array
+    {
+        $quickFilters = $uiConfig['directory']['quick_filters'] ?? [];
+        $sidebarFilters = $uiConfig['directory']['sidebar_filters'] ?? [];
+        $filterDefaults = [];
+        if ($filter instanceof BaseFilter) {
+            $criteria = [];
+            $queryKeys = array_keys($request->query());
+            foreach (array_merge($quickFilters, $sidebarFilters) as $declared) {
+                $handle = $declared['handle'] ?? null;
+                if (! is_string($handle) || $handle === '') {
+                    continue;
+                }
+                if (array_key_exists('default', $declared) && $declared['default'] !== null && $declared['default'] !== '') {
+                    $filterDefaults[$handle] = $declared['default'] === '$user' ? auth()->id() : $declared['default'];
+                }
+                // Relation-exists filters (fidelity): the criterion
+                // targets a RELATED record (assignees via a pivot),
+                // not a column on this table. Translated here into
+                // the __exists:<relation>.<key> criteria key the
+                // base service applies as whereHas.
+                if (($declared['type'] ?? null) === 'relation_exists' && ! empty($declared['relation'])) {
+                    $existsKey = '__exists:'.$declared['relation'].'.'.($declared['key'] ?? 'id');
+                    $existsValue = null;
+                    if ($request->filled($handle) && $request->input($handle) !== '__all__') {
+                        $existsValue = $request->input($handle) === '$user' ? auth()->id() : $request->input($handle);
+                    } elseif (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
+                        $existsValue = $filterDefaults[$handle];
+                    }
+                    if ($existsValue !== null) {
+                        $criteria[$existsKey] = $existsValue;
+                    }
+
+                    continue;
+                }
+                if ($request->filled($handle)) {
+                    // '__all__' is the explicit clear sentinel the
+                    // filter tabs send: no criterion, and the
+                    // declared default stays off for this request.
+                    if ($request->input($handle) !== '__all__') {
+                        // Option-level criteria (fidelity): a
+                        // chosen option carrying `criteria`
+                        // replaces the plain equality with its
+                        // condition group (Overdue, buckets).
+                        $optionConditions = DirectoryUi::optionConditions($declared, $request->input($handle), auth()->id());
+                        if ($optionConditions !== null) {
+                            $criteria['__conditions'] = array_merge($criteria['__conditions'] ?? [], $optionConditions);
+                        } else {
+                            $criteria[$handle] = $request->input($handle);
+                        }
+                    }
+                }
+                foreach (['from', 'to'] as $suffix) {
+                    $rangeKey = $handle.'_'.$suffix;
+                    if ($request->filled($rangeKey)) {
+                        $criteria[$rangeKey] = $request->input($rangeKey);
+                    }
+                }
+                // Declared DEFAULT (fidelity stage): applies only
+                // when the request never mentioned the handle —
+                // any interaction (a tab click always carries the
+                // key, even empty or '__all__') suppresses it.
+                if (isset($filterDefaults[$handle]) && ! in_array($handle, $queryKeys, true)) {
+                    $optionConditions = DirectoryUi::optionConditions($declared, $filterDefaults[$handle], auth()->id());
+                    if ($optionConditions !== null) {
+                        $criteria['__conditions'] = array_merge($criteria['__conditions'] ?? [], $optionConditions);
+                    } else {
+                        $criteria[$handle] = $filterDefaults[$handle];
+                    }
+                }
+                // Range defaults (progress 0-20% in the source):
+                // default_from / default_to apply while neither
+                // range key appears in the request.
+                if ((array_key_exists('default_from', $declared) || array_key_exists('default_to', $declared))
+                    && ! in_array($handle.'_from', $queryKeys, true) && ! in_array($handle.'_to', $queryKeys, true)) {
+                    if (array_key_exists('default_from', $declared)) {
+                        $criteria[$handle.'_from'] = $declared['default_from'];
+                    }
+                    if (array_key_exists('default_to', $declared)) {
+                        $criteria[$handle.'_to'] = $declared['default_to'];
+                    }
+                }
+            }
+            // date_filter_on translation: a declared range carrying
+            // `columns` applies to the column the request's
+            // column_param names (or its default_column). The
+            // generic <handle>_from/_to criteria are rewritten to
+            // the chosen column for the generic filter engine.
+            foreach (array_merge($quickFilters, $sidebarFilters) as $declaredRange) {
+                if (! is_array($declaredRange) || empty($declaredRange['columns']) || ! is_array($declaredRange['columns'])) {
+                    continue;
+                }
+                $rangeHandle = (string) ($declaredRange['handle'] ?? '');
+                if ($rangeHandle === '' || (! isset($criteria[$rangeHandle.'_from']) && ! isset($criteria[$rangeHandle.'_to']))) {
+                    continue;
+                }
+                $param = (string) ($declaredRange['column_param'] ?? 'date_filter_on');
+                $chosen = (string) $request->query($param, '');
+                if (! in_array($chosen, $declaredRange['columns'], true)) {
+                    $chosen = (string) ($declaredRange['default_column'] ?? $declaredRange['columns'][0]);
+                }
+                foreach (['_from', '_to'] as $suffix) {
+                    if (isset($criteria[$rangeHandle.$suffix])) {
+                        $criteria[$chosen.$suffix] = $criteria[$rangeHandle.$suffix];
+                        unset($criteria[$rangeHandle.$suffix]);
+                    }
+                }
+            }
+            // Scope layer (Option B): a scoped view grant
+            // narrows the list to the viewer's slice of the
+            // records — owned (the slice's declared
+            // access.own_scope clauses), added (records the
+            // viewer authored), or both (the union). A single
+            // column clause stays a plain criterion, anything
+            // richer rides the service's grouped-OR __own_any
+            // criterion.
+            $scopeClauses = $this->viewScopeClauses();
+            if (count($scopeClauses) === 1 && isset($scopeClauses[0]['field'])) {
+                $criteria[$scopeClauses[0]['field']] = $scopeClauses[0]['value'];
+            } elseif ($scopeClauses !== []) {
+                $criteria['__own_any'] = $scopeClauses;
+            }
+            if ($criteria !== []) {
+                $filter->setCriteria($criteria);
+            }
+        }
+
+        return $filterDefaults;
+    }
+
+    /**
+     * Server-side directory export (D8): the full filtered,
+     * scope-narrowed list as a real XLSX workbook — the
+     * format source systems export — instead of a CSV of
+     * the rendered page. Columns are the directory's own;
+     * *_id values resolve through the form's option labels,
+     * exactly like the report surface.
+     */
+    public function export(Request $request)
+    {
+        $this->authorizeSlice('view');
+
+        $manifest = $this->ownManifest();
+        if (($manifest['ui']['directory']['export'] ?? true) === false) {
+            abort(404);
+        }
+        $sliceName = (string) ($manifest['name'] ?? '');
+        $columns = DirectoryUi::columnsForSlice($sliceName);
+        if ($columns === []) {
+            abort(404);
+        }
+
+        $filterClass = $this->getFilterClass();
+        $filter = new $filterClass($request->all());
+        if ($filter instanceof BaseFilter) {
+            $filter->withLimit(5000);
+        }
+        // The directory's own criteria path: declared filters,
+        // defaults and the scope clauses narrow the export
+        // exactly like the on-screen list.
+        $this->applyDirectoryCriteria($request, $filter, $this->getSliceUiConfig());
+        $records = $this->getService()->getList($filter)->items;
+        if (! is_array($records)) {
+            $records = iterator_to_array($records);
+        }
+
+        $formClass = $this->getFormClass();
+        $options = $this->resolveRelationshipOptions(new $formClass);
+        $labelMaps = [];
+        foreach ($columns as $column) {
+            $key = (string) ($column['key'] ?? '');
+            if (! str_ends_with($key, '_id')) {
+                continue;
+            }
+            $base = substr($key, 0, -3);
+            foreach ([Str::camel(Str::plural($base)).'Options', Str::camel($base).'Options', Str::studly(Str::plural($base)).'Options', $key] as $candidateKey) {
+                if (isset($options[$candidateKey]) && is_array($options[$candidateKey])) {
+                    $labelMaps[$key] = $options[$candidateKey];
+                    break;
+                }
+            }
+        }
+
+        $rows = [];
+        foreach ($records as $record) {
+            $attrs = is_object($record) && method_exists($record, 'getAttributes') ? $record->getAttributes() : [];
+            $row = [];
+            foreach ($columns as $column) {
+                $key = (string) ($column['key'] ?? '');
+                $value = $attrs[$key] ?? (is_object($record) ? data_get($record, $key) : null);
+                if ($value !== null && isset($labelMaps[$key]) && (is_int($value) || is_string($value))) {
+                    $value = $labelMaps[$key][$value] ?? $value;
+                }
+                $row[] = $value instanceof \DateTimeInterface ? $value->format('Y-m-d H:i:s') : $value;
+            }
+            $rows[] = $row;
+        }
+
+        $filename = Str::slug($sliceName).'-'.date('Y-m-d').'.xlsx';
+
+        return response(\LaraSlice\Support\XlsxWriter::build(
+            array_map(fn ($c) => (string) ($c['label'] ?? $c['key'] ?? ''), $columns),
+            $rows
+        ), 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
     }
 
     /**
@@ -1788,7 +2173,28 @@ abstract class BaseSliceWebController extends Controller
 
     public function show(string|int $id)
     {
-        $this->authorizeSlice('view');
+        $selfAccess = false;
+        try {
+            $this->authorizeSlice('view');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            // Self-record access: a viewer may always open
+            // the record that IS them (their own employee
+            // hub/profile), even when their role holds no
+            // view grant on the slice — the source systems
+            // route the hub outside the directory permission.
+            // View only; the record is loaded below and the
+            // exception stands unless it is the viewer's own.
+            if ($e->getStatusCode() !== 403) {
+                throw $e;
+            }
+            // A feature-module denial is not a missing grant:
+            // self-access must never resurrect a disabled module.
+            $featureModule = $this->ownManifest()['feature_module'] ?? null;
+            if (is_string($featureModule) && \LaraSlice\Support\ModuleSettings::isHiddenFor(auth()->user(), $featureModule)) {
+                throw $e;
+            }
+            $selfAccess = true;
+        }
 
         $service = $this->getService();
         $record = method_exists($service, 'findModel') ? $service->findModel($id) : null;
@@ -1800,11 +2206,18 @@ abstract class BaseSliceWebController extends Controller
             return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('error', 'Record not found');
         }
 
-        // Own-scope: another person's record is not viewable.
-        // A slice with no derivable scope clauses keeps the
-        // historical unenforced behaviour (the porter/C3 pass
-        // ensures view-own slices declare their scope).
-        if ($this->sliceViewScope() === 'own' && $this->ownScopeClauses() !== [] && ! $this->recordMatchesOwnScope($record)) {
+        if ($selfAccess && ! $this->recordIsViewerSelf($record)) {
+            abort(403, 'Access Denied: this record is not your own.');
+        }
+
+        // Scope layer: a record outside the viewer's scope
+        // is not viewable. A slice with no derivable scope
+        // clauses keeps the historical unenforced behaviour
+        // (the porter/C3 pass ensures scoped slices declare
+        // their scope).
+        if (in_array($this->sliceViewScope(), ['owned', 'added', 'both'], true)
+            && $this->viewScopeClauses() !== []
+            && ! $this->recordMatchesOwnScope($record)) {
             abort(404);
         }
 
@@ -1856,6 +2269,7 @@ abstract class BaseSliceWebController extends Controller
                 // over the record's relations.
                 'showStats' => DirectoryUi::showStatsFromManifest($ownManifest, $record),
                 'showWidgets' => DirectoryUi::showWidgetsFromManifest($ownManifest, $record),
+                'showIdentity' => DirectoryUi::showIdentity($ownManifest, $record),
                 // Layout kit step 3: declared show composition
                 // (ui.show.composition) for the view's branches.
                 'showComposition' => DirectoryUi::showCompositionFromManifest($ownManifest),
@@ -2177,6 +2591,69 @@ abstract class BaseSliceWebController extends Controller
     }
 
     /**
+     * The clauses that narrow this slice's records to the
+     * viewer's scope layer slice: owned → the own-scope
+     * clauses; added → records the viewer authored; both →
+     * the union; all/none → no narrowing.
+     *
+     * @return array<int, array{field?: string, relation?: string, key?: string, value: mixed}>
+     */
+    protected function viewScopeClauses(): array
+    {
+        return match ($this->sliceViewScope()) {
+            'owned' => $this->ownScopeClauses(),
+            'added' => $this->addedScopeClauses(),
+            'both' => $this->mergeScopeClauses($this->ownScopeClauses(), $this->addedScopeClauses()),
+            default => [],
+        };
+    }
+
+    /**
+     * Added-scope clauses: `added_by = viewer` when the
+     * slice's table carries authorship; on a table without
+     * it, the own-scope clauses are the closest faithful
+     * analogue; with neither, a never-match clause (an
+     * added-scope grant on an authorless, ownerless table
+     * sees nothing — the source's semantics).
+     *
+     * @return array<int, array{field?: string, relation?: string, key?: string, value: mixed}>
+     */
+    protected function addedScopeClauses(): array
+    {
+        $manifest = $this->ownManifest();
+        if (isset($manifest['fields']['added_by'])) {
+            return [['field' => 'added_by', 'value' => auth()->id()]];
+        }
+        $own = $this->ownScopeClauses();
+        if ($own !== []) {
+            return $own;
+        }
+
+        return [['field' => 'id', 'value' => -1]];
+    }
+
+    /**
+     * @param  array<int, array{field?: string, relation?: string, key?: string, value: mixed}>  $a
+     * @param  array<int, array{field?: string, relation?: string, key?: string, value: mixed}>  $b
+     * @return array<int, array{field?: string, relation?: string, key?: string, value: mixed}>
+     */
+    protected function mergeScopeClauses(array $a, array $b): array
+    {
+        $seen = [];
+        $merged = [];
+        foreach (array_merge($a, $b) as $clause) {
+            $key = json_encode($clause);
+            if ($key === false || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $merged[] = $clause;
+        }
+
+        return $merged;
+    }
+
+    /**
      * The viewer's own-scope clauses for this slice (Body v2
      * access): the manifest's declared `access.own_scope`
      * list when present — each entry is {field: <column>} or
@@ -2204,6 +2681,17 @@ abstract class BaseSliceWebController extends Controller
                     $clauses[] = ['field' => (string) $clause['field'], 'value' => auth()->id()];
                 } elseif (! empty($clause['relation'])) {
                     $clauses[] = ['relation' => (string) $clause['relation'], 'key' => (string) ($clause['key'] ?? 'id'), 'value' => auth()->id()];
+                } elseif (! empty($clause['pivot'])) {
+                    // Membership pivots (project_members,
+                    // task_users…): the record is the viewer's
+                    // when a pivot row links it to them. Works
+                    // without an Eloquent relation on the model.
+                    $clauses[] = [
+                        'pivot' => (string) $clause['pivot'],
+                        'foreign_key' => (string) ($clause['foreign_key'] ?? ''),
+                        'user_key' => (string) ($clause['user_key'] ?? 'user_id'),
+                        'value' => auth()->id(),
+                    ];
                 }
             }
             if ($clauses !== []) {
@@ -2216,12 +2704,28 @@ abstract class BaseSliceWebController extends Controller
     }
 
     /**
+     * Whether a loaded record IS the viewer — the slice's
+     * owner/self field (manifest owner_field, else the
+     * user_id column) points at the signed-in user. Backs
+     * self-record access on detail routes (own hub/profile).
+     */
+    protected function recordIsViewerSelf(object $record): bool
+    {
+        $ownerField = $this->ownScopeOwnerField();
+        if ($ownerField === null || ! isset($record->{$ownerField})) {
+            return false;
+        }
+
+        return (int) $record->{$ownerField} === (int) auth()->id();
+    }
+
+    /**
      * Whether a loaded record belongs to the viewer under
-     * the own-scope clauses (detail-route enforcement).
+     * the view-scope clauses (detail-route enforcement).
      */
     protected function recordMatchesOwnScope(object $record): bool
     {
-        foreach ($this->ownScopeClauses() as $clause) {
+        foreach ($this->viewScopeClauses() as $clause) {
             if (isset($clause['field'])) {
                 if ((int) ($record->{$clause['field']} ?? 0) === (int) $clause['value']) {
                     return true;
@@ -2233,6 +2737,17 @@ abstract class BaseSliceWebController extends Controller
                         ? $clause['key']
                         : $relation->getRelated()->getTable().'.'.$clause['key'];
                     if ($relation->where($qualified, $clause['value'])->exists()) {
+                        return true;
+                    }
+                } catch (\Throwable $e) {
+                    // An unevaluable clause is unsatisfied, never an error.
+                }
+            } elseif (isset($clause['pivot']) && ($clause['foreign_key'] ?? '') !== '') {
+                try {
+                    if (\Illuminate\Support\Facades\DB::table((string) $clause['pivot'])
+                        ->where((string) $clause['foreign_key'], $record->getKey())
+                        ->where((string) ($clause['user_key'] ?? 'user_id'), $clause['value'])
+                        ->exists()) {
                         return true;
                     }
                 } catch (\Throwable $e) {
@@ -2253,7 +2768,7 @@ abstract class BaseSliceWebController extends Controller
      */
     protected function applyOwnScopeOnCreate(object $form): void
     {
-        if ($this->sliceViewScope() !== 'own') {
+        if (! in_array($this->sliceViewScope(), ['owned', 'both'], true)) {
             return;
         }
         $ownerField = $this->ownScopeOwnerField();

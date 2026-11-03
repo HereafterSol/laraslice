@@ -103,3 +103,14 @@ every contract row.
 - Don't pick a spacing, radius or tone value outside the
   tokens above because it "looks better" in one screenshot —
   change the token, everywhere, or not at all.
+
+## Soul: Enterprise (composed preset)
+
+One attribute — `<html data-soul="enterprise">` — composes the
+dimensions into the enterprise register: tight radius
+(0.375rem), the flat shadow scale, a muted five-hue chart
+ramp, and tabular figures on data tables. The default Soul is
+unchanged; a project opts in when it wants the calmer,
+denser, boardroom feel. The Copilot dock is flat in every
+Soul (dark slate, no gradient, no glow) — consumer-AI chrome
+does not belong in an enterprise tool.

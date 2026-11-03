@@ -50,7 +50,20 @@
             'html' => $html,
             'badge_from' => $c['badge_from'] ?? null,
             'breakdown' => $c['breakdown'] ?? null,
-            'options' => $c['options'] ?? null,
+            // Options normalize to {value, label} pairs here:
+            // a value => label map with numeric values (FK ids)
+            // has int keys after PHP's key coercion, and the
+            // option renderer's int-key branch would mistake
+            // the id for a list position and lose it.
+            'options' => (isset($c['options']) && is_array($c['options']) && $c['options'] !== [])
+                ? (array_is_list($c['options'])
+                    ? array_map(fn ($o) => is_array($o)
+                        ? ['value' => $o['value'] ?? $o['label'] ?? '', 'label' => $o['label'] ?? $o['value'] ?? '']
+                        : ['value' => $o, 'label' => $o], $c['options'])
+                    : collect($c['options'])->map(fn ($label, $value) => is_array($label)
+                        ? ['value' => $label['value'] ?? $value, 'label' => $label['label'] ?? $value]
+                        : ['value' => $value, 'label' => $label])->values()->all())
+                : null,
             'field_type' => $c['field_type'] ?? null,
         ];
     })->values();
@@ -360,7 +373,7 @@
                     </tr>
                 </template>
                 <tr x-show="paged.length === 0">
-                    <td colspan="{{ $cols->count() + ($selectable ? 1 : 0) + (isset($actions) ? 1 : 0) }}" class="text-muted-foreground h-24 text-center align-middle">{{ __('No records found.') }}</td>
+                    <td colspan="{{ $cols->count() + ($selectable ? 1 : 0) + (isset($actions) ? 1 : 0) }}" class="text-muted-foreground h-24 text-center align-middle">{{ \LaraSlice\Support\Kit::current() === 'replica' ? __('No data available in table') : __('No records found.') }}</td>
                 </tr>
             </tbody>
         </table>
@@ -513,6 +526,18 @@ if (typeof window.blatDataTable === 'undefined') {
                 const keys = this.cols.map(c => c.key);
                 for (const k of ['title', 'name', 'heading', 'invoice_number', 'subject']) {
                     if (keys.includes(k) && row[k]) return String(row[k]).replace(/<[^>]*>/g, '').slice(0, 40);
+                }
+                // Fallback: the first text column that is not the
+                // calendar's own date key, the row key, or an id —
+                // a date-first table (Holidays: date, occassion)
+                // would otherwise label every chip with its date.
+                const skip = new Set([this.resolvedDateKey, this.rowKey, 'id']);
+                for (const k of keys) {
+                    if (skip.has(k) || k.endsWith('_id')) continue;
+                    const v = row[k + '__raw'] ?? row[k];
+                    if (v !== null && v !== undefined && String(v).trim() !== '' && isNaN(Number(v))) {
+                        return String(v).replace(/<[^>]*>/g, '').slice(0, 40);
+                    }
                 }
                 return String(row[keys[0]] || 'Item').replace(/<[^>]*>/g, '').slice(0, 40);
             },
@@ -714,7 +739,7 @@ if (typeof window.blatDataTable === 'undefined') {
                     return;
                 }
                 if (this.bulkAction === 'delete') {
-                    if (confirm('Are you sure you want to delete ' + this.selected.length + ' selected record(s)?')) {
+                    const runBulkDelete = () => {
                         const ids = this.selectedRecordIds();
                         if (this.bulkDeleteUrl) {
                             // L4: real server-side delete via a form
@@ -733,6 +758,12 @@ if (typeof window.blatDataTable === 'undefined') {
                         this.$dispatch('bulk-delete', { indices: this.selected, ids });
                         this.selected = [];
                         this.emitSelection();
+                    };
+                    const bulkMsg = 'Are you sure you want to delete ' + this.selected.length + ' selected record(s)?';
+                    if (window.lsConfirm) {
+                        window.lsConfirm(bulkMsg, 'Yes, Delete It!').then(ok => { if (ok) runBulkDelete(); });
+                    } else if (confirm(bulkMsg)) {
+                        runBulkDelete();
                     }
                 } else if (this.bulkAction === 'export') {
                     this.exportCsv('selected_' + this.exportFilename);

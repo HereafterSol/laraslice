@@ -19,9 +19,11 @@ class AiEngine
     /**
      * Default model per provider, used until a model is chosen in AI settings or config.
      * Retired IDs (claude-3-5-*, gemini-1.5-*, gpt-4-turbo) were replaced in v1.4.2.
+     * The OpenCode default was verified against the live Zen model list (Nov 2026):
+     * 'space-bunny-free' no longer exists there; 'big-pickle' is the free default.
      */
     public const DEFAULT_MODELS = [
-        'opencode' => 'space-bunny-free',
+        'opencode' => 'big-pickle',
         'openai' => 'gpt-4o-mini',
         'gemini' => 'gemini-3.8-flash',
         'anthropic' => 'claude-opus-5-5',
@@ -48,16 +50,17 @@ class AiEngine
                 'is_free' => true,
                 'is_default' => true,
                 'key_setting' => 'ai.opencode_api_key',
-                'model' => 'space-bunny-free',
+                'model' => self::DEFAULT_MODELS['opencode'],
                 'models' => [
-                    'space-bunny-free',
+                    // Verified against the live OpenCode Zen model list (Nov 2026).
+                    'big-pickle',
+                    'beam-free',
+                    'flint-40b-free',
                     'mimo-v2.6-flash-free',
-                    'mimo-v2.5-free',
-                    'ling-3.1-flash-free',
+                    'nemotron-3.5-super-vl-free',
                     'nemotron-3.5-lightning-free',
-                    'muse-spark-1.3-contributor-free',
-                    'fledge-alpha-free',
-                    'longcat-2.5-preview-free',
+                    'deepseek-v4.1-flash-free',
+                    'glm-5.3-flash-free',
                 ],
                 'description' => 'OpenCode Zen models, including free tiers. Needs an OpenCode API key (OPENCODE_API_KEY or this page).',
             ],
@@ -76,7 +79,7 @@ class AiEngine
                 'is_free' => false,
                 'key_setting' => 'ai.gemini_api_key',
                 'model' => self::DEFAULT_MODELS['gemini'],
-                'models' => ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-2.5-pro'],
+                'models' => ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
                 'description' => 'Google DeepMind state-of-the-art multimodal reasoning models.',
             ],
             [
@@ -400,7 +403,7 @@ class AiEngine
             return [
                 'success' => true,
                 'provider' => $activeProvider,
-                'model' => ($activeProvider === 'opencode' ? $this->getSetting('ai.opencode_model', 'space-bunny-free') : null),
+                'model' => ($activeProvider === 'opencode' ? $this->getSetting('ai.opencode_model', self::DEFAULT_MODELS['opencode']) : null),
                 'reply' => $remoteReply,
             ];
         }
@@ -876,7 +879,7 @@ class AiEngine
         if (preg_match('/^\/test\b/i', $msg) || $msg === '2+2' || $msg === '2 + 2') {
             $testRes = $this->testProvider('opencode');
             $status = ($testRes['success'] ?? false) ? '✅ Connected' : '❌ Failed';
-            $model = $testRes['model'] ?? 'space-bunny-free';
+            $model = $testRes['model'] ?? self::DEFAULT_MODELS['opencode'];
             $reply = "### ⚡ OpenCode AI Live Test\n\n";
             $reply .= "**Status:** {$status}\n";
             $reply .= "**Provider:** `opencode` (Free Suite)\n";
@@ -1763,7 +1766,7 @@ class AiEngine
                     if (empty($apiKey)) {
                         return null;
                     }
-                    $model = $this->providerModel('opencode', 'space-bunny-free');
+                    $model = $this->providerModel('opencode', self::DEFAULT_MODELS['opencode']);
                     $reply = $this->callOpenAiCompatible(
                         'https://opencode.ai/zen/v1/chat/completions',
                         $apiKey,
@@ -1772,12 +1775,12 @@ class AiEngine
                         $message,
                         $history
                     );
-                    // If model hit FreeTierError or failed, automatically fallback to space-bunny-free
-                    if ($reply === null && $model !== 'space-bunny-free') {
+                    // If the chosen model hit a free-tier limit or failed, fall back to the free default.
+                    if ($reply === null && $model !== self::DEFAULT_MODELS['opencode']) {
                         $reply = $this->callOpenAiCompatible(
                             'https://opencode.ai/zen/v1/chat/completions',
                             $apiKey,
-                            'space-bunny-free',
+                            self::DEFAULT_MODELS['opencode'],
                             $systemPrompt,
                             $message,
                             $history
@@ -1846,6 +1849,17 @@ class AiEngine
         return $this->providerClient ??= new ProviderClient;
     }
 
+    /**
+     * The most recent provider failure in plain words (for example
+     * "HTTP 429: Free usage limit reached."), or null when the last call
+     * succeeded or no call has run. Surfaces WHY a provider returned no
+     * reply, so callers never have to guess between quota, auth and outage.
+     */
+    public function lastProviderError(): ?string
+    {
+        return $this->providerClient()->lastError;
+    }
+
     protected function callOpenAiCompatible(string $url, string $apiKey, string $model, string $systemPrompt, string $message, array $history = []): ?string
     {
         return $this->providerClient()->openAiCompatible($url, $apiKey, $model, $systemPrompt, $message, $history);
@@ -1898,11 +1912,22 @@ class AiEngine
     /**
      * Dynamic cognitive reasoning generator when using OpenCode Free mode.
      */
+    /**
+     * The built-in responder, used when no AI provider is
+     * connected. It answers from live system facts — the slice
+     * registry and the database — and labels its sources.
+     *
+     * It used to answer EVERY question with the same inventory
+     * dump (on a real app, all 164 slice names in one line).
+     * Real usage asks specific questions, so the responder is
+     * intent-routed and answer-first: the fact asked for, then
+     * one next step. Anything it cannot ground, it says so.
+     */
     protected function generateCognitiveResponse(string $message, array $context, array $pageContext, array $history): string
     {
         $msg = strtolower($message);
-        $slicesList = implode(', ', array_keys($context['active_slices']));
-        $totalUsers = $context['database_metrics']['users_total'];
+        $slices = (array) ($context['active_slices'] ?? []);
+        $metrics = (array) ($context['database_metrics'] ?? []);
 
         // Domain scaffolding request
         if (preg_match('/(create|build|scaffold|generate|make).*(erp|crm|ecommerce|store|billing|invoice|hr)/i', $msg)) {
@@ -1919,20 +1944,100 @@ class AiEngine
                    "```bash\n".
                    "php artisan slice:make Accounts Contacts Deals Invoices --domain=CRM --workflow\n".
                    "```\n\n".
-                   '*Or open **Slice Studio** (`/laraslice/wizard/schema-studio`) to visually configure custom fields, validation chips, and child table line items.*';
+                   '*Or open the **Studio** (`/laraslice/studio`, Design mode) to draft it visually from a brief.*';
         }
 
-        // General inquiry
-        return "### 🚀 LaraSlice AI Copilot (OpenCode Cognitive Engine)\n\n".
-               "I am live and synchronized with your **LaraSlice framework**.\n\n".
-               "- **Active Screen:** `{$context['current_page']}`\n".
-               "- **Registered Slices:** `{$slicesList}`\n".
-               "- **Database Telemetry:** `{$totalUsers} users` active in the system.\n\n".
-               "**Recommended Actions**:\n".
-               "- **Live Data**: Ask *\"How many users do we have?\"* or *\"Show schema for users\"*.\n".
-               "- **Slice Studio**: Ask *\"How do I wipe domain data?\"* or visit `/laraslice/wizard/schema-studio` for the new 2-column visual designer.\n".
-               "- **Provider Settings**: Visit `/admin/settings/ai` to connect custom OpenAI, Gemini, or Claude API keys.\n\n".
-               "*Your query was:* **\"{$message}\"**.";
+        // A domain by name: its slices, capped. Checked before the
+        // generic inventory — a named domain is the more specific ask.
+        $domains = array_values(array_unique(array_map(fn ($d) => (string) ($d['domain'] ?? 'General'), $slices)));
+        foreach ($domains as $domain) {
+            if (strlen($domain) >= 3 && preg_match('/\b'.preg_quote(strtolower($domain), '/').'\b/', $msg)
+                && preg_match('/\b(slices?|modules?|apps?|list|show|what|which)\b/', $msg)) {
+                $inDomain = array_filter($slices, fn ($d) => (string) ($d['domain'] ?? 'General') === $domain);
+                $names = array_map(fn ($name, $d) => (string) ($d['title'] ?? $name), array_keys($inDomain), $inDomain);
+                sort($names);
+                $shown = array_slice($names, 0, 30);
+                $more = count($names) - count($shown);
+
+                return "**{$domain}** — ".count($names)." slices:\n\n- ".implode("\n- ", $shown).
+                       ($more > 0 ? "\n- …and {$more} more" : '').
+                       "\n\n_Source: slice registry (live)._";
+            }
+        }
+
+        // Slice inventory: counts by domain, never the full name dump.
+        if (preg_match('/\b(list|show|what|which|how many)\b[^.?!]*\b(slices?|modules?|apps?|features?)\b|\b(slices?|modules?)\b[^.?!]*\b(list|installed|active|available|exist)\b/', $msg)) {
+            $byDomain = [];
+            foreach ($slices as $data) {
+                $byDomain[(string) ($data['domain'] ?? 'General')] = ($byDomain[(string) ($data['domain'] ?? 'General')] ?? 0) + 1;
+            }
+            arsort($byDomain);
+            $lines = [];
+            foreach ($byDomain as $domain => $count) {
+                $lines[] = "- **{$domain}** — {$count} ".($count === 1 ? 'slice' : 'slices');
+            }
+
+            return '**'.count($slices).' slices** across **'.count($byDomain)." domains**:\n\n".
+                   implode("\n", $lines).
+                   "\n\nAsk about a domain (\"HR slices\") or a slice by name (\"Tell me about Projects\") for details.".
+                   "\n\n_Source: slice registry (live)._";
+        }
+
+        // A slice by name: its registry facts.
+        foreach ($slices as $name => $data) {
+            foreach (array_unique([(string) $name, (string) ($data['title'] ?? '')]) as $needle) {
+                if (strlen($needle) >= 4 && preg_match('/\b'.preg_quote(strtolower($needle), '/').'\b/', $msg)) {
+                    $reply = "**{$data['title']}** (`{$name}`)\n\n".
+                             '- **Domain:** '.($data['domain'] ?? 'General')."\n".
+                             '- **Status:** '.(($data['enabled'] ?? true) ? 'enabled' : 'disabled')."\n".
+                             '- **Version:** '.($data['version'] ?? '1.0.0');
+                    if (! empty($data['description'])) {
+                        $reply .= "\n- **About:** {$data['description']}";
+                    }
+                    if (! empty($data['dependencies'])) {
+                        $reply .= "\n- **Depends on:** ".implode(', ', (array) $data['dependencies']);
+                    }
+
+                    return $reply."\n\nManage it in the Studio (`/laraslice/studio`, Manage mode).".
+                           "\n\n_Source: slice registry (live)._";
+                }
+            }
+        }
+
+        // Health / status: live counts, not inventory.
+        if (preg_match('/\b(health|healthy|status|working|online|alive|ok)\b/', $msg)) {
+            return "**System status — live counts:**\n\n".
+                   '- **Users:** '.($metrics['users_total'] ?? 0)."\n".
+                   '- **Roles:** '.($metrics['roles_total'] ?? 0)."\n".
+                   '- **Tables:** '.($metrics['tables_count'] ?? 0)."\n".
+                   '- **Audit log entries:** '.($metrics['audit_logs_total'] ?? 0)."\n\n".
+                   'For backups, sync and the quality gates (drift, conformance, declaration history), open **Operate** in the Studio.'.
+                   "\n\n_Source: database (live counts)._";
+        }
+
+        // Help / capabilities.
+        if (preg_match('/\b(help|what can you do|capabilit|options|features)\b/', $msg)) {
+            return "**What I can do** (built-in mode, no provider connected):\n\n".
+                   "- **Count records** — \"How many invoices are there?\"\n".
+                   "- **Describe a slice** — \"Tell me about Projects\"\n".
+                   "- **List slices by domain** — \"What slices do we have?\"\n".
+                   "- **Guide Studio work** — drafting from briefs, ports, and the quality gates\n\n".
+                   'Connect a provider under **Settings → AI** for open-ended reasoning over your system.';
+        }
+
+        // Fallback: short, honest, page-aware. Never an inventory dump.
+        $page = (string) ($context['current_page'] ?? '/');
+        $pageLine = $page !== '' && $page !== '/'
+            ? "\n\nYou are on `{$page}` — ask about the slice behind this page by name if you want its facts."
+            : '';
+
+        return "You asked: *\"{$message}\"*\n\n".
+               "I'm the **built-in assistant** — no AI provider is connected, so I answer from live system facts rather than reasoning freely. Try:\n\n".
+               "- \"How many … are there?\" for live counts\n".
+               "- \"Tell me about &lt;slice name&gt;\" for a slice's facts\n".
+               "- \"What slices do we have?\" for the inventory by domain".
+               $pageLine.
+               "\n\nFor open-ended answers, connect a provider under **Settings → AI**.";
     }
 
     /**
@@ -1945,7 +2050,7 @@ class AiEngine
         $pageContext = ['path' => '/admin/settings/ai'];
 
         if ($provider === 'opencode') {
-            $model = $this->providerModel('opencode', 'space-bunny-free');
+            $model = $this->providerModel('opencode', self::DEFAULT_MODELS['opencode']);
             $testReply = $this->callCustomProvider('What is 2+2? Answer with the calculation and result concisely.', $context, $pageContext, 'opencode');
             $latency = round((microtime(true) - $start) * 1000);
 

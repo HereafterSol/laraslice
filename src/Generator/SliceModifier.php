@@ -24,6 +24,23 @@ class SliceModifier
     }
 
     /**
+     * The exact slice directory this modifier is pinned to, when
+     * the caller resolved the slice path-exactly (two installed
+     * slices may share a name — resolving by name alone can
+     * edit the wrong twin). Set via forSliceDir(); the caller
+     * is responsible for validating the directory against
+     * discovery before pinning it.
+     */
+    private ?string $targetSliceDir = null;
+
+    public function forSliceDir(string $dir): static
+    {
+        $this->targetSliceDir = rtrim($dir, '/\\');
+
+        return $this;
+    }
+
+    /**
      * Add multiple fields to an existing slice in a SINGLE consolidated migration (October CMS Builder style).
      *
      * @param  array  $fields  Array of field definitions: [['name' => 'sku', 'type' => 'string', 'length' => 100, 'nullable' => true, 'default' => null, 'unsigned' => false]]
@@ -822,6 +839,12 @@ PHP;
 
     protected function resolveSliceDir(string $pluralName): string
     {
+        // 0. Path-exact pin: the caller already resolved the exact
+        // slice (same-name twins make the guesses below unsafe).
+        if ($this->targetSliceDir !== null) {
+            return $this->targetSliceDir;
+        }
+
         // 1. Direct flat path
         $appPath = rtrim($this->slicesPath, '/\\').DIRECTORY_SEPARATOR.$pluralName;
         if (is_dir($appPath)) {
