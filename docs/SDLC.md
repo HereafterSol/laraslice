@@ -10,6 +10,10 @@ are the **Mind** (`system.yaml`), the **Body** (`*.ui.yaml`), and
 the **Heart** (`slice.yaml`); the working surface is the **Dev
 Studio** and its six modes.
 
+**Port or greenfield:** the ordered programme (Analyze → Phase 0 →
+Phase D nav → gates → Studio handoff) lives in
+[PORT-100-PLAYBOOK.md](PORT-100-PLAYBOOK.md).
+
 ## The lifecycle, phase by phase
 
 ### 1. Discovery & requirements — the Mind (Plan mode)
@@ -58,8 +62,9 @@ product.
 - **Composition probe**: the layout rules (fused filter bar,
   title in the topbar, one title per page) checked on live pages.
 - For **ported** systems, the Replica Protocol's five gates
-  (`docs/REPLICA-PROTOCOL.md`) with the port's
-  `REPLICA-STATUS.md` as the quotable record.
+  ([REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md), playbook
+  [PORT-100-PLAYBOOK.md](PORT-100-PLAYBOOK.md)) with the port's
+  `REPLICA-STATUS.md` as the quotable record (lowest gate wins).
 
 ### 5. Release — the boundary
 

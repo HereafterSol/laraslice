@@ -25,7 +25,9 @@ final class DataTableUiParserTest extends TestCase
         $cols = $h['columns'];
         $this->assertSame('date_overdue', $cols['due_date']['formatter'] ?? null);
         $this->assertSame('status_pill', $cols['board_column']['formatter'] ?? $cols['status']['formatter'] ?? null);
-        $this->assertSame('composite_user', $cols['users']['formatter'] ?? null);
+        // The fixture loops over $row->users rendering multiple
+        // avatars — an avatar stack, not a single composite person.
+        $this->assertSame('user_stack', $cols['users']['formatter'] ?? null);
         $this->assertContains($cols['due_date']['formatter'], DataTableUiParser::FORMATTERS);
     }
 
@@ -36,7 +38,9 @@ final class DataTableUiParserTest extends TestCase
         $cols = $h['columns'];
         $this->assertSame('date_overdue', $cols['deadline']['formatter'] ?? null);
         $this->assertSame('progress_bar', $cols['completion_percent']['formatter'] ?? null);
-        $this->assertSame('composite_user', $cols['members']['formatter'] ?? null);
+        // Members render as an avatar stack (the flagship's curated
+        // manifest declares user_stack for this exact column).
+        $this->assertSame('user_stack', $cols['members']['formatter'] ?? null);
     }
 
     public function test_invoices_datatable_extracts_money_and_status(): void
@@ -80,7 +84,7 @@ final class DataTableUiParserTest extends TestCase
 
     public function test_formatters_stay_in_v0_1_vocabulary(): void
     {
-        foreach (['Tasks', 'Projects', 'Invoices'] as $slice) {
+        foreach (['Tasks', 'Projects', 'Invoices', 'Employees'] as $slice) {
             $h = $this->parser->parseForSlice($this->fixtures, $slice);
             foreach ($h['columns'] as $meta) {
                 $this->assertContains(
@@ -90,5 +94,32 @@ final class DataTableUiParserTest extends TestCase
                 );
             }
         }
+    }
+
+    public function test_employees_datatable_extracts_formatters_and_get_columns(): void
+    {
+        $h = $this->parser->parseForSlice($this->fixtures, 'Employees');
+        $this->assertSame('EmployeesDataTable.php', $h['file']);
+
+        // Assert classifications
+        $cols = $h['columns'];
+        $this->assertSame('code_badge', $cols['employee_id']['formatter'] ?? null);
+        $this->assertSame('composite_user', $cols['name']['formatter'] ?? null);
+        $this->assertSame('status_pill', $cols['status']['formatter'] ?? null);
+        $this->assertSame('text', $cols['role']['formatter'] ?? null);
+        $this->assertTrue($cols['role']['inline_edit'] ?? false);
+
+        // Assert get_columns parsed
+        $this->assertNotEmpty($h['get_columns']);
+        $visibleCols = array_values(array_filter($h['get_columns'], fn ($c) => $c['visible']));
+        $this->assertCount(5, $visibleCols);
+        $this->assertSame(['employee_id', 'name', 'email', 'role', 'status'], array_column($visibleCols, 'handle'));
+
+        // Assert merge sets directory columns directly from getColumns
+        $merged = $this->parser->mergeIntoUi([], $h);
+        $dirCols = $merged['directory']['columns'];
+        $this->assertCount(5, $dirCols);
+        $this->assertSame(['employee_id', 'name', 'email', 'role', 'status'], array_column($dirCols, 'handle'));
+        $this->assertSame(['role'], $merged['directory']['inline_edit']);
     }
 }

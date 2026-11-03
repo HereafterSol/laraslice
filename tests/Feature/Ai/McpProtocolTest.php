@@ -18,7 +18,7 @@ class McpProtocolTest extends TestCase
         $known = $this->rpc(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => ['protocolVersion' => '2024-11-05']]);
         $this->assertSame('2024-11-05', $known['result']['protocolVersion']);
         $this->assertSame(LaraSliceServiceProvider::VERSION, $known['result']['serverInfo']['version']);
-        $this->assertSame(['tools'], array_keys($known['result']['capabilities']));
+        $this->assertSame(['tools', 'resources'], array_keys($known['result']['capabilities']));
 
         $unknown = $this->rpc(['jsonrpc' => '2.0', 'id' => 2, 'method' => 'initialize', 'params' => ['protocolVersion' => '1999-01-01']]);
         $this->assertSame(McpServer::PROTOCOL_VERSIONS[0], $unknown['result']['protocolVersion']);
@@ -29,11 +29,43 @@ class McpProtocolTest extends TestCase
         $this->assertNull($this->rpc(['jsonrpc' => '2.0', 'method' => 'notifications/initialized']));
     }
 
-    public function test_ping_and_empty_resource_and_prompt_lists(): void
+    public function test_ping_and_empty_prompt_list(): void
     {
         $this->assertEquals((object) [], $this->rpc(['jsonrpc' => '2.0', 'id' => 3, 'method' => 'ping'])['result']);
-        $this->assertSame([], $this->rpc(['jsonrpc' => '2.0', 'id' => 4, 'method' => 'resources/list'])['result']['resources']);
         $this->assertSame([], $this->rpc(['jsonrpc' => '2.0', 'id' => 5, 'method' => 'prompts/list'])['result']['prompts']);
+    }
+
+    public function test_dual_era_negotiation(): void
+    {
+        // 2026-07-28 stateless era negotiates like any version.
+        $new = $this->rpc(['jsonrpc' => '2.0', 'id' => 11, 'method' => 'initialize', 'params' => ['protocolVersion' => '2026-07-28']]);
+        $this->assertSame('2026-07-28', $new['result']['protocolVersion']);
+
+        // ...and via _meta, where the new era carries it.
+        $meta = $this->rpc(['jsonrpc' => '2.0', 'id' => 12, 'method' => 'initialize', 'params' => ['_meta' => ['protocolVersion' => '2025-06-18']]]);
+        $this->assertSame('2025-06-18', $meta['result']['protocolVersion']);
+
+        // Default = newest supported.
+        $this->assertSame('2026-07-28', McpServer::PROTOCOL_VERSIONS[0]);
+    }
+
+    public function test_resources_list_and_read(): void
+    {
+        $list = $this->rpc(['jsonrpc' => '2.0', 'id' => 13, 'method' => 'resources/list'])['result']['resources'];
+        $uris = array_column($list, 'uri');
+        $this->assertContains('laraslice://skills/index', $uris);
+        $this->assertContains('laraslice://gates/definitions', $uris);
+        $this->assertContains('laraslice://commands/index', $uris);
+
+        $skills = $this->rpc(['jsonrpc' => '2.0', 'id' => 14, 'method' => 'resources/read', 'params' => ['uri' => 'laraslice://skills/index']]);
+        $this->assertStringContainsString('laraslice', $skills['result']['contents'][0]['text']);
+
+        $gates = $this->rpc(['jsonrpc' => '2.0', 'id' => 15, 'method' => 'resources/read', 'params' => ['uri' => 'laraslice://gates/definitions']]);
+        $decoded = json_decode($gates['result']['contents'][0]['text'], true);
+        $this->assertSame(['S', 'D', 'F', 'T', 'V'], array_column($decoded['gates'], 'id'));
+
+        $unknown = $this->rpc(['jsonrpc' => '2.0', 'id' => 16, 'method' => 'resources/read', 'params' => ['uri' => 'laraslice://nope']]);
+        $this->assertSame(-32602, $unknown['error']['code']);
     }
 
     public function test_tools_are_described_with_input_schemas(): void

@@ -25,6 +25,7 @@ final class SliceDiffCommand extends Command
         $slice = $manager->getSlice($this->argument('slice'));
         if (! $slice) {
             $this->error('Slice not found: '.$this->argument('slice'));
+
             return self::FAILURE;
         }
 
@@ -43,6 +44,7 @@ final class SliceDiffCommand extends Command
             $json = $slice->path.'/slice.json';
             if (! is_file($json)) {
                 $this->info('(no changes) — YAML only, nothing to diff against.');
+
                 return self::SUCCESS;
             }
             $other = ManifestRepository::read($json);
@@ -52,6 +54,7 @@ final class SliceDiffCommand extends Command
 
         $diff = ManifestRepository::unifiedDiff($currentYaml, $otherYaml, 'slice.yaml', $label);
         $this->line($diff);
+
         return self::SUCCESS;
     }
 }

@@ -20,6 +20,11 @@
         $store.theme.setShadow(shadow);
         document.documentElement.setAttribute('data-shadow', shadow);
     },
+    updateSoul(soul) {
+        $store.theme.setSoul(soul);
+        if (soul === 'default') document.documentElement.removeAttribute('data-soul');
+        else document.documentElement.setAttribute('data-soul', soul);
+    },
     copyCss() {
         const rad = $store.theme.radius === '0' ? '0rem' : `${$store.theme.radius}rem`;
         const css = `:root {
@@ -260,6 +265,27 @@
                         Lg
                     </button>
                 </div>
+            </div>
+
+            <!-- 8. Soul (composed preset) -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-foreground uppercase tracking-wider">Soul</label>
+                    <span class="text-[11px] font-mono text-muted-foreground capitalize" x-text="$store.theme.soul"></span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 bg-muted/40 p-1 rounded-xl border border-border text-xs font-medium">
+                    <button type="button" @click="updateSoul('default')"
+                            :class="$store.theme.soul === 'default' ? 'bg-primary text-primary-foreground font-bold shadow-xs border border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-card'"
+                            class="py-1.5 rounded-lg transition text-center cursor-pointer">
+                        Default
+                    </button>
+                    <button type="button" @click="updateSoul('enterprise')"
+                            :class="$store.theme.soul === 'enterprise' ? 'bg-primary text-primary-foreground font-bold shadow-xs border border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-card'"
+                            class="py-1.5 rounded-lg transition text-center cursor-pointer">
+                        Enterprise
+                    </button>
+                </div>
+                <p class="text-[11px] text-muted-foreground">A composed preset: Enterprise tightens the radius, flattens shadows, mutes the chart ramp, and sets tabular figures on tables — one switch, every surface.</p>
             </div>
 
         </div>

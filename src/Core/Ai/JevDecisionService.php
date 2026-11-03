@@ -3,11 +3,12 @@
 namespace LaraSlice\Core\Ai;
 
 /**
- * Rule-based decision helpers for the blueprint studio: archetype classification,
- * migration risk scoring and component assignment.
+ * Blueprint Studio heuristics only — not TypeSafe Jev API and not runtime UI synthesis.
  *
- * These are keyword and weight heuristics ("Choice", "Noul", "Score" primitives), not model
- * calls; confidence values are relative weights, not calibrated probabilities.
+ * Rule-based helpers: archetype classification, migration risk scoring, component hints.
+ * Keyword/weight heuristics inspired by typed-decision vocabulary; confidence is relative, not calibrated.
+ *
+ * @see skills/laraslice/SKILL.md §17 · docs/MIND_BODY_HEART.md (internal JEV P1 roadmap)
  */
 class JevDecisionService
 {

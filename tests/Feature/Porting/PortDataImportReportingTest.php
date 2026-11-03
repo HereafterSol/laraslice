@@ -69,8 +69,9 @@ final class PortDataImportReportingTest extends TestCase
 
     protected function tearDown(): void
     {
+        DB::disconnect('laraslice_source');
         if (isset($this->sourceFile) && is_file($this->sourceFile)) {
-            unlink($this->sourceFile);
+            @unlink($this->sourceFile);
         }
         parent::tearDown();
     }
@@ -114,6 +115,7 @@ final class PortDataImportReportingTest extends TestCase
         $slicesDir = sys_get_temp_dir().'/ls-mig-order-'.uniqid();
         $migDir = $slicesDir.'/ProbeSlice/Migrations';
         mkdir($migDir, 0777, true);
+        $migDir = realpath($migDir) ?: $migDir;
         file_put_contents($migDir.'/2026_01_01_000000_create_ported_probe_table.php', <<<'PHP'
 <?php
 

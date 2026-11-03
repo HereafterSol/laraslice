@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace LaraSlice\Porting;
 
+use Illuminate\Support\Str;
+
 /**
  * Source anatomy extractor (P2 of the page-structure plan):
  * turns a rendered-page probe — landmarks and structure
@@ -39,21 +41,41 @@ class SourceAnatomyExtractor
 
         $facets = [];
         $facetRows = [];
+        $positiveY = [];
         foreach ($probe['selects'] ?? [] as $select) {
-            if ($tableTop !== null && ($select['y'] ?? PHP_INT_MAX) >= $tableTop) {
+            $y = (float) ($select['y'] ?? 0);
+            if ($y > 0 && ($tableTop === null || $y < $tableTop)) {
+                $opts = array_values(array_filter(array_map('strval', $select['options'] ?? [])));
+                if (! self::isPageSizeOptions($opts)) {
+                    $positiveY[] = $y;
+                }
+            }
+        }
+        $primaryToolbarY = $positiveY !== [] ? min($positiveY) : null;
+
+        foreach ($probe['selects'] ?? [] as $select) {
+            $y = (float) ($select['y'] ?? 0);
+            if ($tableTop !== null && $y >= $tableTop) {
                 continue; // below the grid: not a facet
             }
             $options = array_values(array_filter(array_map('strval', $select['options'] ?? [])));
             if (self::isPageSizeOptions($options)) {
                 continue; // the length menu is pagination furniture
             }
+            $scope = 'toolbar';
+            if ($y <= 0) {
+                $scope = 'action_bar';
+            } elseif ($primaryToolbarY !== null && $y > ($primaryToolbarY + 30)) {
+                $scope = 'drawer';
+            }
             $facets[] = [
                 'item' => (string) ($select['name'] ?? $select['id'] ?? 'select'),
                 'kind' => 'select',
+                'scope' => $scope,
                 'options_observed' => $options,
                 'decision' => 'observed',
             ];
-            $facetRows[] = (int) ($select['y'] ?? 0);
+            $facetRows[] = (int) $y;
         }
         foreach ($probe['tabGroups'] ?? [] as $group) {
             $facets[] = [
@@ -151,6 +173,7 @@ class SourceAnatomyExtractor
                 }
                 if ($title !== '' && $label === $title) {
                     $identityObserved = $label;
+
                     continue;
                 }
                 $fields[] = [
@@ -170,6 +193,7 @@ class SourceAnatomyExtractor
             // its lines are identity highlights.
             if ($title !== '' && $sectionTitle === $title) {
                 $identityObserved = $identityObserved ?? $title;
+
                 continue;
             }
             $sections[] = [
@@ -390,7 +414,7 @@ class SourceAnatomyExtractor
             }
         }
         if ($text !== '' && strlen($text) <= 40) {
-            $singular = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slug));
+            $singular = Str::studly(Str::singular($slug));
             if ($text !== 'Add '.$singular) {
                 $hints['create_label'] = $text;
             }

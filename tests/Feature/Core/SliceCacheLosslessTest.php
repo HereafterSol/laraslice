@@ -91,7 +91,8 @@ final class SliceCacheLosslessTest extends TestCase
         $this->assertCount(3, $cached);
         foreach ($cached as $path) {
             $this->assertIsString($path);
-            $this->assertFileExists($path);
+            $resolved = file_exists($path) ? $path : base_path($path);
+            $this->assertFileExists($resolved);
         }
         $manager->clearCache();
     }
@@ -107,7 +108,11 @@ final class SliceCacheLosslessTest extends TestCase
         $this->assertFileExists($dataPath);
         $data = include $dataPath;
         $this->assertIsArray($data);
-        $this->assertArrayHasKey($manifest->path.'/slice.yaml', $data);
+        $normalize = new ReflectionMethod($manager, 'normalizeManifestPathForCache');
+        $normalize->setAccessible(true);
+        $manifestFile = $manifest->path.'/slice.yaml';
+        $cacheKey = $normalize->invoke($manager, $manifestFile);
+        $this->assertArrayHasKey($cacheKey, $data);
 
         $load = new ReflectionMethod($manager, 'loadManifest');
         $load->setAccessible(true);
@@ -120,6 +125,25 @@ final class SliceCacheLosslessTest extends TestCase
         file_put_contents($manifest->path.'/slice.yaml', "name: 'Projects'\nversion: 1.0.0\ntitle: 'Projects Renamed'\n");
         $fresh = $load->invoke($manager, $manifest->path.'/slice.yaml');
         $this->assertSame('Projects Renamed', $fresh->title);
+        $manager->clearCache();
+    }
+
+    public function test_cached_paths_are_stored_relative_and_resolve_under_base_path(): void
+    {
+        $manifest = $this->manifest('ERP/Tasks', 'Tasks');
+        $manager = $this->managerWith($manifest);
+        $manager->clearCache();
+        $manager->cacheSlices();
+
+        $cached = include $manager->getCachedSlicesPath();
+        $this->assertIsArray($cached);
+        $this->assertCount(1, $cached);
+
+        $resolve = new ReflectionMethod($manager, 'resolveCachedManifestPath');
+        $resolve->setAccessible(true);
+        $resolved = $resolve->invoke($manager, $cached[0]);
+        $this->assertFileExists($resolved);
+
         $manager->clearCache();
     }
 

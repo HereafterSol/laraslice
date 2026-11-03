@@ -1,5 +1,7 @@
 # Mind · Body · Heart — the three files of a Slice system
 
+> **Porting:** trilogy files describe the system; **completion** is measured separately — [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md), [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md), status template [templates/REPLICA-STATUS.md](templates/REPLICA-STATUS.md). **Why we port ERPs:** [VISION.md](VISION.md).
+
 Every Slice system is described by three coordinated files. Only
 one of them runs.
 
@@ -35,6 +37,8 @@ roles:             # permission CLUBS + the override model
   overrides: per-user grants/revocations on top of the club
 journeys:          # the work, end to end, in plain language
   - {name: Apply for leave, actor: Employee, steps: [...], outcome: "..."}
+success_metrics:   # how the owner knows it is working (PRD's metrics, as declarations)
+  - {name: Weekly active teams, target: "500 by month 3"}
 navigation:        # the menu tree users actually see
   - {label: Work, children: [Projects, Tasks, Time Logs]}
 routes: {style: resource, prefixing: module}
@@ -51,6 +55,9 @@ operations:        # the Operate quadrant, declared
   backups: {schedule: daily, retention_days: 30, includes: [db, uploads]}
   sync: {files: none, db: none}
   audit: {enabled: true}
+localization:      # how stored values are presented, declared
+  timezone: Asia/Kolkata   # datetimes are stored in UTC, shown in this zone
+  currency: PKR            # the code money-typed fields render with
 ```
 
 Rules:
@@ -392,7 +399,7 @@ order, with the primary action where — lived as hard-coded
 generator template. When a source page composed differently, no
 file could say so, and the drift was found by eye. v4 makes
 composition declared data. Research basis (Carbon, Ant,
-Atlassian, NN/g, Salesforce, Fluent; commissioned R&D,
+Enterprise UX research (NN/g, Fluent, and similar); commissioned R&D,
 `PAGE-STRUCTURE-PORTING-FIDELITY-PLAN-2026-10-23.md`): the
 canonical anatomy is convergent across design systems, but
 PRIMARY-ACTION PLACEMENT is genuinely contested (header-right /

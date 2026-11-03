@@ -14,6 +14,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rendering Kit
+    |--------------------------------------------------------------------------
+    |
+    | The kit renders this application's surfaces: null is the
+    | house kit (the standard Soul); 'replica' renders a ported
+    | application in its source's own identity (100%-clone
+    | ports). The Mind's `design.kit` overrides this per system;
+    | `?kit=` overrides per request (developer escape hatch).
+    */
+    'kit' => env('LARASLICE_KIT'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Audit & Compliance Trail
     |--------------------------------------------------------------------------
     */

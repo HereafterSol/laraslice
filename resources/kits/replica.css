@@ -1,0 +1,192 @@
+/* REPLICA KIT — framework kit (promoted from the Tier-5 P3 spike, 1 Nov 2026): renders
+   kit #1's markup with the SOURCE application's identity,
+   from the captured design spec (porting/ui-spec/
+   source.design.yaml): primary rgb(29, 130, 245), dark-navy
+   240px sidebar, "Helvetica Neue", 39px/4px/400 buttons,
+   13px/500 muted table headers, shadow cards (r4), dot
+   status pills. Active only when <html data-kit="replica">
+   (layouts/app.blade.php, gated on ?kit=replica).
+   Boundary (honest): this is a token + component-style
+   layer over kit #1's markup — NOT markup synthesis (see
+   docs/KIT-CONTRACT.md and the replica contract). Shipped by
+   the package as resources/kits/replica.css; published to
+   public/css/replica-kit.css on install; selected through
+   LaraSlice\Support\Kit (Mind `design.kit`, config, ?kit=). */
+
+/* Font reality: "Helvetica Neue" is absent on Linux, and a
+   bare missing family falls back to the browser default
+   (a serif in this sandbox) — the computed value is right
+   but the rendering lies. This @font-face binds the family
+   to the real Helvetica where it exists (macOS/Windows)
+   and to a metric-compatible local sans where it does
+   not. The declared/computed family name is unchanged. */
+@font-face {
+    font-family: "Helvetica Neue";
+    src: local("Helvetica Neue"), local("Liberation Sans"), local("DejaVu Sans"), local("Arial");
+}
+
+[data-kit="replica"] {
+    /* Identity tokens (Tailwind @theme inline chain resolves
+       utilities through these at runtime). */
+    --primary: rgb(29, 130, 245);
+    --primary-foreground: rgb(255, 255, 255);
+    --ring: rgb(29, 130, 245);
+    --font-sans: "Helvetica Neue";
+    --radius: 6px; /* rounded-md resolves to radius-2px = 4px */
+
+    /* Shell: dark navy sidebar, 240px. */
+    --sidebar: rgb(23, 31, 41);
+    --sidebar-foreground: rgb(163, 179, 199);
+    --sidebar-accent: rgba(255, 255, 255, 0.08);
+    --sidebar-accent-foreground: rgb(255, 255, 255);
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-primary: rgb(29, 130, 245);
+    --sidebar-primary-foreground: rgb(255, 255, 255);
+    --sidebar-ring: rgb(29, 130, 245);
+    --sidebar-width: 240px;
+}
+
+/* Sidebar width: the sidebar provider carries
+   --sidebar-width INLINE (calc(var(--spacing) * 64) = 256px),
+   which shadows the inherited token — an !important
+   redeclaration at provider level is the contained override. */
+[data-kit="replica"] [data-slot="sidebar-provider"] {
+    --sidebar-width: 240px !important;
+}
+
+/* Primary actions: the source's 39px / r4 / 400 / 14px. */
+[data-kit="replica"] :is(a, button).bg-primary {
+    height: 39px;
+    border-radius: 4px;
+    font-weight: 400;
+    font-size: 14px;
+}
+
+/* Table headers: 13px / 500 / muted slate, as captured. */
+[data-kit="replica"] thead th {
+    color: rgb(153, 165, 181);
+    font-weight: 500;
+    font-size: 13px;
+}
+
+/* Cards & the table wrapper: r4 + the captured soft shadow. */
+[data-kit="replica"] [data-slot="card"],
+[data-kit="replica"] .shadow-2xs {
+    border-radius: 4px;
+    box-shadow: rgb(210, 217, 228) 0px 0px 4px 0px;
+}
+
+/* Status pills: the source renders a coloured dot + plain
+   text, not a filled badge. The kit's pill already contains
+   a dot span — dropping the fill/border (scoped to bordered
+   pills in table cells; avatar initials are also
+   rounded-full here and must stay untouched) lets that dot
+   read exactly like the source's. */
+[data-kit="replica"] td .rounded-full.border {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+/* Layout kit step 1 (26 Oct 2026): the source's content
+   canvas is a pale blue-grey; the topbar stays white. */
+[data-kit="replica"] {
+    --background: rgb(238, 242, 246);
+}
+[data-kit="replica"] [data-slot="sidebar-inset"] > header {
+    background-color: rgb(255, 255, 255);
+}
+
+/* Layout kit step 3 (26 Oct 2026): fused strips carry long
+   nowrap tab rows inside their own scroll area — the flex
+   chain must not let that min-content widen the page. */
+[data-kit="replica"] [data-slot="sidebar-inset"] {
+    min-width: 0;
+}
+[data-kit="replica"] [data-slot="sidebar-inset"] main {
+    min-width: 0;
+}
+
+/* Rail widget titles: the source's card headings — title-case,
+   full-size, near-black — not the house's small-caps eyebrow.
+   The generator marks rail titles with .ls-widget-title;
+   house kits leave the hook unstyled. */
+[data-kit="replica"] .ls-widget-title {
+    font-size: 16px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    color: rgb(33, 37, 41);
+}
+
+/* Replica shell: the tab ribbon becomes the source's boxed
+   tab strip — a white bordered box on the page background,
+   cells divided by hairlines, no underline, and the record
+   actions leave the bar (they live on the identity card's
+   ••• menu under this kit). */
+[data-kit="replica"] [data-ls-ribbon] {
+    margin: 14px 24px 0;
+    border: 1px solid rgb(226, 232, 240);
+    border-radius: 4px;
+    background-color: rgb(255, 255, 255);
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+}
+[data-kit="replica"] [data-ls-ribbon] button[data-ls-tab] {
+    border-bottom-width: 0;
+    border-right: 1px solid rgb(226, 232, 240);
+    padding: 12px 24px;
+    font-size: 13.5px;
+}
+/* The source's active tab carries a blue underline at the box edge. */
+[data-kit="replica"] [data-ls-ribbon] button[data-ls-tab].border-primary {
+    box-shadow: inset 0 -2px 0 0 var(--primary, #1d82f5);
+}
+[data-kit="replica"] [data-ls-ribbon-actions] {
+    display: none;
+}
+[data-kit="replica"] [data-ls-ribbon-more] {
+    align-self: stretch;
+}
+[data-kit="replica"] [data-ls-ribbon-more] > button {
+    height: 100%;
+    border-bottom-width: 0;
+    background-color: rgb(241, 245, 249);
+    border-left: 1px solid rgb(226, 232, 240);
+    padding-left: 18px;
+    padding-right: 18px;
+}
+
+/* Replica identity cards use the source's tighter card padding. */
+[data-kit="replica"] .ls-identity-card {
+    padding: 1rem;
+}
+
+/* Replica identity: the source's large square photo tile. */
+[data-kit="replica"] .ls-identity-avatar {
+    width: 108px;
+    height: 108px;
+    border-radius: 4px;
+    font-size: 30px;
+}
+
+/* Replica directories: code columns are plain text in the
+   source (EMP-12, WI), not chips; status renders as a
+   coloured dot + plain dark label, not a tinted pill. */
+[data-kit="replica"] .ls-code-badge {
+    background: transparent;
+    border-color: transparent;
+    padding: 0;
+    font-family: inherit;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+[data-kit="replica"] .ls-status-pill {
+    background: transparent;
+    border-color: transparent;
+    padding: 0;
+    color: var(--foreground, #212529);
+    font-weight: 400;
+    font-size: 13px;
+}

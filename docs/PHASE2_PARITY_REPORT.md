@@ -2,7 +2,7 @@
 
 **Date:** 19 Oct 2026  
 **Branch tip:** after `--source` + pilot re-infer  
-**Source:** ERP `*DataTable.php` fixtures (real Worksuite-class code)
+**Source:** ERP `*DataTable.php` fixtures (production monolith-class code)
 
 ## Command
 

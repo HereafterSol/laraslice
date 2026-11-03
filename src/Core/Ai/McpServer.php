@@ -39,14 +39,30 @@ class McpServer
             ], 400);
         }
 
+        // 2026-era clients carry the protocol version in the
+        // MCP-Protocol-Version header instead of an initialize
+        // handshake; fold it into _meta so negotiation sees it.
+        $headerVersion = $request->header('MCP-Protocol-Version');
+        if (is_string($headerVersion) && $headerVersion !== '') {
+            $payload['params'] = is_array($payload['params'] ?? null) ? $payload['params'] : [];
+            $meta = is_array($payload['params']['_meta'] ?? null) ? $payload['params']['_meta'] : [];
+            $payload['params']['_meta'] = array_merge($meta, ['protocolVersion' => $headerVersion]);
+        }
+
         $response = $this->handleRpc($payload);
 
         // Notifications get no JSON-RPC response
         return $response === null ? response()->json(null, 202) : response()->json($response);
     }
 
-    /** Protocol versions this server implements, newest first. */
-    public const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+    /**
+     * Protocol versions this server implements, newest first.
+     * Dual-era (R&D P1): the 2026-07-28 stateless shape is
+     * accepted alongside the 2025-06-18 handshake era — every
+     * request is self-contained either way, so one handler
+     * serves both.
+     */
+    public const PROTOCOL_VERSIONS = ['2026-07-28', '2025-06-18', '2025-03-26', '2024-11-05'];
 
     /**
      * Process a JSON-RPC 2.0 message. Returns null for notifications, which get no response.
@@ -69,7 +85,8 @@ class McpServer
                 'ping' => (object) [],
                 'tools/list' => ['tools' => $this->toolDefinitions()],
                 'tools/call' => $this->toolCallResult($params),
-                'resources/list' => ['resources' => []],
+                'resources/list' => ['resources' => $this->resourceDefinitions()],
+                'resources/read' => $this->resourceReadResult($params),
                 'resources/templates/list' => ['resourceTemplates' => []],
                 'prompts/list' => ['prompts' => []],
                 default => null,
@@ -78,6 +95,10 @@ class McpServer
             report($e);
 
             return $this->error($id, -32603, 'Internal error while handling '.$method);
+        }
+
+        if (is_array($result) && isset($result['__error'])) {
+            return $this->error($id, $result['__error']['code'], $result['__error']['message']);
         }
 
         if ($result === null) {
@@ -89,7 +110,8 @@ class McpServer
 
     protected function initializeResult(array $params): array
     {
-        $requested = $params['protocolVersion'] ?? null;
+        $requested = $params['protocolVersion']
+            ?? (is_array($params['_meta'] ?? null) ? ($params['_meta']['protocolVersion'] ?? null) : null);
 
         return [
             'protocolVersion' => in_array($requested, self::PROTOCOL_VERSIONS, true) ? $requested : self::PROTOCOL_VERSIONS[0],
@@ -99,8 +121,126 @@ class McpServer
             ],
             'capabilities' => [
                 'tools' => ['listChanged' => false],
+                'resources' => ['listChanged' => false, 'subscribe' => false],
             ],
         ];
+    }
+
+    /**
+     * MCP resources (R&D P1): the always-useful indexes an
+     * agent needs before touching tools — skills, gates,
+     * docs, slices and commands — served read-only.
+     *
+     * @return list<array{uri: string, name: string, description: string, mimeType: string}>
+     */
+    protected function resourceDefinitions(): array
+    {
+        return [
+            ['uri' => 'laraslice://skills/index', 'name' => 'Skill index', 'description' => 'The LaraSlice skill family: names and one-line purposes.', 'mimeType' => 'text/markdown'],
+            ['uri' => 'laraslice://gates/definitions', 'name' => 'Gate definitions', 'description' => 'The five verification gates (S/D/F/T/V) plus the drift and conformance gates, with their JSON output contract.', 'mimeType' => 'application/json'],
+            ['uri' => 'laraslice://docs/index', 'name' => 'Docs index', 'description' => 'Package documentation files and their titles.', 'mimeType' => 'text/markdown'],
+            ['uri' => 'laraslice://slices/index', 'name' => 'Slice index', 'description' => 'The slices discovered in this application.', 'mimeType' => 'application/json'],
+            ['uri' => 'laraslice://commands/index', 'name' => 'Command index', 'description' => 'Every slice:/laraslice:/workflow: command with its synopsis (the slice:index data).', 'mimeType' => 'application/json'],
+        ];
+    }
+
+    protected function resourceReadResult(array $params): array
+    {
+        $uri = is_string($params['uri'] ?? null) ? $params['uri'] : '';
+        $known = array_column($this->resourceDefinitions(), 'mimeType', 'uri');
+        if (! isset($known[$uri])) {
+            return ['__error' => ['code' => -32602, 'message' => "Unknown resource: {$uri}"]];
+        }
+        $text = match ($uri) {
+            'laraslice://skills/index' => $this->skillsIndexText(),
+            'laraslice://gates/definitions' => $this->gatesDefinitionsJson(),
+            'laraslice://docs/index' => $this->docsIndexText(),
+            'laraslice://slices/index' => $this->slicesIndexJson(),
+            'laraslice://commands/index' => (string) json_encode(\LaraSlice\Support\CommandIndex::collect(), JSON_PRETTY_PRINT),
+            default => '',
+        };
+
+        return ['contents' => [['uri' => $uri, 'mimeType' => $known[$uri], 'text' => $text]]];
+    }
+
+    protected function skillsIndexText(): string
+    {
+        $root = dirname(__DIR__, 3).'/skills';
+        $lines = ['# LaraSlice skills', ''];
+        if (is_dir($root)) {
+            foreach (glob($root.'/*/SKILL.md') ?: [] as $file) {
+                $head = (string) file_get_contents($file);
+                $name = basename(dirname($file));
+                $description = '';
+                if (preg_match('/^description:\s*(.+)$/m', $head, $m)) {
+                    $description = trim($m[1]);
+                } elseif (preg_match('/^#\s+(.+)$/m', $head, $m)) {
+                    $description = trim($m[1]);
+                }
+                $lines[] = "- **{$name}** — {$description}";
+            }
+        }
+        if (count($lines) === 2) {
+            $lines[] = '(no skills directory ships with this install)';
+        }
+
+        return implode("\n", $lines)."\n";
+    }
+
+    protected function gatesDefinitionsJson(): string
+    {
+        return (string) json_encode([
+            'gates' => [
+                ['id' => 'S', 'name' => 'Structure', 'question' => 'Does the page carry the same sections and fields as the source?', 'example' => 'The Employees hub has the same four cards and the same table columns.'],
+                ['id' => 'D', 'name' => 'Data', 'question' => 'Do the numbers and values match the source data?', 'example' => 'Total employees 12, and the PKR totals agree to the paisa.'],
+                ['id' => 'F', 'name' => 'Furniture', 'question' => 'Do the filters, menus and row actions work like the source?', 'example' => 'The Paid filter narrows 19 invoices to 14, like the source.'],
+                ['id' => 'T', 'name' => 'Tasks', 'question' => 'Can the user finish the real job end to end?', 'example' => 'Create an invoice, send it, and see the payment recorded.'],
+                ['id' => 'V', 'name' => 'Visual', 'question' => 'Does it look like the source (for a replica) or like the design system (for a fresh build)?', 'example' => 'Same layout, spacing and colours under the declared kit.'],
+            ],
+            'command_gates' => [
+                ['command' => 'slice:drift', 'json' => 'slice:drift --format=json', 'shape' => '{errors, warnings, findings: [{kind, severity, message, fix}]}'],
+                ['command' => 'slice:conformance', 'json' => 'slice:conformance --format=json', 'shape' => '{pages, conforming, percent, per_page, unrecorded: [{entry, fix}], open: [{entry, fix}], approved, stale, lint_findings}'],
+            ],
+            'rule' => 'A gate is only as high as its evidence: status equals the lowest UNVERIFIED gate. Findings are fixed at the declaration layer (Mind/Body/Heart), never in generated output.',
+        ], JSON_PRETTY_PRINT);
+    }
+
+    protected function docsIndexText(): string
+    {
+        $root = dirname(__DIR__, 3).'/docs';
+        $lines = ['# LaraSlice docs', ''];
+        if (is_dir($root)) {
+            foreach (glob($root.'/*.md') ?: [] as $file) {
+                $title = basename($file);
+                if (preg_match('/^#\s+(.+)$/m', (string) file_get_contents($file), $m)) {
+                    $title .= ' — '.trim($m[1]);
+                }
+                $lines[] = '- '.$title;
+            }
+        }
+        if (count($lines) === 2) {
+            $lines[] = '(no docs directory ships with this install)';
+        }
+
+        return implode("\n", $lines)."\n";
+    }
+
+    protected function slicesIndexJson(): string
+    {
+        try {
+            $rows = [];
+            foreach ($this->sliceManager->getAllSlices() as $slice) {
+                $rows[] = [
+                    'name' => $slice->name ?? null,
+                    'namespace' => $slice->namespace ?? null,
+                    'path' => isset($slice->path) ? str_replace(base_path().'/', '', (string) $slice->path) : null,
+                ];
+            }
+        } catch (\Throwable) {
+            $rows = [];
+        }
+
+        return (string) json_encode($rows, JSON_PRETTY_PRINT);
     }
 
     /**

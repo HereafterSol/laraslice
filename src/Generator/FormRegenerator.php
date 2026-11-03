@@ -173,10 +173,12 @@ class FormRegenerator
             $staged = $stagedFiles[$view] ?? null;
             if ($staged === null) {
                 $report[] = ['view' => $view, 'status' => 'not-generated', 'current_lines' => file_exists($current) ? count(file($current) ?: []) : null, 'staged_lines' => null];
+
                 continue;
             }
             if (! file_exists($current)) {
                 $report[] = ['view' => $view, 'status' => 'new', 'current_lines' => null, 'staged_lines' => count(file($staged) ?: [])];
+
                 continue;
             }
             $currentContent = (string) file_get_contents($current);

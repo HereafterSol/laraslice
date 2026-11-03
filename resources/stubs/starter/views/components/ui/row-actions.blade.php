@@ -31,14 +31,35 @@
         @endif
         @if($actions)
             <template x-for="action in {{ $actions }}" :key="action.name">
-                <button type="button" @click="open = false; if (!action.confirm || confirm(action.confirm)) { const f = document.createElement('form'); f.method = 'POST'; f.action = action.url; const t = document.createElement('input'); t.type = 'hidden'; t.name = '_token'; t.value = document.querySelector('meta[name=csrf-token]')?.content || ''; f.appendChild(t); document.body.appendChild(f); f.submit(); }" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-muted/70 transition-colors">
-                    <span class="size-4 shrink-0 rounded-full border border-border/70 bg-muted/60" aria-hidden="true"></span>
-                    <span x-text="action.label"></span>
-                </button>
+                <span>
+                    <template x-if="action.mode === 'link'">
+                        <a :href="action.url" :target="action.target || '_self'" @click="open = false" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-muted/70 transition-colors">
+                            <span class="size-4 shrink-0 rounded-full border border-border/70 bg-muted/60" aria-hidden="true"></span>
+                            <span x-text="action.label"></span>
+                        </a>
+                    </template>
+                    <template x-if="action.mode === 'copy'">
+                        <button type="button" @click="open = false; if (navigator.clipboard) { navigator.clipboard.writeText(action.url); }" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-muted/70 transition-colors">
+                            <span class="size-4 shrink-0 rounded-full border border-border/70 bg-muted/60" aria-hidden="true"></span>
+                            <span x-text="action.label"></span>
+                        </button>
+                    </template>
+                    <template x-if="!action.mode || action.mode === 'post'">
+                        <button type="button" @click="open = false; const submit = () => { const f = document.createElement('form'); f.method = 'POST'; f.action = action.url; const t = document.createElement('input'); t.type = 'hidden'; t.name = '_token'; t.value = document.querySelector('meta[name=csrf-token]')?.content || ''; f.appendChild(t); document.body.appendChild(f); f.submit(); }; if (!action.confirm) { submit(); } else if (window.lsConfirm) { window.lsConfirm(action.confirm, 'Continue').then(ok => { if (ok) submit(); }); } else if (confirm(action.confirm)) { submit(); }" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-muted/70 transition-colors">
+                            <span class="size-4 shrink-0 rounded-full border border-border/70 bg-muted/60" aria-hidden="true"></span>
+                            <span x-text="action.label"></span>
+                        </button>
+                    </template>
+                </span>
             </template>
         @endif
         @if($deleteUrl)
-            <button type="button" @click="open = false; if(confirm('{{ $deleteConfirm }}')) { $dispatch('delete-record', { url: {{ $deleteUrl }} }) }" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose-600 hover:bg-rose-500/10 transition-colors">
+            {{-- Delete submits a real DELETE form (built in JS, the
+                 same pattern as the declared record actions above).
+                 It previously dispatched a 'delete-record' event
+                 that nothing listened for — the confirm appeared,
+                 the user confirmed, and nothing was deleted. --}}
+            <button type="button" @click="open = false; const submit = () => { const f = document.createElement('form'); f.method = 'POST'; f.action = {{ $deleteUrl }}; const t = document.createElement('input'); t.type = 'hidden'; t.name = '_token'; t.value = document.querySelector('meta[name=csrf-token]')?.content || ''; f.appendChild(t); const m = document.createElement('input'); m.type = 'hidden'; m.name = '_method'; m.value = 'DELETE'; f.appendChild(m); document.body.appendChild(f); f.submit(); }; if (window.lsConfirm) { window.lsConfirm('{{ $deleteConfirm }}', 'Yes, Delete It!').then(ok => { if (ok) submit(); }); } else if (confirm('{{ $deleteConfirm }}')) { submit(); }" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose-600 hover:bg-rose-500/10 transition-colors">
                 <x-lucide-trash-2 class="size-4" /> Delete
             </button>
         @endif

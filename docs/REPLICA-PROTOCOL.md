@@ -3,9 +3,11 @@
 How a port earns the word "replica". Porting a running system into
 LaraSlice is gated, not vibes: five gates, in order, and a port's
 status is its **lowest unverified gate**. Every port keeps one
-`REPLICA-STATUS.md` at its root — per-gate results, the task matrix,
+`porting/REPLICA-STATUS.md` at the application root — per-gate results, the task matrix,
 deviations, and a NOT-covered list — and replica status is quoted
-only from that file, with its date.
+only from that file, with its date. Copy the template from
+[docs/templates/REPLICA-STATUS.md](templates/REPLICA-STATUS.md). See also
+[ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) (framework design vs port completion).
 
 ## Phase 0 — the composition map
 

@@ -16,7 +16,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <button type="button" @click="loadPortedToStudio()" :disabled="!portPlanData && !portInspectionData" :class="(!portPlanData && !portInspectionData) ? 'opacity-40 cursor-not-allowed' : ''" class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer shadow-xs disabled:hover:bg-emerald-500/10" title="Load entire ported suite directly into Studio canvas (requires an analyzed plan)">
+                <button type="button" @click="loadPortedToStudio()" :disabled="!portPlanData && !portInspectionData" :class="(!portPlanData && !portInspectionData) ? 'opacity-40 cursor-not-allowed' : ''" class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition cursor-pointer shadow-xs" title="Load entire ported suite directly into Studio canvas (requires an analyzed plan)">
                     <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                     <span>📥 Load into Studio</span>
                 </button>
@@ -59,7 +59,7 @@
                 <label class="block text-xs font-semibold text-foreground mb-1">Target Domain Suite *</label>
                 <div class="flex gap-2">
                     <input type="text" x-model="portDomain" placeholder="e.g. ERP" class="w-full rounded-lg border border-input bg-card px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-xs">
-                    <button type="button" @click="fetchPortPlan()" :disabled="portInspecting" class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-xs cursor-pointer disabled:opacity-50">
+                    <button type="button" @click="fetchPortPlan()" :disabled="portInspecting" class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition shadow-xs cursor-pointer disabled:opacity-50">
                         <span x-show="!portInspecting">🔍 Analyze</span>
                         <span x-show="portInspecting">Analyzing...</span>
                     </button>
@@ -139,11 +139,11 @@
             <div x-show="portPlanData?.sidebar_preview?.source_navigation?.groups?.length" class="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
                 <p class="font-bold text-sm text-foreground mb-1">🔍 Source Navigation Detected</p>
                 <p class="text-xs text-muted-foreground mb-2">
-                    Found in: <code class="font-mono text-indigo-400" x-text="portPlanData.sidebar_preview.source_navigation.source"></code>.
+                    Found in: <code class="font-mono text-indigo-400" x-text="portPlanData?.sidebar_preview?.source_navigation?.source"></code>.
                     Compare how the source groups navigation vs our proposed VSA grouping below.
                 </p>
                 <div class="flex flex-wrap gap-1.5">
-                    <template x-for="(nav, nIdx) in (portPlanData.sidebar_preview.source_navigation.groups || [])" :key="nIdx">
+                    <template x-for="(nav, nIdx) in (portPlanData?.sidebar_preview?.source_navigation?.groups || [])" :key="nIdx">
                         <span class="rounded-full bg-indigo-500/10 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 border border-indigo-500/20" x-text="nav.label + ' (' + nav.order + ')'"></span>
                     </template>
                 </div>

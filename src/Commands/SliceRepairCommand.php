@@ -3,7 +3,10 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Porting\SlicePortService;
 
 class SliceRepairCommand extends Command
 {
@@ -61,7 +64,6 @@ class SliceRepairCommand extends Command
             ? 'All slices are up to date.'
             : ($dryRun ? "{$changed} file(s) would be updated; run without --dry-run to apply." : "{$changed} file(s) updated."));
 
-        
         $this->reportJsonOnlySlices();
 
         return self::SUCCESS;
@@ -102,9 +104,9 @@ class SliceRepairCommand extends Command
     /**
      * Re-apply demo-aligned module groups (Work, Finance, HR, CRM, …) onto existing slice.yaml.
      */
-    protected function remapNavigationGroups(\LaraSlice\Core\Discovery\SliceManager $manager, array $slices): int
+    protected function remapNavigationGroups(SliceManager $manager, array $slices): int
     {
-        $porter = app(\LaraSlice\Porting\SlicePortService::class);
+        $porter = app(SlicePortService::class);
         $n = 0;
         foreach ($slices as $slice) {
             $json = $slice->path.'/slice.yaml';
@@ -112,11 +114,11 @@ class SliceRepairCommand extends Command
                 continue;
             }
             try {
-                $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($json);
+                $manifest = ManifestRepository::read($json);
             } catch (\Throwable $e) {
                 continue;
             }
-            $primary = $manifest['models'][0]['table'] ?? \Illuminate\Support\Str::snake($slice->name);
+            $primary = $manifest['models'][0]['table'] ?? Str::snake($slice->name);
             $module = $porter->detectModuleForSlice($slice->name, $primary);
             $old = $manifest['navigation']['group'] ?? null;
             $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], [
@@ -127,7 +129,7 @@ class SliceRepairCommand extends Command
             if (in_array($slice->name, $noise, true) || str_ends_with($slice->name, 'Items')) {
                 $manifest['navigation']['visible'] = false;
             }
-            \LaraSlice\Core\Discovery\ManifestRepository::writeBoth($json, $manifest);
+            ManifestRepository::writeBoth($json, $manifest);
             $this->line("<fg=green>remap-nav</> {$slice->name}: ".($old ?: '—')." → {$module}");
             $n++;
         }
@@ -142,9 +144,9 @@ class SliceRepairCommand extends Command
      * current formatter inference. Skips slices with Studio version_history
      * to avoid clobbering user customizations.
      */
-    protected function reInferDirectoryUi(\LaraSlice\Core\Discovery\SliceManager $manager, array $slices, bool $dryRun, ?string $sourcePath = null): int
+    protected function reInferDirectoryUi(SliceManager $manager, array $slices, bool $dryRun, ?string $sourcePath = null): int
     {
-        $porter = app(\LaraSlice\Porting\SlicePortService::class);
+        $porter = app(SlicePortService::class);
         $n = 0;
         $skipped = 0;
         if ($sourcePath) {
@@ -156,7 +158,7 @@ class SliceRepairCommand extends Command
                 continue;
             }
             try {
-                $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($json);
+                $manifest = ManifestRepository::read($json);
             } catch (\Throwable $e) {
                 continue;
             }
@@ -165,6 +167,7 @@ class SliceRepairCommand extends Command
             if (! empty($manifest['version_history'])) {
                 $skipped++;
                 $this->line("<fg=yellow>skip</> {$slice->name}: has Studio version_history (user customized)");
+
                 continue;
             }
 
@@ -258,13 +261,13 @@ class SliceRepairCommand extends Command
             }
 
             if (! $dryRun) {
-                \LaraSlice\Core\Discovery\ManifestRepository::writeBoth($json, $manifest);
+                ManifestRepository::writeBoth($json, $manifest);
             }
             $this->line(($dryRun ? '<fg=yellow>would re-infer</> ' : '<fg=green>re-inferred</> ').$slice->name);
             $n++;
         }
         $manager->clearCache();
-        $this->info("Re-inferred directory UI on {$n} slice(s)".($skipped ? ", skipped {$skipped} with Studio customizations" : "").".");
+        $this->info("Re-inferred directory UI on {$n} slice(s)".($skipped ? ", skipped {$skipped} with Studio customizations" : '').'.');
 
         return $n;
     }
@@ -339,7 +342,7 @@ class SliceRepairCommand extends Command
             $base = $byKey[$resolved] ?? [
                 'key' => $resolved,
                 'handle' => $resolved,
-                'label' => $col['label'] ?? \Illuminate\Support\Str::headline($resolved),
+                'label' => $col['label'] ?? Str::headline($resolved),
                 'sortable' => true,
             ];
             if (! empty($col['formatter'])) {
@@ -423,6 +426,7 @@ class SliceRepairCommand extends Command
         $merged = $this->arrayMergeMissing($app, $pkg);
         if ($merged === $app) {
             $this->line('<fg=gray>config</> published laraslice.php already has package keys');
+
             return;
         }
 
@@ -443,6 +447,7 @@ class SliceRepairCommand extends Command
         foreach ($defaults as $key => $value) {
             if (! array_key_exists($key, $existing)) {
                 $existing[$key] = $value;
+
                 continue;
             }
             if (is_array($value) && is_array($existing[$key])) {
@@ -484,5 +489,4 @@ class SliceRepairCommand extends Command
         }
         $this->comment('Convert with: php artisan slice:migrate-json-to-yaml');
     }
-
 }

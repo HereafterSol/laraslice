@@ -1,0 +1,43 @@
+# Worked example — the Books slice from SKILL §24 (laraslice-start).
+# The only file a first slice needs: fields, one relation, permissions, directory.
+schema_version: 2
+name: Books
+handle: book
+description: 'The library catalogue: books and their authors.'
+app: Library
+module: Catalogue
+domain: Catalogue
+navigation:
+  group: Catalogue
+  label: Books
+  url: /library/catalogue/books
+  icon: package
+  order: 10
+models:
+  -
+    handle: book
+    table: books
+    root: true
+    fields:
+      - {handle: title, label: Title, type: string, required: true}
+      - {handle: isbn, label: ISBN, type: string, required: false}
+      - {handle: author_id, label: Author, type: integer, required: true}
+      - {handle: published_year, label: Published, type: integer, required: false}
+      - {handle: status, label: Status, type: select, required: true, options: {available: Available, on_loan: 'On loan', lost: Lost}}
+    relations:
+      -
+        name: author
+        type: belongsTo
+        model: author
+        foreign_key: author_id
+permissions:
+  - book.view
+  - book.create
+  - book.edit
+  - book.delete
+ui:
+  directory:
+    columns:
+      - {handle: title, label: Title}
+      - {handle: author_id, label: Author}
+      - {handle: status, label: Status}

@@ -348,7 +348,7 @@
                         </p>
                     </div>
                     <ul class="text-xs text-muted-foreground space-y-1.5 font-medium">
-                        <li class="flex items-center gap-2 text-foreground">✓ Jev System One typed decision engine</li>
+                        <li class="flex items-center gap-2 text-foreground">✓ Declarative <code>ui:</code> + kit contract (BlatUI today)</li>
                         <li class="flex items-center gap-2 text-foreground">✓ LaraSlice Skill prompt integration</li>
                         <li class="flex items-center gap-2 text-foreground">✓ Autonomous test and schema generation</li>
                     </ul>
@@ -695,7 +695,7 @@
                     <span class="font-mono text-base" x-text="faqOpen === 3 ? '−' : '+'">+</span>
                 </button>
                 <div x-show="faqOpen === 3" class="px-6 pb-5 text-xs sm:text-sm text-muted-foreground leading-relaxed border-t border-border pt-4" style="display: none;">
-                    Yes! LaraSlice ships with specialized skills (<code>skills/laraslice/SKILL.md</code>) and Jev System One integration. You can give an AI agent a natural language user story or specification, and it will autonomously run <code>slice:make</code>, configure parent-child multi-table schemas, and produce valid BlatUI Blade templates and Flutter code.
+                    Yes! LaraSlice ships with specialized skills (<code>skills/laraslice/SKILL.md</code>) and declarative Body <code>ui:</code> manifests. Agents can run <code>slice:make</code>, configure multi-table schemas, and generate BlatUI Blade views. Multi–design-system kits and internal Body→kit synthesis are documented in <code>docs/KIT-CONTRACT.md</code> and <code>docs/MIND_BODY_HEART.md</code> (roadmap).
                 </div>
             </div>
 

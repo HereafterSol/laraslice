@@ -49,7 +49,7 @@ If you want to contribute enhancements or fixes directly back to LaraSlice's cor
 ### 2. Making Changes
 - **Core Slices**: Edit files inside `src/Slices/{SliceName}/` (e.g. `src/Slices/Users`, `src/Slices/Roles`, `src/Slices/Settings`).
 - **Core Engine**: Edit files in `src/Core/`, `src/Commands/`, `src/Generator/`, or `src/Schema/`.
-- Ensure all views use pure **BlatUI standard** (Blade + Tailwind CSS v4 + Alpine.js + Lucide icons). Zero Metronic or Keenicons dependencies.
+- Ensure all views use pure **BlatUI standard** (Blade + Tailwind CSS v4 + Alpine.js + Lucide icons). Zero legacy admin-kit or Keenicons dependencies.
 
 ### 3. Running the Test Suite
 Unit, feature and architecture-boundary tests, formatting (Pint) and static analysis (Larastan) must pass; CI runs the same checks on PHP 8.2-8.4 and Laravel 11-13:

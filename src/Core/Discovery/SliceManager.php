@@ -124,16 +124,18 @@ class SliceManager
      */
     protected function loadManifest(string $manifestPath): SliceManifest
     {
+        $manifestPath = $this->resolveCachedManifestPath($manifestPath);
         $cache = $this->manifestDataCache();
-        if (isset($cache[$manifestPath]) && is_array($cache[$manifestPath]['data'] ?? null)) {
+        $cacheKey = $this->normalizeManifestPathForCache($manifestPath);
+        if (isset($cache[$cacheKey]) && is_array($cache[$cacheKey]['data'] ?? null)) {
             // Same-process writers (tests, Octane, queue workers) leave
             // PHP's stat cache holding the pre-edit values; without a
             // clear, the freshness guard blesses the stale entry.
             clearstatcache(true, $manifestPath);
             $mtime = @filemtime($manifestPath);
             $size = @filesize($manifestPath);
-            if ($mtime === ($cache[$manifestPath]['mtime'] ?? null) && $size === ($cache[$manifestPath]['size'] ?? null)) {
-                return SliceManifest::fromParsed($manifestPath, $cache[$manifestPath]['data']);
+            if ($mtime === ($cache[$cacheKey]['mtime'] ?? null) && $size === ($cache[$cacheKey]['size'] ?? null)) {
+                return SliceManifest::fromParsed($manifestPath, $cache[$cacheKey]['data']);
             }
         }
 
@@ -163,8 +165,12 @@ class SliceManager
                 // legacy map's keys could not represent as
                 // separate entries on the write side.
                 foreach ($cached as $manifestPath) {
-                    if (is_string($manifestPath) && file_exists($manifestPath)) {
-                        $manifest = $this->loadManifest($manifestPath);
+                    if (! is_string($manifestPath)) {
+                        continue;
+                    }
+                    $resolved = $this->resolveCachedManifestPath($manifestPath);
+                    if (file_exists($resolved)) {
+                        $manifest = $this->loadManifest($resolved);
                         $this->registerManifest($manifest);
                         if ($manifest->active) {
                             $this->bootSlice($manifest);
@@ -259,6 +265,66 @@ class SliceManager
     }
 
     /**
+     * Store manifest paths relative to base_path() so a copied app tree
+     * does not keep pointing at another install (erp-replica vs erp-port-v201).
+     */
+    protected function normalizeManifestPathForCache(string $absolutePath): string
+    {
+        $real = realpath($absolutePath);
+        if ($real === false) {
+            return $absolutePath;
+        }
+
+        $base = realpath(base_path());
+        if ($base !== false && str_starts_with($real, $base)) {
+            return ltrim(str_replace('\\', '/', substr($real, strlen($base))), '/');
+        }
+
+        return $real;
+    }
+
+    /**
+     * Resolve a cached manifest path (relative or legacy absolute from another clone).
+     */
+    protected function resolveCachedManifestPath(string $storedPath): string
+    {
+        if ($storedPath === '') {
+            return $storedPath;
+        }
+
+        $normalized = str_replace('\\', '/', $storedPath);
+        $isAbsolute = preg_match('#^(?:[A-Za-z]:/|/)#', $normalized) === 1;
+        if (! $isAbsolute) {
+            $candidate = base_path(str_replace('/', DIRECTORY_SEPARATOR, $storedPath));
+            if (file_exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        if (file_exists($storedPath)) {
+            return $storedPath;
+        }
+
+        $markers = [
+            'app/Slices',
+            'vendor/hereafter/laraslice/src/Slices',
+        ];
+        foreach ($markers as $marker) {
+            $pos = stripos($normalized, $marker);
+            if ($pos === false) {
+                continue;
+            }
+            $suffix = substr($normalized, $pos);
+            $rebasing = base_path(str_replace('/', DIRECTORY_SEPARATOR, $suffix));
+            if (file_exists($rebasing)) {
+                return $rebasing;
+            }
+        }
+
+        return $storedPath;
+    }
+
+    /**
      * Check if slice discovery is cached.
      */
     public function isCached(): bool
@@ -289,7 +355,7 @@ class SliceManager
                     'writing the cache would silently drop it from the registry.'
                 );
             }
-            $paths[] = $manifestFile;
+            $paths[] = $this->normalizeManifestPathForCache($manifestFile);
         }
 
         $cachePath = $this->getCachedSlicesPath();
@@ -311,7 +377,8 @@ class SliceManager
         foreach ($this->discoveredSlices as $manifest) {
             $manifestFile = $this->findManifest($manifest->path);
             if ($manifestFile && file_exists($manifestFile)) {
-                $dataCache[$manifestFile] = [
+                $cacheKey = $this->normalizeManifestPathForCache($manifestFile);
+                $dataCache[$cacheKey] = [
                     'mtime' => filemtime($manifestFile),
                     'size' => filesize($manifestFile),
                     'data' => $manifest->raw,
@@ -404,10 +471,12 @@ class SliceManager
             }
             if ($foreachIdx === null && str_contains($line, '@foreach($quickFilters as $qf)')) {
                 $foreachIdx = $i;
+
                 continue;
             }
             if ($foreachIdx !== null && $endforeachIdx === null && str_contains($line, '@endforeach')) {
                 $endforeachIdx = $i;
+
                 continue;
             }
             if ($endforeachIdx !== null && trim($line) === '@endif') {
@@ -435,6 +504,7 @@ class SliceManager
         foreach ($lines as $i => $line) {
             if ($dtIdx === null && str_contains($line, '<x-ui.data-table')) {
                 $dtIdx = $i;
+
                 continue;
             }
             if ($dtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -533,9 +603,9 @@ class SliceManager
 
         // Broken intermediate (first (ah) run): the @if ended up
         // BOTH before and inside the div. Drop the inner one.
-        $brokenPattern = "        ".$ifLine."\n    ".$divOpen."\n        ".$ifLine;
+        $brokenPattern = '        '.$ifLine."\n    ".$divOpen."\n        ".$ifLine;
         if (str_contains($content, $brokenPattern)) {
-            return str_replace($brokenPattern, "    ".$ifLine."\n    ".$divOpen, $content);
+            return str_replace($brokenPattern, '    '.$ifLine."\n    ".$divOpen, $content);
         }
 
         // Original shape: div (with empty:hidden) wrapping the
@@ -561,7 +631,7 @@ class SliceManager
         if (! preg_match('/^\s*<div class="ml-auto flex flex-wrap items-center gap-2">/', (string) $inner)) {
             return null;
         }
-        $bar = "    ".$ifLine."\n    ".$divOpen.$inner."    </div>\n    @endif";
+        $bar = '    '.$ifLine."\n    ".$divOpen.$inner."    </div>\n    @endif";
 
         return substr($content, 0, $pos).$bar.substr($content, $closePos + strlen($closePair));
     }
@@ -962,6 +1032,7 @@ BLADE;
 
     /**
      * Repair rule (z): widen the slots guard. Finds the narrow
+     *
      * @if(!empty($quickFilters)) line that opens the block
      * containing <x-slot:toolbar-lead> or <x-slot:quick-filters>
      * (within the next two non-blank lines) and widens it to
@@ -1025,6 +1096,7 @@ BLADE;
         foreach ($lines as $i => $line) {
             if ($gtIdx === null && str_contains($line, '<x-ui.data-table')) {
                 $gtIdx = $i;
+
                 continue;
             }
             if ($gtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -1097,6 +1169,7 @@ BLADE;
             foreach ($lines as $i => $line) {
                 if ($gtIdx === null && str_contains($line, '<x-ui.data-table')) {
                     $gtIdx = $i;
+
                     continue;
                 }
                 if ($gtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -1212,6 +1285,7 @@ BLADE;
             $l = $blockLines[$i];
             if (trim($l) === '') {
                 $i++;
+
                 continue;
             }
             if (str_contains($l, "\$can['seed']")) {
@@ -1285,6 +1359,7 @@ BLADE;
         foreach ($lines as $i => $line) {
             if ($dtIdx === null && str_contains($line, '<x-ui.data-table')) {
                 $dtIdx = $i;
+
                 continue;
             }
             if ($dtIdx !== null && str_ends_with(rtrim($line), '>')) {
@@ -1331,7 +1406,6 @@ BLADE;
         return true;
     }
 
-
     /**
      * Register the G2 declared routes (document, matrix) for a slice.
      * Silent no-op when the slice declares neither, its routes file
@@ -1358,11 +1432,12 @@ BLADE;
                 break;
             }
         }
+        $export = ($slice->raw['ui']['directory']['export'] ?? true) !== false;
         $import = is_array($slice->raw['ui']['directory']['import'] ?? null);
         $seed = is_array($slice->raw['ui']['directory']['reference_sets'] ?? null);
         $invite = is_array($slice->raw['ui']['directory']['invite'] ?? null);
         $conversation = is_array($slice->raw['ui']['conversation'] ?? null);
-        if (! $document && ! $matrix && ! $report && $namedReports === [] && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite && ! $punch && ! $conversation) {
+        if (! $document && ! $matrix && ! $report && $namedReports === [] && ! $inline && ! $bulkEntry && ! $timer && ! $import && ! $seed && ! $invite && ! $punch && ! $conversation && ! $export) {
             return;
         }
         try {
@@ -1441,6 +1516,11 @@ BLADE;
                 Route::middleware($middleware)
                     ->post($uriPrefix.'/{id}/timer/stop', [$controllerClass, 'timerStop'])
                     ->name($namePrefix.'.timer_stop');
+            }
+            if ($export && ! Route::has($namePrefix.'.export')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/export', [$controllerClass, 'export'])
+                    ->name($namePrefix.'.export');
             }
             if ($import && ! Route::has($namePrefix.'.import')) {
                 Route::middleware($middleware)
@@ -1658,7 +1738,7 @@ BLADE;
             ."    <div class=\"flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2\">\n"
             .$cluster."\n"
             ."    </div>\n"
-            ."    @endif";
+            .'    @endif';
         $content = substr($content, 0, $insertAt).$commandBar.substr($content, $insertAt);
 
         // 3) Toolbar-lead slot inside the data-table invocation.
@@ -1717,7 +1797,7 @@ BLADE;
             ."        <div class=\"ml-auto flex flex-wrap items-center gap-2\">\n"
             .$headerCluster."\n"
             ."        </div>\n"
-            ."        @endif";
+            .'        @endif';
 
         // Insert into the title row: shape A (title + breadcrumb
         // in one flex row) and shape B (Compact Top Bar: inner
@@ -1869,7 +1949,7 @@ BLADE;
                                 ."        </x-ui.card>\n"
                                 ."        @endforeach\n"
                                 ."    </div>\n"
-                                ."    @endif";
+                                .'    @endif';
                         }
                         if ($inject !== '') {
                             $lines = explode("\n", $vContent);
@@ -2237,7 +2317,7 @@ BLADE;
                         if (str_contains($vContent, '<x-ui.filter-tabs') && ! str_contains($vContent, 'filterDefaults')) {
                             $vContent = str_replace(
                                 ':param="$qf[\'handle\']"',
-                                ':param="$qf[\'handle\']"' . "\n" . '                :activeTab="$activeFilters[$qf[\'handle\']] ?? null"' . "\n" . '                :default="$filterDefaults[$qf[\'handle\']] ?? null"',
+                                ':param="$qf[\'handle\']"'."\n".'                :activeTab="$activeFilters[$qf[\'handle\']] ?? null"'."\n".'                :default="$filterDefaults[$qf[\'handle\']] ?? null"',
                                 $vContent
                             );
                             $vChanged = true;
@@ -2344,28 +2424,42 @@ BLADE;
                             $manifestData = ManifestRepository::read($slice->path.'/slice.yaml');
                             $createLabel = $manifestData['ui']['directory']['create_label'] ?? null;
                             if (is_string($createLabel) && $createLabel !== '') {
-                                $generated = 'Add '.\Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slice->name));
+                                $generated = 'Add '.Str::studly(Str::singular($slice->name));
                                 if ($generated !== $createLabel && str_contains($vContent, $generated)) {
-                                    // Idempotency (fixed 25 Oct
-                                    // 2026): when the declared
+                                    // Idempotency, both containment
+                                    // directions: when the declared
                                     // label CONTAINS the generated
-                                    // string ('Add Lead Contact'
-                                    // vs 'Add Lead'), a plain
-                                    // str_replace re-matches its
-                                    // own output and appends the
-                                    // suffix on EVERY run. Shield
-                                    // already-correct occurrences,
-                                    // replace the rest, unshield.
+                                    // string ('Add Lead Contact' vs
+                                    // 'Add Lead'), shield the declared
+                                    // occurrences first or every run
+                                    // appends the suffix again. When
+                                    // the GENERATED string contains
+                                    // the declared one ('Add
+                                    // EmployeeDetail' vs 'Add
+                                    // Employee'), shielding the
+                                    // declared text would eat the
+                                    // generated string's head and
+                                    // nothing would ever replace —
+                                    // tokenize the generated string
+                                    // and swap the token instead.
                                     $shield = "\u{0001}LSLABEL\u{0001}";
-                                    $relabeled = str_replace(
-                                        $shield,
-                                        $createLabel,
-                                        str_replace(
-                                            $generated,
+                                    if (str_contains($generated, $createLabel)) {
+                                        $relabeled = str_replace(
+                                            $shield,
                                             $createLabel,
-                                            str_replace($createLabel, $shield, $vContent)
-                                        )
-                                    );
+                                            str_replace($generated, $shield, $vContent)
+                                        );
+                                    } else {
+                                        $relabeled = str_replace(
+                                            $shield,
+                                            $createLabel,
+                                            str_replace(
+                                                $generated,
+                                                $createLabel,
+                                                str_replace($createLabel, $shield, $vContent)
+                                            )
+                                        );
+                                    }
                                     if ($relabeled !== $vContent) {
                                         $vContent = $relabeled;
                                         $vChanged = true;
@@ -2489,13 +2583,13 @@ BLADE;
                         if ($base === 'show.blade.php') {
                             $compacted = str_replace(
                                 ['<x-ui.card class="p-6 bg-card border shadow-xs">',
-                                 'size-14 rounded-2xl bg-primary/10 text-primary font-bold text-lg',
-                                 '<div class="space-y-6" x-data="{ activeTab:',
-                                 'px-4 py-2.5 text-[13px] font-medium border-b-2'],
+                                    'size-14 rounded-2xl bg-primary/10 text-primary font-bold text-lg',
+                                    '<div class="space-y-6" x-data="{ activeTab:',
+                                    'px-4 py-2.5 text-[13px] font-medium border-b-2'],
                                 ['<x-ui.card class="p-4 bg-card border shadow-xs">',
-                                 'size-11 rounded-xl bg-primary/10 text-primary font-bold text-base',
-                                 '<div class="space-y-4" x-data="{ activeTab:',
-                                 'px-4 py-2 text-[13px] font-medium border-b-2'],
+                                    'size-11 rounded-xl bg-primary/10 text-primary font-bold text-base',
+                                    '<div class="space-y-4" x-data="{ activeTab:',
+                                    'px-4 py-2 text-[13px] font-medium border-b-2'],
                                 $vContent
                             );
                             if ($compacted !== $vContent) {
@@ -2660,6 +2754,9 @@ BLADE;
                     }
                 }
             } catch (\Throwable $e) {
+                // Never swallow silently: a throwing repair step
+                // aborts the remaining view upgrades for the slice.
+                \Illuminate\Support\Facades\Log::warning('LaraSlice repairSlice view upgrades aborted: '.$e->getMessage(), ['slice' => $slice->name]);
             }
         }
 
@@ -2881,6 +2978,7 @@ BLADE;
                                         $webContent = $stripped;
                                         $contentChanged = true;
                                     }
+
                                     continue;
                                 }
 
@@ -2944,11 +3042,165 @@ BLADE;
             }
         }
 
-
         // Ensure index data-table reflects YAML ui.directory (views, inline_edit, date-key)
         $this->repairIndexDirectoryUi($slice);
 
+        // Heal belongsTo lookups older generators emitted from the
+        // FK stem alone ('Category' for project_category) — the
+        // target model often carries a different name and the
+        // relation throws the moment anything traverses it.
+        $this->repairModelRelations($slice);
+
         return $this->repairedFiles;
+    }
+
+    /**
+     * Rewrite belongsTo modelClass('…') lookups that do not resolve
+     * to any discovered model, deriving the real target from schema
+     * evidence — the same chain the generator now uses at birth:
+     * record-prefixed table → conventional table → fused form →
+     * unique *_stem table → client→User. Unresolvable lookups are
+     * left untouched (reported by drift tooling, never guessed).
+     */
+    protected function repairModelRelations(SliceManifest $slice): void
+    {
+        $modelsDir = $slice->path.'/Models';
+        if (! is_dir($modelsDir)) {
+            return;
+        }
+        // Global handle → table map across every discovered slice.
+        $byTable = [];
+        foreach ($this->slices as $s) {
+            foreach (($s->raw['models'] ?? []) as $m) {
+                if (! empty($m['handle']) && ! empty($m['table'])) {
+                    $byTable[(string) $m['table']] = Str::studly((string) $m['handle']);
+                }
+            }
+        }
+        if ($byTable === []) {
+            return;
+        }
+        foreach (glob($modelsDir.'/*.php') ?: [] as $file) {
+            $src = (string) file_get_contents($file);
+            if (! str_contains($src, 'modelClass(') || ! str_contains($src, 'belongsTo')) {
+                continue;
+            }
+            $recordTable = null;
+            if (preg_match("/protected \\\$table = '([^']+)'/", $src, $tm)) {
+                $recordTable = $tm[1];
+            } else {
+                foreach (($slice->raw['models'] ?? []) as $m) {
+                    if (($m['handle'] ?? '') !== '' && Str::studly((string) $m['handle']) === basename($file, '.php')) {
+                        $recordTable = (string) ($m['table'] ?? '') ?: null;
+                        break;
+                    }
+                }
+            }
+            if ($recordTable === null) {
+                continue;
+            }
+            $changed = false;
+            $out = preg_replace_callback(
+                '/function\s+(\w+)\s*\([^)]*\)\s*(?::\s*[^\{]+)?\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/s',
+                function (array $m) use ($byTable, $recordTable, &$changed) {
+                    $block = $m[0];
+                    if (! str_contains($block, 'belongsTo') || ! str_contains($block, 'modelClass(')) {
+                        return $block;
+                    }
+                    if (! preg_match_all("/modelClass\(\s*'([^']+)'\s*\)/", $block, $mc)) {
+                        return $block;
+                    }
+                    $fk = preg_match("/belongsTo\([^,]+,\s*'([^']+)'/", $block, $fm)
+                        ? $fm[1]
+                        : Str::snake($m[1]).'_id';
+                    foreach (array_unique($mc[1]) as $target) {
+                        if ($this->modelClass($target) !== null) {
+                            continue;
+                        }
+                        $fixed = $this->foreignTargetFromEvidence($fk, $recordTable, $byTable);
+                        if ($fixed !== null && $fixed !== $target) {
+                            $block = str_replace("modelClass('{$target}')", "modelClass('{$fixed}')", $block);
+                            $block = str_replace('modelClass("'.$target.'")', "modelClass('{$fixed}')", $block);
+                            $changed = true;
+                        }
+                    }
+
+                    return $block;
+                },
+                $src
+            );
+            if ($out !== null && $changed && $out !== $src) {
+                $this->writeRepair($file, $out);
+            }
+        }
+    }
+
+    /**
+     * The generator's FK evidence chain, mirrored for repairs.
+     * Every candidate must actually RESOLVE through modelClass():
+     * a manifest can declare a handle whose generated class carries
+     * a different name (a 'client' handle living in ClientDetail),
+     * and accepting the phantom would rewrite a throwing lookup
+     * into another throwing lookup.
+     */
+    protected function foreignTargetFromEvidence(string $fkName, string $recordTable, array $byTable): ?string
+    {
+        $base = Str::replaceLast('_id', '', $fkName);
+        if ($base === '' || $base === $fkName) {
+            return null;
+        }
+        $candidates = [];
+        $prefixed = Str::singular($recordTable).'_'.$base;
+        if (isset($byTable[$prefixed])) {
+            $candidates[] = $byTable[$prefixed];
+        }
+        foreach ([Str::plural($base), $base] as $candidateTable) {
+            if (isset($byTable[$candidateTable])) {
+                $candidates[] = $byTable[$candidateTable];
+            }
+        }
+        $fused = str_replace('_', '', Str::singular($recordTable).Str::plural($base));
+        foreach ($byTable as $table => $handle) {
+            if (str_replace('_', '', $table) === $fused) {
+                $candidates[] = $handle;
+            }
+        }
+        $pluralPrefixed = Str::singular($recordTable).'_'.Str::plural($base);
+        if (isset($byTable[$pluralPrefixed])) {
+            $candidates[] = $byTable[$pluralPrefixed];
+        }
+        $suffixMatches = [];
+        foreach ($byTable as $table => $handle) {
+            if (str_ends_with($table, '_'.$base) || str_ends_with($table, '_'.Str::plural($base))) {
+                $suffixMatches[] = $handle;
+            }
+        }
+        if (count($suffixMatches) === 1) {
+            $candidates[] = $suffixMatches[0];
+        }
+        // Sibling rows of the same table family: a recurring or
+        // dependent task is a task; the stem carries the record's
+        // own singular as its tail.
+        $recordSingular = Str::singular($recordTable);
+        if (str_ends_with($base, '_'.$recordSingular) || $base === $recordSingular) {
+            foreach ($byTable as $table => $handle) {
+                if ($table === $recordTable) {
+                    $candidates[] = $handle;
+                }
+            }
+        }
+        // People stems are users in this domain family (the same
+        // family the data porter remaps by email), clients included.
+        if ($base === 'client' || in_array($base, ['agent', 'member', 'created_by', 'updated_by', 'added_by', 'approved_by', 'assigned_to', 'assigned_by', 'owner', 'from_user', 'to_user'], true)) {
+            $candidates[] = 'User';
+        }
+        foreach (array_unique($candidates) as $candidate) {
+            if ($this->modelClass($candidate) !== null) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -3382,14 +3634,15 @@ PHP;
             return array_intersect($roleSlugs, $user->roleSlugs()) !== [];
         }
         try {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('role_user') || ! \Illuminate\Support\Facades\Schema::hasTable('roles')) {
+            if (! Schema::hasTable('role_user') || ! Schema::hasTable('roles')) {
                 return false;
             }
             $uid = $user->id ?? $user->getAuthIdentifier();
             if (! $uid) {
                 return false;
             }
-            return \Illuminate\Support\Facades\DB::table('role_user')
+
+            return DB::table('role_user')
                 ->join('roles', 'role_user.role_id', '=', 'roles.id')
                 ->where('role_user.user_id', $uid)
                 ->whereIn('roles.slug', $roleSlugs)
@@ -3421,6 +3674,11 @@ PHP;
                 continue;
             }
             if (isset($slice->navigation['show_in_navigation']) && $slice->navigation['show_in_navigation'] === false) {
+                continue;
+            }
+            // Feature-module switch (module_settings): a module
+            // deactivated for the user's type leaves the menu.
+            if ($currentUser && \LaraSlice\Support\ModuleSettings::isHiddenFor($currentUser, $slice->featureModule)) {
                 continue;
             }
 
@@ -3470,6 +3728,7 @@ PHP;
             if (is_array($allowedRoles) && $allowedRoles !== [] && $currentUser && ! $isSuperAdmin) {
                 $normalized = array_values(array_filter(array_map(static function ($r) {
                     $r = strtolower(trim((string) $r));
+
                     // accept "role:employee" from journeys.v2 gates
                     return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
                 }, $allowedRoles)));
@@ -3557,6 +3816,7 @@ PHP;
                     if (is_array($childRoles) && $childRoles !== [] && $currentUser && ! $isSuperAdmin) {
                         $cn = array_values(array_filter(array_map(static function ($r) {
                             $r = strtolower(trim((string) $r));
+
                             return str_starts_with($r, 'role:') ? substr($r, 5) : $r;
                         }, $childRoles)));
                         if ($cn !== [] && ! $this->userHasAnyRole($currentUser, $cn)) {
@@ -4155,8 +4415,8 @@ PHP;
             $sJson = json_decode(@file_get_contents($slice->path.'/slice.yaml'), true) ?: [];
             $sliceManifestRoles = $sJson['roles'] ?? ($sJson['workflow']['roles'] ?? []);
         }
-        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml') && class_exists(\Symfony\Component\Yaml\Yaml::class)) {
-            $sYaml = \Symfony\Component\Yaml\Yaml::parse(@file_get_contents($slice->path.'/slice.yaml')) ?: [];
+        if (empty($sliceManifestRoles) && file_exists($slice->path.'/slice.yaml') && class_exists(Yaml::class)) {
+            $sYaml = Yaml::parse(@file_get_contents($slice->path.'/slice.yaml')) ?: [];
             $sliceManifestRoles = $sYaml['roles'] ?? ($sYaml['workflow']['roles'] ?? []);
         }
         foreach ($sliceManifestRoles as $r) {
@@ -4453,5 +4713,4 @@ BLADE;
 
         return $content;
     }
-
 }

@@ -256,6 +256,9 @@ function aiSettingsApp() {
                             <select id="gemini_model" name="gemini_model" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                                 <option value="gemini-3.8-flash" {{ ($settings['gemini_model'] ?? '') === 'gemini-3.8-flash' ? 'selected' : '' }}>Gemini 3.8 Flash</option>
                                 <option value="gemini-3.7-flash" {{ ($settings['gemini_model'] ?? '') === 'gemini-3.7-flash' ? 'selected' : '' }}>Gemini 3.7 Flash</option>
+                                <option value="gemini-3.5-flash-lite" {{ ($settings['gemini_model'] ?? '') === 'gemini-3.5-flash-lite' ? 'selected' : '' }}>Gemini 3.5 Flash-Lite (free tier)</option>
+                                <option value="gemini-3.1-flash-lite" {{ ($settings['gemini_model'] ?? '') === 'gemini-3.1-flash-lite' ? 'selected' : '' }}>Gemini 3.1 Flash-Lite (free tier)</option>
+                                <option value="gemini-2.5-flash-lite" {{ ($settings['gemini_model'] ?? '') === 'gemini-2.5-flash-lite' ? 'selected' : '' }}>Gemini 2.5 Flash-Lite (free tier)</option>
                                 <option value="gemini-2.5-pro" {{ ($settings['gemini_model'] ?? '') === 'gemini-2.5-pro' ? 'selected' : '' }}>Gemini 2.5 Pro</option>
                             </select>
                         </div>
@@ -318,16 +321,16 @@ function aiSettingsApp() {
                                 <p class="text-[10px] text-muted-foreground">Connected to official OpenCode Zen inference gateway.</p>
                             </div>
                             <div class="space-y-1.5">
-                                <x-ui.label for="opencode_model">Free Model Selection (6 Models)</x-ui.label>
+                                <x-ui.label for="opencode_model">Free Model Selection (8 Models)</x-ui.label>
                                 <select id="opencode_model" name="opencode_model" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                    <option value="space-bunny-free" {{ ($settings['opencode_model'] ?? 'space-bunny-free') === 'space-bunny-free' ? 'selected' : '' }}>space-bunny-free (Space Bunny - Fast Reasoning) ⭐ Recommended</option>
+                                    <option value="big-pickle" {{ ($settings['opencode_model'] ?? 'big-pickle') === 'big-pickle' ? 'selected' : '' }}>big-pickle (Big Pickle) ⭐ Recommended</option>
+                                    <option value="beam-free" {{ ($settings['opencode_model'] ?? '') === 'beam-free' ? 'selected' : '' }}>beam-free (Beam)</option>
+                                    <option value="flint-40b-free" {{ ($settings['opencode_model'] ?? '') === 'flint-40b-free' ? 'selected' : '' }}>flint-40b-free (Flint 40B)</option>
                                     <option value="mimo-v2.6-flash-free" {{ ($settings['opencode_model'] ?? '') === 'mimo-v2.6-flash-free' ? 'selected' : '' }}>mimo-v2.6-flash-free (Mimo 2.6 Flash)</option>
-                                    <option value="mimo-v2.5-free" {{ ($settings['opencode_model'] ?? '') === 'mimo-v2.5-free' ? 'selected' : '' }}>mimo-v2.5-free (Mimo 2.5)</option>
-                                    <option value="ling-3.1-flash-free" {{ ($settings['opencode_model'] ?? '') === 'ling-3.1-flash-free' ? 'selected' : '' }}>ling-3.1-flash-free (Ling 3.1 Flash)</option>
-                                    <option value="nemotron-3.5-lightning-free" {{ ($settings['opencode_model'] ?? '') === 'nemotron-3.5-lightning-free' ? 'selected' : '' }}>nemotron-3.5-lightning-free (Nemotron 3.5)</option>
-                                    <option value="muse-spark-1.3-contributor-free" {{ ($settings['opencode_model'] ?? '') === 'muse-spark-1.3-contributor-free' ? 'selected' : '' }}>muse-spark-1.3-contributor-free (Muse Spark 1.3)</option>
-                                    <option value="fledge-alpha-free" {{ ($settings['opencode_model'] ?? '') === 'fledge-alpha-free' ? 'selected' : '' }}>fledge-alpha-free (Fledge Alpha)</option>
-                                    <option value="longcat-2.5-preview-free" {{ ($settings['opencode_model'] ?? '') === 'longcat-2.5-preview-free' ? 'selected' : '' }}>longcat-2.5-preview-free (LongCat 2.5)</option>
+                                    <option value="nemotron-3.5-super-vl-free" {{ ($settings['opencode_model'] ?? '') === 'nemotron-3.5-super-vl-free' ? 'selected' : '' }}>nemotron-3.5-super-vl-free (Nemotron 3.5 Super VL)</option>
+                                    <option value="nemotron-3.5-lightning-free" {{ ($settings['opencode_model'] ?? '') === 'nemotron-3.5-lightning-free' ? 'selected' : '' }}>nemotron-3.5-lightning-free (Nemotron 3.5 Lightning)</option>
+                                    <option value="deepseek-v4.1-flash-free" {{ ($settings['opencode_model'] ?? '') === 'deepseek-v4.1-flash-free' ? 'selected' : '' }}>deepseek-v4.1-flash-free (DeepSeek V4.1 Flash)</option>
+                                    <option value="glm-5.3-flash-free" {{ ($settings['opencode_model'] ?? '') === 'glm-5.3-flash-free' ? 'selected' : '' }}>glm-5.3-flash-free (GLM 5.3 Flash)</option>
                                 </select>
                                 <p class="text-[10px] text-muted-foreground">Select from OpenCode's free high-speed models.</p>
                             </div>

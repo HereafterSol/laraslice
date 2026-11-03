@@ -1,5 +1,13 @@
+@php
+    // Kit resolution (LaraSlice\Support\Kit): the active kit
+    // skins the APPLICATION (Mind design.kit / config / ?kit=);
+    // platform surfaces keep the house identity. A kit is a
+    // token + component-style layer over the standard markup —
+    // the declarations underneath never change per kit.
+    $activeKit = \LaraSlice\Support\Kit::current();
+@endphp
 <!DOCTYPE html>
-<html class="h-full" dir="ltr" lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html class="h-full" dir="ltr" lang="{{ str_replace('_', '-', app()->getLocale()) }}" @if($activeKit) data-kit="{{ $activeKit }}" @endif>
     <head>
         @includeIf('layouts.partials.head')
         <style>
@@ -10,6 +18,9 @@
         @else
             <script src="https://cdn.tailwindcss.com/3.4.17"></script>
             <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js" integrity="sha384-5/joNqFnRyVWzXp99bHot6RHG+EksGp+USSgZwPar7T9SD9PKKER37n/8bXBAZGd" crossorigin="anonymous"></script>
+        @endif
+        @if($activeKit && \LaraSlice\Support\Kit::stylesheet($activeKit))
+            <link rel="stylesheet" href="{{ asset(\LaraSlice\Support\Kit::stylesheet($activeKit)) }}">
         @endif
     </head>
     <body class="min-h-screen bg-background text-foreground antialiased font-sans text-sm flex flex-col selection:bg-primary/20 selection:text-primary"
@@ -160,21 +171,41 @@
         <x-ui.sidebar-provider>
             <x-ui.sidebar>
                 <x-ui.sidebar-header>
+                    @if($activeKit === 'replica')
+                    {{-- Replica shell: company switcher + signed-in user row (source chrome) --}}
+                    <div class="flex items-center justify-between px-2 pt-1">
+                        <span class="flex items-center gap-1.5 text-[15px] font-bold text-white">{{ config('app.name') }} <x-lucide-chevron-down class="size-4 opacity-70" /></span>
+                        <x-lucide-layout-grid class="size-4 text-sidebar-foreground/70" />
+                    </div>
+                    <div class="flex items-center gap-2 px-2 pb-1 pt-2 text-[13px] text-sidebar-foreground">
+                        <span class="size-2 shrink-0 rounded-full bg-emerald-500"></span>
+                        <span class="truncate">{{ auth()->user()->name ?? 'Administrator' }}</span>
+                    </div>
+                    @else
                     <x-block.version-switcher title="LaraSlice" :versions="[$laraSliceVersion]">
                         <x-slot:icon><x-lucide-layers class="size-4" /></x-slot:icon>
                     </x-block.version-switcher>
                     <x-block.search-form placeholder="Search slices, routes..." readonly @focus="searchOpen = true; $el.blur()" @click="searchOpen = true" />
+                    @endif
                 </x-ui.sidebar-header>
                 <x-ui.sidebar-content class="gap-0">
                     {!! \LaraSlice\Support\NavHtml::cached($navMain) !!}
                     {!! \LaraSlice\Support\NavHtml::activeScript() !!}
                 </x-ui.sidebar-content>
                 <x-ui.sidebar-footer>
+                    @if($activeKit === 'replica')
+                    {{-- Replica shell: collapse affordance + app version (source chrome) --}}
+                    <div class="flex w-full items-center justify-between px-1">
+                        <x-lucide-chevrons-left class="size-4 text-sidebar-foreground/60" />
+                        <span class="text-[11px] text-sidebar-foreground/50">v{{ $laraSliceVersion }}</span>
+                    </div>
+                    @else
                     <x-block.nav-user
                         name="{{ auth()->user()->name ?? 'Administrator' }}"
                         email="{{ auth()->user()->email ?? 'admin@laraslice.dev' }}"
                         avatar=""
                         fallback="{{ substr(auth()->user()->name ?? 'Admin', 0, 2) }}" />
+                    @endif
                 </x-ui.sidebar-footer>
                 <x-ui.sidebar-rail />
             </x-ui.sidebar>
@@ -182,6 +213,51 @@
                 <x-ui.sidebar-inset>
                     {{-- Site Header --}}
                     <header class="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 lg:px-6 bg-background/95 backdrop-blur-xs sticky top-0 z-30">
+                        @if($activeKit === 'replica')
+                        {{-- Replica shell topbar: title + breadcrumb left, setup + utilities right (source chrome) --}}
+                        <x-ui.sidebar-trigger class="-ml-1" />
+                        @php
+                            $crumbMatch = null; $crumbLen = -1; $reqPath = '/'.trim(request()->path(), '/');
+                            foreach ($navSlices as $s) {
+                                $candidates = [[$s['label'] ?? $s['title'] ?? $s['name'] ?? '', $s['url'] ?? '']];
+                                foreach (($s['children'] ?? []) as $c) { $candidates[] = [$c['label'] ?? '', $c['url'] ?? '']; }
+                                foreach ($candidates as [$cLabel, $cUrl]) {
+                                    $u = '/'.trim((string) parse_url((string) $cUrl, PHP_URL_PATH), '/');
+                                    if ($u !== '' && $u !== '/' && ($reqPath === $u || str_starts_with($reqPath, $u.'/')) && strlen($u) > $crumbLen) {
+                                        $crumbMatch = $cLabel; $crumbLen = strlen($u);
+                                    }
+                                }
+                            }
+                            $pageTitle = trim($__env->yieldPushContent('page-title')) ?: $crumbMatch;
+                        @endphp
+                        <div class="flex min-w-0 items-baseline gap-3">
+                            <span class="truncate text-[16px] font-bold text-foreground">{{ $pageTitle }}</span>
+                            <nav class="hidden items-center gap-1.5 whitespace-nowrap text-[12.5px] text-muted-foreground md:flex">
+                                <a href="{{ Route::has('dashboard') ? route('dashboard') : url('/') }}" class="hover:text-foreground">Home</a>
+                                @if($crumbMatch)
+                                <span aria-hidden="true">•</span><span>{{ $crumbMatch }}</span>
+                                @if($crumbMatch !== $pageTitle)
+                                <span aria-hidden="true">•</span><span class="text-foreground/80">{{ $pageTitle }}</span>
+                                @endif
+                                @endif
+                            </nav>
+                        </div>
+                        <div class="ml-auto flex items-center gap-1">
+                            @php $spSummary = \LaraSlice\Support\SetupProgress::summary(auth()->user()); @endphp
+                            @if($spSummary)
+                            <a href="{{ route('checklist') }}" class="mr-2 hidden items-center gap-2.5 lg:flex" title="Setup Progress">
+                                <span class="text-[13px] text-muted-foreground">Setup Progress</span>
+                                <span class="block h-1.5 w-28 overflow-hidden rounded-full bg-muted"><span class="block h-full rounded-full bg-primary" style="width: {{ $spSummary['percent'] }}%"></span></span>
+                                <span class="text-xs text-muted-foreground">{{ $spSummary['completed'] }}/{{ $spSummary['total'] }}</span>
+                            </a>
+                            @endif
+                            <button type="button" @click="searchOpen = true" class="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition hover:text-foreground" title="Search">
+                                <x-lucide-search class="size-5" />
+                            </button>
+                            <x-layout.global-timer />
+                            <x-layout.quick-create />
+                        </div>
+                        @else
                         <x-ui.sidebar-trigger class="-ml-1" />
                         <x-ui.separator orientation="vertical" class="mr-2 data-[orientation=vertical]:h-4" />
                         
@@ -262,7 +338,13 @@
                             </x-ui.button>
                             @endif
                         </div>
+                        @endif
                     </header>
+
+                    {{-- Filterbar stack: directory facet bands and overview
+                         hub tab strips push here (layout kit). Without this
+                         stack those bands silently never render. --}}
+                    <div class="sticky top-14 z-20 min-w-0">@stack('filterbar')</div>
 
                     {{-- Main Content Body --}}
                     <main class="@container/main flex flex-1 flex-col gap-4 p-4 lg:p-6 w-full max-w-[1600px] mx-auto">
@@ -365,6 +447,93 @@
                 });
             })();
             </script>
+        {{-- Print mode (?print=1): a clean document surface for
+             show pages — chrome hidden, print dialog opens on
+             load. The media rules also make Ctrl+P anywhere
+             produce the document without the app shell. --}}
+        <style>
+            @media print {
+                aside, header, nav, [data-print-hide] { display: none !important; }
+                main { margin: 0 !important; padding: 0 !important; }
+            }
+        </style>
+        @if (request()->boolean('print'))
+            <style>
+                aside, header, nav, [data-print-hide] { display: none !important; }
+                main { margin: 0 !important; }
+                .ls-print-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 40; display: flex; gap: .75rem; align-items: center; padding: .6rem 1rem; background: #18181b; color: #fafafa; font-size: .85rem; }
+                @media print { .ls-print-bar { display: none !important; } }
+            </style>
+            <div class="ls-print-bar">
+                <span>Print view — use your browser's Print / Save as PDF to download this document.</span>
+                <button type="button" onclick="window.print()" style="background:#fafafa;color:#18181b;border-radius:6px;padding:.3rem .8rem;font-weight:600;">Print / Save as PDF</button>
+            </div>
+            <script>
+                window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 500); });
+            </script>
+        @endif
+        {{-- Shared styled confirmation for destructive actions.
+             window.lsConfirm(message, label) -> Promise<boolean>.
+             Forms carrying data-ls-confirm, and legacy delete
+             forms with onsubmit="return confirm('...')", are
+             intercepted in the capture phase and re-submitted
+             only when the user confirms — the styled successor
+             of the native confirm, worded like the source
+             systems' delete dialog. --}}
+        <div x-data="{ lsMessage: '', lsLabel: 'Yes, Delete It!' }"
+             @ls-confirm-ask.window="lsMessage = $event.detail.message; lsLabel = $event.detail.label || 'Yes, Delete It!'">
+            <x-ui.alert-dialog id="ls-confirm">
+                <x-ui.alert-dialog-content>
+                    <x-ui.alert-dialog-header>
+                        <x-ui.alert-dialog-title>Are you sure?</x-ui.alert-dialog-title>
+                        <x-ui.alert-dialog-description>
+                            <span x-text="lsMessage"></span>
+                        </x-ui.alert-dialog-description>
+                    </x-ui.alert-dialog-header>
+                    <x-ui.alert-dialog-footer>
+                        <x-ui.alert-dialog-cancel @click="window.__lsConfirmResolve && window.__lsConfirmResolve(false)">Cancel</x-ui.alert-dialog-cancel>
+                        <x-ui.alert-dialog-action class="bg-rose-600 hover:bg-rose-500 text-white" @click="window.__lsConfirmResolve && window.__lsConfirmResolve(true)"><span x-text="lsLabel"></span></x-ui.alert-dialog-action>
+                    </x-ui.alert-dialog-footer>
+                </x-ui.alert-dialog-content>
+            </x-ui.alert-dialog>
+        </div>
+        <script>
+            (function () {
+                window.lsConfirm = function (message, label) {
+                    return new Promise(function (resolve) {
+                        window.__lsConfirmResolve = resolve;
+                        window.dispatchEvent(new CustomEvent('ls-confirm-ask', {
+                            detail: {
+                                message: message || 'You will not be able to recover the deleted record!',
+                                label: label || 'Yes, Delete It!'
+                            }
+                        }));
+                        window.dispatchEvent(new CustomEvent('open-alert-dialog-ls-confirm'));
+                    });
+                };
+                document.addEventListener('submit', function (event) {
+                    var form = event.target;
+                    if (!(form instanceof HTMLFormElement)) { return; }
+                    if (form.dataset.lsConfirmed === '1') { return; }
+                    var message = form.getAttribute('data-ls-confirm');
+                    if (message === null) {
+                        var onsubmit = form.getAttribute('onsubmit') || '';
+                        var match = onsubmit.match(/confirm\(\s*'([^']*)'\s*\)/) || onsubmit.match(/confirm\(\s*"([^"]*)"\s*\)/);
+                        if (!match) { return; }
+                        message = match[1];
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    window.lsConfirm(message, form.getAttribute('data-ls-confirm-label') || undefined).then(function (ok) {
+                        if (ok) {
+                            form.dataset.lsConfirmed = '1';
+                            form.submit();
+                        }
+                    });
+                }, true);
+            })();
+        </script>
         @if ($canUseAi)
             <x-ui.ai-copilot-bubble />
         @endif

@@ -390,7 +390,6 @@ final class BlueprintApplier
         }
     }
 
-
     /** A model from this blueprint by handle, or null for external models. */
     private function findModel(array $models, string $handle): ?array
     {

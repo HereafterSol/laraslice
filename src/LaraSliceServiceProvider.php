@@ -20,41 +20,55 @@ use LaraSlice\Commands\BlueprintPlanCommand;
 use LaraSlice\Commands\BlueprintValidateCommand;
 use LaraSlice\Commands\LaraSliceMcpCommand;
 use LaraSlice\Commands\SkillPublishCommand;
-use LaraSlice\Commands\WorkflowExportCommand;
-use LaraSlice\Commands\WorkflowSlaCheckCommand;
-use LaraSlice\Commands\WorkflowTransitionCommand;
 use LaraSlice\Commands\SliceAiCommand;
 use LaraSlice\Commands\SliceCacheCommand;
 use LaraSlice\Commands\SliceClearCommand;
+use LaraSlice\Commands\SliceConformanceCommand;
+use LaraSlice\Commands\SliceDeriveNavigationCommand;
+use LaraSlice\Commands\SliceDeriveSchemaClosureCommand;
+use LaraSlice\Commands\SliceDeriveSurfaceCommand;
 use LaraSlice\Commands\SliceDestroyCommand;
+use LaraSlice\Commands\SliceFlowCommand;
+use LaraSlice\Commands\SliceIndexCommand;
+use LaraSlice\Commands\SliceOperateCommand;
+use LaraSlice\Commands\SlicePortabilityCommand;
+use LaraSlice\Commands\SliceDiffCommand;
+use LaraSlice\Commands\SliceDriftCommand;
 use LaraSlice\Commands\SliceExportFlutterCommand;
 use LaraSlice\Commands\SliceFieldCommand;
 use LaraSlice\Commands\SliceInstallCommand;
+use LaraSlice\Commands\SliceLinksCommand;
 use LaraSlice\Commands\SliceListCommand;
 use LaraSlice\Commands\SliceMakeCommand;
-use LaraSlice\Commands\SlicePublishCommand;
-use LaraSlice\Commands\SlicePortCommand;
+use LaraSlice\Commands\SliceMigrateJsonToYamlCommand;
 use LaraSlice\Commands\SlicePlanDraftCommand;
-use LaraSlice\Commands\SliceConformanceCommand;
-use LaraSlice\Commands\SliceDriftCommand;
+use LaraSlice\Commands\SlicePortCommand;
+use LaraSlice\Commands\SlicePublishCommand;
+use LaraSlice\Commands\SliceQualifyRoutesCommand;
 use LaraSlice\Commands\SliceRegenFormCommand;
 use LaraSlice\Commands\SliceRepairCommand;
-use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceSeedCommand;
-use LaraSlice\Commands\SliceMigrateJsonToYamlCommand;
-use LaraSlice\Commands\SliceDiffCommand;
-use LaraSlice\Commands\SliceLinksCommand;
-use LaraSlice\Commands\SliceQualifyRoutesCommand;
+use LaraSlice\Commands\SliceHistoryCommand;
 use LaraSlice\Commands\SliceSyncCommand;
 use LaraSlice\Commands\SliceToggleCommand;
 use LaraSlice\Commands\SliceUiPruneCommand;
+use LaraSlice\Commands\SliceValidateCommand;
 use LaraSlice\Commands\SliceWipeCommand;
 use LaraSlice\Commands\SliceWizardCommand;
+use LaraSlice\Commands\WorkflowExportCommand;
+use LaraSlice\Commands\WorkflowSlaCheckCommand;
+use LaraSlice\Commands\WorkflowTransitionCommand;
 use LaraSlice\Core\Ai\AiChatController;
 use LaraSlice\Core\Ai\AiEngine;
 use LaraSlice\Core\Ai\McpServer;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Security\Access;
+use LaraSlice\Core\Workflow\Events\WorkflowTransitioned;
+use LaraSlice\Core\Workflow\Listeners\NotifyWorkflowTransition;
+use LaraSlice\Http\Controllers\BulkActionController;
+use LaraSlice\Http\Controllers\PublicRecordController;
+use LaraSlice\Http\Controllers\RecordActionController;
+use LaraSlice\Support\DashboardUi;
 use LaraSlice\Support\SchemaCache;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
 use LaraSlice\Wizard\Middleware\GuardStudioWrites;
@@ -138,6 +152,10 @@ class LaraSliceServiceProvider extends ServiceProvider
                 __DIR__.'/../resources/stubs/starter/views/welcome.blade.php' => resource_path('views/welcome.blade.php'),
             ], 'laraslice-starter');
 
+            $this->publishes([
+                __DIR__.'/../resources/kits/replica.css' => public_path('css/replica-kit.css'),
+            ], 'laraslice-kits');
+
             $this->commands([
                 SliceInstallCommand::class,
                 SliceMakeCommand::class,
@@ -155,15 +173,23 @@ class LaraSliceServiceProvider extends ServiceProvider
                 BlueprintPlanCommand::class,
                 BlueprintApplyCommand::class,
                 SliceSyncCommand::class,
+                SliceHistoryCommand::class,
                 SliceDiffCommand::class,
                 SliceLinksCommand::class,
                 SliceQualifyRoutesCommand::class,
                 SliceMigrateJsonToYamlCommand::class,
-            SlicePortCommand::class,
+                SlicePortCommand::class,
+                SliceDeriveSurfaceCommand::class,
+                SliceDeriveNavigationCommand::class,
+                SliceDeriveSchemaClosureCommand::class,
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
                 SliceRegenFormCommand::class,
                 SlicePlanDraftCommand::class,
+                SliceFlowCommand::class,
+                SliceOperateCommand::class,
+                SlicePortabilityCommand::class,
+                SliceIndexCommand::class,
                 SliceDriftCommand::class,
                 SliceConformanceCommand::class,
                 SliceValidateCommand::class,
@@ -195,8 +221,8 @@ class LaraSliceServiceProvider extends ServiceProvider
         // Workflow approval notifications (database channel, inert
         // until the host app migrates the notifications table).
         Event::listen(
-            \LaraSlice\Core\Workflow\Events\WorkflowTransitioned::class,
-            \LaraSlice\Core\Workflow\Listeners\NotifyWorkflowTransition::class
+            WorkflowTransitioned::class,
+            NotifyWorkflowTransition::class
         );
 
         // Schema checks are cached per process; forget them whenever the schema changes
@@ -206,10 +232,17 @@ class LaraSliceServiceProvider extends ServiceProvider
         // slice's Heart-declared ui.actions — adoption is by
         // declaration alone, independent of the wizard/studio.
         Route::prefix('laraslice')->middleware(['web', 'auth'])->group(function () {
-            Route::post('/record-actions/{prefix}/{id}/{action}', \LaraSlice\Http\Controllers\RecordActionController::class)
+            Route::post('/record-actions/{prefix}/{id}/{action}', RecordActionController::class)
                 ->name('laraslice.record_action');
-            Route::post('/bulk-actions/{prefix}/{action}', \LaraSlice\Http\Controllers\BulkActionController::class)
+            Route::post('/bulk-actions/{prefix}/{action}', BulkActionController::class)
                 ->name('laraslice.bulk_action');
+        });
+
+        // Public record links (ui.public_link): unauthenticated,
+        // token-gated by the record's own hash column.
+        Route::prefix('laraslice')->middleware(['web'])->group(function () {
+            Route::get('/public/{prefix}/{token}', PublicRecordController::class)
+                ->name('laraslice.public_record');
         });
 
         // 3. Register Wizard Routes. Every route needs studio.access; writes need the
@@ -221,13 +254,27 @@ class LaraSliceServiceProvider extends ServiceProvider
 
             Route::prefix('laraslice')->middleware($wizardMiddleware)->group(function () use ($studio, $guard) {
                 Route::middleware("{$studio}:studio.access")->group(function () use ($guard) {
-                    Route::get('/studio', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'shell'])->name('laraslice.studio');
-                    Route::get('/studio/panel/{mode}', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'panel'])->name('laraslice.studio.panel');
+                    Route::get('/studio', [BlueprintStudioController::class, 'shell'])->name('laraslice.studio');
+                    Route::get('/studio/panel/{mode}', [BlueprintStudioController::class, 'panel'])->name('laraslice.studio.panel');
+                    Route::get('/studio/blueprint/draft', [BlueprintStudioController::class, 'blueprintDraft'])->name('laraslice.studio.blueprint_draft');
+                    Route::get('/studio/blueprint/presets', [BlueprintStudioController::class, 'blueprintPresets'])->name('laraslice.studio.blueprint_presets');
+                    Route::get('/studio/blueprint/js-yaml', [BlueprintStudioController::class, 'blueprintJsYaml'])->name('laraslice.studio.blueprint_js_yaml');
+                    Route::get('/studio/blueprint/design-factory', [BlueprintStudioController::class, 'blueprintDesignFactory'])->name('laraslice.studio.blueprint_design_factory');
+                    Route::get('/studio/blueprint/porting-modal', [BlueprintStudioController::class, 'blueprintPortingModal'])->name('laraslice.studio.blueprint_porting_modal');
+                    Route::get('/studio/blueprint/library', [BlueprintStudioController::class, 'blueprintLibraryIndex'])->name('laraslice.studio.blueprint_library');
+                    Route::get('/studio/blueprint/library/{slug}', [BlueprintStudioController::class, 'blueprintLibraryShow'])->name('laraslice.studio.blueprint_library_show');
                     Route::middleware($guard)->group(function () {
-                        Route::post('/studio/plan/preview', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'planPreview'])->name('laraslice.studio.plan_preview');
-                        Route::post('/studio/plan/save', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'planSave'])->name('laraslice.studio.plan_save');
-                        Route::post('/studio/operate/backup', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'operateBackup'])->name('laraslice.studio.operate_backup');
-                        Route::post('/studio/operate/manual', [\LaraSlice\Blueprint\BlueprintStudioController::class, 'operateManual'])->name('laraslice.studio.operate_manual');
+                        Route::post('/studio/blueprint/draft', [BlueprintStudioController::class, 'blueprintDraftSave'])->name('laraslice.studio.blueprint_draft_save');
+                        Route::post('/studio/blueprint/library', [BlueprintStudioController::class, 'blueprintLibraryStore'])->name('laraslice.studio.blueprint_library_store');
+                        Route::delete('/studio/blueprint/library/{slug}', [BlueprintStudioController::class, 'blueprintLibraryDestroy'])->name('laraslice.studio.blueprint_library_destroy');
+                        Route::post('/studio/blueprint/draft-from-brief', [BlueprintStudioController::class, 'draftFromBrief'])->name('laraslice.studio.blueprint_draft_from_brief');
+                        Route::post('/studio/mind-seed/apply', [BlueprintStudioController::class, 'applyMindSeed'])->name('laraslice.studio.mind_seed_apply');
+                        Route::post('/studio/plan/propose-journeys', [BlueprintStudioController::class, 'proposeMindJourneys'])->name('laraslice.studio.plan_propose_journeys');
+                        Route::post('/studio/plan/preview', [BlueprintStudioController::class, 'planPreview'])->name('laraslice.studio.plan_preview');
+                        Route::post('/studio/plan/impact', [BlueprintStudioController::class, 'planImpact'])->name('laraslice.studio.plan_impact');
+                        Route::post('/studio/plan/save', [BlueprintStudioController::class, 'planSave'])->name('laraslice.studio.plan_save');
+                        Route::post('/studio/operate/backup', [BlueprintStudioController::class, 'operateBackup'])->name('laraslice.studio.operate_backup');
+                        Route::post('/studio/operate/manual', [BlueprintStudioController::class, 'operateManual'])->name('laraslice.studio.operate_manual');
                     });
                 });
             });
@@ -239,6 +286,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::get('/blueprint', [BlueprintStudioController::class, 'show'])->name('laraslice.wizard.blueprint');
                     Route::get('/schema-studio', [WizardController::class, 'schemaStudio'])->name('laraslice.wizard.schema_studio');
                     Route::get('/slices', [WizardController::class, 'listSlices'])->name('laraslice.wizard.slices');
+                    Route::get('/declaration-history', [WizardController::class, 'declarationHistory'])->name('laraslice.wizard.declaration_history');
                     Route::get('/audit-logs', [WizardController::class, 'getAuditLogs'])->name('laraslice.wizard.audit_logs');
                     Route::post('/copilot/chat', [WizardController::class, 'copilotChat'])->name('laraslice.wizard.copilot_chat');
                 });
@@ -286,10 +334,15 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::post('/blueprint/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.blueprint.port-execute');
 
                     Route::get('/port-presets', [BlueprintStudioController::class, 'portPresets'])->name('laraslice.wizard.port-presets');
-                    Route::get('/porting', function () { return redirect()->route('laraslice.studio', ['mode' => 'port']); })->name('laraslice.wizard.porting');
+                    Route::get('/porting', function () {
+                        return redirect()->route('laraslice.studio', ['mode' => 'port']);
+                    })->name('laraslice.wizard.porting');
                     Route::post('/port-plan', [BlueprintStudioController::class, 'portPlan'])->name('laraslice.wizard.port-plan');
                     Route::post('/port-inspect', [BlueprintStudioController::class, 'portInspect'])->name('laraslice.wizard.port-inspect');
                     Route::post('/port-execute', [BlueprintStudioController::class, 'portExecute'])->name('laraslice.wizard.port-execute');
+                    Route::post('/port-analyze-scope', [BlueprintStudioController::class, 'portAnalyzeScope'])->name('laraslice.wizard.port-analyze-scope');
+                    Route::post('/port-plan-retain', [BlueprintStudioController::class, 'portPlanRetain'])->name('laraslice.wizard.port-plan-retain');
+                    Route::get('/port-plan-latest', [BlueprintStudioController::class, 'portPlanLatest'])->name('laraslice.wizard.port-plan-latest');
                     // User-saved porting presets (analyzed plans)
                     Route::get('/port-saved-presets', [BlueprintStudioController::class, 'listPortPresets'])->name('laraslice.wizard.port-saved-presets.index');
                     Route::post('/port-saved-presets', [BlueprintStudioController::class, 'savePortPreset'])->name('laraslice.wizard.port-saved-presets.store');
@@ -369,7 +422,7 @@ class LaraSliceServiceProvider extends ServiceProvider
             $hasDashboard = $routes->hasNamedRoute('dashboard');
             if (! $hasDashboard) {
                 Route::middleware(['web', 'auth'])->get('/dashboard', function () {
-                    $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                    $manager = app(SliceManager::class);
                     $entries = [];
                     // Iterate EVERY discovered slice, not the
                     // name-keyed active map: twin slices that
@@ -405,7 +458,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                     }
 
                     return view('laraslice::dashboard', [
-                        'widgets' => \LaraSlice\Support\DashboardUi::collect($entries),
+                        'widgets' => DashboardUi::collect($entries),
                         // Layout kit step 4: the host app chooses
                         // its dashboard composition (standard |
                         // portal) in config/laraslice.php.

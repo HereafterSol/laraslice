@@ -9,7 +9,7 @@ class SliceCacheCommand extends Command
 {
     protected $signature = 'slice:cache';
 
-    protected $description = 'Create a slice discovery cache file for faster boot times in production';
+    protected $description = 'Create a slice discovery cache file for faster boot times in production (paths stored relative to base_path for portable clones)';
 
     public function handle(SliceManager $manager): int
     {
@@ -21,6 +21,19 @@ class SliceCacheCommand extends Command
         $discovered = count($manager->discoveredSlices());
 
         $this->info("Successfully cached {$count} of {$discovered} discovered slice(s) to [{$manager->getCachedSlicesPath()}].");
+
+        // Declaration history rides the cache pass: every
+        // regen, port and Studio save flows through here, so
+        // the ledger stays current without anyone remembering
+        // to record. It is an audit convenience — it must
+        // never fail the cache build.
+        try {
+            $entry = (new \LaraSlice\Support\DeclarationHistory)->record('slice:cache', \LaraSlice\Support\DeclarationHistory::currentPerson());
+            if ($entry !== null) {
+                $this->info("Declaration history: recorded {$entry['id']} — ".count($entry['changes']).' declaration change(s).');
+            }
+        } catch (\Throwable) {
+        }
 
         return self::SUCCESS;
     }

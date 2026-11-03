@@ -3,7 +3,10 @@
 namespace LaraSlice\Porting;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\SliceManager;
 use PDO;
 use Throwable;
 
@@ -57,6 +60,7 @@ class SliceDataPortService
     public function setImportAuth(bool $import): self
     {
         $this->importAuth = $import;
+
         return $this;
     }
 
@@ -139,12 +143,12 @@ class SliceDataPortService
         $skippedTables = [];
 
         try {
-            $sourceConn = \Illuminate\Support\Facades\DB::connection($sourceConnection);
+            $sourceConn = DB::connection($sourceConnection);
             $sourcePdo = $sourceConn->getPdo();
             $driver = $sourceConn->getDriverName();
 
             // Disable FK constraints (driver-aware)
-            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+            Schema::disableForeignKeyConstraints();
 
             // Get source table list
             $sourceTables = $this->getSourceTableList($sourcePdo, $driver);
@@ -159,13 +163,15 @@ class SliceDataPortService
             foreach ($tables as $table) {
                 if (! in_array($table, $sourceTables, true)) {
                     $results[$table] = ['status' => 'not_in_source', 'rows' => 0];
+
                     continue;
                 }
 
                 $targetTable = SlicePortService::targetTableName($table);
 
-                if (! \Illuminate\Support\Facades\Schema::hasTable($targetTable)) {
+                if (! Schema::hasTable($targetTable)) {
                     $results[$table] = ['status' => 'not_in_target', 'rows' => 0, 'target_table' => $targetTable];
+
                     continue;
                 }
 
@@ -182,7 +188,7 @@ class SliceDataPortService
             // Rewrite them by email before constraints come back on.
             $identityRemap = $this->remapUserIdentities(array_map(fn ($t) => SlicePortService::targetTableName($t), $tables), $sourcePdo, $driver);
 
-            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+            Schema::enableForeignKeyConstraints();
 
         } catch (Throwable $e) {
             $results['_error'] = $e->getMessage();
@@ -203,7 +209,7 @@ class SliceDataPortService
             // does not exist yet (migrations not run) — surfaced loudly,
             // never folded into a silent 0-row "success".
             'missing_target_tables' => array_values(array_unique($missingTargetTables)),
-            'tables_imported' => count(array_filter($results, fn($r) => ($r['rows'] ?? 0) > 0)),
+            'tables_imported' => count(array_filter($results, fn ($r) => ($r['rows'] ?? 0) > 0)),
             'identity_remap' => $identityRemap ?? [],
             'auth_warning' => $this->authSkipWarning($results),
             'auth_reconciliation' => $this->reconcileAuthAfterImport(),
@@ -219,11 +225,11 @@ class SliceDataPortService
         $seederDir = $sourcePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'seeders';
         $results = [];
 
-        if (! \Illuminate\Support\Facades\File::isDirectory($seederDir)) {
+        if (! File::isDirectory($seederDir)) {
             return $results;
         }
 
-        foreach (\Illuminate\Support\Facades\File::files($seederDir) as $file) {
+        foreach (File::files($seederDir) as $file) {
             $content = $file->getContents();
             $className = $file->getFilenameWithoutExtension();
 
@@ -240,7 +246,7 @@ class SliceDataPortService
             if (preg_match_all("/(\w+)::create\s*\(/", $content, $m)) {
                 // Model::create — try to infer table from model name
                 foreach ($m[1] as $model) {
-                    $tables[] = \Illuminate\Support\Str::snake(\Illuminate\Support\Str::pluralStudly($model));
+                    $tables[] = Str::snake(Str::pluralStudly($model));
                 }
             }
 
@@ -307,6 +313,7 @@ class SliceDataPortService
         } elseif ($driver === 'sqlite') {
             return $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchAll(PDO::FETCH_COLUMN);
         }
+
         return [];
     }
 
@@ -333,6 +340,7 @@ class SliceDataPortService
             if (in_array($tc, $sourceColumns, true)) {
                 $columnMap[$tc] = $tc;
                 $validColumns[] = $tc;
+
                 continue;
             }
             foreach ($columnAliases[$tc] ?? [] as $alias) {
@@ -347,6 +355,7 @@ class SliceDataPortService
         foreach ($columnMap as $target => $source) {
             $selectParts[] = $target === $source ? "`{$source}`" : "`{$source}` AS `{$target}`";
         }
+
         return [$columnMap, $validColumns, implode(', ', $selectParts)];
     }
 
@@ -385,7 +394,7 @@ class SliceDataPortService
             }
 
             // Get target columns to prevent inserting into non-existent columns
-            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($targetTable);
+            $targetColumns = Schema::getColumnListing($targetTable);
 
             if ($driver === 'mysql') {
                 $sourceColumns = $sourcePdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN);
@@ -401,7 +410,7 @@ class SliceDataPortService
             }
 
             // Clear target table
-            \Illuminate\Support\Facades\DB::table($targetTable)->delete();
+            DB::table($targetTable)->delete();
 
             $chunkSize = 250;
             $offset = 0;
@@ -422,6 +431,7 @@ class SliceDataPortService
                             $row[$k] = null;
                         }
                     }
+
                     return $row;
                 }, $rows);
 
@@ -429,39 +439,40 @@ class SliceDataPortService
                 // (source may not have all target columns, e.g. tasks.title)
                 $targetNotNull = [];
                 try {
-                    $columns = \Illuminate\Support\Facades\Schema::getColumns($targetTable);
+                    $columns = Schema::getColumns($targetTable);
                     foreach ($columns as $col) {
                         $name = $col['name'] ?? null;
-                        if ($name && !in_array($name, $validColumns, true)) {
+                        if ($name && ! in_array($name, $validColumns, true)) {
                             $nullable = $col['nullable'] ?? true;
                             $default = $col['default'] ?? null;
-                            if (!$nullable && $default === null) {
+                            if (! $nullable && $default === null) {
                                 $targetNotNull[$name] = $col['type'] ?? 'string';
                             }
                         }
                     }
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     // If we can't inspect columns, proceed without defaults
                 }
-                if (!empty($targetNotNull)) {
+                if (! empty($targetNotNull)) {
                     $sanitized = array_map(function ($row) use ($targetNotNull) {
                         foreach ($targetNotNull as $col => $type) {
-                            if (!array_key_exists($col, $row) || $row[$col] === null) {
+                            if (! array_key_exists($col, $row) || $row[$col] === null) {
                                 // Sensible defaults by type
                                 if (str_contains($type, 'int') || str_contains($type, 'decimal') || str_contains($type, 'float')) {
                                     $row[$col] = 0;
                                 } elseif (str_contains($type, 'bool')) {
                                     $row[$col] = false;
                                 } else {
-                                    $row[$col] = $col === 'title' || $col === 'name' ? 'Imported ' . $col : '';
+                                    $row[$col] = $col === 'title' || $col === 'name' ? 'Imported '.$col : '';
                                 }
                             }
                         }
+
                         return $row;
                     }, $sanitized);
                 }
 
-                \Illuminate\Support\Facades\DB::table($targetTable)->insert($sanitized);
+                DB::table($targetTable)->insert($sanitized);
                 $tableImported += count($rows);
                 $offset += $chunkSize;
 
@@ -479,6 +490,7 @@ class SliceDataPortService
 
     /**
      * Legacy: Map of source tables to copy into target database.
+     *
      * @deprecated Use importForSlices() with slice mapping instead.
      */
     protected array $priorityTables = [
@@ -600,6 +612,7 @@ class SliceDataPortService
 
     /**
      * Stream data from source database into target database.
+     *
      * @deprecated Use importForSlices() with slice mapping for slice-aware imports.
      * This method now delegates to importTables() using the legacy priority list.
      */
@@ -633,7 +646,7 @@ class SliceDataPortService
 
         try {
             // Disable foreign key constraints in a driver-aware way (works on MySQL, SQLite, PgSQL).
-            \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+            Schema::disableForeignKeyConstraints();
 
             $sourceTables = $sourcePdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
 
@@ -665,6 +678,7 @@ class SliceDataPortService
                         'note' => 'Target table does not exist — run the target migrations before importing data.',
                     ];
                     $missingTargetTables[] = $targetTable;
+
                     continue;
                 }
 
@@ -675,6 +689,7 @@ class SliceDataPortService
                         'rows' => 0,
                         'note' => 'Framework auth table protected from overwrite. Call setImportAuth(true) to opt into normalized merge.',
                     ];
+
                     continue;
                 }
 
@@ -682,6 +697,7 @@ class SliceDataPortService
                 if (isset($this->mergeTables[$table])) {
                     $results[$table] = $this->importMergeTable($table, $this->mergeTables[$table], $sourcePdo, $driver, $progressCallback);
                     $totalRowsImported += $results[$table]['rows'] ?? 0;
+
                     continue;
                 }
 
@@ -689,6 +705,7 @@ class SliceDataPortService
                 if (in_array($table, $this->systemAuthTables, true) && $this->importAuth) {
                     $results[$table] = $this->importNormalizedAuthTable($table, $sourcePdo, $driver, $progressCallback);
                     $totalRowsImported += $results[$table]['rows'] ?? 0;
+
                     continue;
                 }
 
@@ -698,6 +715,7 @@ class SliceDataPortService
 
                     if ($rowCount === 0) {
                         $results[$table] = ['status' => 'empty', 'rows' => 0];
+
                         continue;
                     }
 
@@ -709,10 +727,11 @@ class SliceDataPortService
 
                     if (empty($validColumns)) {
                         $results[$table] = ['status' => 'no_matching_columns', 'rows' => 0];
+
                         continue;
                     }
 
-                    $colsSql = implode(', ', array_map(fn($c) => "`{$c}`", $validColumns));
+                    $colsSql = implode(', ', array_map(fn ($c) => "`{$c}`", $validColumns));
 
                     // Clear target table before streaming (DELETE avoids FK truncation lock)
                     DB::table($targetTable)->delete();
@@ -739,6 +758,7 @@ class SliceDataPortService
                                     $row[$k] = null;
                                 }
                             }
+
                             return $row;
                         }, $rows);
 
@@ -757,15 +777,27 @@ class SliceDataPortService
                     $results[$table] = ['status' => 'error', 'error' => $e->getMessage()];
                 }
             }
+
+            // Identity remap: merged users received fresh target ids, so
+            // imported user references still carry source-space ids.
+            // Rewrite them by email before constraints come back on.
+            // (This path previously never remapped — the logic only ran
+            // inside importTables(), which the CLI port flow does not use.)
+            $identityRemap = $this->remapUserIdentities(
+                array_map(fn ($t) => SlicePortService::targetTableName($t), $this->priorityTables),
+                $sourcePdo,
+                $driver
+            );
         } finally {
-            \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+            Schema::enableForeignKeyConstraints();
         }
 
         return [
             'success' => true,
-            'tables_imported' => count(array_filter($results, fn($r) => ($r['status'] ?? '') === 'success')),
+            'tables_imported' => count(array_filter($results, fn ($r) => ($r['status'] ?? '') === 'success')),
             'total_rows' => $totalRowsImported,
             'details' => $results,
+            'identity_remap' => $identityRemap ?? [],
             'skipped_tables' => array_values(array_unique($skippedTables)),
             'skipped_tables_note' => 'These source tables are not in the ETL priority list and were not imported. Extend SliceDataPortService::$priorityTables or import them manually.',
             // Tables whose TARGET table did not exist at import time
@@ -792,16 +824,19 @@ class SliceDataPortService
                 foreach ($sourcePdo->query("PRAGMA table_info(`{$table}`)")->fetchAll(PDO::FETCH_ASSOC) as $row) {
                     $cols[] = $row['name'];
                 }
+
                 return $cols;
             }
             if ($driver === 'pgsql') {
-                $stmt = $sourcePdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_name = ?");
+                $stmt = $sourcePdo->prepare('SELECT column_name FROM information_schema.columns WHERE table_name = ?');
                 $stmt->execute([$table]);
+
                 return $stmt->fetchAll(PDO::FETCH_COLUMN);
             }
         } catch (Throwable $e) {
             // fall through
         }
+
         return [];
     }
 
@@ -820,7 +855,7 @@ class SliceDataPortService
     ): array {
         $targetTable = $targetTable ?? $table;
         try {
-            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($targetTable);
+            $targetColumns = Schema::getColumnListing($targetTable);
 
             $sourceColumns = $this->getSourceColumns($sourcePdo, $driver, $table);
 
@@ -832,13 +867,13 @@ class SliceDataPortService
 
             // Never carry over legacy primary keys: let the target assign fresh ids
             // so merged rows can never collide with existing rows.
-            $insertColumns = array_values(array_filter($validColumns, fn($col) => $col !== 'id'));
-            $colsSql = implode(', ', array_map(fn($col) => "`{$col}`", $validColumns));
+            $insertColumns = array_values(array_filter($validColumns, fn ($col) => $col !== 'id'));
+            $colsSql = implode(', ', array_map(fn ($col) => "`{$col}`", $validColumns));
 
             $countStmt = $sourcePdo->query("SELECT COUNT(*) FROM `{$table}`");
             $rowCount = (int) $countStmt->fetchColumn();
 
-            $existingKeys = \Illuminate\Support\Facades\DB::table($targetTable)->pluck($keyColumn)->all();
+            $existingKeys = DB::table($targetTable)->pluck($keyColumn)->all();
             $existingLookup = array_flip(array_map('strtolower', array_map('strval', $existingKeys)));
 
             $chunkSize = 250;
@@ -862,6 +897,7 @@ class SliceDataPortService
                     $key = strtolower((string) ($row[$keyColumn] ?? ''));
                     if ($key === '' || isset($existingLookup[$key])) {
                         $skippedExisting++;
+
                         continue;
                     }
                     unset($row['id']);
@@ -870,7 +906,7 @@ class SliceDataPortService
                 }
 
                 if (! empty($toInsert)) {
-                    \Illuminate\Support\Facades\DB::table($targetTable)->insert($toInsert);
+                    DB::table($targetTable)->insert($toInsert);
                     $imported += count($toInsert);
                 }
 
@@ -908,7 +944,7 @@ class SliceDataPortService
                 return $this->importRemappedPivot($table, $sourcePdo, $driver);
             }
 
-            $targetColumns = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+            $targetColumns = Schema::getColumnListing($table);
             $hasSlug = in_array('slug', $targetColumns, true);
 
             $sourceColumns = $this->getSourceColumns($sourcePdo, $driver, $table);
@@ -934,19 +970,21 @@ class SliceDataPortService
 
             foreach ($rows as $row) {
                 $rawName = (string) ($row[$nameColumn] ?? '');
-                $slug = \Illuminate\Support\Str::slug($rawName);
+                $slug = Str::slug($rawName);
                 if ($slug === '') {
                     $skipped++;
+
                     continue;
                 }
                 // Reserved slugs can never be minted from legacy data
                 if (in_array($slug, $reserved, true)) {
-                    $slug = 'legacy-' . $slug;
+                    $slug = 'legacy-'.$slug;
                 }
 
-                $exists = \Illuminate\Support\Facades\DB::table($table)->where('slug', $slug)->exists();
+                $exists = DB::table($table)->where('slug', $slug)->exists();
                 if ($exists) {
                     $skipped++;
+
                     continue;
                 }
 
@@ -958,7 +996,7 @@ class SliceDataPortService
                     $payload['description'] = $row['description'];
                 }
 
-                \Illuminate\Support\Facades\DB::table($table)->insert($payload);
+                DB::table($table)->insert($payload);
                 $imported++;
             }
 
@@ -981,11 +1019,11 @@ class SliceDataPortService
     {
         try {
             if ($table === 'role_user') {
-                $sourceRows = $sourcePdo->query("SELECT user_id, role_id FROM role_user")->fetchAll(PDO::FETCH_ASSOC);
+                $sourceRows = $sourcePdo->query('SELECT user_id, role_id FROM role_user')->fetchAll(PDO::FETCH_ASSOC);
 
                 // Legacy id -> natural key maps from source
                 $emailById = [];
-                foreach ($sourcePdo->query("SELECT id, email FROM users")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                foreach ($sourcePdo->query('SELECT id, email FROM users')->fetchAll(PDO::FETCH_ASSOC) as $r) {
                     $emailById[$r['id']] = strtolower((string) $r['email']);
                 }
                 $roleNameById = [];
@@ -993,17 +1031,17 @@ class SliceDataPortService
                 $roleNameCol = in_array('name', $roleCols, true) ? 'name' : (in_array('display_name', $roleCols, true) ? 'display_name' : null);
                 if ($roleNameCol) {
                     foreach ($sourcePdo->query("SELECT id, `{$roleNameCol}` AS n FROM roles")->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                        $roleNameById[$r['id']] = \Illuminate\Support\Str::slug((string) $r['n']);
+                        $roleNameById[$r['id']] = Str::slug((string) $r['n']);
                     }
                 }
 
                 // Target natural key -> id maps
                 $userIdByEmail = [];
-                foreach (\Illuminate\Support\Facades\DB::table('users')->select('id', 'email')->get() as $u) {
+                foreach (DB::table('users')->select('id', 'email')->get() as $u) {
                     $userIdByEmail[strtolower((string) $u->email)] = $u->id;
                 }
                 $roleIdBySlug = [];
-                foreach (\Illuminate\Support\Facades\DB::table('roles')->select('id', 'slug')->get() as $r) {
+                foreach (DB::table('roles')->select('id', 'slug')->get() as $r) {
                     $roleIdBySlug[(string) $r->slug] = $r->id;
                 }
 
@@ -1013,23 +1051,24 @@ class SliceDataPortService
                     $email = $emailById[$row['user_id']] ?? null;
                     $roleSlug = $roleNameById[$row['role_id']] ?? null;
                     // Legacy 'admin' slug was normalized to 'legacy-admin' on import
-                    if ($roleSlug && ! isset($roleIdBySlug[$roleSlug]) && isset($roleIdBySlug['legacy-' . $roleSlug])) {
-                        $roleSlug = 'legacy-' . $roleSlug;
+                    if ($roleSlug && ! isset($roleIdBySlug[$roleSlug]) && isset($roleIdBySlug['legacy-'.$roleSlug])) {
+                        $roleSlug = 'legacy-'.$roleSlug;
                     }
                     $targetUserId = $email ? ($userIdByEmail[$email] ?? null) : null;
                     $targetRoleId = $roleSlug ? ($roleIdBySlug[$roleSlug] ?? null) : null;
 
                     if (! $targetUserId || ! $targetRoleId) {
                         $unmapped++;
+
                         continue;
                     }
 
-                    $exists = \Illuminate\Support\Facades\DB::table('role_user')
+                    $exists = DB::table('role_user')
                         ->where('user_id', $targetUserId)
                         ->where('role_id', $targetRoleId)
                         ->exists();
                     if (! $exists) {
-                        \Illuminate\Support\Facades\DB::table('role_user')->insert([
+                        DB::table('role_user')->insert([
                             'user_id' => $targetUserId,
                             'role_id' => $targetRoleId,
                         ]);
@@ -1041,10 +1080,182 @@ class SliceDataPortService
                     'note' => "role_user remapped via email/slug: {$linked} links created, {$unmapped} unmapped (user or role not present)."];
             }
 
-            // permission_role: remap via permission slug (legacy perms were normalized on import)
-            $sourceRows = $sourcePdo->query("SELECT permission_id, role_id FROM permission_role")->fetchAll(PDO::FETCH_ASSOC);
-            return ['status' => 'skipped', 'rows' => 0,
-                'note' => 'permission_role remap requires legacy permission slugs; assign permissions to imported roles in the UI.'];
+            // permission_role: carry the legacy grants. Legacy
+            // permission names (view_employees) are translated onto
+            // framework permission slugs (employee_detail.view) by
+            // token evidence against the SEEDED permission set —
+            // never invented: a name that does not translate stays
+            // unmapped and is reported. Scope: the legacy grant
+            // scope is carried FAITHFULLY by type NAME (added /
+            // owned / both / all; 'none' rows are skipped) — type
+            // ids differ across installs, so ids are never read
+            // as meanings (the earlier binary carry did exactly
+            // that and inverted none/added on this install).
+            $permCols = $this->getSourceColumns($sourcePdo, $driver, 'permission_role');
+            $hasType = in_array('permission_type_id', $permCols, true);
+            $typeSelect = $hasType ? ', permission_type_id' : '';
+            $sourceTypeNameById = [];
+            if ($hasType) {
+                try {
+                    foreach ($sourcePdo->query('SELECT id, name FROM permission_types')->fetchAll(PDO::FETCH_ASSOC) as $t) {
+                        $sourceTypeNameById[(int) $t['id']] = strtolower((string) $t['name']);
+                    }
+                } catch (Throwable) {
+                    $sourceTypeNameById = [];
+                }
+            }
+            $targetTypeIdByName = [];
+            $targetHasScope = false;
+            try {
+                $targetHasScope = Schema::hasTable('permission_types')
+                    && Schema::hasColumn('permission_role', 'permission_type_id');
+                if ($targetHasScope) {
+                    foreach (DB::table('permission_types')->select('id', 'name')->get() as $t) {
+                        $targetTypeIdByName[strtolower((string) $t->name)] = (int) $t->id;
+                    }
+                }
+            } catch (Throwable) {
+                $targetHasScope = false;
+            }
+            $sourceRows = $sourcePdo->query("SELECT permission_id, role_id{$typeSelect} FROM permission_role")->fetchAll(PDO::FETCH_ASSOC);
+
+            $legacyNameById = [];
+            foreach ($sourcePdo->query('SELECT id, name FROM permissions')->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $legacyNameById[(int) $r['id']] = (string) $r['name'];
+            }
+            $roleSlugById = [];
+            $roleCols = $this->getSourceColumns($sourcePdo, $driver, 'roles');
+            $roleNameCol = in_array('name', $roleCols, true) ? 'name' : (in_array('display_name', $roleCols, true) ? 'display_name' : null);
+            if ($roleNameCol) {
+                foreach ($sourcePdo->query("SELECT id, `{$roleNameCol}` AS n FROM roles")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                    $roleSlugById[(int) $r['id']] = Str::slug((string) $r['n']);
+                }
+            }
+            $targetRoleIdBySlug = [];
+            foreach (DB::table('roles')->select('id', 'slug')->get() as $r) {
+                $targetRoleIdBySlug[(string) $r->slug] = (int) $r->id;
+            }
+            $targetPermIdBySlug = [];
+            foreach (DB::table('permissions')->select('id', 'slug')->get() as $p) {
+                $targetPermIdBySlug[(string) $p->slug] = (int) $p->id;
+            }
+            // Legacy nouns name source ENTITIES; entities are
+            // slices. Build noun => root-base evidence from the
+            // discovered manifests (slice name + root table keys).
+            $entityBases = [];
+            try {
+                $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                foreach ($manager->getSlices() as $slice) {
+                    foreach (($slice->raw['models'] ?? []) as $m) {
+                        if (! ($m['root'] ?? false) || empty($m['handle'])) {
+                            continue;
+                        }
+                        $base = Str::snake((string) $m['handle']);
+                        // The navigation label is the strongest
+                        // key: it is the name users (and legacy
+                        // permission nouns) call the entity.
+                        $keys = [
+                            Str::snake((string) ($slice->raw['navigation']['label'] ?? '')),
+                            Str::snake((string) $slice->name),
+                            Str::snake((string) ($slice->raw['title'] ?? '')),
+                            (string) ($m['table'] ?? ''),
+                        ];
+                        foreach ($keys as $key) {
+                            if ($key === '') {
+                                continue;
+                            }
+                            foreach ([$key, Str::plural($key), Str::singular($key)] as $variant) {
+                                if (! isset($entityBases[$variant])) {
+                                    $entityBases[$variant] = $base;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                $entityBases = [];
+            }
+            $translation = $this->translateLegacyPermissions(array_values(array_unique($legacyNameById)), array_keys($targetPermIdBySlug), $entityBases);
+
+            $linked = 0;
+            $unmappedPerms = [];
+            $skippedNone = 0;
+            $pendingGrants = [];
+            foreach ($sourceRows as $row) {
+                $scopeName = 'all';
+                if ($hasType) {
+                    $scopeName = $sourceTypeNameById[(int) ($row['permission_type_id'] ?? 0)] ?? 'all';
+                    if ($scopeName === 'none') {
+                        $skippedNone++;
+
+                        continue;
+                    }
+                }
+                $roleSlug = $roleSlugById[(int) $row['role_id']] ?? null;
+                if ($roleSlug && ! isset($targetRoleIdBySlug[$roleSlug]) && isset($targetRoleIdBySlug['legacy-'.$roleSlug])) {
+                    $roleSlug = 'legacy-'.$roleSlug;
+                }
+                $legacyName = $legacyNameById[(int) $row['permission_id']] ?? null;
+                $targetSlug = $legacyName ? ($translation[$legacyName] ?? null) : null;
+                if (! $roleSlug || ! isset($targetRoleIdBySlug[$roleSlug]) || ! $targetSlug || ! isset($targetPermIdBySlug[$targetSlug])) {
+                    if ($legacyName && ! $targetSlug) {
+                        $unmappedPerms[$legacyName] = true;
+                    }
+
+                    continue;
+                }
+                // Accumulate per role+slug. Several legacy
+                // grants can translate onto one slug; the
+                // stored scope is the EXACT-entity grant's
+                // scope when one exists (view_projects owns
+                // project.view's scope) — a compound
+                // sub-resource grant (view_project_discussions)
+                // must not widen its parent slice's scope,
+                // though it still confers the grant itself.
+                $pairKey = $targetRoleIdBySlug[$roleSlug].'|'.$targetPermIdBySlug[$targetSlug];
+                $noun = preg_replace('/^[^_]+_/', '', (string) $legacyName);
+                $slugBase = Str::beforeLast($targetSlug, '.');
+                $isExact = Str::singular((string) $noun) === Str::singular($slugBase) || $noun === $slugBase;
+                $pendingGrants[$pairKey] ??= [
+                    'role_id' => $targetRoleIdBySlug[$roleSlug],
+                    'permission_id' => $targetPermIdBySlug[$targetSlug],
+                    'exact' => null,
+                    'widest' => 'none',
+                ];
+                if ($isExact) {
+                    $pendingGrants[$pairKey]['exact'] = $pendingGrants[$pairKey]['exact'] === null
+                        ? $scopeName
+                        : \LaraSlice\Core\Security\Access::widerScope($pendingGrants[$pairKey]['exact'], $scopeName);
+                }
+                $pendingGrants[$pairKey]['widest'] = \LaraSlice\Core\Security\Access::widerScope($pendingGrants[$pairKey]['widest'], $scopeName);
+            }
+            foreach ($pendingGrants as $grant) {
+                $scopeName = $grant['exact'] ?? $grant['widest'];
+                $existing = DB::table('permission_role')
+                    ->where('permission_id', $grant['permission_id'])
+                    ->where('role_id', $grant['role_id'])
+                    ->first();
+                if (! $existing) {
+                    $insert = [
+                        'permission_id' => $grant['permission_id'],
+                        'role_id' => $grant['role_id'],
+                    ];
+                    if ($targetHasScope && isset($targetTypeIdByName[$scopeName])) {
+                        $insert['permission_type_id'] = $targetTypeIdByName[$scopeName];
+                    }
+                    DB::table('permission_role')->insert($insert);
+                    $linked++;
+                } elseif ($targetHasScope && isset($targetTypeIdByName[$scopeName])) {
+                    DB::table('permission_role')
+                        ->where('permission_id', $grant['permission_id'])
+                        ->where('role_id', $grant['role_id'])
+                        ->update(['permission_type_id' => $targetTypeIdByName[$scopeName]]);
+                }
+            }
+            $unmappedList = array_keys($unmappedPerms);
+
+            return ['status' => 'remapped', 'rows' => $linked, 'unmapped' => count($unmappedList),
+                'note' => "permission_role carried (scope by type name): {$linked} grants created, {$skippedNone} explicit-none grants skipped, ".count($unmappedList).' legacy permissions unmapped'.($unmappedList ? ': '.implode(', ', array_slice($unmappedList, 0, 12)) : '').'.'];
         } catch (Throwable $e) {
             return ['status' => 'error', 'rows' => 0, 'error' => $e->getMessage()];
         }
@@ -1058,6 +1269,114 @@ class SliceDataPortService
      *  2. Re-seeds all framework permissions via SliceManager::syncPermissions().
      *  3. Re-attaches all permissions to both privileged roles.
      */
+    /**
+     * Translate legacy permission names (view_employees, add_tasks)
+     * onto framework permission slugs (employee_detail.view,
+     * task.create) using only the SEEDED slug set as evidence.
+     * A name translates when exactly one base wins the token vote
+     * AND the resulting slug exists; otherwise it stays unmapped.
+     *
+     * @param  array<int, string>  $legacyNames
+     * @param  array<int, string>  $targetSlugs
+     * @param  array<string, string>  $entityBases  noun variant => root permission base
+     * @return array<string, string> legacy name => slug
+     */
+    protected function translateLegacyPermissions(array $legacyNames, array $targetSlugs, array $entityBases = []): array
+    {
+        $slugSet = array_fill_keys($targetSlugs, true);
+        $bases = [];
+        foreach ($targetSlugs as $slug) {
+            $pos = strrpos($slug, '.');
+            if ($pos !== false) {
+                $bases[substr($slug, 0, $pos)] = true;
+            }
+        }
+        $bases = array_keys($bases);
+        $verbActions = [
+            'view' => ['view'], 'add' => ['create'], 'create' => ['create'],
+            'edit' => ['edit'], 'update' => ['edit'], 'delete' => ['delete'],
+            'remove' => ['delete'], 'manage' => ['manage', 'view'],
+        ];
+        $map = [];
+        foreach ($legacyNames as $name) {
+            $parts = explode('_', Str::snake($name));
+            if (count($parts) < 2) {
+                continue;
+            }
+            $verb = $parts[0];
+            $actions = $verbActions[$verb] ?? [$verb];
+            $noun = implode('_', array_slice($parts, 1));
+            // Entity evidence first: the noun (or its number
+            // variants) naming a slice lands on that slice's root.
+            $entityBase = $entityBases[$noun] ?? $entityBases[Str::plural($noun)] ?? $entityBases[Str::singular($noun)] ?? null;
+            if ($entityBase !== null) {
+                foreach ($actions as $action) {
+                    $slug = $entityBase.'.'.$action;
+                    if (isset($slugSet[$slug])) {
+                        $map[$name] = $slug;
+                        continue 2;
+                    }
+                }
+            }
+            $nounSingular = Str::singular($noun);
+            $nounTokens = explode('_', $nounSingular);
+            $squashedNouns = array_unique([
+                str_replace('_', '', $nounSingular),
+                str_replace('_', '', $noun),
+            ]);
+            $best = null;
+            $bestScore = 0;
+            $tied = false;
+            foreach ($bases as $base) {
+                $baseTokens = explode('_', $base);
+                $score = 0;
+                if ($base === $noun || $base === $nounSingular) {
+                    $score = 100;
+                } elseif (array_slice($baseTokens, 0, count($nounTokens)) === $nounTokens
+                    || array_slice($nounTokens, 0, count($baseTokens)) === $baseTokens) {
+                    $score = 60 + 10 * count(array_intersect($baseTokens, $nounTokens));
+                } elseif (($baseTokens[0] ?? null) === ($nounTokens[0] ?? null)) {
+                    $score = 30;
+                }
+                // Squashed containment: a legacy noun that
+                // spans a compound base's tokens (timelogs →
+                // project_time_log) still names that entity.
+                // The least compound match wins (project_time_log
+                // over project_time_log_break), so the score
+                // decays with the base's extra tokens.
+                if ($score < 80) {
+                    $squashedBase = str_replace('_', '', $base);
+                    foreach ($squashedNouns as $squashedNoun) {
+                        if (strlen($squashedNoun) >= 5
+                            && (str_contains($squashedBase, $squashedNoun) || str_contains($squashedNoun, $squashedBase))) {
+                            $score = max(65, 80 - 2 * (count($baseTokens) - count($nounTokens)));
+                            break;
+                        }
+                    }
+                }
+                if ($score > $bestScore) {
+                    $best = $base;
+                    $bestScore = $score;
+                    $tied = false;
+                } elseif ($score === $bestScore && $score > 0) {
+                    $tied = true;
+                }
+            }
+            if ($best === null || $tied || $bestScore < 60) {
+                continue;
+            }
+            foreach ($actions as $action) {
+                $slug = $best.'.'.$action;
+                if (isset($slugSet[$slug])) {
+                    $map[$name] = $slug;
+                    break;
+                }
+            }
+        }
+
+        return $map;
+    }
+
     /**
      * Remap user references in imported tables from source user ids
      * to target user ids, matched by email. Runs once per import,
@@ -1073,7 +1392,7 @@ class SliceDataPortService
     protected function remapUserIdentities(array $importedTables, $sourcePdo, string $driver): array
     {
         try {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('users')) {
+            if (! Schema::hasTable('users')) {
                 return [];
             }
             $sourceTables = $this->getSourceTableList($sourcePdo, $driver);
@@ -1082,14 +1401,14 @@ class SliceDataPortService
             }
 
             $emailBySourceId = [];
-            foreach ($sourcePdo->query('SELECT id, email FROM users')->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            foreach ($sourcePdo->query('SELECT id, email FROM users')->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $email = strtolower(trim((string) ($row['email'] ?? '')));
                 if ($email !== '') {
                     $emailBySourceId[(int) $row['id']] = $email;
                 }
             }
             $targetIdByEmail = [];
-            foreach (\Illuminate\Support\Facades\DB::table('users')->select('id', 'email')->get() as $u) {
+            foreach (DB::table('users')->select('id', 'email')->get() as $u) {
                 $targetIdByEmail[strtolower((string) $u->email)] = (int) $u->id;
             }
 
@@ -1109,12 +1428,12 @@ class SliceDataPortService
                 if ($table === 'users' || in_array($table, $this->systemAuthTables, true)) {
                     continue;
                 }
-                if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                if (! Schema::hasTable($table)) {
                     continue;
                 }
                 $columns = array_intersect(
                     $this->userReferenceColumns,
-                    \Illuminate\Support\Facades\Schema::getColumnListing($table)
+                    Schema::getColumnListing($table)
                 );
                 foreach ($columns as $column) {
                     $changed = 0;
@@ -1125,7 +1444,7 @@ class SliceDataPortService
                             $cases .= ' WHEN '.(int) $from.' THEN '.(int) $to;
                             $ids[] = (int) $from;
                         }
-                        $changed += \Illuminate\Support\Facades\DB::affectingStatement(
+                        $changed += DB::affectingStatement(
                             "UPDATE `{$table}` SET `{$column}` = CASE `{$column}`{$cases} ELSE `{$column}` END WHERE `{$column}` IN (".implode(', ', $ids).')'
                         );
                     }
@@ -1146,7 +1465,7 @@ class SliceDataPortService
         $summary = ['roles_ensured' => [], 'permissions_synced' => false, 'errors' => []];
 
         try {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('roles')) {
+            if (! Schema::hasTable('roles')) {
                 return $summary;
             }
 
@@ -1155,19 +1474,19 @@ class SliceDataPortService
                 'super-admin' => ['name' => 'Super Administrator', 'description' => 'Full unrestricted system-wide access to all slices and settings'],
                 'super-dev' => ['name' => 'Platform Developer', 'description' => 'Framework developer master key: whole-system access including Slice Studio, Blueprint Studio and Porting Studio. Immune to legacy data ports.'],
             ] as $slug => $meta) {
-                $exists = \Illuminate\Support\Facades\DB::table('roles')->where('slug', $slug)->exists();
+                $exists = DB::table('roles')->where('slug', $slug)->exists();
                 if (! $exists) {
                     // Repair: a legacy import may have wiped the role row entirely
-                    \Illuminate\Support\Facades\DB::table('roles')->insert([
+                    DB::table('roles')->insert([
                         'slug' => $slug,
                         'name' => $meta['name'],
                         'description' => $meta['description'],
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);
-                    $summary['roles_ensured'][] = $slug . ' (recreated)';
+                    $summary['roles_ensured'][] = $slug.' (recreated)';
                 } else {
-                    $summary['roles_ensured'][] = $slug . ' (exists)';
+                    $summary['roles_ensured'][] = $slug.' (exists)';
                 }
 
                 // Repair: legacy rows may exist with the right name but empty slug
@@ -1178,13 +1497,13 @@ class SliceDataPortService
             // Re-seed every framework permission and re-attach to privileged roles.
             // SliceManager::syncPermissions() is idempotent (updateOrInsert).
             try {
-                $sliceManager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+                $sliceManager = app(SliceManager::class);
                 if (method_exists($sliceManager, 'syncPermissions')) {
                     $sliceManager->syncPermissions();
                     $summary['permissions_synced'] = true;
                 }
             } catch (Throwable $e) {
-                $summary['errors'][] = 'syncPermissions: ' . $e->getMessage();
+                $summary['errors'][] = 'syncPermissions: '.$e->getMessage();
             }
         } catch (Throwable $e) {
             $summary['errors'][] = $e->getMessage();

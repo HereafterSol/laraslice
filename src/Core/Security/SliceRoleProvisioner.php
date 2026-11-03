@@ -12,10 +12,10 @@ class SliceRoleProvisioner
     /**
      * Provision roles and permissions defined in a slice manifest or configuration.
      *
-     * @param array $roles List of role definitions [{slug, name, description, permissions: []}]
-     * @param string|null $sliceName The associated slice or domain name
-     * @param string|null $domain The domain name
-     * @param bool $seedDemoUsers Whether to provision sandbox test users for each role
+     * @param  array  $roles  List of role definitions [{slug, name, description, permissions: []}]
+     * @param  string|null  $sliceName  The associated slice or domain name
+     * @param  string|null  $domain  The domain name
+     * @param  bool  $seedDemoUsers  Whether to provision sandbox test users for each role
      * @return array Summary of provisioned roles and accounts
      */
     public function provision(array $roles, ?string $sliceName = null, ?string $domain = null, bool $seedDemoUsers = true): array

@@ -3,7 +3,9 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use LaraSlice\Blueprint\BlueprintApplier;
 use LaraSlice\Blueprint\BlueprintLoader;
 use LaraSlice\Blueprint\BlueprintPlanner;
@@ -56,13 +58,13 @@ final class BlueprintApplyCommand extends Command
             if ($doMigrate) {
                 $this->comment('Running migrations…');
                 try {
-                    \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-                    $out = trim(\Illuminate\Support\Facades\Artisan::output());
+                    Artisan::call('migrate', ['--force' => true]);
+                    $out = trim(Artisan::output());
                     if ($out !== '') {
                         $this->line($out);
                     }
                     $this->components->info('Migrations finished.');
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $this->components->error('Migration failed: '.$e->getMessage());
                     $this->line('You can retry with: php artisan migrate');
                 }
@@ -73,16 +75,16 @@ final class BlueprintApplyCommand extends Command
             $sliceName = $blueprint['name'] ?? $blueprint['handle'] ?? 'Slice';
             $this->newLine();
             $this->comment('Demo data:');
-            $this->line('  php artisan slice:seed '.\Illuminate\Support\Str::studly((string) $sliceName).' --count=10');
+            $this->line('  php artisan slice:seed '.Str::studly((string) $sliceName).' --count=10');
             if ($this->option('seed')) {
                 $this->comment('Seeding demo records…');
                 try {
-                    \Illuminate\Support\Facades\Artisan::call('slice:seed', [
-                        'slice' => \Illuminate\Support\Str::studly((string) $sliceName),
+                    Artisan::call('slice:seed', [
+                        'slice' => Str::studly((string) $sliceName),
                         '--count' => 10,
                     ]);
-                    $this->line(trim(\Illuminate\Support\Facades\Artisan::output()));
-                } catch (\Throwable $e) {
+                    $this->line(trim(Artisan::output()));
+                } catch (Throwable $e) {
                     $this->components->warn('Seed failed (slice may need a seeder): '.$e->getMessage());
                 }
             }

@@ -8,13 +8,14 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Support\PageStructureDrift;
+use LaraSlice\Support\RepeaterDeclarationAudit;
 use LaraSlice\Support\SystemDrift;
 use LaraSlice\Support\SystemMind;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceDriftCommand extends Command
 {
-    protected $signature = 'slice:drift {--fix : Reconcile: grant the mapped roles what their clubs promise (creating view-own permission rows when missing)} {--structure : Also audit generated index blades against the Page Structure Contract (Body v4)}';
+    protected $signature = 'slice:drift {--fix : Reconcile: grant the mapped roles what their clubs promise (creating view-own permission rows when missing)} {--structure : Also audit generated index blades against the Page Structure Contract (Body v4)} {--format= : Output format: text (default) or json — JSON carries per-finding fix hints for agents}';
 
     protected $description = 'Mind ↔ Heart drift audit: compare the Mind\'s role clubs and the Bodies\' access declarations against the roles\' actual permission grants. Exits 1 on error-severity drift.';
 
@@ -23,10 +24,21 @@ class SliceDriftCommand extends Command
         $path = SystemMind::defaultPath();
         $hasMind = is_file($path);
         if (! $hasMind && ! $this->option('structure')) {
-            $this->warn('No Mind found at porting/system.yaml — nothing to audit against. Draft one with slice:plan:draft.');
+            if ($this->option('format') === 'json') {
+                $this->line((string) json_encode([
+                    'command' => 'slice:drift',
+                    'errors' => 0,
+                    'warnings' => 0,
+                    'findings' => [],
+                    'note' => 'No Mind found at porting/system.yaml — nothing to audit against. Draft one with slice:plan:draft.',
+                ], JSON_PRETTY_PRINT));
+            } else {
+                $this->warn('No Mind found at porting/system.yaml — nothing to audit against. Draft one with slice:plan:draft.');
+            }
+
             return self::SUCCESS;
         }
-        if (! $hasMind) {
+        if (! $hasMind && $this->option('format') !== 'json') {
             $this->warn('No Mind found at porting/system.yaml — running the page-structure audit only.');
         }
         $mind = $hasMind ? (SystemMind::load($path) ?? []) : [];
@@ -85,17 +97,41 @@ class SliceDriftCommand extends Command
 
         if ($this->option('structure')) {
             $findings = array_merge($findings, $this->auditPageStructure());
-        }
-
-        if ($findings === []) {
-            $this->info('No drift: the Mind\'s promises, the Bodies\' access declarations, and the roles\' grants agree.');
-            return self::SUCCESS;
+            $findings = array_merge($findings, $this->auditRepeaters());
         }
 
         $errors = 0;
         foreach ($findings as $f) {
-            if ($f['severity'] === 'error') {
+            if (($f['severity'] ?? null) === 'error') {
                 $errors++;
+            }
+        }
+
+        if ($this->option('format') === 'json') {
+            $this->line((string) json_encode([
+                'command' => 'slice:drift',
+                'structure' => (bool) $this->option('structure'),
+                'errors' => $errors,
+                'warnings' => count($findings) - $errors,
+                'findings' => array_map(fn ($f) => [
+                    'kind' => $f['kind'] ?? 'drift',
+                    'severity' => $f['severity'] ?? 'warning',
+                    'message' => $f['message'] ?? '',
+                    'fix' => \LaraSlice\Support\FindingFixes::forKind($f['kind'] ?? null),
+                ], $findings),
+            ], JSON_PRETTY_PRINT));
+
+            return $errors > 0 ? self::FAILURE : self::SUCCESS;
+        }
+
+        if ($findings === []) {
+            $this->info('No drift: the Mind\'s promises, the Bodies\' access declarations, and the roles\' grants agree.');
+
+            return self::SUCCESS;
+        }
+
+        foreach ($findings as $f) {
+            if ($f['severity'] === 'error') {
                 $this->error("[{$f['kind']}] {$f['message']}");
             } else {
                 $this->warn("[{$f['kind']}] {$f['message']}");
@@ -104,6 +140,53 @@ class SliceDriftCommand extends Command
         $this->line("Drift audit: {$errors} error(s), ".(count($findings) - $errors).' warning(s).');
 
         return $errors > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Repeater declaration audit: every slice manifest under
+     * app/Slices — a repeater whose table lacks the declared
+     * foreign key is a belongsTo lookup modelled as a child
+     * (the declaration defect behind the 1 Nov 2026 create
+     * 500s); flagged here at build time.
+     *
+     * @return list<array{kind: string, severity: string, message: string}>
+     */
+    private function auditRepeaters(): array
+    {
+        $slices = [];
+        $base = base_path('app/Slices');
+        if (is_dir($base)) {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS)
+            );
+            foreach ($iterator as $file) {
+                if (! $file->isFile() || $file->getFilename() !== 'slice.yaml') {
+                    continue;
+                }
+                try {
+                    $manifest = Yaml::parseFile($file->getPathname());
+                } catch (\Throwable) {
+                    continue;
+                }
+                if (! is_array($manifest)) {
+                    continue;
+                }
+                $repeaters = RepeaterDeclarationAudit::repeatersFromManifest($manifest);
+                if ($repeaters === []) {
+                    continue;
+                }
+                $name = (string) ($manifest['namespace'] ?? $file->getPath());
+                $slices[] = ['slice' => $name, 'repeaters' => $repeaters];
+            }
+        }
+
+        return RepeaterDeclarationAudit::audit($slices, function (string $table, string $column): string {
+            if (! Schema::hasTable($table)) {
+                return 'missing_table';
+            }
+
+            return Schema::hasColumn($table, $column) ? 'ok' : 'missing_column';
+        });
     }
 
     /**
@@ -182,9 +265,9 @@ class SliceDriftCommand extends Command
      * permissions the registry lacks (view-own forms) and grant
      * each mapped role the slugs its club promises.
      *
-     * @param array<string, mixed> $mind
-     * @param array<string, list<string>> $roleGrants
-     * @param list<string> $registry
+     * @param  array<string, mixed>  $mind
+     * @param  array<string, list<string>>  $roleGrants
+     * @param  list<string>  $registry
      */
     private function reconcile(array $mind, array $roleGrants, array $registry): void
     {
@@ -199,10 +282,12 @@ class SliceDriftCommand extends Command
         foreach ($plan as $action) {
             if ($action['action'] === 'unresolvable') {
                 $this->warn("Unresolvable: club {$action['club']} pattern '{$action['pattern']}' names nothing in the registry — fix the Mind's vocabulary.");
+
                 continue;
             }
             if ($action['action'] === 'unmapped-club' || $action['role'] === null) {
                 $this->warn("Unmapped club {$action['club']}: declare maps_to in the Mind to reconcile '{$action['pattern']}'.");
+
                 continue;
             }
             $roleId = $roleIds[$action['role']] ?? null;
@@ -215,6 +300,7 @@ class SliceDriftCommand extends Command
                     $missing[$key] = true;
                     $this->warn("Mapped role missing: club {$action['club']} maps_to '{$action['role']}', but no role with that name exists — nothing was granted for this club. maps_to must name a role in THIS system.");
                 }
+
                 continue;
             }
             $slug = $action['slug'];

@@ -188,8 +188,8 @@ class DesignLint
     public static function parseTokens(string $designMd): array
     {
         $tokens = [];
-        if (preg_match('/^colors:\n((?:  .+\n)+)/m', $designMd, $block)) {
-            foreach (explode("\n", $block[1]) as $line) {
+        if (preg_match('/^colors:\r?\n((?:  .+\r?\n?)+)/m', $designMd, $block)) {
+            foreach (explode("\n", str_replace("\r", '', $block[1])) as $line) {
                 if (preg_match('/^\s{2}([a-z-]+):\s*"(oklch\([^"]+\))"/', $line, $m)) {
                     $tokens[$m[1]] = $m[2];
                 }

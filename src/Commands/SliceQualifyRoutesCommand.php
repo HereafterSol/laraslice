@@ -36,17 +36,20 @@ final class SliceQualifyRoutesCommand extends Command
             $routesFile = $slice->path.'/Routes/web.php';
             if (! is_file($routesFile)) {
                 $skipped++;
+
                 continue;
             }
             $routes = (string) file_get_contents($routesFile);
             if (! preg_match("/Route::prefix\\('([^']+)'\\)->name\\('([^']+)\\.'\\)/", $routes, $m)) {
                 $skipped++;
+
                 continue;
             }
             [, $uriPrefix, $oldName] = $m;
             $qualified = str_replace('/', '_', str_replace('-', '_', $uriPrefix));
             if (! str_contains($uriPrefix, '/') || $qualified === $oldName) {
                 $skipped++; // root slice or already qualified
+
                 continue;
             }
 

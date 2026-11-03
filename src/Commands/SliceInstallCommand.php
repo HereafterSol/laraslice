@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Support\AgentGuide;
 use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Users\Models\User;
 use Symfony\Component\Process\Process;
@@ -47,6 +48,7 @@ class SliceInstallCommand extends Command
         $this->components->task('Publishing LaraSlice configuration', function () {
             // An existing config/laraslice.php is kept unless --force is given
             Artisan::call('vendor:publish', ['--tag' => 'laraslice-config', '--force' => (bool) $this->option('force')]);
+            Artisan::call('vendor:publish', ['--tag' => 'laraslice-kits', '--force' => (bool) $this->option('force')]);
 
             return true;
         });
@@ -90,6 +92,22 @@ class SliceInstallCommand extends Command
             $jsDest = resource_path('js');
             if (File::isDirectory($jsSource)) {
                 $this->publishDirectory($jsSource, $jsDest);
+            }
+
+            return true;
+        });
+
+        // 2b. Generate the AI guide (AGENTS.md + CLAUDE.md import shim).
+        // An existing AGENTS.md is kept (it may be hand-curated) unless
+        // --force; existing installs can adopt it later via
+        // `php artisan slice:index --agents`.
+        $this->components->task('Generating AGENTS.md (AI guide) & CLAUDE.md shim', function () {
+            $status = AgentGuide::write((bool) $this->option('force'));
+            if ($status['AGENTS.md'] === 'kept') {
+                $this->skippedFiles++;
+            }
+            if ($status['CLAUDE.md'] === 'kept') {
+                $this->skippedFiles++;
             }
 
             return true;

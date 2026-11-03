@@ -7,6 +7,7 @@
     'labels' => [],
     'height' => 250,
     'label' => null,
+    'legend' => 'values',
 ])
 
 @php
@@ -108,13 +109,15 @@
                     </div>
                 @endif
             </div>
-            <ul class="min-w-36 flex-1 space-y-1.5">
+            <ul class="{{ $legend === 'labels' ? 'min-w-28' : 'min-w-36' }} flex-1 space-y-1.5">
                 @foreach($values as $i => $v)
                     <li class="flex items-center gap-2">
-                        <span class="size-2.5 shrink-0 rounded-full" style="background: {{ $colorFor($i) }}"></span>
+                        <span class="{{ $legend === 'labels' ? 'h-2.5 w-4 rounded-sm' : 'size-2.5 rounded-full' }} shrink-0" style="background: {{ $colorFor($i) }}"></span>
                         <span class="flex-1 truncate font-medium text-muted-foreground" title="{{ $labels[$i] }}">{{ $labels[$i] }}</span>
+                        @if($legend !== 'labels')
                         <span class="font-semibold text-foreground">{{ rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.') }}</span>
                         <span class="w-11 text-right text-muted-foreground">{{ $total > 0 ? round($v / $total * 100, 1) : 0 }}%</span>
+                        @endif
                     </li>
                 @endforeach
             </ul>

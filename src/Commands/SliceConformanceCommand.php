@@ -7,22 +7,99 @@ namespace LaraSlice\Commands;
 use Illuminate\Console\Command;
 use LaraSlice\Porting\ConformanceGate;
 use LaraSlice\Porting\DesignLint;
+use LaraSlice\Porting\PortEvidence;
 use LaraSlice\Porting\SourceAnatomyExtractor;
 use Symfony\Component\Yaml\Yaml;
 
 class SliceConformanceCommand extends Command
 {
-    protected $signature = 'slice:conformance {--lint : Also run the design lint (DESIGN.md contrast pairs + blade colour/spacing patterns)} {--visual : Also run the Tier-5 visual gate (source.design.yaml tokens vs port design captures, plus form-presentation findings)}';
+    protected $signature = 'slice:conformance {--lint : Also run the design lint (DESIGN.md contrast pairs + blade colour/spacing patterns)} {--visual : Also run the Tier-5 visual gate (source.design.yaml tokens vs port design captures, plus form-presentation findings)} {--format= : Output format: text (default) or json — JSON carries the gate result with per-finding fix hints for agents}';
 
     protected $description = 'Fidelity conformance gate: compare every anatomy spec (source evidence) against the ported Hearts and judge all differences against the deviation register (porting/deviations.yaml). Exits 1 on UNRECORDED deviations.';
 
+    /** @var array<string, mixed> */
+    private array $jsonPayload = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $lintFindings = [];
+
     public function handle(): int
     {
+        if ($this->option('format') !== 'json') {
+            return $this->runGate();
+        }
+        // JSON mode: the gate runs against a buffered output so
+        // the only thing on stdout is the structured result.
+        $buffer = new \Symfony\Component\Console\Output\BufferedOutput;
+        $real = $this->output;
+        $this->output = $buffer;
+        try {
+            $code = $this->runGate();
+        } finally {
+            $this->output = $real;
+        }
+        $this->line((string) json_encode($this->jsonPayload + [
+            'command' => 'slice:conformance',
+            'exit' => $code,
+        ], JSON_PRETTY_PRINT));
+
+        return $code;
+    }
+
+    private function runGate(): int
+    {
+        // Evidence (porting/evidence/*.json) is the second
+        // measurement source: scripted journey gates and audit
+        // runners record checks there. Anatomy measures
+        // structure; evidence measures behaviour. The two
+        // percents are reported side by side, never blended.
+        $evidence = PortEvidence::load();
+        $evidencePayload = $this->evidencePayload($evidence);
+
         $specDir = base_path('porting/ui-spec');
         $specFiles = is_dir($specDir) ? (glob($specDir.'/*.anatomy.ui.yaml') ?: []) : [];
         if ($specFiles === []) {
-            $this->warn('No anatomy specs at porting/ui-spec/*.anatomy.ui.yaml — run slice:port --anatomy first.');
-            return self::SUCCESS;
+            $hasSlices = false;
+            $slicesRootEarly = base_path('app/Slices');
+            if (is_dir($slicesRootEarly)) {
+                foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($slicesRootEarly, \FilesystemIterator::SKIP_DOTS)) as $earlyFile) {
+                    if ($earlyFile->isFile() && $earlyFile->getFilename() === 'slice.yaml') {
+                        $hasSlices = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($evidence['checks'] > 0) {
+                // No anatomy recorded, but journey evidence is:
+                // the port IS measured — by its recorded checks.
+                // A failing recorded check fails the gate; a
+                // malformed evidence file fails it too.
+                $this->reportEvidence($evidence);
+                $failed = $evidence['failed_count'] > 0 || $evidence['errors'] !== [];
+                $this->jsonPayload = [
+                    'pages' => 0, 'conforming' => 0,
+                    'percent' => $evidence['percent'], 'measured' => true, 'measured_by' => 'evidence',
+                    'unrecorded' => [], 'open' => [], 'approved' => [], 'stale' => [], 'per_page' => [],
+                    'evidence' => $evidencePayload,
+                    'note' => 'No anatomy specs at porting/ui-spec/*.anatomy.ui.yaml — structure conformance NOT MEASURED; the percent shown is the recorded port evidence (porting/evidence/). Record anatomy with slice:port --anatomy to measure structure too.',
+                ];
+                $this->warn('No anatomy specs — structure conformance NOT MEASURED. Port evidence: '.$evidence['passed'].'/'.$evidence['checks'].' checks passed ('.$evidence['percent'].'%).');
+
+                return $failed ? self::FAILURE : self::SUCCESS;
+            }
+
+            // Nothing recorded at all = NOT MEASURED, never
+            // "100%": a gate that passes on zero evidence teaches
+            // teams to trust a number that was never computed.
+            // When the app actually has slices installed, the
+            // absence of specs is a failed gate (record them);
+            // on a bare app with nothing to measure it stays a
+            // no-op success.
+            $this->jsonPayload = ['pages' => 0, 'conforming' => 0, 'percent' => null, 'measured' => false, 'measured_by' => 'none', 'unrecorded' => [], 'open' => [], 'approved' => [], 'stale' => [], 'per_page' => [], 'evidence' => $evidencePayload, 'note' => 'No anatomy specs at porting/ui-spec/*.anatomy.ui.yaml — conformance NOT MEASURED. Run slice:port --anatomy first.'];
+            $this->warn('No anatomy specs at porting/ui-spec/*.anatomy.ui.yaml — conformance NOT MEASURED (0 pages recorded). Run slice:port --anatomy first.');
+
+            return $hasSlices ? self::FAILURE : self::SUCCESS;
         }
 
         // Hearts by handle.
@@ -78,6 +155,7 @@ class SliceConformanceCommand extends Command
                 $register = is_array($parsed['deviations'] ?? null) ? $parsed['deviations'] : [];
             } catch (\Throwable) {
                 $this->error('porting/deviations.yaml is unparsable — the register must stay readable.');
+
                 return self::FAILURE;
             }
         }
@@ -101,6 +179,7 @@ class SliceConformanceCommand extends Command
             $slug = (string) $spec['slice'];
             if (! isset($hearts[$slug])) {
                 $this->line("  {$slug}: no ported slice with this handle — skipped");
+
                 continue;
             }
             $pages++;
@@ -176,6 +255,7 @@ class SliceConformanceCommand extends Command
         $allStale = $result['stale'];
 
         $conforming = 0;
+        $perPage = [];
         foreach ($perSlug as $slug => $info) {
             $ids = array_column($info['candidates'], 'id');
             $hasError = false;
@@ -196,6 +276,7 @@ class SliceConformanceCommand extends Command
                 $conforming++;
             }
             $state = $hasError ? 'UNRECORDED' : ($hasOpen ? 'open deviations' : 'conforming');
+            $perPage[$slug] = ['state' => $state, 'candidates' => count($ids), 'heart' => str_replace(base_path().'/', '', $info['path'])];
             $matched = str_replace(base_path().'/', '', $info['path']);
             $this->line("  {$slug}: {$state} (".count($ids)." deviation candidate(s)) [{$matched}]");
             foreach ($visualDiffs[$slug] ?? [] as $diff) {
@@ -216,7 +297,7 @@ class SliceConformanceCommand extends Command
             $this->warn('stale: '.$stale);
         }
 
-        $pct = $pages > 0 ? round(100 * $conforming / $pages) : 100;
+        $pct = $pages > 0 ? round(100 * $conforming / $pages) : null;
         $this->info("Conformance: {$conforming}/{$pages} pages at 100% (fixed or approved-and-recorded) — {$pct}%. "
             .count($allErrors).' unrecorded, '.count($allOpen).' open, '.count($allApproved).' approved deviation(s).');
 
@@ -230,11 +311,87 @@ class SliceConformanceCommand extends Command
         }
 
         $failed = $allErrors !== [];
+        if ($evidence['checks'] > 0 || $evidence['errors'] !== []) {
+            // Recorded journey evidence stands beside the
+            // anatomy verdict: a port whose Gate T record
+            // carries a failure is not conforming, whatever
+            // the structure comparison says.
+            $this->reportEvidence($evidence);
+            $failed = $failed || $evidence['failed_count'] > 0 || $evidence['errors'] !== [];
+        }
         if ($this->option('lint')) {
             $failed = $this->runLint() || $failed;
         }
 
+        $withFixes = static fn (array $lines) => array_map(fn ($line) => [
+            'entry' => $line,
+            'fix' => \LaraSlice\Support\FindingFixes::forLine($line),
+        ], $lines);
+        $this->jsonPayload = [
+            'pages' => $pages,
+            'conforming' => $conforming,
+            'percent' => $pages > 0 ? round(100 * $conforming / $pages) : null,
+            'measured' => $pages > 0,
+            'measured_by' => $evidence['checks'] > 0 ? 'anatomy+evidence' : 'anatomy',
+            'evidence' => $evidencePayload,
+            'per_page' => $perPage,
+            'unrecorded' => $withFixes($allErrors),
+            'open' => $withFixes($allOpen),
+            'approved' => $allApproved,
+            'stale' => $allStale,
+            'lint_findings' => array_map(fn ($f) => [
+                'kind' => $f['kind'] ?? 'lint',
+                'severity' => $f['severity'] ?? 'warning',
+                'message' => $f['message'] ?? '',
+                'fix' => \LaraSlice\Support\FindingFixes::forKind($f['kind'] ?? null),
+            ], $this->lintFindings),
+        ];
+
         return $failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * The evidence block carried in the JSON payload (and
+     * summarised in text mode): per-suite counts with the
+     * recording timestamp, so a reader can judge freshness —
+     * evidence is a measurement with a date, not a status.
+     *
+     * @param  array<string, mixed>  $evidence
+     * @return array<string, mixed>
+     */
+    private function evidencePayload(array $evidence): array
+    {
+        return [
+            'checks' => $evidence['checks'],
+            'passed' => $evidence['passed'],
+            'percent' => $evidence['percent'],
+            'suites' => array_map(static fn (array $suite) => [
+                'suite' => $suite['suite'],
+                'file' => $suite['file'],
+                'recorded_at' => $suite['recorded_at'],
+                'app' => $suite['app'],
+                'checks' => $suite['checks'],
+                'passed' => $suite['passed'],
+                'failed' => array_column($suite['failed'], 'id'),
+            ], $evidence['suites']),
+            'errors' => $evidence['errors'],
+        ];
+    }
+
+    /** @param array<string, mixed> $evidence */
+    private function reportEvidence(array $evidence): void
+    {
+        foreach ($evidence['suites'] as $suite) {
+            $when = $suite['recorded_at'] !== null ? " (recorded {$suite['recorded_at']})" : '';
+            $this->line("  evidence {$suite['suite']}: {$suite['passed']}/{$suite['checks']} checks passed{$when}");
+            foreach ($suite['failed'] as $failedCheck) {
+                $detail = $failedCheck['detail'] !== '' ? " — {$failedCheck['detail']}" : '';
+                $this->error("  evidence {$suite['suite']} {$failedCheck['id']}: FAILED — {$failedCheck['label']}{$detail}");
+            }
+        }
+        foreach ($evidence['errors'] as $error) {
+            $this->error('  evidence '.$error);
+        }
     }
 
     /**
@@ -270,6 +427,7 @@ class SliceConformanceCommand extends Command
             }
         }
 
+        $this->lintFindings = $findings;
         $errors = 0;
         $warnings = 0;
         foreach ($findings as $finding) {

@@ -13,16 +13,17 @@ class WorkflowSlaCheckCommand extends Command
 
     public function handle(SlaEscalationManager $manager): int
     {
-        $this->info("Scanning active workflow entities for SLA thresholds...");
+        $this->info('Scanning active workflow entities for SLA thresholds...');
 
         $breached = $manager->scanBreachedEntities();
 
         if (empty($breached)) {
-            $this->info("✓ All active workflows are operating within SLA deadlines. No breaches detected.");
+            $this->info('✓ All active workflows are operating within SLA deadlines. No breaches detected.');
+
             return 0;
         }
 
-        $this->warn("⚠ Found ".count($breached)." SLA breach(es) requiring attention!");
+        $this->warn('⚠ Found '.count($breached).' SLA breach(es) requiring attention!');
 
         $rows = array_map(function ($b) {
             return [

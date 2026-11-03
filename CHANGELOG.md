@@ -1,10 +1,30 @@
 ## [Unreleased]
 
-- Studio YAML diff preview before overwrite (no silent writes)
-- Journey breadcrumb: Port → Design → Customize
-- YAML Phase 3: JSON-only load warns once and points at migrate
-- YAML Phase 4: JSON read fallback removed; `slice:migrate-json-to-yaml` is the upgrade path
-- `slice:diff` CLI parity with Studio preview
+## [2.0.2] - 2026-11-02
+
+**Convergence release — driven by a from-scratch sandbox port of a production application, converged surface-by-surface against the running original until its benchmark scope passed every Replica Protocol gate (scripted admin and employee journeys 24/24), then audited interaction-by-interaction across every module and completed with its messaging, reports, payroll and settings workspaces. Full suite: 643 tests, 2300 assertions. Full notes: [CHANGES-v2.0.2.md](CHANGES-v2.0.2.md).**
+
+### Added
+- Porter carries role→permission grants on auth import: legacy permission names translate onto framework slugs by entity evidence (navigation label, slice name, title, root table; token-vote fallback); scopes carried by name (added · owned · both · all · none) into a typed grant pivot; untranslatable names reported, never guessed.
+- Permission scope layer: five grant scopes narrow directory lists and record pages at runtime (`access.own_scope` declarations, including a pivot-clause form; self-record hub access without a view grant).
+- Design kits: the Mind declares `design.kit` (house default; a replica kit ships for source-faithful ports), `?kit=` session override, `slice:install` publishes the kits.
+- Directory interaction layer: declared imports (`ui.directory.import`, declaration as allowlist), server-side XLSX export over the list's own filtered + scope-narrowed criteria, declared record actions (`ui.actions`: link · copy · send · method), public record links (`ui.public_link`) with an unauthenticated read page, and a `?print=1` print surface on record pages.
+- One styled delete confirmation dialog across row menus, bulk delete and legacy confirm forms.
+- Report group labels fall back to the model's own relation; conversation pattern gains a flat mode for pair-shaped message tables.
+- MCP: dual-era protocol negotiation, resources (skills · gates · docs · slices · commands), and JSON gate output (`slice:drift` / `slice:conformance --format=json`) with a fix hint on every finding.
+- Schema closure for auth tables' descriptive columns under a hard blocklist (credentials, tokens, MFA, payment identifiers, permission payloads never cross); auth values pair by natural key.
+- Hub identity pattern (`ui.show.identity`: identity + About cards), widget relation fallback (user-scope columns, back-references, pivot joins), `pairs` widget type, `_period` current-period stat scopes, stats measure `default:`.
+- SKILL §27: the named six-step path shared with spec-driven toolkits (constitution · specify · plan · tasks · build · converge).
+- SKILL §28 pre-build dossier: six named slots (PRD · TRD · App Flow · UI/UX brief · schema · plan) mapped to LaraSlice artefacts; one-page TRD template (`docs/templates/TRD.md`); `success_metrics` slot in the Mind (drafts with the Mind, editable in Plan mode); `slice:flow` generates the App Flow artefact (HTML or Mermaid) from Mind journeys + slice navigation; the five Replica gates gain plain names (Structure · Data · Furniture · Tasks · Visual) said first everywhere.
+- Studio YAML diff preview before overwrite (no silent writes); journey breadcrumb: Port → Design → Customize; `slice:diff` CLI parity with Studio preview.
+
+### Fixed
+- Bound settings toggles preserve each table's own value convention (yes/no · active/deactive · enabled/disabled · integers) on reads and writes; module-style status rows no longer render off or save as 1/0.
+- Directory row-menu delete was a silent no-op in generated views; it now submits a real delete. Repeater definitions without a foreign key no longer 500 record creation (save-path guard + `slice:drift --structure` audit for the declaration class).
+- Foreign keys resolve by evidence chain at generation (record-prefixed → conventional → fused → plural-prefixed → unique suffix → same-table siblings → people-are-users), every candidate verified to resolve; the same chain heals generated models via `slice:repair` (205/262 lookups resolving on the convergence port).
+- Edit forms: string `*_id` codes no longer render as empty relationship comboboxes; date/datetime inputs emit their own format (raw values rendered empty and saved back as NULL).
+- AI Copilot pill renders below sticky form action bars (it intercepted Save clicks).
+- YAML Phase 3: JSON-only load warns once and points at migrate; YAML Phase 4: JSON read fallback removed; `slice:migrate-json-to-yaml` is the upgrade path.
 
 # Changelog
 
