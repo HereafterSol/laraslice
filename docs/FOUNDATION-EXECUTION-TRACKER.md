@@ -23,7 +23,7 @@
 
 ## Porting pause (mandate)
 
-Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **Next port polish:** directory formatters or **Gate T** expansion. Host **repair** allowed.
+Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **Next port polish:** **Gate T** expansion; remaining Gate V directory **M** chrome backlog. Host **repair** allowed.
 
 ---
 
@@ -66,6 +66,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
 | 2026-11-05 | **Post-merge host sync (v202)** | LaraSlice **`f28f762`**; route-truth **1203** routes — `POST-MERGE-HOST-SYNC-2026-11-05.md` |
 | 2026-11-05 | **X5 Gate V hub PNG + HTTP (v202)** | **15/16** pairs; client hub id **3**; **`slice:links` 0** — `X5-GATE-V-2026-11-05.md` |
+| 2026-11-05 | **Directory formatter lift (v202)** | ClientDetails `composite_user` + Projects `completion_percent` progress — `erp-port-v202/porting/DIRECTORY-FORMATTER-LIFT-2026-11-05.md`; Gate V still **PARTIAL (~50%)** |
 | 2026-11-05 | **Hub YAML lift (v202)** | ClientDetails + Projects — `HUB-YAML-LIFT-2026-11-05.md` |
 | 2026-11-05 | **N3 Gate S matched-table columns** | v202 **16→0** missing cols; `discussions` documented exclude — `porting/N3-GATE-S-2026-11-05.md` |
 | 2026-11-05 | **F1 `slice:route-truth` on erp-port-v202** | path-repo **`b1831ce`**; **1056** routes → `porting/route-truth-2026-11-05.json` — `F1-ROUTE-TRUTH-LOG.md` |
@@ -112,7 +113,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | **Last commit** | `d8058c6` (post-merge + hub YAML programme docs) |
 | **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **714** tests OK (2620 assertions); `SlicePortabilityCommandTest` + shipped `PortabilityAudit` green; `slice:portability` via Testbench (no host `artisan` in package root) |
 | **Merge conflicts resolved** | `SlicePortabilityCommand.php` (shipped `PortabilityAudit` + `TrilogyPortabilityLint`); `BlueprintStudioController.php` (`BlueprintLibrary` + `FrameworkPackage`); `studio-shell.blade.php` (design-factory loader + persona + design slice hook); `ai-copilot-bubble.blade.php` (released z-index/model line + candidate telemetry/version); `skills/laraslice/SKILL.md` (§27 toolkit path + §28–29 candidate sections); duplicate `SlicePortabilityCommand` registration removed in `LaraSliceServiceProvider.php`; **`Kit.php`** restored to released `resolve()` / `stylesheet()` (candidate stub had won auto-merge) |
-| **In flight** | Directory formatter lift / **Gate T** expansion; optional pixel diff; `discussions` / 118-table programme; flagship `slice:portability` cleanup |
+| **In flight** | **Gate T** expansion (employee-create+ journeys); remaining Gate V **M** chrome (filter band, Worksuite widgets, other matrix rows); optional pixel diff; `discussions` / 118-table programme; flagship `slice:portability` cleanup |
 
 **Pull before work:**
 
@@ -129,7 +130,7 @@ git pull origin v2.0.2-candidate
 
 1. ~~**Close F1 on v202:** `slice:links` + **`slice:route-truth` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`).
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. ~~**Hub YAML lift**~~ / ~~**X5** hub PNG~~ — **done** on v202. **Next:** directory formatters or **Gate T**; optional pixel diff (no PASS without metrics).
+3. ~~**Hub YAML lift**~~ / ~~**X5** hub PNG~~ / ~~**directory formatter lift**~~ — **done** on v202. **Next:** **Gate T**; Gate V **M** chrome backlog; optional pixel diff (no PASS without metrics).
 
 ---
 
