@@ -40,13 +40,15 @@
 
 See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md).
 
-1. **Routing truth** — `/erp/erp/...` live URLs vs `erp/adjudication/...` in `route:list` / skills / MCP.
-2. **Flagship zip** — `composer.lock` or Packagist-only install; no SSH VCS default.
-3. **Windows demo** — `demo.ps1` parity (`tar -xf`, `APP_URL`, SQLite path).
+1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); close **F1** on v202 (`slice:links` collisions). See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
+2. **Flagship zip** — Packagist stub + **`porting/generate-flagship-composer-lock.ps1`** shipped ([F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4)); **`composer.lock` inside zip** still open.
+3. **Windows demo** — **`resources/stubs/flagship/demo.ps1`** + **`docs/demo-windows.ps1`** shipped; validate on fresh extract (`tar -xf`).
 
 ### Demo (:7002)
 
-- Server **up** (login 200); **client portal** journey deferred — see `IMPROVEMENT-REGISTER-2.0.2.md` role matrix.
+- Try **`docs/demo-windows.ps1`** or stub **`demo.ps1`** after `git pull` `v2.0.2-candidate` (F3).
+- **Studio F5 / X6:** demo host views republished from package stubs (`ai-copilot-bubble`, `app` layout version via `FrameworkPackage::version()`); CLI copilot status = **SQLite schemas** + **`dev-v2.0.2-candidate`**. **:7002 browser:** stop duplicate `php -S` processes; run one `artisan serve` from `flagship-erp-v202-demo` before smoke.
+- **Client portal** deferred — `IMPROVEMENT-REGISTER-2.0.2.md`.
 
 ## Doc index
 

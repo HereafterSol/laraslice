@@ -33,8 +33,8 @@ Living backlog for the **framework** (not per-port gate status). **Live sprint b
 
 1. **Route prefix truth** — Live **`/erp/erp/...`** URIs; agents use **`php artisan slice:route-truth`** / MCP **`get_route_truth`** ([F2 done](d42146fe-049c-45c5-a106-5b6c580e8a0e) `c3abc2d`). **F1 partial on v202:** `slice:qualify-routes` PASS; **`slice:links` FAIL** — resolve **Settings** core vs ERP twin + **`permission_types`** Roles/ReferenceData collision (BACKLOG #6).
 2. **Flagship zip installability** — Packagist-only **`resources/stubs/flagship/composer.json`**; generate lock via **`porting/generate-flagship-composer-lock.ps1`** before zip cut (optional `vendor` for offline evaluators).
-3. **Windows one-click demo** — **`resources/stubs/flagship/demo.ps1`** + [demo-windows.ps1](demo-windows.ps1): `tar -xf`, `.env` `APP_URL` + absolute SQLite path, `slice:cache`.
-4. **Studio honesty** — Version from composer (not hard-coded badge); host slice count matches discovery; SQLite-aware Copilot copy. *(Framework: `FrameworkPackage` + Studio shell — Nov 2026.)*
+3. **Windows one-click demo** — **`demo.ps1`** + **`docs/demo-windows.ps1`** **shipped** on candidate ([F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4)); run on fresh tree. **Lock in zip** still open — use **`porting/generate-flagship-composer-lock.ps1`** before next flagship cut.
+4. **Studio honesty** — Package **Done**; **X6** republished demo host Blade (`FrameworkPackage::version()`, SQLite Copilot stub); restart single `:7002` server on `flagship-erp-v202-demo` before browser sign-off.
 5. **Porter ReferenceData** — `slice:port --scaffold` can emit merged `currencies` migration over MySQL row limit; split taxonomies in framework or playbook step (see IMPROVEMENT-REGISTER § Zero port erp-port-v202).
 6. **MFA env for port QA** — `auth.mfa_enabled` must respect `LARASLICE_MFA_ENABLED` (**validated on erp-port-v202** Nov 2026; **ship in framework** default config).
 

@@ -33,11 +33,11 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | ID | Work | Owner | Target |
 | --- | --- | --- | --- |
-| F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PARTIAL** — v202 qualify-routes PASS; `slice:links` FAIL (Settings name + permission_types table); see v202 `REPLICA-STATUS` routing row |
+| F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PASS (port)** — v202 `slice:links` exit 0 (5 Nov 2026): **ErpSettings** rename + **permission_types** → Roles only; evidence `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` · `slice:route-truth` pending Packagist bump to `c3abc2d` |
 | F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
 | F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **In progress** — Packagist stub + `demo.ps1` + lock script shipped; lock in zip next cut |
 | F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
-| F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — STUDIO-UX-AUDIT browser table + copilot stub polish |
+| F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — package + **X6** host republish on `flagship-erp-v202-demo`; `:7002` browser needs **one** `artisan serve` on demo (port collision was serving stale app) |
 
 ### Next (after F1–F3 underway)
 
@@ -51,7 +51,6 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | X3 | Consolidate port modal → single Port panel | STUDIO-UX-AUDIT U3 |
 | X4 | Windows `demo.ps1` parity | Part of F3 |
 | X5 | Gate V workbook + pixel diff tooling | erp-port-v202 |
-
 ### Blocked
 
 | ID | Blocker | Unblock |
@@ -64,8 +63,10 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | Date | Item | Evidence |
 | --- | --- | --- |
-| 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; `slice:links` FAIL (2 collisions) — `porting/REPLICA-STATUS.md` routing row |
+| 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; **`slice:links` PASS** after ErpSettings + permission_types fix — `porting/F1-SLICE-LINKS-LOG.md` |
+| 2026-11-05 | **F2 `slice:route-truth` + MCP** | `c3abc2d` — [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e) |
 | 2026-11-05 | **F3 evaluator install (partial)** | Packagist flagship stub, `demo.ps1`, `demo-windows.ps1`, lock generator — [F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4) |
+| 2026-11-05 | **X6 flagship :7002 host Blade republish** | Demo `ai-copilot-bubble` + `app` layout `FrameworkPackage::version()`; `view:clear` + `slice:cache` |
 | 2026-11-05 | **F5 Studio :7002 browser audit** | `7a5527e` |
 | 2026-11-05 | **Phase 0 architecture foundation audit** | [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) |
 | 2026-11-05 | Multi-runtime portability contract | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
@@ -100,8 +101,8 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `7a5527e` (F5 Studio :7002 browser audit) |
-| **In flight** | F1, F4 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
+| **Last commit** | `32f1fec` (docs sync F3/F5 follow-up) |
+| **In flight** | F3 lock-in-zip (`porting/generate-flagship-composer-lock.ps1`); F4 **Now**; **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked |
 
 **Pull before work:**
 
@@ -116,9 +117,9 @@ git pull origin v2.0.2-candidate
 
 ## Muse — suggested next 3 tasks
 
-1. **Close F1 on v202:** resolve Settings slice twin + `permission_types` collision → **`slice:links` PASS**; run **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
+1. ~~**Close F1 on v202:** `slice:links` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining F1:** **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
 2. Run **`porting/generate-flagship-composer-lock.ps1`**, embed lock in next **flagship zip**; smoke **`resources/stubs/flagship/demo.ps1`** on clean extract (F3 close).
-3. Studio owner glossary (F5); align **`slice:portability`** with shipped lint (F4).
+3. **Owner glossary** (STUDIO-UX-AUDIT X2); **F4** Heart lint / `slice:portability` alignment.
 
 ---
 
