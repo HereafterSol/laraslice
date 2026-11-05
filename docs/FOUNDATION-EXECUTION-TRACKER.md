@@ -115,7 +115,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` (base **merged** `origin/master` @ **dd1e0ba** / tag **v2.0.2**) |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `aaa3f51` (R&D ~50% root-cause doc + tracker index/done row — `PORT-50-PERCENT-ROOT-CAUSE-2026-11-05.md`) |
+| **Last commit** | `7e195f2` (R&D ~50% root-cause doc + tracker index/done row — `PORT-50-PERCENT-ROOT-CAUSE-2026-11-05.md`) |
 | **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **716** tests OK (**2643** assertions); `SliceRouteTruthCommandTest` + `McpProtocolTest::test_get_route_truth_*` + `SlicePortabilityCommandTest` / `TrilogyPortabilityLint` green |
 | **Merge conflicts resolved** | `SlicePortabilityCommand.php` (shipped `PortabilityAudit` + `TrilogyPortabilityLint`); `BlueprintStudioController.php` (`BlueprintLibrary` + `FrameworkPackage`); `studio-shell.blade.php` (design-factory loader + persona + design slice hook); `ai-copilot-bubble.blade.php` (released z-index/model line + candidate telemetry/version); `skills/laraslice/SKILL.md` (§27 toolkit path + §28–29 candidate sections); duplicate `SlicePortabilityCommand` registration removed in `LaraSliceServiceProvider.php`; **`Kit.php`** restored to released `resolve()` / `stylesheet()` (candidate stub had won auto-merge) |
 | **In flight** | Gate T follow-ups (client account-backed create, source **:7001** store fixes or documented port-only matrix); remaining Gate V **M** chrome (filter band, Worksuite widgets, other matrix rows); optional pixel diff; `discussions` / 118-table programme; flagship `slice:portability` cleanup |
