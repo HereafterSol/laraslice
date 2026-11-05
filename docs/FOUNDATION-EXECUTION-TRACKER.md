@@ -82,8 +82,8 @@
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
 | **Last commit (before this sprint push)** | `7e39dbd` — fix(porting): strip comments and refine column visibility in DataTableUiParser |
 | **In flight (this sprint)** | Tracker + ENTERPRISE-UX + ROUTING-TRUTH; `EnterpriseShell`; Studio persona stub; architect programme docs + Studio honesty pass |
-| **Push result** | _Updated after push — see below_ |
-| **Commit (this sprint)** | `bfe8a3d` — foundation execution tracker + enterprise UX shell pass |
+| **Push result** | **OK** — `git push origin v2.0.2-candidate` (5 Nov 2026) |
+| **Commit (this sprint)** | `c2a7707` — foundation execution tracker + enterprise UX shell pass |
 
 **Pull before work:**
 
