@@ -99,7 +99,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `730116c` (F3 demo stubs; F2 body `c3abc2d`) |
+| **Last commit** | `10da68f` (F3 demo stubs; F2 body `c3abc2d`) |
 | **In flight** | F1, F2, F4, F5 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
 
 **Pull before work:**
@@ -115,9 +115,9 @@ git pull origin v2.0.2-candidate
 
 ## Muse — suggested next 3 tasks
 
-1. Implement or spec **`slice:route-truth`** JSON emitter; wire MCP read path (F2).
-2. Run **`slice:qualify-routes`** on erp-port-v202 and mark routing row PASS in `REPLICA-STATUS.md` (F1).
-3. Align **`slice:portability`** docs with shipped command (`slice:validate` extension or new lint) and fix demo YAML leakage (F4).
+1. **Close F1 on v202:** resolve Settings slice twin + `permission_types` collision → **`slice:links` PASS**; run **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
+2. Ship flagship **`composer.lock`** + run **`demo.ps1`** / `demo-windows.ps1` (F3).
+3. Studio owner glossary (F5); align **`slice:portability`** with shipped lint (F4).
 
 ---
 

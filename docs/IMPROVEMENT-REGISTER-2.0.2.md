@@ -38,11 +38,11 @@
 - **Work / Projects:** list, filters, status ribbons, export, row actions — **PASS** at `/erp/erp/work/projects`
 - **CRM / Leads:** sidebar targets `/erp/erp/crm/leads` — not fully exercised; same URL pattern as Projects
 
-**Routing mismatch (high severity)**
+**Routing (high severity — partial fix Nov 2026)**
 
-- `php artisan route:list` registers names like `erp/adjudication/work/projects`
-- Live navigation and working URLs use **`/erp/erp/{area}/{slice}`** (double `erp`, no `adjudication`)
-- Direct hits to `erp/adjudication/...` return **404** even when authenticated — breaks bookmarking, docs, and agents that read `route:list`
+- Live navigation: **`/erp/erp/{area}/{slice}`** — keep; do not reverse URLs.
+- Agents/MCP: **`php artisan slice:route-truth`** + **`get_route_truth`** on `v2.0.2-candidate` (`c3abc2d`) — not `route:list` adjudication names alone.
+- **erp-port-v202:** `slice:qualify-routes` **PASS**; **`slice:links` FAIL** — **Settings** core vs ERP twin; **`permission_types`** Roles + ReferenceData ([F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e)).
 
 ---
 

@@ -1,6 +1,6 @@
 # LaraSlice product backlog
 
-Living backlog for the **framework** (not per-port gate status). **Live sprint board:** [FOUNDATION-EXECUTION-TRACKER.md](FOUNDATION-EXECUTION-TRACKER.md) · **Stage 3 audit:** [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) · **Portability:** [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) (`v2.0.2-candidate`, audit commit `05dfef3`, handoff `83d5961`). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
+Living backlog for the **framework** (not per-port gate status). **Live sprint board:** [FOUNDATION-EXECUTION-TRACKER.md](FOUNDATION-EXECUTION-TRACKER.md) · **F2 shipped:** `slice:route-truth` (`c3abc2d`) · **F1 partial:** v202 `slice:links` collisions. Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
 
 **Release baseline:** [v2.0.2](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.2) · Changes: [CHANGES-v2.0.2.md](../CHANGES-v2.0.2.md) · Evaluator findings: [IMPROVEMENT-REGISTER-2.0.2.md](IMPROVEMENT-REGISTER-2.0.2.md) · [NAMING.md](NAMING.md)
 
@@ -31,7 +31,7 @@ Living backlog for the **framework** (not per-port gate status). **Live sprint b
 
 ## v2.0.2 validation — P0 (from real-user demo, Nov 2026)
 
-1. **Route prefix truth** — Navigation uses `/erp/erp/{area}/{slice}`; `route:list` / skills cite `erp/adjudication/...` → **404**. Align registration, `slice:links`, MCP index ([register § UI/UX #1](IMPROVEMENT-REGISTER-2.0.2.md)).
+1. **Route prefix truth** — Live **`/erp/erp/...`** URIs; agents use **`php artisan slice:route-truth`** / MCP **`get_route_truth`** ([F2 done](d42146fe-049c-45c5-a106-5b6c580e8a0e) `c3abc2d`). **F1 partial on v202:** `slice:qualify-routes` PASS; **`slice:links` FAIL** — resolve **Settings** core vs ERP twin + **`permission_types`** Roles/ReferenceData collision (BACKLOG #6).
 2. **Flagship zip installability** — Packagist-only **`resources/stubs/flagship/composer.json`**; generate lock via **`porting/generate-flagship-composer-lock.ps1`** before zip cut (optional `vendor` for offline evaluators).
 3. **Windows one-click demo** — **`resources/stubs/flagship/demo.ps1`** + [demo-windows.ps1](demo-windows.ps1): `tar -xf`, `.env` `APP_URL` + absolute SQLite path, `slice:cache`.
 4. **Studio honesty** — Version from composer (not hard-coded badge); host slice count matches discovery; SQLite-aware Copilot copy. *(Framework: `FrameworkPackage` + Studio shell — Nov 2026.)*
@@ -47,7 +47,7 @@ Living backlog for the **framework** (not per-port gate status). **Live sprint b
 3. **Employee account-backed create** — nested user + details in one transaction (Part C fail class).
 4. **Report slices** — attendance/finance as first-class port surfaces.
 5. **Studio drift panel** — drift table with jump-to-slice in Dev Studio.
-6. **Duplicate slice registry** — twin naming when vendor + ERP both register `Settings`.
+6. **Duplicate slice registry** — twin **Settings** (core vs `app/Slices/ERP/Settings/Settings`) breaks **`slice:links`** on erp-port-v202; **`permission_types`** shared by Roles + ReferenceData — fix or document deviation before F1 PASS ([F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e)).
 7. **Windows test stability** — import test isolation; `tests/README-PLATFORMS.md`.
 
 ### Studio UX (Dev / Port / Blueprint)
