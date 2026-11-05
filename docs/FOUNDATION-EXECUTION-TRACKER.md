@@ -33,7 +33,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | ID | Work | Owner | Target |
 | --- | --- | --- | --- |
-| F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PASS (port)** — v202 `slice:links` exit 0 (5 Nov 2026): **ErpSettings** rename + **permission_types** → Roles only; evidence `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` · `slice:route-truth` pending Packagist bump to `c3abc2d` |
+| F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PASS** — v202 `slice:links` exit 0 + **`slice:route-truth`** exit 0 (5 Nov 2026); path-repo **`b1831ce`**; evidence `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md` |
 | F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
 | F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **PASS** — `resources/stubs/flagship/composer.lock` (Packagist `hereafter/laraslice` **v2.0.2** / `dd1e0ba`); `generate-flagship-composer-lock.ps1` uses `--no-install`; smoke `composer install --dry-run` + `demo.ps1 -NoServe` on flagship tree (5 Nov 2026) |
 | F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | **PASS** — `slice:portability` + `TrilogyPortabilityLint`; `--json` CI; migration filename allowlist documented in contract (5 Nov 2026) |
@@ -64,7 +64,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | Date | Item | Evidence |
 | --- | --- | --- |
 | 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
-| 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; **`slice:links` PASS** after ErpSettings + permission_types fix — `porting/F1-SLICE-LINKS-LOG.md` |
+| 2026-11-05 | **F1 `slice:route-truth` on erp-port-v202** | path-repo **`b1831ce`**; **1056** routes → `porting/route-truth-2026-11-05.json` — `F1-ROUTE-TRUTH-LOG.md` |
 | 2026-11-05 | **F2 `slice:route-truth` + MCP** | `c3abc2d` — [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e) |
 | 2026-11-05 | **F3 flagship lock + install smoke** | `resources/stubs/flagship/composer.lock`; dry-run + `demo.ps1 -NoServe`; lock script `--no-install` |
 | 2026-11-05 | **F3 evaluator install (partial)** | Packagist flagship stub, `demo.ps1`, `demo-windows.ps1`, lock generator — [F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4) |
@@ -105,7 +105,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
 | **Last commit** | `5b15295` (programme post-F4; F4 feat `f467877`) |
-| **In flight** | **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked; flagship demo YAML may still fail `slice:portability` until porter cleanup |
+| **In flight** | **N3** Gate S column trim / **N5** Gate V matrix (F1 **PASS** on v202); flagship demo YAML may still fail `slice:portability` until porter cleanup |
 
 **Pull before work:**
 
@@ -120,9 +120,9 @@ git pull origin v2.0.2-candidate
 
 ## Muse — suggested next 3 tasks
 
-1. ~~**Close F1 on v202:** `slice:links` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining F1:** **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
+1. ~~**Close F1 on v202:** `slice:links` + **`slice:route-truth` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`).
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). **Next:** Owner glossary (STUDIO-UX-AUDIT X2); **`slice:route-truth` on v202** via path-repo.
+3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). **Next:** Owner glossary (STUDIO-UX-AUDIT X2); **N3** Gate S on v202.
 
 ---
 

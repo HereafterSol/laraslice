@@ -40,7 +40,7 @@
 
 See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md).
 
-1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); **F1 port:** v202 **`slice:links` PASS** (5 Nov — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining:** run **`slice:route-truth`** on v202 after path-repo to `c3abc2d`. See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
+1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); **F1 port PASS** on v202 — `slice:links` + **`slice:route-truth`** exit 0 (5 Nov — `F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`). See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
 2. **Flagship zip** — **`resources/stubs/flagship/composer.lock`** tracked (**`23c18d6`**, Packagist `hereafter/laraslice` **v2.0.2**); generator uses **`--no-install`**. **Remaining:** ship lock beside `composer.json` in the **next flagship zip** artifact cut.
 3. **Windows demo** — **`demo.ps1`** / **`docs/demo-windows.ps1`** + **`demo.ps1 -NoServe`** smoke **PASS** on flagship tree; re-validate on **fresh** `tar -xf` extract when cutting zip.
 4. **Portable Heart** — **`slice:portability`** + trilogy lint **PASS** (`f467877`); run on host trees before demo cuts — ported YAML may still report findings until porter cleanup ([MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md)).
