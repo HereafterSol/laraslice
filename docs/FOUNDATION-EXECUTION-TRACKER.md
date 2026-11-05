@@ -103,7 +103,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `23c18d6` (F3 flagship composer.lock stub + lock script `--no-install`) |
+| **Last commit** | `40ca6a4` (post-F3 programme sync; F3 lock `23c18d6`) |
 | **In flight** | F4 **Now**; **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked; embed lock on next **flagship zip** cut from stub |
 
 **Pull before work:**
