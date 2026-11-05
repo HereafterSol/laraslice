@@ -25,7 +25,7 @@ This document states **machine-checkable** rules. Runtimes map declarations to l
 - **UI patterns:** `ui.directory`, `ui.show`, `ui.dashboard`, `ui.document`, `ui.matrix`, `ui.settings_hub` — not `<x-ui.*>` or Livewire tags in YAML.
 - **Workflows:** declared transitions and guards in YAML — not PHP closure references.
 
-**CI intent:** a future `slice:portability` (or extended `slice:validate`) fails on forbidden substrings in `slice.yaml` / Mind / Body under `app/Slices` and `porting/`.
+**CI intent:** `slice:portability` fails on forbidden substrings in `slice.yaml` / Mind / Body under host `app/Slices` (or configured `laraslice.slices_path`), package core Hearts, and `porting/`. **Exception:** Heart `migration` filename values (`.php` suffix) are allowed until porter emits runtime-neutral migration refs.
 
 ---
 
@@ -56,8 +56,8 @@ A sibling runtime **must** implement:
 
 | Gap | Remediation |
 | --- | --- |
-| PHP leakage in demo/port YAML | Porter + validator lint (W3 in foundation audit) |
-| `slice:portability` missing | Implement lint or document alias to validated rules |
+| PHP leakage in demo/port YAML | Porter + **`slice:portability`** (host runbook before demo cut) |
+| ~~`slice:portability` missing~~ | **Shipped** — `TrilogyPortabilityLint` + `slice:portability` (`--json` for CI) |
 | Flutter export only | Not FlutterSlice runtime — label as **generator**, not family row “shipped” |
 
 ---

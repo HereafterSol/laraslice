@@ -36,6 +36,7 @@ use LaraSlice\Commands\SliceListCommand;
 use LaraSlice\Commands\SliceMakeCommand;
 use LaraSlice\Commands\SliceMigrateJsonToYamlCommand;
 use LaraSlice\Commands\SlicePlanDraftCommand;
+use LaraSlice\Commands\SlicePortabilityCommand;
 use LaraSlice\Commands\SlicePortCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SliceQualifyRoutesCommand;
@@ -175,6 +176,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 SlicePlanDraftCommand::class,
                 SliceDriftCommand::class,
                 SliceConformanceCommand::class,
+                SlicePortabilityCommand::class,
                 SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,

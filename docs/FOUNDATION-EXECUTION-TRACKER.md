@@ -2,7 +2,7 @@
 
 **Vision (one line):** Mature LaraSlice so AI, developers, and super-admins adopt it — **enterprise-grade UX**, honest **~50%→100%** port path, skills/MCP discipline, multi-language vision without false shipping claims.
 
-**Headline (5 Nov 2026):** ERP programme **~50%** replica on erp-port-v202 (lowest gate wins — **not 100%**). **Foundation F1–F3 PASS** — **N3/N5** port work on v202 unblocked; **F4** portable Heart lint **Now**.
+**Headline (5 Nov 2026):** ERP programme **~50%** replica on erp-port-v202 (lowest gate wins — **not 100%**). **Foundation F1–F3 PASS** — **N3/N5** port work on v202 unblocked; **F4 PASS** — `slice:portability` aligned to portability contract.
 
 **Audit:** [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) · **Maturity stage:** **3 — Defined**
 
@@ -36,7 +36,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PASS (port)** — v202 `slice:links` exit 0 (5 Nov 2026): **ErpSettings** rename + **permission_types** → Roles only; evidence `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` · `slice:route-truth` pending Packagist bump to `c3abc2d` |
 | F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
 | F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **PASS** — `resources/stubs/flagship/composer.lock` (Packagist `hereafter/laraslice` **v2.0.2** / `dd1e0ba`); `generate-flagship-composer-lock.ps1` uses `--no-install`; smoke `composer install --dry-run` + `demo.ps1 -NoServe` on flagship tree (5 Nov 2026) |
-| F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
+| F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | **PASS** — `slice:portability` + `TrilogyPortabilityLint`; `--json` CI; migration filename allowlist documented in contract (5 Nov 2026) |
 | F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — package + **X6** host republish; demo needs **`LARASLICE_WIZARD_ENABLED=true`** + `config/laraslice.php` **`wizard`** block (stale publish) for `/laraslice/studio`; **one** `artisan serve` on `:7002` |
 
 ### Next (after F1–F3 underway)
@@ -63,6 +63,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | Date | Item | Evidence |
 | --- | --- | --- |
+| 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
 | 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; **`slice:links` PASS** after ErpSettings + permission_types fix — `porting/F1-SLICE-LINKS-LOG.md` |
 | 2026-11-05 | **F2 `slice:route-truth` + MCP** | `c3abc2d` — [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e) |
 | 2026-11-05 | **F3 flagship lock + install smoke** | `resources/stubs/flagship/composer.lock`; dry-run + `demo.ps1 -NoServe`; lock script `--no-install` |
@@ -103,8 +104,8 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `40ca6a4` (post-F3 programme sync; F3 lock `23c18d6`) |
-| **In flight** | F4 **Now**; **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked; embed lock on next **flagship zip** cut from stub |
+| **Last commit** | *(pending F4 push)* |
+| **In flight** | **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked; flagship demo YAML may still fail `slice:portability` until porter cleanup |
 
 **Pull before work:**
 
@@ -121,7 +122,7 @@ git pull origin v2.0.2-candidate
 
 1. ~~**Close F1 on v202:** `slice:links` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining F1:** **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. **F4** Heart lint / `slice:portability` alignment; **Owner glossary** (STUDIO-UX-AUDIT X2).
+3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). **Next:** Owner glossary (STUDIO-UX-AUDIT X2); **`slice:route-truth` on v202** via path-repo.
 
 ---
 
