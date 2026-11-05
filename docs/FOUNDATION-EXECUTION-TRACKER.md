@@ -125,7 +125,7 @@ git pull origin v2.0.2-candidate
 
 1. ~~**Close F1 on v202:** `slice:links` + **`slice:route-truth` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`).
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). **Next:** **N5** Gate V on v202; optional `discussions` / 118-table programme.
+3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). ~~**N5** Gate V matrix~~ — **PARTIAL** (5 Nov — `N5-GATE-V-2026-11-05.md`). **Next:** Muse **master merge** verification (≥705 tests) before push; then hub YAML / **X5** pixel diff.
 
 ---
 
