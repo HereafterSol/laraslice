@@ -55,7 +55,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 
 | ID | Blocker | Unblock |
 | --- | --- | --- |
-| B0 | **Foundation P0 incomplete** | Close F1–F3 in **Now** |
+| B0 | **Foundation P0 incomplete** | ~~Close F1–F3 in **Now**~~ — **F1–F4 PASS**; remaining work is port gates + UX backlog |
 | B1 | Client portal smoke on :7002 | Dedicated session / checklist |
 | B2 | 100% marketing language | Owner sign-off on NOT COVERED list |
 
@@ -63,6 +63,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 
 | Date | Item | Evidence |
 | --- | --- | --- |
+| 2026-11-05 | **F1/F2 route-truth `slice_id` + agent docs** | **`48dd37a`** — `RouteTruthIndex` uses `SliceManifest::getNamespace()`; MCP `get_route_truth` parity tests; skill §7/§11 CLI + MCP table |
 | 2026-11-05 | **Gate T task-board column HTTP (v202)** | PHPUnit **`GateTTaskBoardColumnMoveTest`**; journey **(c)** HTTP via `PUT /erp/work/tasks/{id}` + `board_column_id`; **`slice:links` 0** — **PARTIAL** — `erp-port-v202/porting/GATE-T-TASK-BOARD-COLUMN-2026-11-05.md` |
 | 2026-11-05 | **Gate T expansion (v202)** | PHPUnit **3/3** (`GateTEmployeeCreateTest`, `GateTProjectCreateTest`, `GateTClientCreateTest`); port HTTP matrix @ **:7005**; source **(a)(b)(g) fail** on benchmark — **PARTIAL** — `erp-port-v202/porting/GATE-T-EXPANSION-2026-11-05.md` |
 | 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
@@ -112,8 +113,8 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` (base **merged** `origin/master` @ **dd1e0ba** / tag **v2.0.2**) |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `5626857` (Gate T task-board column move docs on v202) |
-| **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **714** tests OK (2620 assertions); `SlicePortabilityCommandTest` + shipped `PortabilityAudit` green; `slice:portability` via Testbench (no host `artisan` in package root) |
+| **Last commit** | `48dd37a` (route-truth `slice_id` + skill/MCP alignment; tests **716** OK) |
+| **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **716** tests OK (**2643** assertions); `SliceRouteTruthCommandTest` + `McpProtocolTest::test_get_route_truth_*` + `SlicePortabilityCommandTest` / `TrilogyPortabilityLint` green |
 | **Merge conflicts resolved** | `SlicePortabilityCommand.php` (shipped `PortabilityAudit` + `TrilogyPortabilityLint`); `BlueprintStudioController.php` (`BlueprintLibrary` + `FrameworkPackage`); `studio-shell.blade.php` (design-factory loader + persona + design slice hook); `ai-copilot-bubble.blade.php` (released z-index/model line + candidate telemetry/version); `skills/laraslice/SKILL.md` (§27 toolkit path + §28–29 candidate sections); duplicate `SlicePortabilityCommand` registration removed in `LaraSliceServiceProvider.php`; **`Kit.php`** restored to released `resolve()` / `stylesheet()` (candidate stub had won auto-merge) |
 | **In flight** | Gate T follow-ups (client account-backed create, source **:7001** store fixes or documented port-only matrix); remaining Gate V **M** chrome (filter band, Worksuite widgets, other matrix rows); optional pixel diff; `discussions` / 118-table programme; flagship `slice:portability` cleanup |
 

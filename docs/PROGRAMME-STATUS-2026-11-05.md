@@ -43,7 +43,7 @@
 
 See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md).
 
-1. **Routing truth** — **`slice:route-truth`** shipped; **F1 port PASS** on v202 — `slice:links` exit 0; post-merge index **1203** routes (`POST-MERGE-HOST-SYNC-2026-11-05.md`, package **`f28f762`**).
+1. **Routing truth** — **`slice:route-truth`** shipped; **`slice_id`** resolved for core/package slices (`48dd37a`); **F1 port PASS** on v202 — `slice:links` exit 0; post-merge index **1203** routes (`POST-MERGE-HOST-SYNC-2026-11-05.md`, package **`f28f762`**). Agents: skill §7/§11 + MCP **`get_route_truth`**.
 2. **Flagship zip** — **`resources/stubs/flagship/composer.lock`** tracked (**`23c18d6`**, Packagist `hereafter/laraslice` **v2.0.2**); generator uses **`--no-install`**. **Remaining:** ship lock beside `composer.json` in the **next flagship zip** artifact cut.
 3. **Windows demo** — **`demo.ps1`** / **`docs/demo-windows.ps1`** + **`demo.ps1 -NoServe`** smoke **PASS** on flagship tree; re-validate on **fresh** `tar -xf` extract when cutting zip.
 4. **Portable Heart** — **`slice:portability`** + trilogy lint **PASS** (`f467877`); run on host trees before demo cuts — ported YAML may still report findings until porter cleanup ([MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md)).
