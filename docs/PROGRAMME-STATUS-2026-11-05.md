@@ -40,7 +40,7 @@
 
 See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md).
 
-1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); close **F1** on v202 (`slice:links` collisions). See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
+1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); **F1 port:** v202 **`slice:links` PASS** (5 Nov — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining:** run **`slice:route-truth`** on v202 after path-repo to `c3abc2d`. See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
 2. **Flagship zip** — Packagist stub + **`porting/generate-flagship-composer-lock.ps1`** shipped ([F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4)); **`composer.lock` inside zip** still open.
 3. **Windows demo** — **`resources/stubs/flagship/demo.ps1`** + **`docs/demo-windows.ps1`** shipped; validate on fresh extract (`tar -xf`).
 
@@ -53,6 +53,7 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 ## Doc index
 
 - **`LaraSlice/docs/FOUNDATION-EXECUTION-TRACKER.md`** — **primary sprint board + Muse git handoff** (`v2.0.2-candidate`)
+- `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` — F1 **`slice:links`** closure (ErpSettings + permission_types)
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`
