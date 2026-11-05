@@ -3,6 +3,7 @@
 namespace LaraSlice\Tests\Feature\Ai;
 
 use LaraSlice\Core\Ai\McpServer;
+use LaraSlice\Core\Routing\RouteTruthIndex;
 use LaraSlice\LaraSliceServiceProvider;
 use LaraSlice\Tests\TestCase;
 
@@ -81,6 +82,22 @@ class McpProtocolTest extends TestCase
 
         $destroy = collect($tools)->firstWhere('name', 'destroy_slice');
         $this->assertTrue($destroy['annotations']['destructiveHint']);
+
+        $names = array_column($tools, 'name');
+        $this->assertContains('get_route_truth', $names);
+    }
+
+    public function test_get_route_truth_mcp_tool_matches_route_truth_index(): void
+    {
+        $expected = app(RouteTruthIndex::class)->build();
+        $viaMcp = app(McpServer::class)->callTool('get_route_truth', []);
+
+        $this->assertIsArray($viaMcp);
+        $this->assertSame($expected['route_count'], $viaMcp['route_count']);
+        $this->assertSame($expected['routes'][0]['uri'], $viaMcp['routes'][0]['uri']);
+
+        $filtered = app(McpServer::class)->callTool('get_route_truth', ['path' => 'admin/users']);
+        $this->assertLessThan($expected['route_count'], $filtered['route_count']);
     }
 
     public function test_unknown_methods_and_tools_are_errors(): void

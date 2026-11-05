@@ -62,7 +62,9 @@ final class RouteTruthIndex
     {
         $map = [];
         foreach ($this->manager->getActiveSlices() as $slice) {
-            $namespace = (string) ($slice->raw['namespace'] ?? $slice->namespace ?? '');
+            $namespace = method_exists($slice, 'getNamespace')
+                ? $slice->getNamespace()
+                : (string) ($slice->raw['namespace'] ?? $slice->namespace ?? '');
             if ($namespace === '') {
                 continue;
             }

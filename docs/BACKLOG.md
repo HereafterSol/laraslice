@@ -1,6 +1,6 @@
 # LaraSlice product backlog
 
-Living backlog for the **framework** (not per-port gate status). **Live sprint board:** [FOUNDATION-EXECUTION-TRACKER.md](FOUNDATION-EXECUTION-TRACKER.md) · **F2 shipped:** `slice:route-truth` (`c3abc2d`) · **F1 partial:** v202 `slice:links` collisions. Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
+Living backlog for the **framework** (not per-port gate status). **Live sprint board:** [FOUNDATION-EXECUTION-TRACKER.md](FOUNDATION-EXECUTION-TRACKER.md) · **F1–F2 PASS:** v202 `slice:links` + **`slice:route-truth`** (5 Nov 2026). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
 
 **Release baseline:** [v2.0.2](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.2) · Changes: [CHANGES-v2.0.2.md](../CHANGES-v2.0.2.md) · Evaluator findings: [IMPROVEMENT-REGISTER-2.0.2.md](IMPROVEMENT-REGISTER-2.0.2.md) · [NAMING.md](NAMING.md)
 
@@ -31,12 +31,12 @@ Living backlog for the **framework** (not per-port gate status). **Live sprint b
 
 ## v2.0.2 validation — P0 (from real-user demo, Nov 2026)
 
-1. **Route prefix truth** — Live **`/erp/erp/...`** URIs; agents use **`php artisan slice:route-truth`** / MCP **`get_route_truth`** ([F2 done](d42146fe-049c-45c5-a106-5b6c580e8a0e) `c3abc2d`). **F1 partial on v202:** `slice:qualify-routes` PASS; **`slice:links` FAIL** — resolve **Settings** core vs ERP twin + **`permission_types`** Roles/ReferenceData collision (BACKLOG #6).
+1. **Route prefix truth** — Live **`/erp/erp/...`** URIs; agents use **`php artisan slice:route-truth`** / MCP **`get_route_truth`** (skill §7 + §11; PHPUnit MCP parity). **F1 PASS on v202** (5 Nov 2026): `slice:qualify-routes` + **`slice:links` exit 0** — twin Settings + **`permission_types`** resolved on benchmark host; framework guardrail: skill + tests (BACKLOG #6 closed on v202).
 2. **Flagship zip installability** — Packagist-only **`resources/stubs/flagship/composer.json`**; generate lock via **`porting/generate-flagship-composer-lock.ps1`** before zip cut (optional `vendor` for offline evaluators).
 3. **Windows one-click demo** — **`demo.ps1`** + **`docs/demo-windows.ps1`** **shipped** on candidate ([F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4)); run on fresh tree. **Lock in zip** still open — use **`porting/generate-flagship-composer-lock.ps1`** before next flagship cut.
 4. **Studio honesty** — Package **Done**; **X6** republished demo host Blade (`FrameworkPackage::version()`, SQLite Copilot stub); restart single `:7002` server on `flagship-erp-v202-demo` before browser sign-off.
 5. **Porter ReferenceData** — `slice:port --scaffold` can emit merged `currencies` migration over MySQL row limit; split taxonomies in framework or playbook step (see IMPROVEMENT-REGISTER § Zero port erp-port-v202).
-6. **MFA env for port QA** — `auth.mfa_enabled` must respect `LARASLICE_MFA_ENABLED` (**validated on erp-port-v202** Nov 2026; **ship in framework** default config).
+6. **MFA env for port QA** — `config/laraslice.php` **`auth.mfa_enabled`** reads **`LARASLICE_MFA_ENABLED`**; `SecurityPolicyService::requiresMfa()` honors config (**shipped**; validated on erp-port-v202 Nov 2026).
 
 ---
 

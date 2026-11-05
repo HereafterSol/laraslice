@@ -43,4 +43,4 @@ Track completion in host `porting/REPLICA-STATUS.md` (routing row). Framework: *
 | `slice:route-truth` / MCP `get_route_truth` | **Shipped** (5 Nov 2026) |
 | Skill §11 / §28 read order | Points to this doc via tracker |
 | Auto-fix adjudication prefix in generator | **Not shipped** — documentation-only this sprint |
-| Host routing row PASS on v202 | Track in `porting/REPLICA-STATUS.md` |
+| Host routing row PASS on v202 | **`slice:links` exit 0** + **`slice:route-truth` exit 0** (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`; post-merge **1203** routes in `POST-MERGE-HOST-SYNC-2026-11-05.md`) |

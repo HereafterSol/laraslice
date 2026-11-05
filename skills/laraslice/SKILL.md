@@ -423,6 +423,12 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 - `php artisan slice:cache` / `slice:clear`: Cache or clear slice discovery manifests for production boot optimization. Paths are stored **relative to `base_path()`** so a copied port tree does not keep booting slices from another install's absolute paths. After **any** filesystem clone of an app, run `slice:clear` then `slice:cache` (or `slice:repair`, which clears cache). Legacy absolute caches rebase via `app/Slices` / vendor slice suffixes when possible. Parsed manifest data is cached with the same keys (mtime+size freshness).
 - `php artisan slice:publish {slice?} {--all} {--force}`: Publish core slices into `app/Slices/` for full customization.
 
+### Routing truth, links & portability (agents — read `docs/ROUTING-TRUTH-ALIGNMENT.md`)
+- `php artisan slice:qualify-routes {--dry-run}`: Rewrite flat route names to path-qualified names before exporting truth or running link checks.
+- `php artisan slice:route-truth {--path=} {--output=} {--pretty}`: JSON index `{uri, name, slice_id, methods}` — **prefer this over `route:list`** for ERP deep links (live URIs are often `/erp/erp/...`, not adjudication presets).
+- `php artisan slice:links`: Validate navigation hrefs against registered routes (run after `slice:qualify-routes` + `slice:cache` on port hosts).
+- `php artisan slice:portability {--json} {--root=} {--audit-only}`: Declaration audit + trilogy contract lint (`MULTI-RUNTIME-PORTABILITY-CONTRACT.md`); `--json` for CI.
+
 ### Enterprise Governance & AI Commands
 - `php artisan laraslice:audit:prune {--days=90} {--slice=} {--force}`: Prune old enterprise audit log records dynamically using `settings` table retention.
 - `php artisan laraslice:mcp {--transport=stdio|sse} {--test}`: Run the LaraSlice Model Context Protocol (MCP) server for Cursor, Antigravity, and Claude AI agents.
@@ -602,6 +608,7 @@ IDEs such as Cursor, Antigravity, and Claude Code connect directly to LaraSlice 
 | `query_database_metrics` | *(none)* | Live telemetry: total users, active users, roles, audit counts, table list. |
 | `prune_audit_logs` | `days?`, `slice?` | Prune security and audit log entries older than retention period. |
 | `get_page_context` | `path` | Deep inspection of any screen/route (models used, permissions, controls). |
+| `get_route_truth` | `path?` | JSON route index (`uri`, `name`, `slice_id`) — same payload as `slice:route-truth`; use instead of `route:list` for agent URLs. |
 
 ### 3. OpenCode Free Model & Floating AI Copilot Bubble
 - **Zero API Key Requirement**: Default provider is **OpenCode Free** (powered by open weights models like Llama 3.3 70B & Qwen 2.5 Coder + LaraSlice Native Cognitive Engine). Works out of the box with zero paid API keys.

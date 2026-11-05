@@ -42,7 +42,7 @@
 
 - Live navigation: **`/erp/erp/{area}/{slice}`** — keep; do not reverse URLs.
 - Agents/MCP: **`php artisan slice:route-truth`** + **`get_route_truth`** on `v2.0.2-candidate` (`c3abc2d`) — not `route:list` adjudication names alone.
-- **erp-port-v202:** `slice:qualify-routes` **PASS**; **`slice:links` FAIL** — **Settings** core vs ERP twin; **`permission_types`** Roles + ReferenceData ([F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e)).
+- **erp-port-v202:** `slice:qualify-routes` **PASS**; **`slice:links` PASS** (5 Nov 2026 — Settings twin + **`permission_types`** closure on benchmark host); **`slice:route-truth`** index for agents — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`.
 
 ---
 

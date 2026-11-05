@@ -11,20 +11,35 @@ class SliceRouteTruthCommandTest extends TestCase
     {
         $payload = app(RouteTruthIndex::class)->build();
 
-        $this->assertArrayHasKey('routes', $payload);
+        $this->assertRouteTruthPayloadShape($payload);
         $this->assertGreaterThan(0, $payload['route_count']);
-        $this->assertArrayHasKey('uri', $payload['routes'][0]);
+    }
+
+    public function test_route_truth_payload_matches_routing_truth_contract(): void
+    {
+        $payload = app(RouteTruthIndex::class)->build();
+
+        $this->assertNotEmpty($payload['generated_at']);
+        $this->assertSame($payload['route_count'], count($payload['routes']));
+
+        $withSlice = array_filter(
+            $payload['routes'],
+            static fn (array $entry): bool => $entry['slice_id'] !== null && $entry['slice_id'] !== ''
+        );
+        $this->assertNotEmpty($withSlice, 'Expected at least one controller-backed route with slice_id');
     }
 
     public function test_slice_route_truth_command_emits_json(): void
     {
-        $this->artisan('slice:route-truth', ['--output' => sys_get_temp_dir().'/laraslice-route-truth-test.json'])
+        $outputPath = sys_get_temp_dir().'/laraslice-route-truth-test.json';
+
+        $this->artisan('slice:route-truth', ['--output' => $outputPath])
             ->expectsOutputToContain('route(s) to')
             ->assertSuccessful();
 
-        $json = file_get_contents(sys_get_temp_dir().'/laraslice-route-truth-test.json');
-        $this->assertStringContainsString('routes', $json);
-        @unlink(sys_get_temp_dir().'/laraslice-route-truth-test.json');
+        $payload = json_decode((string) file_get_contents($outputPath), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertRouteTruthPayloadShape($payload);
+        @unlink($outputPath);
     }
 
     public function test_slice_route_truth_path_filter(): void
@@ -36,5 +51,27 @@ class SliceRouteTruthCommandTest extends TestCase
         foreach ($filtered['routes'] as $entry) {
             $this->assertStringStartsWith('admin/users', $entry['uri']);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertRouteTruthPayloadShape(array $payload): void
+    {
+        $this->assertArrayHasKey('generated_at', $payload);
+        $this->assertArrayHasKey('route_count', $payload);
+        $this->assertArrayHasKey('routes', $payload);
+        $this->assertIsArray($payload['routes']);
+
+        if ($payload['routes'] === []) {
+            return;
+        }
+
+        $entry = $payload['routes'][0];
+        $this->assertArrayHasKey('uri', $entry);
+        $this->assertArrayHasKey('name', $entry);
+        $this->assertArrayHasKey('slice_id', $entry);
+        $this->assertArrayHasKey('methods', $entry);
+        $this->assertIsArray($entry['methods']);
     }
 }
