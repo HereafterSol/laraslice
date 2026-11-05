@@ -99,7 +99,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `10da68f` (F3 demo stubs; F2 body `c3abc2d`) |
+| **Last commit** | `497dd20` (F3 + doc sync; F2 body `c3abc2d`) |
 | **In flight** | F1, F2, F4, F5 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
 
 **Pull before work:**
