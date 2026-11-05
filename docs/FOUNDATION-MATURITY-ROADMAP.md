@@ -1,9 +1,11 @@
 # Foundation maturity roadmap
 
-**Last updated:** 5 Nov 2026  
-**Programme tie-in:** [PROGRAMME-STATUS-2026-11-05.md](PROGRAMME-STATUS-2026-11-05.md) (~**50%** erp-port-v202 — **not 100%**)  
+**Last updated:** 5 Nov 2026 (post Phase 0 audit)  
+**Overall stage:** **3 — Defined** ([ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md))  
+**Programme tie-in:** [PROGRAMME-STATUS-2026-11-05.md](PROGRAMME-STATUS-2026-11-05.md) (~**50%** erp-port-v202 — **not 100%**) · **porting paused** until tracker **F1–F3**  
 **P0 ship list:** [IMPROVEMENT-REGISTER-2.0.2.md](IMPROVEMENT-REGISTER-2.0.2.md) · [BACKLOG.md](BACKLOG.md#v202-validation--p0-from-real-user-demo-nov-2026)  
-**Legacy phase tracker:** [FOUNDATION_ROADMAP.md](FOUNDATION_ROADMAP.md) (Phase A–D item grid — still valid detail)
+**Legacy phase tracker:** [FOUNDATION_ROADMAP.md](FOUNDATION_ROADMAP.md) (Phase A–D item grid — still valid detail)  
+**Portability contract:** [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md)
 
 ---
 
@@ -20,14 +22,16 @@
 
 ---
 
-## Sequencing (unchanged discipline)
+## Sequencing (post audit — foundation before port lift)
 
 ```text
-LaraSlice 2.0.x foundation P0 (framework repo)
-  → erp-port-v202 gate closure (S columns, Gate V workbook, Gate T harness)
-  → Flagship demo install truth (composer.lock, Windows demo.ps1)
+Phase 0 audit DONE (Nov 2026)
+  → LaraSlice 2.0.x foundation P0 (F1–F5 in FOUNDATION-EXECUTION-TRACKER)
+  → erp-port-v202 gate closure (S columns, Gate V workbook) — resume after F1 PASS
+  → Flagship demo install truth (composer.lock, Windows demo.ps1) — F3
   → erp-port-v201 hub lift into v202 where patterns win
-  → Second runtime spike (one sibling)
+  → Stage 4 evidence (route-truth JSON, portability lint CI)
+  → Second runtime spike (one sibling) — Defer until Stage 4
   → Family table promotion in RUNTIMES.md
 ```
 
@@ -97,5 +101,6 @@ LaraSlice 2.0.x foundation P0 (framework repo)
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-05 | **Phase 0 foundation audit** — maturity **Stage 3**; port programme paused for F1–F3; MULTI-RUNTIME-PORTABILITY-CONTRACT added. |
 | 2026-11-05 | Foundation maturity doc created; ties programme ~50% headline to P0 register; Studio honesty implemented in framework package. |
 | 2026-11-05 | Page-by-page clone scoped as Gate V tactic; Heart/Kit remains strategic default — see porting decision note. |
