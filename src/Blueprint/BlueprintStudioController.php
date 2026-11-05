@@ -6,14 +6,18 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use LaraSlice\Core\Ai\AiEngine;
 use LaraSlice\Core\Ai\JevDecisionService;
+use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Generator\SliceName;
 use LaraSlice\Porting\SlicePortService;
+use LaraSlice\Support\AppFlow;
 use LaraSlice\Support\BlueprintLibrary;
 use LaraSlice\Support\FrameworkPackage;
 use LaraSlice\Support\SystemMind;
@@ -1407,7 +1411,7 @@ final class BlueprintStudioController extends Controller
         $sourceConn = config('laraslice.porting.source_connection');
         if ($sourceConn) {
             try {
-                $conn = \Illuminate\Support\Facades\DB::connection($sourceConn);
+                $conn = DB::connection($sourceConn);
                 $row = $conn->selectOne('select count(*) as c from information_schema.tables where table_schema = ?', [$conn->getDatabaseName()]);
 
                 return response()->json(['success' => true, 'tables' => (int) ($row->c ?? 0), 'kind' => 'database']);
@@ -2147,7 +2151,7 @@ PROMPT;
             return response()->json(['drafted' => false, 'reason' => 'A brief of 20–8000 characters is needed to draft from.'], 422);
         }
 
-        $engine = app(\LaraSlice\Core\Ai\AiEngine::class);
+        $engine = app(AiEngine::class);
         $provider = $engine->getActiveProvider();
         $key = $engine->providerKey($provider);
         if ($key === null || $key === '') {
@@ -2159,7 +2163,7 @@ PROMPT;
             $providerError = null;
             try {
                 $providerError = $engine->lastProviderError();
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $providerError = null; // a stubbed engine in tests may not carry it
             }
 
@@ -2179,10 +2183,10 @@ PROMPT;
         try {
             $parsed = Yaml::parse($yaml);
             if (! is_array($parsed)) {
-                throw new \RuntimeException('The drafted YAML is not a blueprint map.');
+                throw new RuntimeException('The drafted YAML is not a blueprint map.');
             }
             (new BlueprintValidator)->validate($parsed);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Surface the first DETAIL line ("- Model 'x' is not reachable…"),
             // not the generic "Blueprint is invalid:" header — the header alone
             // once hid the one fixable error a real provider draft had.
@@ -2225,7 +2229,7 @@ PROMPT;
                         ];
                     }
                 }
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $mind = null;
             }
         }
@@ -2283,7 +2287,7 @@ PROMPT;
             return response()->json(['proposed' => false, 'reason' => 'This app has no Mind yet. Seed one from a brief in Design first — proposals add to an existing Mind.']);
         }
 
-        $engine = app(\LaraSlice\Core\Ai\AiEngine::class);
+        $engine = app(AiEngine::class);
         $provider = $engine->getActiveProvider();
         $key = $engine->providerKey($provider);
         if ($key === null || $key === '') {
@@ -2299,7 +2303,7 @@ PROMPT;
             $providerError = null;
             try {
                 $providerError = $engine->lastProviderError();
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $providerError = null;
             }
 
@@ -2414,9 +2418,9 @@ PROMPT;
             return response()->json(['has_mind' => false, 'journeys' => [], 'pages' => 0, 'sections' => 0, 'candidate' => null]);
         }
 
-        $pages = \LaraSlice\Support\AppFlow::pagesFromSlices(app(SliceManager::class)->discoveredSlices());
+        $pages = AppFlow::pagesFromSlices(app(SliceManager::class)->discoveredSlices());
         $summarize = function (array $m) use ($pages): array {
-            $flow = \LaraSlice\Support\AppFlow::build($m, $pages);
+            $flow = AppFlow::build($m, $pages);
             $rows = [];
             foreach ($flow['journeys'] as $journey) {
                 $linked = array_values(array_filter($journey['steps'], fn ($s) => $s['slice'] !== null));

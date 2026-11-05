@@ -5,6 +5,7 @@ namespace LaraSlice\Tests\Feature\Core;
 use Illuminate\Foundation\Auth\User as HostUser;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Slices\Users\Services\SecurityPolicyService;
+use LaraSlice\Support\Directory;
 use LaraSlice\Tests\TestCase;
 
 /**
@@ -14,8 +15,12 @@ class CommandSmokeTest extends TestCase
 {
     protected function tearDown(): void
     {
-        app('files')->deleteDirectory(config('laraslice.slices_path'));
-        @unlink(app()->bootstrapPath('cache/laraslice-slices.php'));
+        $slicesPath = config('laraslice.slices_path');
+        if (is_string($slicesPath) && $slicesPath !== '') {
+            Directory::remove($slicesPath);
+        }
+        @unlink(app()->bootstrapPath('cache/laraslice_slices.php'));
+        @unlink(app()->bootstrapPath('cache/laraslice_manifest_data.php'));
         parent::tearDown();
     }
 

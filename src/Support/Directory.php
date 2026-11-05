@@ -14,18 +14,25 @@ final class Directory
             return;
         }
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-
-        foreach ($iterator as $entry) {
-            $entry->isDir() && ! $entry->isLink()
-                ? rmdir($entry->getPathname())
-                : unlink($entry->getPathname());
+        $entries = scandir($path);
+        if ($entries === false) {
+            return;
         }
 
-        rmdir($path);
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $child = $path.DIRECTORY_SEPARATOR.$entry;
+            if (is_dir($child) && ! is_link($child)) {
+                self::remove($child);
+            } elseif (file_exists($child)) {
+                @unlink($child);
+            }
+        }
+
+        @rmdir($path);
     }
 
     /**
@@ -51,11 +58,13 @@ final class Directory
             if (is_dir($srcPath)) {
                 if (! self::copy($srcPath, $dstPath)) {
                     closedir($dir);
+
                     return false;
                 }
             } else {
                 if (! copy($srcPath, $dstPath)) {
                     closedir($dir);
+
                     return false;
                 }
             }
