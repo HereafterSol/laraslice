@@ -1,6 +1,6 @@
 # LaraSlice v2.0.2 ERP programme — status (5 Nov 2026)
 
-**Honest headline:** **~50%** whole-ERP replica (lowest gate wins). **Not 100%.**
+**Honest headline:** **~50%** whole-ERP replica (lowest gate wins). **Not 100%.** **Framework maturity:** **Stage 3 — Defined** — [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) ([Full framework architecture audit](f13b1c79-24c9-4ac4-8965-e7f665a4be90)); **porting paused** until tracker **F1–F3**.
 
 ## Environments
 
@@ -50,6 +50,7 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 
 ## Doc index
 
+- **`LaraSlice/docs/FOUNDATION-EXECUTION-TRACKER.md`** — **primary sprint board + Muse git handoff** (`v2.0.2-candidate`)
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`

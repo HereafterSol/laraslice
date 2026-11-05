@@ -70,7 +70,7 @@
                         <span class="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-base">🪄</span>
                         <div>
                             <p class="text-sm font-semibold text-foreground">Describe your app — or paste a BRD</p>
-                            <p class="text-xs text-muted-foreground">AI drafts a blueprint from it. You review the YAML diff in Design before anything is written.</p>
+                            <p class="text-xs text-muted-foreground">Opens Design with your brief carried over. Full AI draft-from-brief is next — review any YAML diff before applying changes.</p>
                         </div>
                     </div>
                     <textarea x-model="kickoffText" rows="4" placeholder="e.g. A clinic app: Patients, Doctors, Appointments (book, reschedule, cancel), Invoices with payments. Doctors have schedules; patients get reminders… or paste your full BRD here."

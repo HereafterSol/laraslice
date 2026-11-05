@@ -111,7 +111,7 @@ Gaps found in audit (pre-fix):
 
 **Rollout:** Changes live in **LaraSlice package source** (`E:\Apps\message\LaraSlice`). Host apps (demo, `erp-port-v*`) need **`composer update hereafter/laraslice`** or path repo + `slice:cache` to see UI in `/laraslice/studio`.
 
-**Still open:** owner persona, kickoff AI copy, modal consolidation, drift panel (BACKLOG).
+**Still open:** owner glossary (Muse #3), kickoff AI copy, modal consolidation, drift panel (BACKLOG). **Standard:** [ENTERPRISE-UX-STANDARD.md](ENTERPRISE-UX-STANDARD.md) on `v2.0.2-candidate`.
 
 ---
 

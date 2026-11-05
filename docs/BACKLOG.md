@@ -1,10 +1,10 @@
 # LaraSlice product backlog
 
-Living backlog for the **framework** (not per-port gate status). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`. **Nov 2026 programme close (~50% v202):** [PROGRAMME-STATUS-2026-11-05.md](PROGRAMME-STATUS-2026-11-05.md) ([Complete v202 programme sprint](e616253b-166b-4268-b2f2-70af16520ad8)).
+Living backlog for the **framework** (not per-port gate status). **Live sprint board:** [FOUNDATION-EXECUTION-TRACKER.md](FOUNDATION-EXECUTION-TRACKER.md) · **Stage 3 audit:** [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) · **Portability:** [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) (`v2.0.2-candidate`, audit commit `05dfef3`, handoff `83d5961`). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
 
 **Release baseline:** [v2.0.2](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.2) · Changes: [CHANGES-v2.0.2.md](../CHANGES-v2.0.2.md) · Evaluator findings: [IMPROVEMENT-REGISTER-2.0.2.md](IMPROVEMENT-REGISTER-2.0.2.md) · [NAMING.md](NAMING.md)
 
-**Reference index (owner / AI):** [SHARED-REFERENCES.md](SHARED-REFERENCES.md) · Foundation maturity: [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · Port architect note: [PORTING-DECISION-100-REPLICA.md](PORTING-DECISION-100-REPLICA.md) · AI token R&D: [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md)
+**Reference index (owner / AI):** [FOUNDATION-EXECUTION-TRACKER.md](FOUNDATION-EXECUTION-TRACKER.md) · [ENTERPRISE-UX-STANDARD.md](ENTERPRISE-UX-STANDARD.md) · [ROUTING-TRUTH-ALIGNMENT.md](ROUTING-TRUTH-ALIGNMENT.md) · [SHARED-REFERENCES.md](SHARED-REFERENCES.md) · [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [PORTING-DECISION-100-REPLICA.md](PORTING-DECISION-100-REPLICA.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md)
 
 ---
 
@@ -32,8 +32,8 @@ Living backlog for the **framework** (not per-port gate status). Port truth: [AR
 ## v2.0.2 validation — P0 (from real-user demo, Nov 2026)
 
 1. **Route prefix truth** — Navigation uses `/erp/erp/{area}/{slice}`; `route:list` / skills cite `erp/adjudication/...` → **404**. Align registration, `slice:links`, MCP index ([register § UI/UX #1](IMPROVEMENT-REGISTER-2.0.2.md)).
-2. **Flagship zip installability** — Ship **`composer.lock`** or documented Packagist-only `composer.json` (no SSH VCS repo); optional `vendor` for offline evaluators.
-3. **Windows one-click demo** — `demo.ps1` or doc: `tar -xf`, `.env` `APP_URL` + absolute SQLite path, `slice:cache` ([register § Demo](IMPROVEMENT-REGISTER-2.0.2.md)).
+2. **Flagship zip installability** — Packagist-only **`resources/stubs/flagship/composer.json`**; generate lock via **`porting/generate-flagship-composer-lock.ps1`** before zip cut (optional `vendor` for offline evaluators).
+3. **Windows one-click demo** — **`resources/stubs/flagship/demo.ps1`** + [demo-windows.ps1](demo-windows.ps1): `tar -xf`, `.env` `APP_URL` + absolute SQLite path, `slice:cache`.
 4. **Studio honesty** — Version from composer (not hard-coded badge); host slice count matches discovery; SQLite-aware Copilot copy. *(Framework: `FrameworkPackage` + Studio shell — Nov 2026.)*
 5. **Porter ReferenceData** — `slice:port --scaffold` can emit merged `currencies` migration over MySQL row limit; split taxonomies in framework or playbook step (see IMPROVEMENT-REGISTER § Zero port erp-port-v202).
 6. **MFA env for port QA** — `auth.mfa_enabled` must respect `LARASLICE_MFA_ENABLED` (**validated on erp-port-v202** Nov 2026; **ship in framework** default config).

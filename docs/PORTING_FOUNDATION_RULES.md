@@ -49,6 +49,8 @@ After **initial Analyze** (`slice:port --dry-run`, Porting Studio Analyze, or §
 
 Stopping at "N slices generated" with a flat table list in the sidebar is **not** an ERP-class port complete state.
 
+**Foundation programme (Nov 2026):** Phase 0 audit — **Stage 3 Defined**; **net-new port surface paused** until LaraSlice tracker **F1–F3** (routing truth, route-truth index, flagship install). See `docs/ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md` and `FOUNDATION-EXECUTION-TRACKER.md`. Existing port trees may still run `slice:qualify-routes`, Phase D repair, and drift hygiene.
+
 ## Account-backed directory create + Phase D nav (ERP benchmark)
 
 When the source exposes **one operational form** that creates both the login account and the domain row (e.g. Worksuite `POST /account/employees`), the **primary directory slice** should own unified create — not a separate Users slice plus a `user_id` picker on create.

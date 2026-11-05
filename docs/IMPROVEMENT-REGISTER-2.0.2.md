@@ -97,11 +97,11 @@
 
 ## Skills / commands gaps
 
-1. **Windows demo path undocumented** — document `tar -xf`, PowerShell `.env` DB path, and Packagist-only composer when VCS SSH unavailable.
+1. **Windows demo path** — **`docs/demo-windows.ps1`** + ship **`demo.ps1`** beside `demo.sh`; use `tar -xf`, absolute `DB_DATABASE`, `APP_URL`, `slice:cache`.
 2. **Ship `composer.lock` (or vendor) in flagship zip** — reproducible v2.0.2 without `composer update` drift.
-3. **Remove or fix VCS `repositories` in demo `composer.json`** — prefer Packagist dist for public evaluators.
+3. **Remove or fix VCS `repositories` in demo `composer.json`** — template: `resources/stubs/flagship/composer.json` (Packagist-only); run `porting/generate-flagship-composer-lock.ps1` before zip cut.
 4. **Align route registration with navigation** (`adjudication` vs `erp/erp`) — single source of truth for skills, MCP route index, and `slice:links`.
-5. **`demo.sh --port` / Windows `.ps1` parity** — sed and bash block Laragon users.
+5. **`demo.sh --port` / Windows `.ps1` parity** — **`resources/stubs/flagship/demo.ps1`** (`-Port`, `-NoServe`); see **`docs/demo-windows.ps1`**.
 6. **Expose framework version from composer** in Studio shell (not hard-coded 2.0.0).
 7. **Evaluator checklist** in skill: verify client portal + admin RBAC diff after port (only super-admin + employee walked here).
 8. **Portability findings** in demo YAML — runbook for flagship snapshot (`slice:portability` before demo cut).
@@ -127,7 +127,7 @@ Evidence from [Zero ERP re-port v202](132d0df3-8ed1-4ea1-9630-c82d6a6acdfe) on *
 
 **Programme status (5 Nov 2026, programme close):** v202 benchmark **D/F/T PASS**, HTTP **9/9**, Gate S **PARTIAL improved**, Gate V **PARTIAL classified**. **Headline ~50%** (lowest gate S/V). **Not 100%** replica. One-pager: `LaraSlice/docs/PROGRAMME-STATUS-2026-11-05.md`.
 
-**Foundation maturity (5 Nov 2026):** [Architect foundation + Studio sprint](90c91c6a-cb46-4b8d-b4f6-eac9817984ed) — `PORTING-DECISION-100-REPLICA.md`, `AI-FOUNDATION-OPTIMIZATION.md`, `FOUNDATION-MATURITY-ROADMAP.md`, `SHARED-REFERENCES.md`; Studio honesty fixes in framework source (see `STUDIO-UX-AUDIT-2026-10-28.md` § Shipped).
+- **Foundation maturity (5 Nov 2026):** [Full framework architecture audit](f13b1c79-24c9-4ac4-8965-e7f665a4be90) — **Stage 3 Defined**; `ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md`, `MULTI-RUNTIME-PORTABILITY-CONTRACT.md`; **porting paused** until **F1–F3**. Pull `v2.0.2-candidate` (`83d5961`) for tracker + audit docs.
 
 ---
 

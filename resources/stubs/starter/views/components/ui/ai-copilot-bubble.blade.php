@@ -1,6 +1,7 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 @php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
-<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
+@php($schemaTelemetryLabel = $copilotStatus['schema_telemetry_label'] ?? \LaraSlice\Support\FrameworkPackage::schemaTelemetryLabel())
+<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot(@js($schemaTelemetryLabel))" x-cloak>
     <!-- Collapsed restore chip (mobile) -->
     <button
         x-show="collapsed && !isOpen"
@@ -286,7 +287,7 @@
                                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                                             </svg>
-                                            <span>Save & Insert to MySQL</span>
+                                            <span>Save &amp; insert to database</span>
                                         </button>
                                     </div>
                                 </div>
@@ -297,7 +298,7 @@
                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                    <span>Writing record to MySQL database...</span>
+                                    <span>Writing record to {{ $schemaTelemetryLabel }}…</span>
                                 </div>
 
                                 <!-- Success Notification Card -->
@@ -585,8 +586,11 @@
 </div>
 
 <script>
-function larasliceCopilot() {
+function larasliceCopilot(schemaTelemetryLabel) {
+    const countTelemetryDesc = 'Live ' + (schemaTelemetryLabel || 'active database schemas') + ' record count & telemetry';
+
     return {
+        schemaTelemetryLabel: schemaTelemetryLabel || 'active database schemas',
         posLeft: null,
         posTop: null,
         isOpen: false,
@@ -600,7 +604,7 @@ function larasliceCopilot() {
 
         slashCommands: [
             { cmd: '/add ', label: '/add [name]', desc: 'Add record on current page', icon: '➕', needsParam: true },
-            { cmd: '/count', label: '/count', desc: 'Live MySQL record count & telemetry', icon: '📊', needsParam: false },
+            { cmd: '/count', label: '/count', desc: countTelemetryDesc, icon: '📊', needsParam: false },
             { cmd: '/schema', label: '/schema', desc: 'Inspect table schema & columns', icon: '📐', needsParam: false },
             { cmd: '/tools', label: '/tools', desc: 'List all available framework tools', icon: '🛠️', needsParam: false },
             { cmd: '/test', label: '/test', desc: 'Test real AI reasoning (2+2 = 4)', icon: '⚡', needsParam: false },
@@ -693,7 +697,7 @@ function larasliceCopilot() {
             // Standard commands
             list.push(
                 { cmd: '/add ', label: '/add [name]', desc: 'Add record on current page', icon: '➕', needsParam: true },
-                { cmd: '/count', label: '/count', desc: 'Live MySQL record count & telemetry', icon: '📊', needsParam: false },
+                { cmd: '/count', label: '/count', desc: countTelemetryDesc, icon: '📊', needsParam: false },
                 { cmd: '/schema', label: '/schema', desc: 'Inspect current database schema', icon: '📐', needsParam: false },
                 { cmd: '/tools', label: '/tools', desc: 'List all available framework tools', icon: '🛠️', needsParam: false },
                 { cmd: '/help', label: '/help', desc: 'Show all available slash commands', icon: '❓', needsParam: false }
