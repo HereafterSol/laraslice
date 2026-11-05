@@ -57,6 +57,7 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 ## Doc index
 
 - **`LaraSlice/docs/FOUNDATION-EXECUTION-TRACKER.md`** — **primary sprint board + Muse git handoff** (`v2.0.2-candidate`)
+- `LaraSlice/docs/PORT-50-PERCENT-ROOT-CAUSE-2026-11-05.md` — R&D: why ~50% not 100% (skills, framework, porter, harness, adoption)
 - `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` — F1 **`slice:links`** closure (ErpSettings + permission_types)
 - `erp-port-v202/porting/F1-ROUTE-TRUTH-LOG.md` — F1 **`slice:route-truth`** index (1056 routes)
 - `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` — N3 Gate S **16→0** matched missing columns
