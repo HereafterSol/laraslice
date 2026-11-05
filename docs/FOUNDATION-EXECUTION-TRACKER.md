@@ -35,7 +35,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- | --- | --- |
 | F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PASS (port)** — v202 `slice:links` exit 0 (5 Nov 2026): **ErpSettings** rename + **permission_types** → Roles only; evidence `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` · `slice:route-truth` pending Packagist bump to `c3abc2d` |
 | F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
-| F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **In progress** — Packagist stub + `demo.ps1` + lock script shipped; lock in zip next cut |
+| F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **PASS** — `resources/stubs/flagship/composer.lock` (Packagist `hereafter/laraslice` **v2.0.2** / `dd1e0ba`); `generate-flagship-composer-lock.ps1` uses `--no-install`; smoke `composer install --dry-run` + `demo.ps1 -NoServe` on flagship tree (5 Nov 2026) |
 | F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
 | F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — package + **X6** host republish; demo needs **`LARASLICE_WIZARD_ENABLED=true`** + `config/laraslice.php` **`wizard`** block (stale publish) for `/laraslice/studio`; **one** `artisan serve` on `:7002` |
 
@@ -65,6 +65,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- | --- |
 | 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; **`slice:links` PASS** after ErpSettings + permission_types fix — `porting/F1-SLICE-LINKS-LOG.md` |
 | 2026-11-05 | **F2 `slice:route-truth` + MCP** | `c3abc2d` — [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e) |
+| 2026-11-05 | **F3 flagship lock + install smoke** | `resources/stubs/flagship/composer.lock`; dry-run + `demo.ps1 -NoServe`; lock script `--no-install` |
 | 2026-11-05 | **F3 evaluator install (partial)** | Packagist flagship stub, `demo.ps1`, `demo-windows.ps1`, lock generator — [F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4) |
 | 2026-11-05 | **X6 flagship :7002 host Blade republish** | Demo `ai-copilot-bubble` + `app` layout `FrameworkPackage::version()`; `view:clear` + `slice:cache` |
 | 2026-11-05 | **X6 :7002 Studio route fix** | Enabled wizard (`LARASLICE_WIZARD_ENABLED` + `config/laraslice.php` wizard block); `/laraslice/studio` → **302** login (not 404); cleared duplicate `:7002` listeners |
@@ -102,8 +103,8 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `6cb0edb` (X6 wizard env in demo scripts; tracker F5/Done) |
-| **In flight** | F3 lock-in-zip (`porting/generate-flagship-composer-lock.ps1`); F4 **Now**; **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked |
+| **Last commit** | *(substantive commit pending this sprint)* |
+| **In flight** | F4 **Now**; **`slice:route-truth` on v202** after path-repo to `c3abc2d`; N3/N5 unblocked; embed lock on next **flagship zip** cut from stub |
 
 **Pull before work:**
 
@@ -119,8 +120,8 @@ git pull origin v2.0.2-candidate
 ## Muse — suggested next 3 tasks
 
 1. ~~**Close F1 on v202:** `slice:links` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining F1:** **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
-2. Run **`porting/generate-flagship-composer-lock.ps1`**, embed lock in next **flagship zip**; smoke **`resources/stubs/flagship/demo.ps1`** on clean extract (F3 close).
-3. **Owner glossary** (STUDIO-UX-AUDIT X2); **F4** Heart lint / `slice:portability` alignment.
+2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
+3. **F4** Heart lint / `slice:portability` alignment; **Owner glossary** (STUDIO-UX-AUDIT X2).
 
 ---
 

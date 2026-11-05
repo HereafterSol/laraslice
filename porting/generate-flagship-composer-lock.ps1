@@ -19,7 +19,7 @@ if (-not (Test-Path 'composer.json')) {
 }
 
 Write-Host 'Resolving dependencies from Packagist (no VCS repositories in stub)…'
-composer update --no-interaction --no-dev
+composer update --no-interaction --no-dev --no-install
 if ($LASTEXITCODE -ne 0) { throw 'composer update failed.' }
 
 if (-not (Test-Path 'composer.lock')) {

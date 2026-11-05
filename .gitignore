@@ -1,5 +1,6 @@
 /vendor
 composer.lock
+!/resources/stubs/flagship/composer.lock
 .env
 .phpunit.result.cache
 .DS_Store
