@@ -1,0 +1,2589 @@
+{
+ "legal_dispute_adjudication": [
+  {
+   "name": "Complaints",
+   "handle": "complaints",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "Complaints",
+    "handle": "complaints",
+    "domain": "Adjudication",
+    "description": "Manages complaints records and associated child items",
+    "permissions": [
+     "complaints.view",
+     "complaints.create",
+     "complaints.edit",
+     "complaints.delete",
+     "complaints.hear",
+     "complaints.forward",
+     "complaints.decide"
+    ],
+    "models": [
+     {
+      "name": "Complaint",
+      "handle": "complaint",
+      "table": "complaints",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for Complaints",
+      "fields": [
+       {
+        "handle": "from_role_id",
+        "label": "From Role Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "to_role_id",
+        "label": "To Role Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "from_user_id",
+        "label": "From User Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "to_user_id",
+        "label": "To User Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_status_id",
+        "label": "Complaint Status Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_date",
+        "label": "Complaint Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_type_id",
+        "label": "Complaint Type Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_subtype_id",
+        "label": "Complaint Subtype Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_details",
+        "label": "Complaint Details",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_agree",
+        "label": "Is Agree",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "harassment_nature_id",
+        "label": "Harassment Nature Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "employment_nature_id",
+        "label": "Employment Nature Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "organization_type_id",
+        "label": "Organization Type Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complainant_posting_place",
+        "label": "Complainant Posting Place",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "accused_posting_place",
+        "label": "Accused Posting Place",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "region_id",
+        "label": "Region Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_no",
+        "label": "Complaint No",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "cr_complaint_no",
+        "label": "Cr Complaint No",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "diary_date_time",
+        "label": "Diary Date Time",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complainant_name",
+        "label": "Complainant Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complainant_cnic",
+        "label": "Complainant Cnic",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complainant_mobile",
+        "label": "Complainant Mobile",
+        "type": "string",
+        "input_type": "tel",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "receiving_mode",
+        "label": "Receiving Mode",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "courier_postal_name",
+        "label": "Courier Postal Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "courier_postal_number",
+        "label": "Courier Postal Number",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "received_by",
+        "label": "Received By",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "received_by_id",
+        "label": "Received By Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_short_order",
+        "label": "Is Short Order",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_deficient",
+        "label": "Is Deficient",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "status_report_soughts",
+        "label": "Status Report Soughts",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "accused",
+        "type": "hasMany",
+        "model": "accused",
+        "foreign_key": "complaint_id"
+       },
+       {
+        "name": "complaint_properties",
+        "type": "hasMany",
+        "model": "complaint_property",
+        "foreign_key": "complaint_id"
+       },
+       {
+        "name": "complaint_approvals",
+        "type": "hasMany",
+        "model": "complaint_approval",
+        "foreign_key": "complaint_id"
+       },
+       {
+        "name": "complaint_attributes_harassments",
+        "type": "hasMany",
+        "model": "complaint_attributes_harassment",
+        "foreign_key": "complaint_id"
+       },
+       {
+        "name": "complaint_attributes_properties",
+        "type": "hasMany",
+        "model": "complaint_attributes_property",
+        "foreign_key": "complaint_id"
+       },
+       {
+        "name": "complaint_feedbacks",
+        "type": "hasMany",
+        "model": "complaint_feedback",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     },
+     {
+      "name": "Accused",
+      "handle": "accused",
+      "table": "accused",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of Complaints",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_unknown",
+        "label": "Is Unknown",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "father_name",
+        "label": "Father Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "gender_id",
+        "label": "Gender Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "cnic",
+        "label": "Cnic",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "company_name",
+        "label": "Company Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "designation",
+        "label": "Designation",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "department",
+        "label": "Department",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "email",
+        "label": "Email",
+        "type": "string",
+        "input_type": "email",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "mobile_no",
+        "label": "Mobile No",
+        "type": "string",
+        "input_type": "tel",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "landline_no",
+        "label": "Landline No",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "address",
+        "label": "Address",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "province_id",
+        "label": "Province Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "district_id",
+        "label": "District Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "tehsil_id",
+        "label": "Tehsil Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "complaint",
+        "type": "belongsTo",
+        "model": "complaint",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     },
+     {
+      "name": "ComplaintProperty",
+      "handle": "complaint_property",
+      "table": "complaint_properties",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of Complaints",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "district_id",
+        "label": "District Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "acquisition_mode_id",
+        "label": "Acquisition Mode Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "concerned_organization_id",
+        "label": "Concerned Organization Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "property_nature_id",
+        "label": "Property Nature Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "region_id",
+        "label": "Region Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "property_details",
+        "label": "Property Details",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "complaint",
+        "type": "belongsTo",
+        "model": "complaint",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     },
+     {
+      "name": "ComplaintApproval",
+      "handle": "complaint_approval",
+      "table": "complaint_approvals",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of Complaints",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "from_role_id",
+        "label": "From Role Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "to_role_id",
+        "label": "To Role Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "from_user_id",
+        "label": "From User Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "to_user_id",
+        "label": "To User Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_status_id",
+        "label": "Complaint Status Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "remarks",
+        "label": "Remarks",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_active",
+        "label": "Is Active",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "complaint",
+        "type": "belongsTo",
+        "model": "complaint",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     },
+     {
+      "name": "ComplaintAttributesHarassment",
+      "handle": "complaint_attributes_harassment",
+      "table": "complaint_attributes_harassments",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of Complaints",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_cross_organization",
+        "label": "Is Cross Organization",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "institution_date",
+        "label": "Institution Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "decision_date",
+        "label": "Decision Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "days_resolved",
+        "label": "Days Resolved",
+        "type": "integer",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "provice_id",
+        "label": "Provice Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "district_id",
+        "label": "District Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "representation_id",
+        "label": "Representation Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "penalty_nature_id",
+        "label": "Penalty Nature Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_status_implemented",
+        "label": "Is Status Implemented",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "implementation_date",
+        "label": "Implementation Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "remarks",
+        "label": "Remarks",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "created_by_id",
+        "label": "Created By Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "complaint",
+        "type": "belongsTo",
+        "model": "complaint",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     },
+     {
+      "name": "ComplaintAttributesProperty",
+      "handle": "complaint_attributes_property",
+      "table": "complaint_attributes_properties",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of Complaints",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "micro_category_id",
+        "label": "Micro Category Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "institution_date",
+        "label": "Institution Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "decision_date",
+        "label": "Decision Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "days_resolved",
+        "label": "Days Resolved",
+        "type": "integer",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "decision_type_id",
+        "label": "Decision Type Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "provice_id",
+        "label": "Provice Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "islamabad_zone",
+        "label": "Islamabad Zone",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "property_valuation",
+        "label": "Property Valuation",
+        "type": "decimal",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_settlement",
+        "label": "Is Settlement",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "property_quantum",
+        "label": "Property Quantum",
+        "type": "decimal",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "representation_id",
+        "label": "Representation Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_status_implemented",
+        "label": "Is Status Implemented",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "implementation_date",
+        "label": "Implementation Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "remarks",
+        "label": "Remarks",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "created_by_id",
+        "label": "Created By Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "complaint",
+        "type": "belongsTo",
+        "model": "complaint",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     },
+     {
+      "name": "ComplaintFeedback",
+      "handle": "complaint_feedback",
+      "table": "complaint_feedbacks",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of Complaints",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "star",
+        "label": "Star",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "remarks",
+        "label": "Remarks",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       }
+      ],
+      "relations": [
+       {
+        "name": "complaint",
+        "type": "belongsTo",
+        "model": "complaint",
+        "foreign_key": "complaint_id"
+       }
+      ]
+     }
+    ],
+    "workflow": {
+     "enabled": true,
+     "state_column": "complaint_status_id",
+     "states": [
+      {
+       "slug": "pending",
+       "label": "Pending",
+       "color": "amber"
+      },
+      {
+       "slug": "deficient",
+       "label": "Deficient",
+       "color": "rose"
+      },
+      {
+       "slug": "maintainability",
+       "label": "Maintainability",
+       "color": "blue"
+      },
+      {
+       "slug": "preliminary_hearing",
+       "label": "Preliminary Hearing",
+       "color": "purple"
+      },
+      {
+       "slug": "notice_to_respondent",
+       "label": "Notice to Respondent",
+       "color": "indigo"
+      },
+      {
+       "slug": "reply",
+       "label": "Reply",
+       "color": "cyan"
+      },
+      {
+       "slug": "regular_hearing",
+       "label": "Regular Hearing",
+       "color": "teal"
+      },
+      {
+       "slug": "evidence_of_parties",
+       "label": "Evidence of parties",
+       "color": "blue"
+      },
+      {
+       "slug": "cross_examination",
+       "label": "Cross Examination",
+       "color": "purple"
+      },
+      {
+       "slug": "reports",
+       "label": "Reports / For Report",
+       "color": "cyan"
+      },
+      {
+       "slug": "arguments",
+       "label": "Final Arguments",
+       "color": "teal"
+      },
+      {
+       "slug": "orders",
+       "label": "Orders",
+       "color": "orange"
+      },
+      {
+       "slug": "final_judgement",
+       "label": "Final judgement",
+       "color": "emerald"
+      },
+      {
+       "slug": "notice_for_implementation",
+       "label": "Notice for implementation",
+       "color": "indigo"
+      },
+      {
+       "slug": "order_implemented",
+       "label": "Order Implemented",
+       "color": "emerald"
+      },
+      {
+       "slug": "contempt",
+       "label": "Contempt",
+       "color": "rose"
+      },
+      {
+       "slug": "rejected",
+       "label": "Rejected",
+       "color": "slate"
+      }
+     ],
+     "transitions": [
+      {
+       "slug": "mark_deficient",
+       "name": "Mark Deficient",
+       "from": [
+        "pending",
+        "maintainability"
+       ],
+       "to": "deficient",
+       "target_role": "assistant_registrar",
+       "requires_remarks": true
+      },
+      {
+       "slug": "resubmit_petition",
+       "name": "Resubmit Petition",
+       "from": [
+        "deficient"
+       ],
+       "to": "pending",
+       "target_role": "complainant"
+      },
+      {
+       "slug": "scrutinize_maintainability",
+       "name": "Verify Maintainability",
+       "from": [
+        "pending"
+       ],
+       "to": "maintainability",
+       "target_role": "assistant_registrar"
+      },
+      {
+       "slug": "reject_petition",
+       "name": "Reject Petition",
+       "from": [
+        "maintainability",
+        "preliminary_hearing"
+       ],
+       "to": "rejected",
+       "target_role": "registrar",
+       "requires_remarks": true
+      },
+      {
+       "slug": "schedule_preliminary",
+       "name": "Schedule Preliminary Hearing",
+       "from": [
+        "maintainability"
+       ],
+       "to": "preliminary_hearing",
+       "target_role": "registrar"
+      },
+      {
+       "slug": "issue_notice",
+       "name": "Issue Notice to Respondent",
+       "from": [
+        "maintainability",
+        "preliminary_hearing"
+       ],
+       "to": "notice_to_respondent",
+       "target_role": "registrar"
+      },
+      {
+       "slug": "submit_reply",
+       "name": "Submit Reply",
+       "from": [
+        "notice_to_respondent"
+       ],
+       "to": "reply",
+       "target_role": "assistant_registrar"
+      },
+      {
+       "slug": "conduct_regular_hearing",
+       "name": "Conduct Regular Hearing",
+       "from": [
+        "reply",
+        "preliminary_hearing"
+       ],
+       "to": "regular_hearing",
+       "target_role": "ombudsperson"
+      },
+      {
+       "slug": "record_evidence",
+       "name": "Record Evidence",
+       "from": [
+        "regular_hearing"
+       ],
+       "to": "evidence_of_parties",
+       "target_role": "ombudsperson"
+      },
+      {
+       "slug": "cross_examine",
+       "name": "Conduct Cross Examination",
+       "from": [
+        "evidence_of_parties"
+       ],
+       "to": "cross_examination",
+       "target_role": "advisor"
+      },
+      {
+       "slug": "seek_report",
+       "name": "Seek Inquiry Report",
+       "from": [
+        "regular_hearing",
+        "evidence_of_parties"
+       ],
+       "to": "reports",
+       "target_role": "ombudsperson"
+      },
+      {
+       "slug": "hear_arguments",
+       "name": "Hear Final Arguments",
+       "from": [
+        "cross_examination",
+        "reports",
+        "regular_hearing"
+       ],
+       "to": "arguments",
+       "target_role": "ombudsperson"
+      },
+      {
+       "slug": "reserve_orders",
+       "name": "Reserve Orders",
+       "from": [
+        "arguments"
+       ],
+       "to": "orders",
+       "target_role": "ombudsperson"
+      },
+      {
+       "slug": "pronounce_judgment",
+       "name": "Pronounce Final Judgement",
+       "from": [
+        "orders",
+        "arguments"
+       ],
+       "to": "final_judgement",
+       "target_role": "ombudsperson"
+      },
+      {
+       "slug": "issue_implementation_notice",
+       "name": "Notice for Implementation",
+       "from": [
+        "final_judgement"
+       ],
+       "to": "notice_for_implementation",
+       "target_role": "law_officer"
+      },
+      {
+       "slug": "mark_implemented",
+       "name": "Mark Order Implemented",
+       "from": [
+        "notice_for_implementation"
+       ],
+       "to": "order_implemented",
+       "target_role": "law_officer"
+      },
+      {
+       "slug": "initiate_contempt",
+       "name": "Initiate Contempt",
+       "from": [
+        "notice_for_implementation"
+       ],
+       "to": "contempt",
+       "target_role": "law_officer",
+       "requires_remarks": true
+      }
+     ]
+    },
+    "roles": [
+     {
+      "slug": "super_admin",
+      "name": "Super Admin",
+      "description": "Apex system administration, security configurations, role assignment, and audit logs",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.create",
+       "complaints.edit",
+       "complaints.delete",
+       "complaints.hear",
+       "complaints.forward",
+       "complaints.decide"
+      ]
+     },
+     {
+      "slug": "admin",
+      "name": "Admin",
+      "description": "Operational case oversight, staff allocation, reporting dossiers, and institutional analytics",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.create",
+       "complaints.edit",
+       "complaints.forward"
+      ]
+     },
+     {
+      "slug": "complainant",
+      "name": "Complainant",
+      "description": "Aggrieved citizen registering grievance petition, submitting documents, and tracking case progress",
+      "seed": true,
+      "seedUser": false,
+      "permissions": [
+       "complaints.view",
+       "complaints.create"
+      ]
+     },
+     {
+      "slug": "assistant_registrar",
+      "name": "Assistant Registrar",
+      "description": "Initial petition scrutiny, deficiency notices, diary numbering, and case dossier compilation",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.create",
+       "complaints.edit",
+       "complaints.forward"
+      ]
+     },
+     {
+      "slug": "registrar",
+      "name": "Registrar",
+      "description": "Maintainability determination, bench scheduling, summons & notice dispatch to respondents",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.edit",
+       "complaints.forward"
+      ]
+     },
+     {
+      "slug": "ombudsperson",
+      "name": "Ombudsperson",
+      "description": "Federal Ombudsperson presiding over judicial hearings, interim injunctions, and final decrees",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.hear",
+       "complaints.decide"
+      ]
+     },
+     {
+      "slug": "advisor",
+      "name": "Advisor",
+      "description": "Senior judicial advisory, legal research briefs, hearing assistance, and case analysis",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.hear",
+       "complaints.forward"
+      ]
+     },
+     {
+      "slug": "law_officer",
+      "name": "Law Officer",
+      "description": "Legal scrutiny, court compliance tracking, judgment implementation enforcement, and contempt review",
+      "seed": true,
+      "seedUser": true,
+      "permissions": [
+       "complaints.view",
+       "complaints.forward",
+       "complaints.decide"
+      ]
+     }
+    ],
+    "navigation": {
+     "label": "Complaints",
+     "icon": "scale",
+     "group": "Adjudication",
+     "route": "adjudication/complaints"
+    }
+   },
+   "allRelations": [
+    {
+     "type": "hasMany",
+     "source": "complaints",
+     "target": "accused",
+     "source_model": "complaint",
+     "model": "accused",
+     "foreign_key": "complaint_id"
+    },
+    {
+     "type": "hasMany",
+     "source": "complaints",
+     "target": "complaint_properties",
+     "source_model": "complaint",
+     "model": "complaint_property",
+     "foreign_key": "complaint_id"
+    },
+    {
+     "type": "hasMany",
+     "source": "complaints",
+     "target": "complaint_approvals",
+     "source_model": "complaint",
+     "model": "complaint_approval",
+     "foreign_key": "complaint_id"
+    },
+    {
+     "type": "hasMany",
+     "source": "complaints",
+     "target": "complaint_attributes_harassments",
+     "source_model": "complaint",
+     "model": "complaint_attributes_harassment",
+     "foreign_key": "complaint_id"
+    },
+    {
+     "type": "hasMany",
+     "source": "complaints",
+     "target": "complaint_attributes_properties",
+     "source_model": "complaint",
+     "model": "complaint_attributes_property",
+     "foreign_key": "complaint_id"
+    },
+    {
+     "type": "hasMany",
+     "source": "complaints",
+     "target": "complaint_feedbacks",
+     "source_model": "complaint",
+     "model": "complaint_feedback",
+     "foreign_key": "complaint_id"
+    }
+   ],
+   "source": "schema_version: 1\nname: Complaints\nhandle: complaints\ndomain: Adjudication\ndescription: 'Manages complaints records and associated child items'\npermissions:\n  - complaints.view\n  - complaints.create\n  - complaints.edit\n  - complaints.delete\n  - complaints.hear\n  - complaints.forward\n  - complaints.decide\nmodels:\n  -\n    name: Complaint\n    handle: complaint\n    table: complaints\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for Complaints'\n    fields:\n      -\n        handle: from_role_id\n        label: 'From Role Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: to_role_id\n        label: 'To Role Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: from_user_id\n        label: 'From User Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: to_user_id\n        label: 'To User Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_status_id\n        label: 'Complaint Status Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_date\n        label: 'Complaint Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_type_id\n        label: 'Complaint Type Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_subtype_id\n        label: 'Complaint Subtype Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_details\n        label: 'Complaint Details'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: is_agree\n        label: 'Is Agree'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: harassment_nature_id\n        label: 'Harassment Nature Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: employment_nature_id\n        label: 'Employment Nature Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: organization_type_id\n        label: 'Organization Type Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complainant_posting_place\n        label: 'Complainant Posting Place'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: accused_posting_place\n        label: 'Accused Posting Place'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: region_id\n        label: 'Region Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_no\n        label: 'Complaint No'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: cr_complaint_no\n        label: 'Cr Complaint No'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: diary_date_time\n        label: 'Diary Date Time'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complainant_name\n        label: 'Complainant Name'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complainant_cnic\n        label: 'Complainant Cnic'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complainant_mobile\n        label: 'Complainant Mobile'\n        type: string\n        input_type: tel\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: receiving_mode\n        label: 'Receiving Mode'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: courier_postal_name\n        label: 'Courier Postal Name'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: courier_postal_number\n        label: 'Courier Postal Number'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: received_by\n        label: 'Received By'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: received_by_id\n        label: 'Received By Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_short_order\n        label: 'Is Short Order'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_deficient\n        label: 'Is Deficient'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: status_report_soughts\n        label: 'Status Report Soughts'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations:\n      -\n        name: accused\n        type: hasMany\n        model: accused\n        foreign_key: complaint_id\n      -\n        name: complaint_properties\n        type: hasMany\n        model: complaint_property\n        foreign_key: complaint_id\n      -\n        name: complaint_approvals\n        type: hasMany\n        model: complaint_approval\n        foreign_key: complaint_id\n      -\n        name: complaint_attributes_harassments\n        type: hasMany\n        model: complaint_attributes_harassment\n        foreign_key: complaint_id\n      -\n        name: complaint_attributes_properties\n        type: hasMany\n        model: complaint_attributes_property\n        foreign_key: complaint_id\n      -\n        name: complaint_feedbacks\n        type: hasMany\n        model: complaint_feedback\n        foreign_key: complaint_id\n  -\n    name: Accused\n    handle: accused\n    table: accused\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of Complaints'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_unknown\n        label: 'Is Unknown'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: father_name\n        label: 'Father Name'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: gender_id\n        label: 'Gender Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: cnic\n        label: Cnic\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: company_name\n        label: 'Company Name'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: designation\n        label: Designation\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: department\n        label: Department\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: email\n        label: Email\n        type: string\n        input_type: email\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: mobile_no\n        label: 'Mobile No'\n        type: string\n        input_type: tel\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: landline_no\n        label: 'Landline No'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: address\n        label: Address\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: province_id\n        label: 'Province Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: district_id\n        label: 'District Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: tehsil_id\n        label: 'Tehsil Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations:\n      -\n        name: complaint\n        type: belongsTo\n        model: complaint\n        foreign_key: complaint_id\n  -\n    name: ComplaintProperty\n    handle: complaint_property\n    table: complaint_properties\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of Complaints'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: district_id\n        label: 'District Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: acquisition_mode_id\n        label: 'Acquisition Mode Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: concerned_organization_id\n        label: 'Concerned Organization Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: property_nature_id\n        label: 'Property Nature Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: region_id\n        label: 'Region Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: property_details\n        label: 'Property Details'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n    relations:\n      -\n        name: complaint\n        type: belongsTo\n        model: complaint\n        foreign_key: complaint_id\n  -\n    name: ComplaintApproval\n    handle: complaint_approval\n    table: complaint_approvals\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of Complaints'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: from_role_id\n        label: 'From Role Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: to_role_id\n        label: 'To Role Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: from_user_id\n        label: 'From User Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: to_user_id\n        label: 'To User Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_status_id\n        label: 'Complaint Status Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: remarks\n        label: Remarks\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: is_active\n        label: 'Is Active'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations:\n      -\n        name: complaint\n        type: belongsTo\n        model: complaint\n        foreign_key: complaint_id\n  -\n    name: ComplaintAttributesHarassment\n    handle: complaint_attributes_harassment\n    table: complaint_attributes_harassments\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of Complaints'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_cross_organization\n        label: 'Is Cross Organization'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: institution_date\n        label: 'Institution Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: decision_date\n        label: 'Decision Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: days_resolved\n        label: 'Days Resolved'\n        type: integer\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: provice_id\n        label: 'Provice Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: district_id\n        label: 'District Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: representation_id\n        label: 'Representation Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: penalty_nature_id\n        label: 'Penalty Nature Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_status_implemented\n        label: 'Is Status Implemented'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: implementation_date\n        label: 'Implementation Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: remarks\n        label: Remarks\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: created_by_id\n        label: 'Created By Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations:\n      -\n        name: complaint\n        type: belongsTo\n        model: complaint\n        foreign_key: complaint_id\n  -\n    name: ComplaintAttributesProperty\n    handle: complaint_attributes_property\n    table: complaint_attributes_properties\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of Complaints'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: micro_category_id\n        label: 'Micro Category Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: institution_date\n        label: 'Institution Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: decision_date\n        label: 'Decision Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: days_resolved\n        label: 'Days Resolved'\n        type: integer\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: decision_type_id\n        label: 'Decision Type Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: provice_id\n        label: 'Provice Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: islamabad_zone\n        label: 'Islamabad Zone'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: property_valuation\n        label: 'Property Valuation'\n        type: decimal\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_settlement\n        label: 'Is Settlement'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: property_quantum\n        label: 'Property Quantum'\n        type: decimal\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: representation_id\n        label: 'Representation Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_status_implemented\n        label: 'Is Status Implemented'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: implementation_date\n        label: 'Implementation Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: remarks\n        label: Remarks\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: created_by_id\n        label: 'Created By Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations:\n      -\n        name: complaint\n        type: belongsTo\n        model: complaint\n        foreign_key: complaint_id\n  -\n    name: ComplaintFeedback\n    handle: complaint_feedback\n    table: complaint_feedbacks\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of Complaints'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: star\n        label: Star\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: remarks\n        label: Remarks\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n    relations:\n      -\n        name: complaint\n        type: belongsTo\n        model: complaint\n        foreign_key: complaint_id\nworkflow:\n  enabled: true\n  state_column: complaint_status_id\n  states:\n    -\n      slug: pending\n      label: Pending\n      color: amber\n    -\n      slug: deficient\n      label: Deficient\n      color: rose\n    -\n      slug: maintainability\n      label: Maintainability\n      color: blue\n    -\n      slug: preliminary_hearing\n      label: 'Preliminary Hearing'\n      color: purple\n    -\n      slug: notice_to_respondent\n      label: 'Notice to Respondent'\n      color: indigo\n    -\n      slug: reply\n      label: Reply\n      color: cyan\n    -\n      slug: regular_hearing\n      label: 'Regular Hearing'\n      color: teal\n    -\n      slug: evidence_of_parties\n      label: 'Evidence of parties'\n      color: blue\n    -\n      slug: cross_examination\n      label: 'Cross Examination'\n      color: purple\n    -\n      slug: reports\n      label: 'Reports / For Report'\n      color: cyan\n    -\n      slug: arguments\n      label: 'Final Arguments'\n      color: teal\n    -\n      slug: orders\n      label: Orders\n      color: orange\n    -\n      slug: final_judgement\n      label: 'Final judgement'\n      color: emerald\n    -\n      slug: notice_for_implementation\n      label: 'Notice for implementation'\n      color: indigo\n    -\n      slug: order_implemented\n      label: 'Order Implemented'\n      color: emerald\n    -\n      slug: contempt\n      label: Contempt\n      color: rose\n    -\n      slug: rejected\n      label: Rejected\n      color: slate\n  transitions:\n    -\n      slug: mark_deficient\n      name: 'Mark Deficient'\n      from:\n        - pending\n        - maintainability\n      to: deficient\n      target_role: assistant_registrar\n      requires_remarks: true\n    -\n      slug: resubmit_petition\n      name: 'Resubmit Petition'\n      from:\n        - deficient\n      to: pending\n      target_role: complainant\n    -\n      slug: scrutinize_maintainability\n      name: 'Verify Maintainability'\n      from:\n        - pending\n      to: maintainability\n      target_role: assistant_registrar\n    -\n      slug: reject_petition\n      name: 'Reject Petition'\n      from:\n        - maintainability\n        - preliminary_hearing\n      to: rejected\n      target_role: registrar\n      requires_remarks: true\n    -\n      slug: schedule_preliminary\n      name: 'Schedule Preliminary Hearing'\n      from:\n        - maintainability\n      to: preliminary_hearing\n      target_role: registrar\n    -\n      slug: issue_notice\n      name: 'Issue Notice to Respondent'\n      from:\n        - maintainability\n        - preliminary_hearing\n      to: notice_to_respondent\n      target_role: registrar\n    -\n      slug: submit_reply\n      name: 'Submit Reply'\n      from:\n        - notice_to_respondent\n      to: reply\n      target_role: assistant_registrar\n    -\n      slug: conduct_regular_hearing\n      name: 'Conduct Regular Hearing'\n      from:\n        - reply\n        - preliminary_hearing\n      to: regular_hearing\n      target_role: ombudsperson\n    -\n      slug: record_evidence\n      name: 'Record Evidence'\n      from:\n        - regular_hearing\n      to: evidence_of_parties\n      target_role: ombudsperson\n    -\n      slug: cross_examine\n      name: 'Conduct Cross Examination'\n      from:\n        - evidence_of_parties\n      to: cross_examination\n      target_role: advisor\n    -\n      slug: seek_report\n      name: 'Seek Inquiry Report'\n      from:\n        - regular_hearing\n        - evidence_of_parties\n      to: reports\n      target_role: ombudsperson\n    -\n      slug: hear_arguments\n      name: 'Hear Final Arguments'\n      from:\n        - cross_examination\n        - reports\n        - regular_hearing\n      to: arguments\n      target_role: ombudsperson\n    -\n      slug: reserve_orders\n      name: 'Reserve Orders'\n      from:\n        - arguments\n      to: orders\n      target_role: ombudsperson\n    -\n      slug: pronounce_judgment\n      name: 'Pronounce Final Judgement'\n      from:\n        - orders\n        - arguments\n      to: final_judgement\n      target_role: ombudsperson\n    -\n      slug: issue_implementation_notice\n      name: 'Notice for Implementation'\n      from:\n        - final_judgement\n      to: notice_for_implementation\n      target_role: law_officer\n    -\n      slug: mark_implemented\n      name: 'Mark Order Implemented'\n      from:\n        - notice_for_implementation\n      to: order_implemented\n      target_role: law_officer\n    -\n      slug: initiate_contempt\n      name: 'Initiate Contempt'\n      from:\n        - notice_for_implementation\n      to: contempt\n      target_role: law_officer\n      requires_remarks: true\nroles:\n  -\n    slug: super_admin\n    name: 'Super Admin'\n    description: 'Apex system administration, security configurations, role assignment, and audit logs'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.create\n      - complaints.edit\n      - complaints.delete\n      - complaints.hear\n      - complaints.forward\n      - complaints.decide\n  -\n    slug: admin\n    name: Admin\n    description: 'Operational case oversight, staff allocation, reporting dossiers, and institutional analytics'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.create\n      - complaints.edit\n      - complaints.forward\n  -\n    slug: complainant\n    name: Complainant\n    description: 'Aggrieved citizen registering grievance petition, submitting documents, and tracking case progress'\n    seed: true\n    seedUser: false\n    permissions:\n      - complaints.view\n      - complaints.create\n  -\n    slug: assistant_registrar\n    name: 'Assistant Registrar'\n    description: 'Initial petition scrutiny, deficiency notices, diary numbering, and case dossier compilation'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.create\n      - complaints.edit\n      - complaints.forward\n  -\n    slug: registrar\n    name: Registrar\n    description: 'Maintainability determination, bench scheduling, summons & notice dispatch to respondents'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.edit\n      - complaints.forward\n  -\n    slug: ombudsperson\n    name: Ombudsperson\n    description: 'Federal Ombudsperson presiding over judicial hearings, interim injunctions, and final decrees'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.hear\n      - complaints.decide\n  -\n    slug: advisor\n    name: Advisor\n    description: 'Senior judicial advisory, legal research briefs, hearing assistance, and case analysis'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.hear\n      - complaints.forward\n  -\n    slug: law_officer\n    name: 'Law Officer'\n    description: 'Legal scrutiny, court compliance tracking, judgment implementation enforcement, and contempt review'\n    seed: true\n    seedUser: true\n    permissions:\n      - complaints.view\n      - complaints.forward\n      - complaints.decide\nnavigation:\n  label: Complaints\n  icon: scale\n  group: Adjudication\n  route: complaints.index\n  children:\n    -\n      label: 'All Complaints'\n      url: /adjudication/complaints\n      route: complaints.index\n      icon: scale\n    -\n      label: 'Admin Docket Intake'\n      url: /adjudication/complaints/create?flow=admin\n      icon: file-plus\n    -\n      label: 'Citizen Grievance Portal'\n      url: /adjudication/complaints/create?flow=complainant\n      icon: user-plus\n"
+  },
+  {
+   "name": "Attachments",
+   "handle": "attachments",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "Attachments",
+    "handle": "attachments",
+    "domain": "Adjudication",
+    "description": "Manages attachments records and associated child items",
+    "permissions": [
+     "attachments.view",
+     "attachments.create",
+     "attachments.edit",
+     "attachments.delete"
+    ],
+    "models": [
+     {
+      "name": "Attachment",
+      "handle": "attachment",
+      "table": "attachments",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for Attachments",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "path",
+        "label": "Path",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "attachable_id",
+        "label": "Attachable Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "attachable_type",
+        "label": "Attachable Type",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_additional",
+        "label": "Is Additional",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_approval_id",
+        "label": "Complaint Approval Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "Attachments",
+     "icon": "paperclip",
+     "group": "Adjudication",
+     "route": "adjudication/attachments"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: Attachments\nhandle: attachments\ndomain: Adjudication\ndescription: 'Manages attachments records and associated child items'\npermissions:\n  - attachments.view\n  - attachments.create\n  - attachments.edit\n  - attachments.delete\nmodels:\n  -\n    name: Attachment\n    handle: attachment\n    table: attachments\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for Attachments'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: path\n        label: Path\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: attachable_id\n        label: 'Attachable Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: attachable_type\n        label: 'Attachable Type'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_additional\n        label: 'Is Additional'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_approval_id\n        label: 'Complaint Approval Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: Attachments\n  icon: paperclip\n  group: Adjudication\n  route: adjudication/attachments\n"
+  },
+  {
+   "name": "Representations",
+   "handle": "representations",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "Representations",
+    "handle": "representations",
+    "domain": "Adjudication",
+    "description": "Manages representations records and associated child items",
+    "permissions": [
+     "representations.view",
+     "representations.create",
+     "representations.edit",
+     "representations.delete"
+    ],
+    "models": [
+     {
+      "name": "Representation",
+      "handle": "representation",
+      "table": "representations",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for Representations",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "Representations",
+     "icon": "file-text",
+     "group": "Adjudication",
+     "route": "adjudication/representations"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: Representations\nhandle: representations\ndomain: Adjudication\ndescription: 'Manages representations records and associated child items'\npermissions:\n  - representations.view\n  - representations.create\n  - representations.edit\n  - representations.delete\nmodels:\n  -\n    name: Representation\n    handle: representation\n    table: representations\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for Representations'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: Representations\n  icon: file-text\n  group: Adjudication\n  route: adjudication/representations\n"
+  },
+  {
+   "name": "ReportSoughts",
+   "handle": "report_soughts",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "ReportSoughts",
+    "handle": "report_soughts",
+    "domain": "Adjudication",
+    "description": "Manages report_soughts records and associated child items",
+    "permissions": [
+     "report_soughts.view",
+     "report_soughts.create",
+     "report_soughts.edit",
+     "report_soughts.delete"
+    ],
+    "models": [
+     {
+      "name": "ReportSought",
+      "handle": "report_sought",
+      "table": "report_soughts",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for ReportSoughts",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "ReportSoughts",
+     "icon": "search",
+     "group": "Adjudication",
+     "route": "adjudication/report-soughts"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: ReportSoughts\nhandle: report_soughts\ndomain: Adjudication\ndescription: 'Manages report_soughts records and associated child items'\npermissions:\n  - report_soughts.view\n  - report_soughts.create\n  - report_soughts.edit\n  - report_soughts.delete\nmodels:\n  -\n    name: ReportSought\n    handle: report_sought\n    table: report_soughts\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for ReportSoughts'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: ReportSoughts\n  icon: search\n  group: Adjudication\n  route: adjudication/report-soughts\n"
+  },
+  {
+   "name": "NoticeTitles",
+   "handle": "notice_titles",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "NoticeTitles",
+    "handle": "notice_titles",
+    "domain": "Adjudication",
+    "description": "Manages notice_titles records and associated child items",
+    "permissions": [
+     "notice_titles.view",
+     "notice_titles.create",
+     "notice_titles.edit",
+     "notice_titles.delete"
+    ],
+    "models": [
+     {
+      "name": "NoticeTitle",
+      "handle": "notice_title",
+      "table": "notice_titles",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for NoticeTitles",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "NoticeTitles",
+     "icon": "bell",
+     "group": "Adjudication",
+     "route": "adjudication/notice-titles"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: NoticeTitles\nhandle: notice_titles\ndomain: Adjudication\ndescription: 'Manages notice_titles records and associated child items'\npermissions:\n  - notice_titles.view\n  - notice_titles.create\n  - notice_titles.edit\n  - notice_titles.delete\nmodels:\n  -\n    name: NoticeTitle\n    handle: notice_title\n    table: notice_titles\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for NoticeTitles'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: NoticeTitles\n  icon: bell\n  group: Adjudication\n  route: adjudication/notice-titles\n"
+  },
+  {
+   "name": "NoticeTemplates",
+   "handle": "notice_templates",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "NoticeTemplates",
+    "handle": "notice_templates",
+    "domain": "Adjudication",
+    "description": "Manages notice_templates records and associated child items",
+    "permissions": [
+     "notice_templates.view",
+     "notice_templates.create",
+     "notice_templates.edit",
+     "notice_templates.delete"
+    ],
+    "models": [
+     {
+      "name": "NoticeTemplate",
+      "handle": "notice_template",
+      "table": "notice_templates",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for NoticeTemplates",
+      "fields": [
+       {
+        "handle": "notice_title_id",
+        "label": "Notice Title Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "purpose",
+        "label": "Purpose",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_type_id",
+        "label": "Complaint Type Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "template_html",
+        "label": "Template Html",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "required_fields",
+        "label": "Required Fields",
+        "type": "json",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "NoticeTemplates",
+     "icon": "bell",
+     "group": "Adjudication",
+     "route": "adjudication/notice-templates"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: NoticeTemplates\nhandle: notice_templates\ndomain: Adjudication\ndescription: 'Manages notice_templates records and associated child items'\npermissions:\n  - notice_templates.view\n  - notice_templates.create\n  - notice_templates.edit\n  - notice_templates.delete\nmodels:\n  -\n    name: NoticeTemplate\n    handle: notice_template\n    table: notice_templates\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for NoticeTemplates'\n    fields:\n      -\n        handle: notice_title_id\n        label: 'Notice Title Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: purpose\n        label: Purpose\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_type_id\n        label: 'Complaint Type Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: template_html\n        label: 'Template Html'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: required_fields\n        label: 'Required Fields'\n        type: json\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: NoticeTemplates\n  icon: bell\n  group: Adjudication\n  route: adjudication/notice-templates\n"
+  },
+  {
+   "name": "Notices",
+   "handle": "notices",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "Notices",
+    "handle": "notices",
+    "domain": "Adjudication",
+    "description": "Manages notices records and associated child items",
+    "permissions": [
+     "notices.view",
+     "notices.create",
+     "notices.edit",
+     "notices.delete"
+    ],
+    "models": [
+     {
+      "name": "Notice",
+      "handle": "notice",
+      "table": "notices",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for Notices",
+      "fields": [
+       {
+        "handle": "complaint_id",
+        "label": "Complaint Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "notice_template_id",
+        "label": "Notice Template Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "diary_no",
+        "label": "Diary No",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "notice_order_date",
+        "label": "Notice Order Date",
+        "type": "datetime",
+        "input_type": "datetime",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "notice_order_time",
+        "label": "Notice Order Time",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "final_content",
+        "label": "Final Content",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "signature_file_name",
+        "label": "Signature File Name",
+        "type": "string",
+        "input_type": "file",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "signature_file_path",
+        "label": "Signature File Path",
+        "type": "string",
+        "input_type": "file",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "created_by",
+        "label": "Created By",
+        "type": "integer",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "Notices",
+     "icon": "bell",
+     "group": "Adjudication",
+     "route": "adjudication/notices"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: Notices\nhandle: notices\ndomain: Adjudication\ndescription: 'Manages notices records and associated child items'\npermissions:\n  - notices.view\n  - notices.create\n  - notices.edit\n  - notices.delete\nmodels:\n  -\n    name: Notice\n    handle: notice\n    table: notices\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for Notices'\n    fields:\n      -\n        handle: complaint_id\n        label: 'Complaint Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: notice_template_id\n        label: 'Notice Template Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: diary_no\n        label: 'Diary No'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: notice_order_date\n        label: 'Notice Order Date'\n        type: datetime\n        input_type: datetime\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: notice_order_time\n        label: 'Notice Order Time'\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: final_content\n        label: 'Final Content'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: signature_file_name\n        label: 'Signature File Name'\n        type: string\n        input_type: file\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: signature_file_path\n        label: 'Signature File Path'\n        type: string\n        input_type: file\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: created_by\n        label: 'Created By'\n        type: integer\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: Notices\n  icon: bell\n  group: Adjudication\n  route: adjudication/notices\n"
+  },
+  {
+   "name": "MasterData",
+   "handle": "master_data",
+   "domain": "Adjudication",
+   "blueprint": {
+    "schema_version": 1,
+    "name": "MasterData",
+    "handle": "master_data",
+    "domain": "Adjudication",
+    "description": "Shared statutory taxonomies, lookup registries, and regional catalogs",
+    "permissions": [
+     "master_data.view",
+     "master_data.create",
+     "master_data.edit",
+     "master_data.delete"
+    ],
+    "models": [
+     {
+      "name": "Gender",
+      "handle": "gender",
+      "table": "genders",
+      "root": true,
+      "timestamps": true,
+      "soft_deletes": true,
+      "description": "Primary aggregate root for MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "Province",
+      "handle": "province",
+      "table": "provinces",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "District",
+      "handle": "district",
+      "table": "districts",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "province_id",
+        "label": "Province Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "Tehsil",
+      "handle": "tehsil",
+      "table": "tehsils",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "district_id",
+        "label": "District Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "Region",
+      "handle": "region",
+      "table": "regions",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "ComplaintType",
+      "handle": "complaint_type",
+      "table": "complaint_types",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "ComplaintSubtype",
+      "handle": "complaint_subtype",
+      "table": "complaint_subtypes",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_type_id",
+        "label": "Complaint Type Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "ComplaintStatus",
+      "handle": "complaint_status",
+      "table": "complaint_statuses",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_subtype_id",
+        "label": "Complaint Subtype Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "EmploymentNature",
+      "handle": "employment_nature",
+      "table": "employment_natures",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "AcquisitionMode",
+      "handle": "acquisition_mode",
+      "table": "acquisition_modes",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "HarassmentNature",
+      "handle": "harassment_nature",
+      "table": "harassment_natures",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "OrganizationType",
+      "handle": "organization_type",
+      "table": "organization_types",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "PropertyType",
+      "handle": "property_type",
+      "table": "property_types",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "PropertyNature",
+      "handle": "property_nature",
+      "table": "property_natures",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "HearingType",
+      "handle": "hearing_type",
+      "table": "hearing_types",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "PenaltyNature",
+      "handle": "penalty_nature",
+      "table": "penalty_natures",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "MicroCategory",
+      "handle": "micro_category",
+      "table": "micro_categories",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "DecisionType",
+      "handle": "decision_type",
+      "table": "decision_types",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "complaint_type_id",
+        "label": "Complaint Type Id",
+        "type": "integer",
+        "input_type": "select",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "PenaltyType",
+      "handle": "penalty_type",
+      "table": "penalty_types",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "name",
+        "label": "Name",
+        "type": "string",
+        "input_type": "text",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     },
+     {
+      "name": "Faq",
+      "handle": "faq",
+      "table": "faqs",
+      "root": false,
+      "timestamps": true,
+      "soft_deletes": false,
+      "description": "Child entity of MasterData",
+      "fields": [
+       {
+        "handle": "question_en",
+        "label": "Question En",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "answer_en",
+        "label": "Answer En",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "question_ur",
+        "label": "Question Ur",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "answer_ur",
+        "label": "Answer Ur",
+        "type": "text",
+        "input_type": "textarea",
+        "required": false,
+        "nullable": true,
+        "width": 100,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_active",
+        "label": "Is Active",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       },
+       {
+        "handle": "is_property_faq",
+        "label": "Is Property Faq",
+        "type": "boolean",
+        "input_type": "switch",
+        "required": false,
+        "nullable": true,
+        "width": 50,
+        "optionsText": ""
+       }
+      ],
+      "relations": []
+     }
+    ],
+    "workflow": null,
+    "roles": [],
+    "navigation": {
+     "label": "MasterData",
+     "icon": "database",
+     "group": "Adjudication",
+     "route": "adjudication/master-data"
+    }
+   },
+   "allRelations": [],
+   "source": "schema_version: 1\nname: MasterData\nhandle: master_data\ndomain: Adjudication\ndescription: 'Shared statutory taxonomies, lookup registries, and regional catalogs'\npermissions:\n  - master_data.view\n  - master_data.create\n  - master_data.edit\n  - master_data.delete\nmodels:\n  -\n    name: Gender\n    handle: gender\n    table: genders\n    root: true\n    timestamps: true\n    soft_deletes: true\n    description: 'Primary aggregate root for MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: Province\n    handle: province\n    table: provinces\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: District\n    handle: district\n    table: districts\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: province_id\n        label: 'Province Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: Tehsil\n    handle: tehsil\n    table: tehsils\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: district_id\n        label: 'District Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: Region\n    handle: region\n    table: regions\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: ComplaintType\n    handle: complaint_type\n    table: complaint_types\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: ComplaintSubtype\n    handle: complaint_subtype\n    table: complaint_subtypes\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_type_id\n        label: 'Complaint Type Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: ComplaintStatus\n    handle: complaint_status\n    table: complaint_statuses\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_subtype_id\n        label: 'Complaint Subtype Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: EmploymentNature\n    handle: employment_nature\n    table: employment_natures\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: AcquisitionMode\n    handle: acquisition_mode\n    table: acquisition_modes\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: HarassmentNature\n    handle: harassment_nature\n    table: harassment_natures\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: OrganizationType\n    handle: organization_type\n    table: organization_types\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: PropertyType\n    handle: property_type\n    table: property_types\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: PropertyNature\n    handle: property_nature\n    table: property_natures\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: HearingType\n    handle: hearing_type\n    table: hearing_types\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: PenaltyNature\n    handle: penalty_nature\n    table: penalty_natures\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: MicroCategory\n    handle: micro_category\n    table: micro_categories\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: DecisionType\n    handle: decision_type\n    table: decision_types\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: complaint_type_id\n        label: 'Complaint Type Id'\n        type: integer\n        input_type: select\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: PenaltyType\n    handle: penalty_type\n    table: penalty_types\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: name\n        label: Name\n        type: string\n        input_type: text\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\n  -\n    name: Faq\n    handle: faq\n    table: faqs\n    root: false\n    timestamps: true\n    soft_deletes: false\n    description: 'Child entity of MasterData'\n    fields:\n      -\n        handle: question_en\n        label: 'Question En'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: answer_en\n        label: 'Answer En'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: question_ur\n        label: 'Question Ur'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: answer_ur\n        label: 'Answer Ur'\n        type: text\n        input_type: textarea\n        required: false\n        nullable: true\n        width: 100\n        optionsText: ''\n      -\n        handle: is_active\n        label: 'Is Active'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n      -\n        handle: is_property_faq\n        label: 'Is Property Faq'\n        type: boolean\n        input_type: switch\n        required: false\n        nullable: true\n        width: 50\n        optionsText: ''\n    relations: {  }\nworkflow: null\nroles: {  }\nnavigation:\n  label: MasterData\n  icon: database\n  group: Adjudication\n  route: adjudication/master-data\n"
+  }
+ ]
+}

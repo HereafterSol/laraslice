@@ -25,6 +25,7 @@ const themeStore = {
     tracking: localStorage.getItem('theme:tracking') || 'normal',
     inputStyle: localStorage.getItem('theme:inputStyle') || 'outline',
     fontHeading: localStorage.getItem('theme:fontHeading') || 'sans',
+    soul: localStorage.getItem('theme:soul') || 'default',
 
     init() {
         // No stored choice → fall back per the darkMode policy: 'system' follows the OS,
@@ -38,7 +39,7 @@ const themeStore = {
         });
         // Keep every same-origin document in sync (e.g. block-preview iframes):
         // localStorage writes in one document fire a `storage` event in the others.
-        const defaults = { mode: this.darkMode === 'system' ? 'system' : 'light', base: 'neutral', preset: 'default', radius: '0.625', font: 'sans', shadow: 'default', spacing: 'default', tracking: 'normal', inputStyle: 'outline', fontHeading: 'sans' };
+        const defaults = { mode: this.darkMode === 'system' ? 'system' : 'light', base: 'neutral', preset: 'default', radius: '0.625', font: 'sans', shadow: 'default', spacing: 'default', tracking: 'normal', inputStyle: 'outline', fontHeading: 'sans', soul: 'default' };
         window.addEventListener('storage', (e) => {
             if (!e.key || !e.key.startsWith('theme:')) return;
             const key = e.key.slice('theme:'.length);
@@ -70,6 +71,7 @@ const themeStore = {
     setTracking(tracking) { this.set('tracking', tracking); },
     setInputStyle(inputStyle) { this.set('inputStyle', inputStyle); },
     setFontHeading(fontHeading) { this.set('fontHeading', fontHeading); },
+    setSoul(soul) { this.set('soul', soul); },
 
     toggle() {
         if (this.darkMode === false) return;
@@ -103,7 +105,7 @@ const themeStore = {
     },
 
     reset() {
-        ['mode', 'base', 'preset', 'radius', 'font', 'shadow', 'spacing', 'tracking', 'inputStyle', 'fontHeading'].forEach((k) =>
+        ['mode', 'base', 'preset', 'radius', 'font', 'shadow', 'spacing', 'tracking', 'inputStyle', 'fontHeading', 'soul'].forEach((k) =>
             localStorage.removeItem('theme:' + k),
         );
         this.mode = this.darkMode === 'system' ? 'system' : 'light';
@@ -116,6 +118,7 @@ const themeStore = {
         this.tracking = 'normal';
         this.inputStyle = 'outline';
         this.fontHeading = 'sans';
+        this.soul = 'default';
         this.apply();
     },
 
@@ -136,6 +139,7 @@ const themeStore = {
         this.attr(root, 'data-tracking', this.tracking, 'normal');
         this.attr(root, 'data-input-style', this.inputStyle, 'outline');
         this.attr(root, 'data-font-heading', this.fontHeading, 'sans');
+        this.attr(root, 'data-soul', this.soul, 'default');
         root.setAttribute('data-radius', this.radius);
     },
 

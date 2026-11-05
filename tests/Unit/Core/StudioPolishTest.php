@@ -45,9 +45,12 @@ class StudioPolishTest extends TestCase
     public function test_design_panel_has_yaml_validation_chip(): void
     {
         $design = $this->blade('design-panel.blade.php');
-        $this->assertStringContainsString('get yamlStatus()', $design);
+        $this->assertStringContainsString('yamlStatus', $design, 'the chip binds the component yamlStatus');
         $this->assertStringContainsString('YAML valid', $design);
         $this->assertStringContainsString('sticky top-0', $design);
+        // The getter itself ships with the component factory asset now.
+        $factory = (string) file_get_contents(dirname(__DIR__, 3).'/resources/assets/design-factory.js');
+        $this->assertStringContainsString('get yamlStatus()', $factory);
     }
 
     public function test_manage_header_groups_destructive_actions_behind_danger_menu(): void

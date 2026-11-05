@@ -44,7 +44,7 @@ function larasliceWizard() {
         newRole: { name: '', slug: '', description: '', permissions: [] },
         showPortModal: false,
         portPreset: 'erp',
-        portSourcePath: 'e:/laragon/www/erp',
+        portSourcePath: '',
         portDomain: 'ERP',
         portMode: 'system-base',
         portImportData: true,
@@ -53,7 +53,7 @@ function larasliceWizard() {
         portExecuting: false,
         portError: '',
         portInspectionData: null,
-        portPlanData: null,
+        portPlanData: { journeys: [], sidebar_preview: [], summary: null, domain: '' },
         portPlanJsonText: '',
         portActiveTab: 'sidebar',
         portExecutionLogs: [],
@@ -914,6 +914,13 @@ function larasliceWizard() {
         migrationSuccess: false,
         migrationOutput: '',
         installedSlices: [],
+        slicesLoading: true,
+        // Manage tab bar: the slice editor is grouped into
+        // focused sections instead of one endless scroll.
+        manageTab: 'structure',
+        // Declaration-history entries for the selected
+        // slice (Operate's trust layer, per slice).
+        sliceHistory: [],
         selectedSlice: null,
         selectedTable: null,
         targetTable: '',
@@ -1089,6 +1096,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     targetTable: this.targetTable,
                     new_fields: newCols.map(f => ({
                         name: f.handle.trim(),
@@ -1170,6 +1178,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     relations: this.studioRelations
                 })
             }).then(r => r.json()).then(d => {
@@ -1186,6 +1195,45 @@ function larasliceWizard() {
             });
         },
 
+        /**
+         * Create → Manage flow: after a successful generate,
+         * continue in the editor of record with the new
+         * slice selected — the journey does not end at a
+         * file list.
+         */
+        async openInManage() {
+            await this.loadSlices();
+            const wanted = String(this.projectName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const match = this.installedSlices.find(s => String(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') === wanted)
+                || this.installedSlices[this.installedSlices.length - 1];
+            this.mainTab = 'studio';
+            if (match) this.selectSlice(match);
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.set('mode', 'manage');
+                window.history.replaceState({}, '', u);
+            } catch (e) { /* standalone wizard: nothing to sync */ }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+
+        /**
+         * Declaration history for one slice — the same
+         * append-only record slice:history reads, filtered
+         * to this slice's files. Feeds the Activity tab.
+         */
+        async loadSliceHistory(slice) {
+            this.sliceHistory = [];
+            if (!slice || !slice.name) return;
+            try {
+                const res = await fetch('/laraslice/wizard/declaration-history?name=' + encodeURIComponent(slice.name) + '&path=' + encodeURIComponent(slice.path || ''), { headers: { 'Accept': 'application/json' } });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (this.selectedSlice && this.selectedSlice.name === slice.name && (this.selectedSlice.path || '') === (slice.path || '')) {
+                    this.sliceHistory = Array.isArray(data.data) ? data.data : [];
+                }
+            } catch (e) { /* history is best-effort */ }
+        },
+
         rollbackVersion(hist, hIdx) {
             if (!confirm(`Are you sure you want to rollback / restore '${this.selectedSlice.name}' to version ${hist.version}?`)) {
                 return;
@@ -1200,6 +1248,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     target_version: hist.version,
                     target_index: (typeof hIdx === 'number') ? hIdx : null,
                     target_date: hist.date || null
@@ -1258,6 +1307,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     tableName: this.newChildTable.tableName.trim(),
                     relationType: this.newChildTable.relationType,
                     foreignKey: this.newChildTable.foreignKey || null,
@@ -1304,6 +1354,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     targetTable: this.targetTable,
                     fields: valid,
                     migrate: true
@@ -1345,8 +1396,9 @@ function larasliceWizard() {
             this.newPermInput = '';
         },
         init() {
-            if (!this.projectName) { this.applyPreset('legal_dispute_adjudication'); }
-
+            // A fresh Studio opens BLANK. Presets are one-click
+            // cards below — auto-applying one on init made every
+            // install open on a stranger's demo project.
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('port') === '1' || this.mainTab === 'porting') {
                 this.showPortModal = true;
@@ -1359,6 +1411,7 @@ function larasliceWizard() {
             fetch('/laraslice/wizard/slices')
                 .then(r => r.json())
                 .then(d => {
+                    this.slicesLoading = false;
                     this.installedSlices = d.data || [];
                     if (this.installedSlices.length > 0) {
                         const curName = this.selectedSlice ? this.selectedSlice.name : null;
@@ -1374,7 +1427,7 @@ function larasliceWizard() {
                             }
                         }
                     }
-                }).catch(e => console.error(e));
+                }).catch(e => { this.slicesLoading = false; console.error(e); });
         },
         showToast(msg, type = 'success') {
             this.toastMessage = msg;
@@ -1621,6 +1674,7 @@ function larasliceWizard() {
         },
         selectSlice(slice) {
             this.selectedSlice = slice;
+            this.loadSliceHistory(slice);
             this.navRoles = Array.isArray(slice.navigation?.roles) ? [...slice.navigation.roles] : [];
             this.navGroup = slice.navigation?.group || slice.domain || 'General';
             this.navVisible = slice.navigation?.visible !== false;
@@ -1763,6 +1817,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     targetTable: this.targetTable,
                     field: this.newField.name,
                     type: this.newField.type,
@@ -1793,6 +1848,7 @@ function larasliceWizard() {
                 },
                 body: JSON.stringify({
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     ...this.navConfig
                 })
             }).then(r => r.json()).then(d => {
@@ -1860,6 +1916,7 @@ function larasliceWizard() {
                     : (this.includeWorkflow === false ? { enabled: false, states: [], transitions: [] } : null);
                 return {
                     slice: this.selectedSlice.name,
+                    path: this.selectedSlice.path || '',
                     ui,
                     navigation,
                     ...(workflowPayload !== null ? { workflow: workflowPayload } : {}),
@@ -1927,6 +1984,7 @@ function larasliceWizard() {
                     },
                     body: JSON.stringify({
                         slice: this.selectedSlice.name,
+                        path: this.selectedSlice.path || '',
                         ui,
                         navigation,
                         ...(workflowPayload !== null ? { workflow: workflowPayload } : {}),
@@ -1961,7 +2019,7 @@ function larasliceWizard() {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify({ slice: this.selectedSlice.name, prefer }),
+                    body: JSON.stringify({ slice: this.selectedSlice.name, path: this.selectedSlice.path || '', prefer }),
                 });
                 const data = await res.json();
                 this.studioConfigMessage = data.message || (data.success ? 'Synced' : 'Sync failed');
@@ -2194,12 +2252,24 @@ function larasliceWizard() {
             };
         },
 
-        generateSlice() {
+        async generateSlice() {
             if (!this.projectName || this.projectName.trim() === '') {
                 return alert('Please enter a Slice Name');
             }
             if (this.projectName.includes(',') && this.domain) {
                 return this.generateDomainSuite(this.domain, this.projectName.split(',').map(s => s.trim()).filter(Boolean));
+            }
+            // Structural gate: an empty model scaffolds an
+            // empty shell. That is sometimes intended (a
+            // container slice), so it stays possible — but
+            // never silent. (The audit walked to Generate
+            // with 0 fields and nothing objected.)
+            if ((this.customFields || []).length === 0) {
+                const msg = `'${this.projectName}' has no fields defined yet. Generating now scaffolds an empty shell — no table columns beyond the id and timestamps. Add fields in step 2, or generate the shell deliberately.`;
+                const ok = window.lsConfirm
+                    ? await window.lsConfirm(msg, 'Generate empty shell')
+                    : confirm(msg);
+                if (!ok) return;
             }
             this.isGenerating = true;
             this.resultMessage = '';
@@ -2437,10 +2507,8 @@ function larasliceWizard() {
             this.portInspectionData = null;
             this.portError = '';
             if (val === 'erp') {
-                this.portSourcePath = 'e:/laragon/www/erp';
                 this.portDomain = 'ERP';
             } else if (val === 'adjudication') {
-                this.portSourcePath = 'e:/laragon/www/wwf-old';
                 this.portDomain = 'Legal';
             } else if (val === 'custom') {
                 this.portSourcePath = '';
@@ -2883,21 +2951,6 @@ function larasliceWizard() {
                             <p class="text-xs text-muted-foreground mt-1">Configure your vertical slice core identity</p>
                         </div>
 
-                                                <!-- Legacy Reverse-Engineering Callout Banner -->
-                        <div class="rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-transparent p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-                            <div class="flex items-center gap-3">
-                                <span class="text-3xl">🚀</span>
-                                <div>
-                                    <h4 class="text-xs font-bold text-foreground">Reverse-Engineer & Port Legacy Laravel Monolith</h4>
-                                    <p class="text-[11px] text-muted-foreground mt-0.5">Auto-classify legacy database tables into Bounded Domains, generate zero-blank-dropdown seeders (system-base) or perform full historical migration.</p>
-                                </div>
-                            </div>
-                            <a href="{{ route('laraslice.wizard.blueprint') }}?port=1" class="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-xs">
-                                <span>Launch Porting Wizard</span>
-                                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                            </a>
-                        </div>
-
                         <!-- Blueprint Starter Templates & Categories -->
                         <div class="space-y-3.5">
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-2.5">
@@ -3037,21 +3090,21 @@ function larasliceWizard() {
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Feature / Slice Name(s) *</label>
+                                <label class="block text-xs font-semibold text-foreground mb-2">Feature / Slice Name(s) *</label>
                                 <input type="text" x-model="projectName" @input="refreshRbacList()" placeholder="e.g., Invoice or Companies, Contacts, Deals"
                                        class="w-full px-4 py-3 bg-muted/30 border border-border rounded-xl text-foreground text-sm focus:border-primary focus:outline-none">
                                 <p class="text-[10px] text-muted-foreground mt-1">Separate with commas to batch scaffold multi-slice domain suites in 1-click.</p>
                             </div>
 
                             <div>
-                                <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Domain / Group</label>
+                                <label class="block text-xs font-semibold text-foreground mb-2">Domain / Group</label>
                                 <input type="text" x-model="domain" placeholder="e.g., CRM, E-Commerce, Operations"
                                        class="w-full px-4 py-3 bg-muted/30 border border-border rounded-xl text-foreground text-sm focus:border-primary focus:outline-none">
                                 <p class="text-[10px] text-muted-foreground mt-1">Groups slices in sidebar, routes & namespace.</p>
                             </div>
 
                             <div>
-                                <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Root Namespace *</label>
+                                <label class="block text-xs font-semibold text-foreground mb-2">Root Namespace *</label>
                                 <input type="text" x-model="namespace" placeholder="App\Slices" readonly aria-describedby="slice-namespace-help"
                                        class="w-full px-4 py-3 bg-muted/30 border border-border rounded-xl text-foreground text-sm opacity-80">
                                 <p class="text-[10px] text-muted-foreground mt-1" x-text="'App\\Slices\\' + (domain ? domain.replace(/[^A-Za-z0-9]/g, '') + '\\...' : '...')"></p>
@@ -3059,7 +3112,7 @@ function larasliceWizard() {
                         </div>
 
                         <div>
-                            <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Description</label>
+                            <label class="block text-xs font-semibold text-foreground mb-2">Description</label>
                             <textarea x-model="description" rows="3" placeholder="Brief description of this feature slice..."
                                       class="w-full px-4 py-3 bg-muted/30 border border-border rounded-xl text-foreground text-sm focus:border-primary focus:outline-none"></textarea>
                         </div>
@@ -3704,10 +3757,16 @@ function larasliceWizard() {
                                         <p class="text-xs text-emerald-600 dark:text-emerald-400 font-medium" x-text="resultMessage"></p>
                                     </div>
                                 </div>
-                                <a :href="resultData?.web_url" target="_blank" class="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5 cursor-pointer">
-                                    <span>Open Web UI</span>
-                                    <span>↗</span>
-                                </a>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" @click="openInManage()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+                                        <span>Open in Manage</span>
+                                        <span>→</span>
+                                    </button>
+                                    <a :href="resultData?.web_url" target="_blank" class="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5 cursor-pointer">
+                                        <span>Open Web UI</span>
+                                        <span>↗</span>
+                                    </a>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-muted/40 dark:bg-muted/20 p-4 rounded-xl border border-border">
@@ -3879,12 +3938,12 @@ function larasliceWizard() {
         <!-- October CMS Builder Style Studio Mode -->
         <div x-show="mainTab === 'studio'" class="grid grid-cols-1 md:grid-cols-12 gap-6">
             <!-- Left: Slice Selector (Grouped by Domain with Accordion) -->
-            <div class="col-span-12 md:col-span-5 lg:col-span-4 space-y-4">
+            <div class="col-span-12 md:col-span-5 lg:col-span-4 space-y-4" :class="selectedSlice ? 'max-md:hidden' : ''">
                 <div class="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-3">
                     <div class="flex items-center justify-between pb-2 border-b border-border">
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Installed Slices</span>
-                            <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary" x-text="(installedSlices || []).length + ' Total'"></span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary" x-text="slicesLoading ? 'Loading…' : (installedSlices || []).length + ' Total'"></span>
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button" @click="showPortModal = true" class="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition cursor-pointer shadow-2xs">
@@ -4042,7 +4101,11 @@ function larasliceWizard() {
                                 </div>
                             </div>
                         </template>
-                        <div x-show="groupedSlices().length === 0" class="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                        <div x-show="slicesLoading" class="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                            <p class="text-sm font-semibold text-muted-foreground animate-pulse">Loading slices…</p>
+                            <p class="text-xs text-muted-foreground mt-1">Reading the slice registry.</p>
+                        </div>
+                        <div x-show="!slicesLoading && groupedSlices().length === 0" class="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
                             <p class="text-sm font-semibold text-muted-foreground">No slices match "<span x-text="sliceSearchQuery"></span>"</p>
                             <p class="text-xs text-muted-foreground mt-1">Try a different search term or clear the filter.</p>
                             <button type="button" @click="sliceSearchQuery = ''" class="mt-3 text-xs text-primary hover:underline">Clear filter</button>
@@ -4051,8 +4114,18 @@ function larasliceWizard() {
                 </div>
             </div>
 
+            <!-- Right, before any selection: an honest placeholder
+                 (a fresh install with no slices lands here too) -->
+            <div class="col-span-12 md:col-span-7 lg:col-span-8" x-show="!selectedSlice && !slicesLoading" x-cloak>
+                <div class="rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
+                    <p class="text-sm font-semibold text-foreground">No slice selected</p>
+                    <p class="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">Pick a slice from the list to edit its fields, pages, access and activity. On a fresh install there is nothing here yet — your first slice starts in <button type="button" @click="setMode('create')" class="font-semibold text-primary underline">Create</button>.</p>
+                </div>
+            </div>
+
             <!-- Right: Slice Schema & Evolution Studio -->
             <div class="col-span-12 md:col-span-7 lg:col-span-8 space-y-6" x-show="selectedSlice">
+                <button type="button" @click="selectedSlice = null" class="md:hidden inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold text-foreground cursor-pointer">← All slices</button>
                 <!-- Slice Header Banner with Quick Actions -->
                 <div class="bg-card border border-border rounded-2xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
                     <div>
@@ -4089,15 +4162,29 @@ function larasliceWizard() {
                                 </button>
                             </div>
                         </div>
-                        <a :href="selectedSlice?.ui_url || '/' + (selectedSlice?.name ? selectedSlice.name.toLowerCase() : '')" target="_blank" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer">
+                        <a :href="selectedSlice?.ui_url || '/' + (selectedSlice?.name ? selectedSlice.name.toLowerCase() : '')" target="_blank" class="px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground font-bold text-xs rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer">
                             <span>Open Slice UI</span>
                             <span>↗</span>
                         </a>
                     </div>
                 </div>
 
+                <!-- Manage section tabs: one focused section at
+                     a time instead of an endless scroll. The bar
+                     sticks while the section scrolls. -->
+                <div class="sticky top-2 z-20 flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-card/95 p-1.5 shadow-lg backdrop-blur">
+                    <template x-for="mt in [{ id: 'structure', icon: '🏗', label: 'Structure' }, { id: 'data', icon: '🔗', label: 'Data & Relations' }, { id: 'pages', icon: '📄', label: 'Pages' }, { id: 'access', icon: '🧭', label: 'Access' }, { id: 'activity', icon: '📜', label: 'Activity' }]" :key="mt.id">
+                        <button type="button" @click="manageTab = mt.id; if (mt.id === 'pages') showAdvancedUi = true"
+                                class="rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer"
+                                :class="manageTab === mt.id ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground hover:bg-accent'">
+                            <span x-text="mt.icon + ' ' + mt.label"></span>
+                        </button>
+                    </template>
+                    <span class="ml-auto hidden px-2 text-[11px] text-muted-foreground lg:block">One section at a time — nothing is lost when you switch.</span>
+                </div>
+
                 <!-- Slice Tables & Child Entities (Multi-Table Aggregate Manager) -->
-                <div class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div x-show="manageTab === 'structure'" class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
                         <div class="flex items-center gap-2.5">
                             <div class="size-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold text-sm">
@@ -4217,7 +4304,7 @@ function larasliceWizard() {
                 </div>
 
                 <!-- Blueprint Builder Style FIELDS Grid (Image 4) -->
-                <div class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
+                <div x-show="manageTab === 'structure'" class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
                         <div class="flex items-center gap-3">
                             <h2 class="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -4751,12 +4838,12 @@ function larasliceWizard() {
                         <div class="flex items-center gap-2 text-xs font-mono text-muted-foreground">
                             <span class="font-bold text-foreground" x-text="studioFields.length + ' column(s) active'"></span>
                             <span x-show="studioFields.filter(f => !f.is_existing && f.handle.trim()).length > 0" class="text-emerald-500 font-semibold"
-                                  x-text="'• ' + studioFields.filter(f => !f.is_existing && f.handle.trim()).length + ' new column(s) queued to add'"></span>
+                                  x-text="'• ' + studioFields.filter(f => !f.is_existing && f.handle.trim()).length + ' new column(s) not yet in the slice'"></span>
                             <span x-show="deletedStudioFields.length > 0" class="text-rose-400 font-semibold"
                                   x-text="'• ' + deletedStudioFields.length + ' column(s) queued to drop'"></span>
                         </div>
                         <button type="button" @click="applyStudioSchema()" :disabled="isSavingStudioFields"
-                                class="w-full sm:w-auto px-6 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                                class="w-full sm:w-auto px-6 py-2.5 bg-primary hover:opacity-90 text-primary-foreground font-bold text-xs rounded-xl transition shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
                             <span x-show="!isSavingStudioFields">🚀 Apply Schema Changes & Run Migration</span>
                             <span x-show="isSavingStudioFields">Generating Migration & Updating Database...</span>
                         </button>
@@ -4766,7 +4853,7 @@ function larasliceWizard() {
                 </div>
 
                 <!-- Dedicated SLICE RELATIONSHIPS & FOREIGN KEYS Card (Image 4) -->
-                <div class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
+                <div x-show="manageTab === 'data'" class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
                         <div>
                             <h2 class="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -4884,13 +4971,13 @@ function larasliceWizard() {
 
                 
                 <!-- Progressive disclosure: UI architecture collapsed until requested -->
-                <div class="flex items-center justify-between">
+                <div x-show="manageTab === 'pages'" class="flex items-center justify-between">
                     <button type="button" @click="showAdvancedUi = !showAdvancedUi"
                             class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent">
                         <span x-text="showAdvancedUi ? '▾ Hide UI customization' : '▸ Customize directory & forms'"></span>
                     </button>
                 </div>
-                <div x-show="showAdvancedUi" x-cloak class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4" x-data="{ uiTab: 'directory' }">
+                <div x-show="manageTab === 'pages' && showAdvancedUi" x-cloak class="rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4" x-data="{ uiTab: 'directory' }">
 
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
                         <div class="flex items-center gap-2.5">
@@ -5080,7 +5167,7 @@ function larasliceWizard() {
                 </div>
 
                 <!-- Navigation & Permissions Settings (October CMS Builder equivalent) -->
-                <div class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div x-show="manageTab === 'access'" class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between pb-3 border-b border-border">
                         <div>
                             <h3 class="font-bold text-foreground text-base flex items-center gap-2">
@@ -5273,7 +5360,7 @@ function larasliceWizard() {
                 </div>
 
                 <!-- Version History (October CMS version.yaml equivalent) -->
-                <div class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div x-show="manageTab === 'activity'" class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between pb-3 border-b border-border">
                         <div>
                             <h3 class="font-bold text-foreground text-base flex items-center gap-2">
@@ -5332,8 +5419,34 @@ function larasliceWizard() {
                     </div>
                 </div>
 
+                <!-- Declaration History for this slice (slice:history) -->
+                <div x-show="manageTab === 'activity'" class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-border">
+                        <div>
+                            <h3 class="font-bold text-foreground text-base flex items-center gap-2">
+                                <span>🧾</span> Declaration History
+                                <span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-mono font-bold" x-text="sliceHistory.length + ' change(s)'"></span>
+                            </h3>
+                            <p class="text-xs text-muted-foreground mt-0.5">Every recorded change to this slice's declarations (Mind, Body, Heart) — the same append-only record <code class="font-mono bg-muted px-1 rounded">php artisan slice:history</code> reads. Diffs: <code class="font-mono bg-muted px-1 rounded">slice:history --diff=&lt;id&gt;</code></p>
+                        </div>
+                        <button type="button" @click="loadSliceHistory(selectedSlice)" class="px-3 py-1.5 bg-muted/40 hover:bg-muted text-foreground border border-border rounded-lg text-xs font-semibold transition cursor-pointer">↺ Refresh</button>
+                    </div>
+                    <div x-show="sliceHistory.length === 0" class="text-xs text-muted-foreground">No declaration changes recorded for this slice yet. Changes are recorded automatically when declarations sync (<code class="font-mono bg-muted px-1 rounded">slice:cache</code> / <code class="font-mono bg-muted px-1 rounded">slice:sync</code>).</div>
+                    <div class="space-y-2">
+                        <template x-for="entry in sliceHistory" :key="entry.id">
+                            <div class="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs">
+                                <span class="font-mono font-bold text-primary" x-text="entry.id"></span>
+                                <span class="text-muted-foreground" x-text="entry.recorded_at"></span>
+                                <span class="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px]" x-text="entry.command || '—'"></span>
+                                <span class="text-muted-foreground" x-text="(entry.files || []).join(', ')"></span>
+                                <span class="ml-auto text-muted-foreground" x-text="'by ' + (entry.by || entry.actor || 'system')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
                 <!-- Enterprise Audit Trail & Compliance Activity Log -->
-                <div class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div x-show="manageTab === 'activity'" class="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between pb-3 border-b border-border">
                         <div>
                             <h3 class="font-bold text-foreground text-base flex items-center gap-2">

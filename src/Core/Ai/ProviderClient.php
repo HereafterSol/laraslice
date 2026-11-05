@@ -16,6 +16,14 @@ use LaraSlice\LaraSliceServiceProvider;
 class ProviderClient
 {
     /**
+     * The last provider failure in plain words ("HTTP 429: Free usage limit
+     * reached."), or null when the most recent call succeeded. Callers show
+     * this to the user: a silent null reply once hid quota and auth failures
+     * behind a generic "provider returned nothing" message.
+     */
+    public ?string $lastError = null;
+
+    /**
      * Standard OpenAI-compatible Chat API call.
      */
     public function openAiCompatible(string $url, string $apiKey, string $model, string $systemPrompt, string $message, array $history = []): ?string
@@ -49,6 +57,7 @@ class ProviderClient
     protected function postJson(string $url, array $payload, array $headers = [], ?int $timeout = null): ?array
     {
         $timeout ??= (int) config('laraslice.ai.http.timeout', 60);
+        $this->lastError = null;
 
         try {
             $response = Http::acceptJson()
@@ -71,6 +80,7 @@ class ProviderClient
                 'host' => parse_url($url, PHP_URL_HOST),
                 'error' => $e->getMessage(),
             ]);
+            $this->lastError = 'Connection failed: '.mb_substr($e->getMessage(), 0, 200);
 
             return null;
         }
@@ -81,6 +91,11 @@ class ProviderClient
                 'status' => $response->status(),
                 'error' => mb_substr((string) $response->body(), 0, 500),
             ]);
+            $errorBody = $response->json();
+            $providerMessage = is_array($errorBody)
+                ? ($errorBody['error']['message'] ?? (is_string($errorBody['error'] ?? null) ? $errorBody['error'] : null))
+                : null;
+            $this->lastError = 'HTTP '.$response->status().': '.mb_substr($providerMessage ?? (string) $response->body(), 0, 200);
 
             return null;
         }

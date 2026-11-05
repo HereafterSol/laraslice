@@ -37,6 +37,8 @@ roles:             # permission CLUBS + the override model
   overrides: per-user grants/revocations on top of the club
 journeys:          # the work, end to end, in plain language
   - {name: Apply for leave, actor: Employee, steps: [...], outcome: "..."}
+success_metrics:   # how the owner knows it is working (PRD's metrics, as declarations)
+  - {name: Weekly active teams, target: "500 by month 3"}
 navigation:        # the menu tree users actually see
   - {label: Work, children: [Projects, Tasks, Time Logs]}
 routes: {style: resource, prefixing: module}
@@ -53,6 +55,9 @@ operations:        # the Operate quadrant, declared
   backups: {schedule: daily, retention_days: 30, includes: [db, uploads]}
   sync: {files: none, db: none}
   audit: {enabled: true}
+localization:      # how stored values are presented, declared
+  timezone: Asia/Kolkata   # datetimes are stored in UTC, shown in this zone
+  currency: PKR            # the code money-typed fields render with
 ```
 
 Rules:

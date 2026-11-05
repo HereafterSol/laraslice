@@ -49,8 +49,12 @@ class ShowWidgetsTest extends TestCase
         ]]]]];
 
         $widgets = DirectoryUi::showWidgetsFromManifest($manifest, $this->record());
-        $this->assertSame(['Incomplete', 'Doing', 'Completed'], $widgets[0]['labels']);
-        $this->assertSame([1, 1, 3], $widgets[0]['series']);
+        // Replica P2 (1 Nov 2026): a declared label map is the
+        // full vocabulary — a group with no rows (To Do here)
+        // stays in the legend at zero, the way the source
+        // boards list every column. Order follows the map.
+        $this->assertSame(['Incomplete', 'To Do', 'Doing', 'Completed'], $widgets[0]['labels']);
+        $this->assertSame([1, 0, 1, 3], $widgets[0]['series']);
     }
 
     public function test_field_gauge_stats_measures_and_rail_list(): void
@@ -82,7 +86,9 @@ class ShowWidgetsTest extends TestCase
         $this->assertSame(88.0, $widgets[0]['percent']);
         $this->assertSame('rail', $widgets[1]['placement']);
         $this->assertSame(
-            [['label' => 'Done', 'value' => '3'], ['label' => 'Remaining', 'value' => '2']],
+            // Stats rows carry the declared measure icon (default
+            // empty) since Replica P2 increment 5 (layout: cards).
+            [['label' => 'Done', 'value' => '3', 'icon' => ''], ['label' => 'Remaining', 'value' => '2', 'icon' => '']],
             $widgets[1]['rows']
         );
         $this->assertSame('rail', $widgets[2]['placement']);

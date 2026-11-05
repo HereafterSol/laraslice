@@ -243,12 +243,43 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
             if (! $table || ! $fk) {
                 continue;
             }
+            // A declared repeater whose table does not carry the
+            // parent foreign key is not a child collection at all
+            // (a belongsTo lookup modelled as a repeater by the
+            // porter). The read/delete paths already tolerate it;
+            // the save path must skip it too instead of failing
+            // the whole save with an unknown-column error.
+            if (! SchemaCache::hasColumn($table, $fk)) {
+                continue;
+            }
             $fields = array_keys($def['fields'] ?? []);
             $tenantKey = $def['tenant_key'] ?? 'company_id';
             $existingIds = DB::table($table)->where($fk, $model->getKey())->pluck('id')->map(fn ($i) => (int) $i)->all();
             $kept = [];
             foreach ($form->{$handle} as $row) {
                 $payload = array_intersect_key($row, array_flip($fields));
+                // The form always submits its blank template row;
+                // a row with no entered value is the repeater's
+                // empty state, not data. Inserting it writes a junk
+                // child row — and fails outright when the table has
+                // a NOT NULL column the form does not carry.
+                // Boolean/toggle fields always submit a value, so
+                // they can never make a row "have content" alone;
+                // '0' in a content field IS a value, not emptiness.
+                $hasValue = false;
+                foreach ($payload as $field => $value) {
+                    $type = $def['fields'][$field]['type'] ?? null;
+                    if (in_array($type, ['boolean', 'bool', 'toggle', 'checkbox'], true)) {
+                        continue;
+                    }
+                    if ($value !== null && $value !== '' && ! (is_string($value) && trim($value) === '')) {
+                        $hasValue = true;
+                        break;
+                    }
+                }
+                if (! $hasValue) {
+                    continue;
+                }
                 $payload[$fk] = $model->getKey();
                 if ($tenantKey && SchemaCache::hasColumn($table, $tenantKey) && $model->getAttribute($tenantKey) !== null) {
                     $payload[$tenantKey] = $model->getAttribute($tenantKey);
@@ -500,7 +531,24 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
         $limit = $filter->getLimit();
 
         if ($filter->getSortBy()) {
-            $query->orderBy($filter->getSortBy(), $filter->isSortDesc() ? 'desc' : 'asc');
+            // A declared/default sort field that is not a real
+            // column on this table (stale manifest, computed
+            // handle) degrades to natural order instead of a
+            // SQL error. Checked through the model's own
+            // connection (no facade — services also run in
+            // bare unit contexts); any failure applies the sort
+            // as before.
+            $sortField = $filter->getSortBy();
+            $applies = true;
+            try {
+                $sortModel = $query->getModel();
+                $applies = $sortModel->getConnection()->getSchemaBuilder()->hasColumn($sortModel->getTable(), $sortField);
+            } catch (\Throwable) {
+                $applies = true;
+            }
+            if ($applies) {
+                $query->orderBy($sortField, $filter->isSortDesc() ? 'desc' : 'asc');
+            }
         }
 
         $models = $query->skip(($page - 1) * $limit)->take($limit)->get();
@@ -606,6 +654,24 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                                     }
                                 }
                                 $group->orWhereHas($relation, fn ($q) => $q->where($qualified, $clause['value']));
+                            } elseif (! empty($clause['pivot']) && ! empty($clause['foreign_key'])) {
+                                // Membership pivot clause: an
+                                // EXISTS row in the pivot table
+                                // linking this record to the
+                                // viewer (project_members,
+                                // task_users, event_attendees…).
+                                $pivot = (string) $clause['pivot'];
+                                $fk = (string) $clause['foreign_key'];
+                                $userKey = (string) ($clause['user_key'] ?? 'user_id');
+                                $mainTable = $model !== null ? $model->getTable() : null;
+                                if ($mainTable !== null && \Illuminate\Support\Facades\Schema::hasTable($pivot)) {
+                                    $group->orWhereExists(function ($q) use ($pivot, $fk, $userKey, $mainTable, $clause) {
+                                        $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                                            ->from($pivot)
+                                            ->whereColumn("{$pivot}.{$fk}", "{$mainTable}.id")
+                                            ->where("{$pivot}.{$userKey}", $clause['value']);
+                                    });
+                                }
                             }
                         }
                     });

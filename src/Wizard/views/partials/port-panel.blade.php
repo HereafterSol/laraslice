@@ -88,6 +88,20 @@
             </div>
             <div x-show="error" class="mt-3 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-400" x-text="error"></div>
 
+            <div x-show="analyzing" class="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-xs">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-semibold text-foreground">Analyzing <span x-text="analyzeScope ? '· ' + analyzeScope.tables + ' tables from ' + analyzeScope.kind : 'the source'"></span></span>
+                    <span class="text-muted-foreground"><span x-text="analyzeElapsed"></span>s elapsed</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded bg-muted"><div class="h-full w-1/3 animate-pulse rounded bg-primary/70"></div></div>
+                <p class="mt-2 leading-relaxed text-muted-foreground">Reading the schema, classifying tables, and mapping slices. Large sources (300+ tables) typically take 1–3 minutes. Nothing is written during analysis — the plan is review-only until you Execute.</p>
+                <button type="button" @click="cancelAnalyze()" class="mt-2 rounded-lg border border-input px-3 py-1.5 font-semibold text-foreground hover:bg-muted">Cancel analysis</button>
+            </div>
+
+            <div x-show="restoredPlan" class="mt-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span class="font-semibold text-foreground">↩️ Restored your last analysis</span> — <span x-text="restoredPlan?.source"></span><span x-show="restoredPlan?.total_tables"> · <span x-text="restoredPlan?.total_tables"></span> tables</span> · <span x-text="restoredPlan?.retained_at"></span>. Review it below, or run Analyze source again to refresh it.
+            </div>
+
             <div x-show="!planData && !analyzing" class="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
                 <span class="font-semibold text-foreground">Start here:</span> pick a source path or Git URL, set a short domain name (e.g. <span class="font-mono">ERP</span>), then click <strong class="text-foreground">Analyze source</strong>. You can review journeys and navigation before anything is written to disk.
             </div>
@@ -900,7 +914,6 @@ function portingStudio() {
                 this.targetDomain = 'FinTech';
             } else if (this.preset === 'erp') {
                 this.targetDomain = 'ERP';
-                if (!this.sourcePath) this.sourcePath = 'e:/laragon/www/erp';
             } else if (this.preset === 'custom' || this.preset === 'auto') {
                 if (this.targetDomain === 'ERP' || this.targetDomain === 'Adjudication') this.targetDomain = 'Core';
             }
@@ -917,6 +930,11 @@ function portingStudio() {
         showSourceManager: false,
         dataSource: 'real',
         analyzing: false,
+        analyzeScope: null,
+        analyzeElapsed: 0,
+        analyzeTimer: null,
+        analyzeAbort: null,
+        restoredPlan: null,
         executing: false,
         personaPreview: 'admin',
         importAuth: false,
@@ -1117,6 +1135,13 @@ function portingStudio() {
         async analyze() {
             this.analyzing = true;
             this.error = '';
+            this.restoredPlan = null;
+            this.analyzeScope = null;
+            const analyzeStartedAt = Date.now();
+            this.analyzeElapsed = 0;
+            clearInterval(this.analyzeTimer);
+            this.analyzeTimer = setInterval(() => { this.analyzeElapsed = Math.floor((Date.now() - analyzeStartedAt) / 1000); }, 500);
+            this.analyzeAbort = new AbortController();
             try {
                 const domainName = (this.targetDomain || (this.preset === 'erp' ? 'ERP' : 'Core')).trim();
                 const payload = { preset: this.preset, domain: domainName, source_type: this.sourceType };
@@ -1129,10 +1154,28 @@ function portingStudio() {
                 } else {
                     payload.source = this.sourcePath;
                 }
+                if (this.sourceType !== 'git') {
+                    // Fast scope first: a bad source fails in a second
+                    // instead of a minute of silence, and the panel
+                    // can state the real size before the wait.
+                    const sr = await fetch('/laraslice/wizard/port-analyze-scope', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrf() },
+                        body: JSON.stringify({ source: this.sourcePath }),
+                        signal: this.analyzeAbort.signal,
+                    });
+                    const sd = await sr.json();
+                    if (!sr.ok) throw new Error(sd.message || 'Source check failed');
+                    if (sd.tables) {
+                        this.analyzeScope = sd;
+                        this.log('🔍 Scope: ' + sd.tables + ' tables (' + sd.kind + ') — analyzing…');
+                    }
+                }
                 const res = await fetch('/laraslice/wizard/port-plan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
                     body: JSON.stringify(payload),
+                    signal: this.analyzeAbort.signal,
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.message || 'Analysis failed');
@@ -1142,11 +1185,36 @@ function portingStudio() {
                     this.log('📥 Cloned from ' + data.cloned_from + (this.gitBranch ? ' @ ' + this.gitBranch : ''));
                 }
                 this.activeTab = 'journeys';
+                // Retain the plan on the server: leaving Port and
+                // returning restores this review instead of losing it.
+                try {
+                    await fetch('/laraslice/wizard/port-plan-retain', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrf() },
+                        body: JSON.stringify({
+                            source: this.sourceType === 'git' ? this.gitUrl : this.sourcePath,
+                            domain: domainName,
+                            total_tables: data.inspection?.total_tables ?? this.analyzeScope?.tables ?? null,
+                            plan: this.planData,
+                        }),
+                    });
+                    this.log('💾 Analysis retained — it will be restored when you return to Port.');
+                } catch (e) { /* retention is best-effort */ }
             } catch (e) {
-                this.error = e.message;
+                if (e.name === 'AbortError') {
+                    this.error = 'Analysis cancelled — nothing was written, and the source was not modified.';
+                    this.log('⏹ Analysis cancelled.');
+                } else {
+                    this.error = e.message;
+                }
             } finally {
+                clearInterval(this.analyzeTimer);
                 this.analyzing = false;
             }
+        },
+
+        cancelAnalyze() {
+            if (this.analyzeAbort) this.analyzeAbort.abort();
         },
 
         moveGroup(gIdx, direction) {
@@ -1256,6 +1324,16 @@ function portingStudio() {
                 const res = await fetch('/laraslice/wizard/port-saved-presets', { headers: { 'Accept': 'application/json' } });
                 const data = await res.json();
                 if (data.success) this.savedPresets = data.presets || [];
+            } catch (e) { /* silent */ }
+            // Restore the last retained analysis, if any
+            try {
+                const res = await fetch('/laraslice/wizard/port-plan-latest', { headers: { 'Accept': 'application/json' } });
+                const data = await res.json();
+                if (data.found && data.plan && !this.planData) {
+                    this.planData = data.plan;
+                    this.planJsonText = JSON.stringify(this.planData, null, 2);
+                    this.restoredPlan = { source: data.source || '', total_tables: data.total_tables, retained_at: data.retained_at || '' };
+                }
             } catch (e) { /* silent */ }
         },
 

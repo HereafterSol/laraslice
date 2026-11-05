@@ -133,4 +133,89 @@ final class Access
 
         return false;
     }
+
+    /**
+     * The scope layer (Option B): how much of a permission's
+     * records the user may reach — 'all', 'both', 'owned',
+     * 'added' or 'none'. Mirrors the source systems' model:
+     * every grant row carries a permission type, resolved
+     * BY NAME (type ids differ across installs).
+     *
+     * Widest scope wins across the user's roles; 'added'
+     * from one role and 'owned' from another merge to
+     * 'both'. A grant row with no type (NULL, or the scope
+     * schema not yet migrated) is a legacy grant and counts
+     * as 'all', so pre-scope installs behave as before.
+     * Per-person overrides: a revoke forces 'none', a grant
+     * confers 'all'. Super roles always resolve to 'all'.
+     */
+    public static function scopeFor(mixed $user, string $ability): string
+    {
+        if (! is_object($user) || ! isset($user->id)) {
+            return 'none';
+        }
+
+        if (self::isSuperDev($user) || self::isSuperAdmin($user)) {
+            return 'all';
+        }
+
+        try {
+            if (PermissionOverrides::revokes($user, $ability)) {
+                return 'none';
+            }
+            if (PermissionOverrides::grants($user, $ability)) {
+                return 'all';
+            }
+
+            if (! Schema::hasTable('role_user') || ! Schema::hasTable('permission_role') || ! Schema::hasTable('permissions')) {
+                return self::allows($user, $ability) ? 'all' : 'none';
+            }
+
+            $hasScope = Schema::hasTable('permission_types')
+                && Schema::hasColumn('permission_role', 'permission_type_id');
+
+            $query = DB::table('permission_role')
+                ->join('role_user', 'role_user.role_id', '=', 'permission_role.role_id')
+                ->join('permissions', 'permissions.id', '=', 'permission_role.permission_id')
+                ->where('role_user.user_id', $user->id)
+                ->where('permissions.slug', $ability);
+
+            if ($hasScope) {
+                $rows = $query
+                    ->leftJoin('permission_types', 'permission_types.id', '=', 'permission_role.permission_type_id')
+                    ->pluck('permission_types.name');
+            } else {
+                $rows = $query->pluck('permission_role.permission_id')
+                    ->map(fn () => null);
+            }
+
+            $scope = 'none';
+            foreach ($rows as $typeName) {
+                $grantScope = $typeName === null ? 'all' : (string) $typeName;
+                $scope = self::widerScope($scope, $grantScope);
+            }
+
+            return $scope;
+        } catch (\Throwable) {
+            return self::allows($user, $ability) ? 'all' : 'none';
+        }
+    }
+
+    /**
+     * The wider of two scopes. Rank: none < added = owned
+     * < both < all; added + owned widen to both.
+     */
+    public static function widerScope(string $a, string $b): string
+    {
+        $rank = ['none' => 0, 'added' => 1, 'owned' => 1, 'both' => 2, 'all' => 3];
+        $ra = $rank[$a] ?? 0;
+        $rb = $rank[$b] ?? 0;
+        if ($ra !== $rb) {
+            return $ra > $rb ? $a : $b;
+        }
+
+        return ($a === 'added' && $b === 'owned') || ($a === 'owned' && $b === 'added')
+            ? 'both'
+            : $a;
+    }
 }

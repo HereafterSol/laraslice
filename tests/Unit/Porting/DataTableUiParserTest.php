@@ -25,7 +25,9 @@ final class DataTableUiParserTest extends TestCase
         $cols = $h['columns'];
         $this->assertSame('date_overdue', $cols['due_date']['formatter'] ?? null);
         $this->assertSame('status_pill', $cols['board_column']['formatter'] ?? $cols['status']['formatter'] ?? null);
-        $this->assertSame('composite_user', $cols['users']['formatter'] ?? null);
+        // The fixture loops over $row->users rendering multiple
+        // avatars — an avatar stack, not a single composite person.
+        $this->assertSame('user_stack', $cols['users']['formatter'] ?? null);
         $this->assertContains($cols['due_date']['formatter'], DataTableUiParser::FORMATTERS);
     }
 
@@ -36,7 +38,9 @@ final class DataTableUiParserTest extends TestCase
         $cols = $h['columns'];
         $this->assertSame('date_overdue', $cols['deadline']['formatter'] ?? null);
         $this->assertSame('progress_bar', $cols['completion_percent']['formatter'] ?? null);
-        $this->assertSame('composite_user', $cols['members']['formatter'] ?? null);
+        // Members render as an avatar stack (the flagship's curated
+        // manifest declares user_stack for this exact column).
+        $this->assertSame('user_stack', $cols['members']['formatter'] ?? null);
     }
 
     public function test_invoices_datatable_extracts_money_and_status(): void

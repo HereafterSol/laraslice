@@ -32,6 +32,15 @@ trait AuthorizesSliceActions
         if (! Access::allows($user, $candidates)) {
             abort(403, "Access Denied: You do not have the required permission [{$candidates[1]}] to perform this action.");
         }
+
+        // Feature-module switch: a deactivated module refuses its
+        // pages too, not just its menu entries.
+        if (method_exists($this, 'ownManifest')) {
+            $featureModule = $this->ownManifest()['feature_module'] ?? null;
+            if (is_string($featureModule) && \LaraSlice\Support\ModuleSettings::isHiddenFor($user, $featureModule)) {
+                abort(403, "Access Denied: The '{$featureModule}' module is disabled for your account type.");
+            }
+        }
     }
 
     /**
@@ -62,11 +71,15 @@ trait AuthorizesSliceActions
     }
 
     /**
-     * How the current user may view this slice: 'all' records,
-     * only their 'own' records, or 'none'. Super users and full
-     * view grants resolve to 'all'; a view-own-only grant
-     * resolves to 'own' and the base controller enforces the
-     * narrowing on lists and detail routes.
+     * How the current user may view this slice, under the
+     * scope layer: 'all' records, 'both' (their own + ones
+     * they added), 'owned', 'added', or 'none'. The scope
+     * comes from the grant rows themselves
+     * (Access::scopeFor resolves the permission type's
+     * name); a legacy grant without a type counts as 'all'.
+     * The Body v2 view-own slug form still resolves to
+     * 'owned'. The base controller enforces the narrowing
+     * on lists and detail routes.
      */
     protected function sliceViewScope(): string
     {
@@ -76,14 +89,17 @@ trait AuthorizesSliceActions
         }
         $base = $this->getPermissionBase();
         $plural = Str::plural($base);
-        if (Access::allows($user, ["{$base}.view", "{$plural}.view", "{$base}.*", "{$plural}.*"])) {
-            return 'all';
+
+        $scope = 'none';
+        foreach (["{$base}.view", "{$plural}.view", "{$base}.*", "{$plural}.*"] as $slug) {
+            $scope = Access::widerScope($scope, Access::scopeFor($user, $slug));
         }
-        if (Access::allows($user, ["{$base}.view-own", "{$plural}.view-own"])) {
-            return 'own';
+        if ($scope === 'none'
+            && Access::allows($user, ["{$base}.view-own", "{$plural}.view-own"])) {
+            $scope = 'owned';
         }
 
-        return 'none';
+        return $scope;
     }
 
     /**

@@ -55,10 +55,18 @@ class SystemMind
      * Flatten the Mind into the Plan form's fields (strings the
      * panel edits as plain language).
      *
-     * @return array{purpose: string, roles: string, journeys: string, operations: string}
+     * @return array{purpose: string, roles: string, journeys: string, metrics: string, operations: string}
      */
     public static function toForm(array $mind): array
     {
+        $actors = [];
+        foreach ((array) ($mind['actors'] ?? []) as $actor) {
+            if (! is_array($actor)) {
+                continue;
+            }
+            $actors[] = ($actor['name'] ?? 'Actor').' | '.($actor['kind'] ?? 'external').' | '.($actor['description'] ?? '');
+        }
+
         $roles = [];
         foreach ($mind['roles']['clubs'] ?? [] as $club) {
             if (! is_array($club)) {
@@ -75,6 +83,15 @@ class SystemMind
             $journeys[] = ($journey['name'] ?? 'Journey').' | '.($journey['actor'] ?? '').' | '.implode(' > ', (array) ($journey['steps'] ?? [])).' | '.($journey['outcome'] ?? '');
         }
 
+        $metrics = [];
+        foreach ((array) ($mind['success_metrics'] ?? []) as $metric) {
+            if (is_array($metric)) {
+                $metrics[] = ($metric['name'] ?? 'Metric').' | '.($metric['target'] ?? '');
+            } elseif (is_string($metric) && $metric !== '') {
+                $metrics[] = $metric;
+            }
+        }
+
         $ops = [];
         foreach ((array) ($mind['operations'] ?? []) as $key => $value) {
             $ops[] = $key.': '.(is_array($value) ? (string) json_encode($value) : (string) $value);
@@ -82,8 +99,10 @@ class SystemMind
 
         return [
             'purpose' => (string) ($mind['system']['purpose'] ?? ''),
+            'actors' => implode("\n", $actors),
             'roles' => implode("\n", $roles),
             'journeys' => implode("\n", $journeys),
+            'metrics' => implode("\n", $metrics),
             'operations' => implode("\n", $ops),
         ];
     }
@@ -128,6 +147,47 @@ class SystemMind
             ];
         }
         $mind['journeys'] = $journeys;
+
+        // Actors: "Name | kind | description" per line. Only
+        // touched when the form supplies the field, so non-Plan
+        // callers never wipe a Mind's actors by omission (the
+        // metrics rule below, applied to the cast of the system).
+        if (array_key_exists('actors', $form)) {
+            $actors = [];
+            foreach (preg_split('/\r?\n/', (string) $form['actors']) ?: [] as $line) {
+                $line = trim($line);
+                if ($line === '') {
+                    continue;
+                }
+                $parts = array_map('trim', explode('|', $line));
+                $name = $parts[0] ?? '';
+                if ($name === '') {
+                    continue;
+                }
+                $actors[] = [
+                    'name' => $name,
+                    'kind' => strtolower($parts[1] ?? '') === 'internal' ? 'internal' : 'external',
+                    'description' => implode(' | ', array_slice($parts, 2)),
+                ];
+            }
+            $mind['actors'] = $actors;
+        }
+
+        // Success metrics: "Name | target" per line. Only touched
+        // when the form supplies the field, so non-Plan callers
+        // never wipe a Mind's metrics by omission.
+        if (array_key_exists('metrics', $form)) {
+            $metrics = [];
+            foreach (preg_split('/\r?\n/', (string) $form['metrics']) ?: [] as $line) {
+                $line = trim($line);
+                if ($line === '') {
+                    continue;
+                }
+                [$mName, $mTarget] = array_pad(array_map('trim', explode('|', $line, 2)), 2, '');
+                $metrics[] = ['name' => $mName, 'target' => $mTarget];
+            }
+            $mind['success_metrics'] = $metrics;
+        }
 
         $ops = [];
         foreach (preg_split('/\r?\n/', (string) ($form['operations'] ?? '')) ?: [] as $line) {
@@ -248,6 +308,9 @@ class SystemMind
                 'journeys' => [
                     ['name' => '[draft] Core journey', 'actor' => 'Super Admin', 'steps' => ['[draft]'], 'outcome' => '[draft]'],
                 ],
+                'success_metrics' => [
+                    ['name' => '[draft] e.g. Weekly active teams', 'target' => '[draft] e.g. 500 by month 3'],
+                ],
                 'modules' => $modules,
                 'operations' => ['backups' => '[draft] daily', 'updates' => '[draft] monthly'],
             ];
@@ -259,6 +322,75 @@ class SystemMind
         }
 
         return $result;
+    }
+
+    /**
+     * Seed a Mind from a Studio brief draft (purpose, actors,
+     * journeys the AI drafted from the user's own brief).
+     * NEVER overwrites: when a Mind already exists at either
+     * location this returns null and the existing Mind stays
+     * the only truth — the same rule slice:plan:draft keeps.
+     * Sections a brief cannot know (roles, operations) start
+     * empty for the Plan editor, not invented.
+     *
+     * @param array{purpose?: mixed, actors?: mixed, journeys?: mixed} $seed
+     * @return string|null the written path, or null when a Mind already exists
+     */
+    public static function applyBriefSeed(array $seed, string $systemName): ?string
+    {
+        if (self::path() !== null) {
+            return null;
+        }
+
+        $actors = [];
+        foreach ((array) ($seed['actors'] ?? []) as $actor) {
+            if (! is_array($actor) || ! is_string($actor['name'] ?? null) || trim($actor['name']) === '') {
+                continue;
+            }
+            $actors[] = [
+                'name' => trim($actor['name']),
+                'kind' => ($actor['kind'] ?? null) === 'internal' ? 'internal' : 'external',
+                'description' => is_string($actor['description'] ?? null) ? trim($actor['description']) : '',
+            ];
+        }
+
+        $journeys = [];
+        foreach ((array) ($seed['journeys'] ?? []) as $journey) {
+            if (! is_array($journey) || ! is_string($journey['name'] ?? null) || trim($journey['name']) === '') {
+                continue;
+            }
+            $steps = [];
+            foreach ((array) ($journey['steps'] ?? []) as $step) {
+                if (is_string($step) && trim($step) !== '') {
+                    $steps[] = trim($step);
+                }
+            }
+            $journeys[] = [
+                'name' => trim($journey['name']),
+                'actor' => is_string($journey['actor'] ?? null) ? trim($journey['actor']) : '',
+                'steps' => $steps,
+                'outcome' => is_string($journey['outcome'] ?? null) ? trim($journey['outcome']) : '',
+            ];
+        }
+
+        $mind = [
+            'system' => [
+                'name' => $systemName,
+                'purpose' => is_string($seed['purpose'] ?? null) ? trim($seed['purpose']) : '',
+                'owner' => '',
+            ],
+            'actors' => $actors,
+            'roles' => ['model' => 'role-clubs-with-user-overrides', 'clubs' => []],
+            'journeys' => $journeys,
+        ];
+
+        $path = self::defaultPath();
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0775, true);
+        }
+        file_put_contents($path, "# Mind — seeded from the Studio brief draft. Review and complete it in Plan mode.\n".self::render($mind));
+
+        return $path;
     }
 
     /**

@@ -33,7 +33,7 @@ class AiChatController
 
         $settings = [
             'default_provider' => $activeProvider,
-            'opencode_model' => $this->aiEngine->providerModel('opencode', 'space-bunny-free'),
+            'opencode_model' => $this->aiEngine->providerModel('opencode', AiEngine::DEFAULT_MODELS['opencode']),
             'openai_model' => $this->aiEngine->providerModel('openai', AiEngine::DEFAULT_MODELS['openai']),
             'gemini_model' => $this->aiEngine->providerModel('gemini', AiEngine::DEFAULT_MODELS['gemini']),
             'anthropic_model' => $this->aiEngine->providerModel('anthropic', AiEngine::DEFAULT_MODELS['anthropic']),
@@ -93,7 +93,7 @@ class AiChatController
 
         $plain = [
             'ai.default_provider' => $validated['default_provider'],
-            'ai.opencode_model' => $validated['opencode_model'] ?? 'space-bunny-free',
+            'ai.opencode_model' => $validated['opencode_model'] ?? AiEngine::DEFAULT_MODELS['opencode'],
             'ai.openai_model' => $validated['openai_model'] ?? AiEngine::DEFAULT_MODELS['openai'],
             'ai.gemini_model' => $validated['gemini_model'] ?? AiEngine::DEFAULT_MODELS['gemini'],
             'ai.anthropic_model' => $validated['anthropic_model'] ?? AiEngine::DEFAULT_MODELS['anthropic'],

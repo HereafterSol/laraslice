@@ -89,4 +89,28 @@ class SettingsUiTest extends TestCase
         $this->assertSame(['table' => 'smtp_settings'], $sections[0]['bind']);
         $this->assertNull($sections[1]['bind'], 'unbound sections stay on the key-value store');
     }
+
+    public function test_toggle_conventions_cover_the_domains_settings_tables_use(): void
+    {
+        // Read side: every stored "on" spelling counts.
+        foreach ([1, '1', 'yes', 'true', true, 'active', 'enabled'] as $on) {
+            $this->assertTrue(SettingsUi::toggleIsOn($on), 'on: '.var_export($on, true));
+        }
+        foreach ([0, '0', 'no', 'false', false, 'deactive', 'disabled', null] as $off) {
+            $this->assertFalse(SettingsUi::toggleIsOn($off), 'off: '.var_export($off, true));
+        }
+
+        // Write side: the record's own convention is kept —
+        // a module_settings row must stay active/deactive,
+        // never collapse into 1/0.
+        $this->assertSame('yes', SettingsUi::toggleValueFor('no', true));
+        $this->assertSame('no', SettingsUi::toggleValueFor('yes', false));
+        $this->assertSame('active', SettingsUi::toggleValueFor('deactive', true));
+        $this->assertSame('deactive', SettingsUi::toggleValueFor('active', false));
+        $this->assertSame('enabled', SettingsUi::toggleValueFor('disabled', true));
+        $this->assertSame('disabled', SettingsUi::toggleValueFor('enabled', false));
+        $this->assertSame(1, SettingsUi::toggleValueFor(0, true));
+        $this->assertSame(0, SettingsUi::toggleValueFor(1, false));
+        $this->assertSame('1', SettingsUi::toggleValueFor('0', true));
+    }
 }

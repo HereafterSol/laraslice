@@ -43,20 +43,110 @@
         </div>
     </div>
 
+    <div class="rounded-xl border border-border bg-card p-4 mb-6">
+        <h3 class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Quality — the trust layer</h3>
+        <p class="mt-1 text-xs text-muted-foreground">The same facts the CLI gates report (<span class="font-mono">slice:conformance</span>, <span class="font-mono">slice:drift</span>, <span class="font-mono">slice:history</span>) — declarations measured, not asserted.</p>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Conformance evidence</p>
+                @if(($quality['evidence']['available'] ?? false) && $quality['evidence']['checks'] > 0)
+                    <p class="mt-1 text-sm font-semibold {{ $quality['evidence']['failed'] === [] ? 'text-emerald-600' : 'text-destructive' }}">{{ $quality['evidence']['passed'] }}/{{ $quality['evidence']['checks'] }} checks passed ({{ $quality['evidence']['percent'] }}%)</p>
+                    <p class="text-xs text-muted-foreground">{{ $quality['evidence']['suites'] }} suite(s) · latest {{ $quality['evidence']['latest_at'] }}</p>
+                    @if($quality['evidence']['failed'] !== [])
+                        <p class="text-xs font-semibold text-destructive">Failing: {{ implode(', ', $quality['evidence']['failed']) }}</p>
+                    @endif
+                @elseif($quality['evidence']['available'] ?? false)
+                    <p class="mt-1 text-sm text-muted-foreground">No evidence recorded yet — run a journey gate (it writes <span class="font-mono">porting/evidence/</span>).</p>
+                @else
+                    <p class="mt-1 text-sm text-muted-foreground">Not available.</p>
+                @endif
+                @foreach($quality['evidence']['errors'] ?? [] as $err)
+                    <p class="text-xs font-semibold text-destructive">{{ $err }}</p>
+                @endforeach
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Declaration drift</p>
+                @if($quality['drift']['available'] ?? false)
+                    <p class="mt-1 text-sm font-semibold {{ $quality['drift']['errors'] === 0 ? 'text-emerald-600' : 'text-destructive' }}">{{ $quality['drift']['errors'] }} error(s) · {{ $quality['drift']['warnings'] }} warning(s)</p>
+                    <p class="text-xs text-muted-foreground">Mind vs roles, registry and Bodies — details: <span class="font-mono">php artisan slice:drift</span></p>
+                @else
+                    <p class="mt-1 text-sm text-muted-foreground">No Mind recorded — drift is not measurable.</p>
+                @endif
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Declaration history</p>
+                @if($quality['history']['available'] ?? false)
+                    <p class="mt-1 text-sm font-semibold text-foreground">{{ $quality['history']['entries'] }} entr(ies) · {{ $quality['history']['tracked'] }} declaration files tracked</p>
+                    @foreach($quality['history']['latest'] as $h)
+                        <p class="text-xs text-muted-foreground">{{ $h['recorded_at'] }} · {{ $h['actor'] }}{{ !empty($h['by']) ? ' (by '.$h['by'].')' : '' }} · {{ $h['changes'] }} change(s)</p>
+                    @endforeach
+                    <p class="text-xs text-muted-foreground">Diffs: <span class="font-mono">php artisan slice:history --diff=&lt;id&gt;</span></p>
+                @else
+                    <p class="mt-1 text-sm text-muted-foreground">Not available.</p>
+                @endif
+            </div>
+            <div>
+                <p class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Runtime portability</p>
+                @if($quality['portability']['available'] ?? false)
+                    @if($quality['portability']['clean'])
+                        <p class="mt-1 text-sm font-semibold text-emerald-600">Runtime-neutral — {{ $quality['portability']['files_scanned'] }} declaration file(s) scanned, no framework leakage.</p>
+                    @else
+                        <p class="mt-1 text-sm font-semibold text-destructive">{{ $quality['portability']['findings'] }} finding(s) of framework leakage in the declarations.</p>
+                        <p class="text-xs text-muted-foreground">Details: <span class="font-mono">php artisan slice:portability</span></p>
+                    @endif
+                    @if(($quality['portability']['bindings'] ?? 0) > 0)
+                        <p class="text-xs text-muted-foreground">{{ $quality['portability']['bindings'] }} runtime binding(s) in Hearts (namespace lines) — expected.</p>
+                    @endif
+                @else
+                    <p class="mt-1 text-sm text-muted-foreground">Not available.</p>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-4 mb-6">
+        <h3 class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Version control — declarations</h3>
+        @if(($git['available'] ?? false))
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span class="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px]">branch: {{ $git['branch'] !== '' ? $git['branch'] : '(unknown)' }}</span>
+                @if(($git['dirty_count'] ?? 0) === 0)
+                    <span class="font-semibold text-emerald-600">All declaration files are committed — the Mind, Bodies and Hearts in Git match the files on disk.</span>
+                @else
+                    <span class="font-semibold text-amber-600">{{ $git['dirty_count'] }} declaration file(s) carry uncommitted changes:</span>
+                @endif
+            </div>
+            @if(($git['dirty_count'] ?? 0) > 0)
+                <ul class="mt-2 space-y-1">
+                    @foreach(array_slice($git['dirty'], 0, 8) as $d)
+                        <li class="font-mono text-[11px] text-muted-foreground"><span class="text-foreground/70">{{ $d['status'] === '??' ? 'untracked' : $d['status'] }}</span> {{ $d['path'] }}</li>
+                    @endforeach
+                    @if($git['dirty_count'] > 8)
+                        <li class="text-[11px] text-muted-foreground">… and {{ $git['dirty_count'] - 8 }} more.</li>
+                    @endif
+                </ul>
+            @endif
+            @if(!empty($git['last_commit']))
+                <p class="mt-2 text-xs text-muted-foreground">Last declaration commit: <span class="font-mono">{{ $git['last_commit']['hash'] }}</span> {{ $git['last_commit']['subject'] }} ({{ $git['last_commit']['when'] }})</p>
+            @endif
+        @else
+            <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{{ $git['reason'] ?? 'Git state is not available.' }}</p>
+        @endif
+    </div>
+
     <div class="grid gap-4 lg:grid-cols-2 pb-6">
-        <div class="rounded-xl border border-border bg-card p-4">
+        <div class="min-w-0 rounded-xl border border-border bg-card p-4">
             <h3 class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Recent audit activity</h3>
             <ul class="mt-2 space-y-1.5">
                 @forelse($audit as $entry)
                     <li class="text-xs"><span class="font-semibold text-foreground">{{ $entry['action'] ?? '' }}</span>
-                        <span class="text-muted-foreground">{{ $entry['slice'] ?? '' }} {{ $entry['entity_type'] ?? '' }}#{{ $entry['entity_id'] ?? '' }} · {{ $entry['actor_email'] ?? 'system' }} · {{ $entry['created_at'] ?? '' }}</span></li>
+                        <span class="break-all text-muted-foreground">{{ $entry['slice'] ?? '' }} {{ $entry['entity_type'] ?? '' }}#{{ $entry['entity_id'] ?? '' }} · {{ $entry['actor_email'] ?? 'system' }} · {{ $entry['created_at'] ?? '' }}</span></li>
                 @empty
                     <li class="text-xs text-muted-foreground">No audit entries.</li>
                 @endforelse
             </ul>
         </div>
 
-        <div class="rounded-xl border border-border bg-card p-4">
+        <div class="min-w-0 rounded-xl border border-border bg-card p-4">
             <h3 class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Access review</h3>
             <ul class="mt-2 space-y-2">
                 @foreach($access as $entry)

@@ -61,6 +61,7 @@ class DataTableUiParser
         'progress_bar',
         'code_badge',
         'composite_user',
+        'user_stack',
         'number',
     ];
 
@@ -437,6 +438,11 @@ class DataTableUiParser
             str_contains($lower, '<img') || str_contains($lower, 'avatar') || str_contains($lower, 'user-image') || str_contains($lower, 'userimage')
             || str_contains($lower, 'components.employee') || str_contains($lower, 'components.user')
         ) {
+            // A plural collection handle (members, assignees) renders
+            // an avatar STACK, not a single composite person cell.
+            if (in_array($h, ['members', 'assignees', 'team_members', 'assigned_users', 'users'], true)) {
+                return $this->hint($handle, 'user_stack', $via, 'high');
+            }
             if (
                 str_contains($h, 'user') || str_contains($h, 'member') || str_contains($h, 'assignee')
                 || str_contains($h, 'employee') || str_contains($lower, 'member') || str_contains($lower, 'user')
@@ -489,9 +495,12 @@ class DataTableUiParser
 
         if (
             str_contains($h, 'short_code') || str_contains($h, 'invoice_number') || $h === 'code'
-            || str_ends_with($h, '_code') || str_ends_with($h, '_id')
+            || str_ends_with($h, '_code')
             || (str_contains($lower, 'route(') && (str_contains($lower, 'show') || str_contains($lower, 'view')))
         ) {
+            // NOTE: *_id handles are NOT code badges — a foreign key
+            // renders its related record's label (client_id shows the
+            // client's name), which the FK batch resolver supplies.
             if (! str_contains($lower, '<select') && ! str_contains($lower, '<img') && ! str_contains($lower, 'components.employee')) {
                 return $this->hint($handle, 'code_badge', $via, 'high');
             }
@@ -517,6 +526,9 @@ class DataTableUiParser
         }
         if (in_array($h, ['total', 'amount', 'grand_total'], true)) {
             return $this->hint($handle, 'money_breakdown', 'name', 'low');
+        }
+        if (in_array($h, ['members', 'assignees', 'team_members', 'assigned_users', 'users'], true)) {
+            return $this->hint($handle, 'user_stack', 'name', 'low');
         }
         if (str_contains($h, 'user') || str_contains($h, 'member') || str_contains($h, 'assignee')) {
             return $this->hint($handle, 'composite_user', 'name', 'low');

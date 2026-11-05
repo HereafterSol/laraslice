@@ -38,9 +38,15 @@ final class SchemaCache
     {
         $key = DB::getDefaultConnection().':'.$table;
         if (! array_key_exists($key, self::$tables)) {
-            self::$tables[$key] = Schema::hasTable($table)
-                ? array_map('strtolower', Schema::getColumnListing($table))
-                : false;
+            // Cache POSITIVES only. A missing table is a transient
+            // state (install, migration, a database rebuilt under a
+            // running server): caching the negative would blind
+            // every consumer — audit logging, schema guards — for
+            // the whole life of a long-running process.
+            if (! Schema::hasTable($table)) {
+                return false;
+            }
+            self::$tables[$key] = array_map('strtolower', Schema::getColumnListing($table));
         }
 
         return self::$tables[$key];

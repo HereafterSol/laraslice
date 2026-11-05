@@ -175,7 +175,7 @@ class SettingWebController extends Controller
                 $values = [];
                 foreach ($toggles as $column) {
                     if (\Illuminate\Support\Facades\Schema::hasColumn($table, $column)) {
-                        $values[$column] = in_array($record->{$column}, [1, '1', 'yes', 'true', true], true);
+                        $values[$column] = \LaraSlice\Support\SettingsUi::toggleIsOn($record->{$column});
                     }
                 }
                 $rows[] = [
@@ -195,7 +195,7 @@ class SettingWebController extends Controller
             if ($row !== null && \Illuminate\Support\Facades\Schema::hasColumn($table, $column)) {
                 $value = $row->{$column};
                 if ($field['type'] === 'toggle') {
-                    $value = in_array($value, [1, '1', 'yes', 'true', true], true) ? '1' : '0';
+                    $value = \LaraSlice\Support\SettingsUi::toggleIsOn($value) ? '1' : '0';
                 }
                 $section['fields'][$i]['value'] = $value;
             }
@@ -235,11 +235,7 @@ class SettingWebController extends Controller
                     }
                     $on = isset($submitted[$key][$column]) && (string) $submitted[$key][$column] === '1';
                     $current = $record->{$column};
-                    $payload[$column] = match (true) {
-                        $current === 'yes' || $current === 'no' => $on ? 'yes' : 'no',
-                        is_int($current) => $on ? 1 : 0,
-                        default => $on ? '1' : '0',
-                    };
+                    $payload[$column] = \LaraSlice\Support\SettingsUi::toggleValueFor($current, $on);
                 }
                 if ($payload !== []) {
                     if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'updated_at')) {
@@ -262,11 +258,7 @@ class SettingWebController extends Controller
             if ($field['type'] === 'toggle') {
                 $on = $request->boolean($column);
                 $current = $existing?->{$column};
-                $value = match (true) {
-                    $current === 'yes' || $current === 'no' => $on ? 'yes' : 'no',
-                    is_int($current) => $on ? 1 : 0,
-                    default => $on ? '1' : '0',
-                };
+                $value = \LaraSlice\Support\SettingsUi::toggleValueFor($current, $on);
             }
             if ($field['secret'] && ($value === null || $value === '')) {
                 continue;

@@ -1,38 +1,30 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 @php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
 @php($schemaTelemetryLabel = $copilotStatus['schema_telemetry_label'] ?? \LaraSlice\Support\FrameworkPackage::schemaTelemetryLabel())
-<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-50 font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot(@js($schemaTelemetryLabel))" x-cloak>
+<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-[5] font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot(@js($schemaTelemetryLabel))" x-cloak>
     <!-- Collapsed restore chip (mobile) -->
     <button
         x-show="collapsed && !isOpen"
         @click="collapsed = false"
         type="button"
-        class="fixed bottom-4 right-4 z-50 flex size-10 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg border border-indigo-500/40 sm:hidden"
+        class="fixed bottom-4 right-4 z-50 flex size-10 items-center justify-center rounded-lg bg-slate-900 text-white shadow-md border border-slate-700 sm:hidden"
         aria-label="Show AI Copilot">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
     </button>
 
     <!-- Floating Trigger Bubble (icon-only + collapsible on small screens) -->
     <div class="relative group" x-show="!isOpen && !collapsed">
-        <!-- Pulse Glow -->
-        <span class="absolute -inset-1 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-70 blur-md group-hover:opacity-100 animate-pulse transition duration-500 hidden sm:block"></span>
-        
-        <button 
-            @click="toggleChat()" 
+
+        <button
+            @click="toggleChat()"
             type="button"
-            class="relative flex items-center gap-2.5 p-2.5 sm:px-4 sm:py-3 rounded-full bg-slate-900 text-white shadow-2xl border border-indigo-500/40 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-200">
-            <div class="relative flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-pink-500 text-white font-bold text-xs shadow-inner">
+            title="AI Copilot — {{ $copilotStatus['connected'] ? $copilotStatus['name'] : 'Built-in answers' }}"
+            class="relative flex items-center justify-center p-2.5 rounded-full bg-slate-900 text-white shadow-md border border-slate-700 hover:bg-slate-800 transition-colors duration-200">
+            <div class="relative flex items-center justify-center w-7 h-7 rounded-md bg-slate-700 text-white font-bold text-xs">
                 <svg class="w-4 h-4 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-900"></span>
-            </div>
-            <div class="text-left hidden sm:block">
-                <div class="text-xs font-bold leading-tight tracking-wide flex items-center gap-1.5">
-                    <span>AI Copilot</span>
-                    <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 font-mono">{{ $copilotStatus['connected'] ? $copilotStatus['name'] : 'Built-in answers' }}</span>
-                </div>
-                <div class="text-[10px] text-slate-400 leading-none">Ready &bull; Aware of Current Page</div>
+                <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full {{ $copilotStatus['connected'] ? 'bg-emerald-400' : 'bg-slate-400' }} border-2 border-slate-900"></span>
             </div>
         </button>
     </div>
@@ -60,7 +52,7 @@
                 <div>
                     <div class="text-xs font-bold text-white flex items-center gap-1.5">
                         <span>LaraSlice AI Copilot</span>
-                        <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ONLINE</span>
+                        <span class="text-[9px] font-mono px-2 py-0.5 rounded-full border {{ $copilotStatus['connected'] ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-500/20 text-slate-300 border-slate-500/30' }}">{{ $copilotStatus['connected'] ? 'ONLINE' : 'BUILT-IN' }}</span>
                     </div>
                     <div class="text-[10px] text-slate-400 flex items-center gap-1">
                         <span class="truncate max-w-[210px]" x-text="'Route: ' + currentPath"></span>
@@ -578,8 +570,8 @@
                 </button>
             </form>
             <div class="flex items-center justify-between text-[10px] text-slate-500 mt-2 px-1">
-                <span>Model: <strong class="text-slate-400">OpenCode AI Free</strong> (Zero Key Required)</span>
-                <span class="font-mono text-indigo-400">LaraSlice v{{ $copilotStatus['framework_version'] ?? 'dev' }}</span>
+                <span>Model: <strong class="text-slate-400">{{ $copilotStatus['connected'] ? $copilotStatus['name'] : 'Built-in answers' }}</strong>{{ $copilotStatus['connected'] ? '' : ' (no provider connected)' }}</span>
+                <span class="font-mono text-indigo-400">LaraSlice v{{ $copilotStatus['framework_version'] ?? \LaraSlice\Support\FrameworkPackage::version() }}</span>
             </div>
         </div>
     </div>

@@ -17,10 +17,13 @@ final class BlueprintValidator
 
     private const RESERVED_FIELDS = ['id', 'created_at', 'updated_at', 'deleted_at'];
 
-    public const ALLOWED_FORMATTERS = [
-        'code_badge', 'composite_user', 'status_pill', 'money_breakdown', 'progress_bar', 'lines',
-        'date_time', 'date_overdue', 'text', 'text_with_badge', 'number', 'money', 'badge',
-    ];
+    /**
+     * The formatter vocabulary is owned by the runtime
+     * renderer (DataTableRows::FORMATTERS) — this constant
+     * is an alias so validator, renderer and Studio
+     * pickers can never drift apart again.
+     */
+    public const ALLOWED_FORMATTERS = \LaraSlice\Support\DataTableRows::FORMATTERS;
 
     /** @param array<string, mixed> $blueprint
      * @return array<string, mixed> Validated blueprint.
