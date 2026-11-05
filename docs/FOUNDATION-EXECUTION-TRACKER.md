@@ -23,7 +23,7 @@
 
 ## Porting pause (mandate)
 
-Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V expansion on erp-port-v202 until **Now** row **F1–F3** show owner + target date. Host **repair** (`slice:qualify-routes`, `slice:repair`, `slice:cache`) on existing trees is allowed.
+Do **not** start net-new ERP slice scaffolding or Gate V expansion on erp-port-v202 without programme owner sign-off. **N3 Gate S** column closure is **Now**. Host **repair** (`slice:qualify-routes`, `slice:repair`, `slice:cache`, `slice:route-truth`) on existing trees is allowed.
 
 ---
 
@@ -43,7 +43,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | ID | Work | Notes |
 | --- | --- | --- |
-| N3 | erp-port-v202 Gate S column closure | **Unblocked when F1 PASS** |
+| N3 | erp-port-v202 Gate S column closure | **Now** — F1 routing **PASS** |
 | N4 | (merged into F3) Flagship install | — |
 | N5 | Gate V URL matrix + qualify-routes on v202 | Depends F1 |
 | X1 | Skill family split (core/start/port/operate router) | Audit D10 |
@@ -104,7 +104,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `5b15295` (programme post-F4; F4 feat `f467877`) |
+| **Last commit** | `c0a4b63` (F1 route-truth PASS on v202) |
 | **In flight** | **N3** Gate S column trim / **N5** Gate V matrix (F1 **PASS** on v202); flagship demo YAML may still fail `slice:portability` until porter cleanup |
 
 **Pull before work:**

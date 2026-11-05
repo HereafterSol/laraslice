@@ -55,6 +55,7 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 
 - **`LaraSlice/docs/FOUNDATION-EXECUTION-TRACKER.md`** — **primary sprint board + Muse git handoff** (`v2.0.2-candidate`)
 - `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` — F1 **`slice:links`** closure (ErpSettings + permission_types)
+- `erp-port-v202/porting/F1-ROUTE-TRUTH-LOG.md` — F1 **`slice:route-truth`** + `porting/route-truth-2026-11-05.json` (1056 routes)
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`
