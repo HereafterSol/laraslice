@@ -37,7 +37,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
 | F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **In progress** — Packagist stub + `demo.ps1` + lock script shipped; lock in zip next cut |
 | F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
-| F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — package + **X6** host republish on `flagship-erp-v202-demo`; `:7002` browser needs **one** `artisan serve` on demo (port collision was serving stale app) |
+| F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — package + **X6** host republish; demo needs **`LARASLICE_WIZARD_ENABLED=true`** + `config/laraslice.php` **`wizard`** block (stale publish) for `/laraslice/studio`; **one** `artisan serve` on `:7002` |
 
 ### Next (after F1–F3 underway)
 
@@ -67,6 +67,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | 2026-11-05 | **F2 `slice:route-truth` + MCP** | `c3abc2d` — [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e) |
 | 2026-11-05 | **F3 evaluator install (partial)** | Packagist flagship stub, `demo.ps1`, `demo-windows.ps1`, lock generator — [F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4) |
 | 2026-11-05 | **X6 flagship :7002 host Blade republish** | Demo `ai-copilot-bubble` + `app` layout `FrameworkPackage::version()`; `view:clear` + `slice:cache` |
+| 2026-11-05 | **X6 :7002 Studio route fix** | Enabled wizard (`LARASLICE_WIZARD_ENABLED` + `config/laraslice.php` wizard block); `/laraslice/studio` → **302** login (not 404); cleared duplicate `:7002` listeners |
 | 2026-11-05 | **F5 Studio :7002 browser audit** | `7a5527e` |
 | 2026-11-05 | **Phase 0 architecture foundation audit** | [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) |
 | 2026-11-05 | Multi-runtime portability contract | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |

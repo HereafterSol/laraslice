@@ -42,6 +42,7 @@ function Set-DotEnvLine {
 
 Set-DotEnvLine 'DB_DATABASE' $sqlite
 Set-DotEnvLine 'APP_URL' "http://127.0.0.1:$Port"
+Set-DotEnvLine 'LARASLICE_WIZARD_ENABLED' 'true'
 
 $envContent = Get-Content '.env' -Raw
 if ($envContent -notmatch '(?m)^APP_KEY=base64:') {
