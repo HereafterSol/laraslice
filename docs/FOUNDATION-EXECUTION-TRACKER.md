@@ -37,7 +37,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
 | F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **In progress** — Packagist stub + `demo.ps1` + lock script shipped; lock in zip next cut |
 | F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
-| F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | STUDIO-UX-AUDIT + register |
+| F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | **Done** — STUDIO-UX-AUDIT browser table + copilot stub polish |
 
 ### Next (after F1–F3 underway)
 
@@ -74,7 +74,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | 2026-11-05 | `FrameworkPackage` version / slice count / schema label | Studio + Copilot |
 | 2026-10-28 | Studio UX audit quick wins | STUDIO-UX-AUDIT shipped table |
 | 2026-11-05 | Programme status + improvement register | PROGRAMME-STATUS, IMPROVEMENT-REGISTER |
-| 2026-11-05 | **F3 evaluator install (partial)** | `resources/stubs/flagship/composer.json` (Packagist-only), `demo.ps1`, `docs/demo-windows.ps1`, `porting/generate-flagship-composer-lock.ps1` |
+| 2026-11-05 | **F5 Studio UX honesty (:7002 verify)** | [STUDIO-UX-AUDIT-2026-10-28.md](STUDIO-UX-AUDIT-2026-10-28.md) browser table; copilot stub driver-aware slash copy |
 
 ---
 
@@ -100,7 +100,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
 | **Last commit** | `fe9ef9f` (F3 evaluator install; F2 `c3abc2d`) |
-| **In flight** | F1, F2, F4, F5 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
+| **In flight** | F1, F4 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
 
 **Pull before work:**
 

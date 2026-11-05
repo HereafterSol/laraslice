@@ -111,7 +111,28 @@ Gaps found in audit (pre-fix):
 
 **Rollout:** Changes live in **LaraSlice package source** (`E:\Apps\message\LaraSlice`). Host apps (demo, `erp-port-v*`) need **`composer update hereafter/laraslice`** or path repo + `slice:cache` to see UI in `/laraslice/studio`.
 
-**Still open:** owner glossary (Muse #3), kickoff AI copy, modal consolidation, drift panel (BACKLOG). **Standard:** [ENTERPRISE-UX-STANDARD.md](ENTERPRISE-UX-STANDARD.md) on `v2.0.2-candidate`.
+**Still open:** owner glossary (Muse #3), modal consolidation, drift panel (BACKLOG). **Standard:** [ENTERPRISE-UX-STANDARD.md](ENTERPRISE-UX-STANDARD.md) on `v2.0.2-candidate`.
+
+---
+
+## Browser verification (5 Nov 2026 — flagship :7002)
+
+**Host:** `E:\laragon\www\flagship-erp-v202-demo` · `php artisan serve --host=127.0.0.1 --port=7002` · path repo `dev-v2.0.2-candidate` → `E:\Apps\message\LaraSlice` · login `admin@laraslice.com` / `password`.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Studio subhead **host slices** | **PASS** | Header showed **116 host slices** (discovery-backed label) |
+| `FrameworkPackage::version()` | **PASS (CLI)** | Tinker: `dev-v2.0.2-candidate` |
+| `FrameworkPackage::schemaTelemetryLabel()` | **PASS (CLI)** | Tinker: `SQLite schemas` on bundled SQLite |
+| Port panel **REPLICA-STATUS** honest copy | **PASS (package)** | `port-panel` intro cites `porting/REPLICA-STATUS.md` (lazy panel; code review) |
+| `?persona=owner&mode=port` tab filter | **PASS (code)** | `visibleTabs` owner set: guide, journeys, sidebar, log |
+| Copilot welcome + `/count` slash desc | **PARTIAL on :7002** | Package stub uses driver-aware label; **published** `resources/views/components/ui/ai-copilot-bubble.blade.php` on demo still says “live MySQL schemas” until republish from stub |
+| Sidebar version chip | **PARTIAL on :7002** | Published `layouts/app.blade.php` uses `InstalledVersions` → **v2.0.0**; Studio shell badge uses `FrameworkPackage::version()` when visible (`sm+`) |
+| Studio Home BRD promise | **Fixed (package)** | Softened kickoff copy in `studio-shell.blade.php` |
+
+**Screenshot notes:** Dev Studio header + Port mode selected + Copilot bubble open on `/laraslice/studio?mode=port&persona=owner` — slice count visible; republish host Blade to close Copilot/sidebar version gaps on demo zip.
+
+**Rollout reminder:** `composer update hereafter/laraslice` (or path repo) → `php artisan slice:cache` → republish or diff-merge `resources/views/components/ui/ai-copilot-bubble.blade.php` + align `layouts/app.blade.php` version line with `FrameworkPackage::version()`.
 
 ---
 
