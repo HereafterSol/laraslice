@@ -100,6 +100,21 @@ Gaps found in audit (pre-fix):
 
 ---
 
+## Shipped (5 Nov 2026 — [Architect foundation + Studio sprint](90c91c6a-cb46-4b8d-b4f6-eac9817984ed))
+
+| Audit item | Status |
+| --- | --- |
+| Version badge hard-coded 1.0 / 2.0.0 | **Fixed** — `FrameworkPackage::version()` in studio shell |
+| Slice count vs discovery mismatch | **Improved** — “host slices” from `laraslice.slices_path` |
+| Copilot “live MySQL” on SQLite demo | **Fixed** — driver-aware schema label in bubble + AI settings |
+| Port mode overclaims 100% | **Fixed** — `port-panel` points to `porting/REPLICA-STATUS.md` gate truth |
+
+**Rollout:** Changes live in **LaraSlice package source** (`E:\Apps\message\LaraSlice`). Host apps (demo, `erp-port-v*`) need **`composer update hereafter/laraslice`** or path repo + `slice:cache` to see UI in `/laraslice/studio`.
+
+**Still open:** owner persona, kickoff AI copy, modal consolidation, drift panel (BACKLOG).
+
+---
+
 ## References
 
 - SKILL §8: ONE Studio at `/laraslice/studio`, legacy redirects.

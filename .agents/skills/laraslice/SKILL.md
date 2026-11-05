@@ -13,6 +13,12 @@ Read and follow the **full** skill at:
 
 **Port 100% programme:** `E:\Apps\message\LaraSlice\docs\PORT-100-PLAYBOOK.md` (Analyze → Phase 0 → Phase D nav → Gates S/D/F/T/V → Studio handoff; lowest gate wins).
 
+**Architect port mode:** `E:\Apps\message\LaraSlice\docs\PORTING-DECISION-100-REPLICA.md` (page clone vs Heart/Body/Kit).
+
+**AI token budget:** FOUNDATION-EXECUTION-TRACKER → PROGRAMME-STATUS → ENTERPRISE-UX-STANDARD → PORT-100 → `porting/REPLICA-STATUS.md` — see `E:\Apps\message\LaraSlice\docs\AI-FOUNDATION-OPTIMIZATION.md`.
+
+**Reference index:** `E:\Apps\message\LaraSlice\docs\SHARED-REFERENCES.md` · **Maturity roadmap:** `E:\Apps\message\LaraSlice\docs\FOUNDATION-MATURITY-ROADMAP.md`
+
 **Foundation rules (2.0.1+):**
 
 - After cloning/copying a port app: `php artisan slice:clear` → `slice:cache` (or `porting/rebuild-discovery-cache.php`).

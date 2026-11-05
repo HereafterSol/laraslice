@@ -11,10 +11,10 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use LaraSlice\Core\Ai\JevDecisionService;
-use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Generator\SliceName;
 use LaraSlice\Porting\SlicePortService;
+use LaraSlice\Support\FrameworkPackage;
 use LaraSlice\Support\SystemMind;
 use LaraSlice\Support\SystemOperate;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
@@ -1742,18 +1742,15 @@ final class BlueprintStudioController extends Controller
     public function shell(Request $request): mixed
     {
         $mode = (string) $request->query('mode', '');
-        $sliceCount = 0;
-        try {
-            $manager = app(SliceManager::class);
-            $sliceCount = count($manager->getAllSlices());
-        } catch (Throwable $e) {
-            $sliceCount = 0;
-        }
+        $persona = (string) $request->query('persona', 'developer');
+        $sliceCount = FrameworkPackage::hostSliceCount();
 
         return view('laraslice::studio-shell', [
             'initialMode' => $mode,
+            'studioPersona' => in_array($persona, ['owner', 'developer'], true) ? $persona : 'developer',
             'hasSlices' => $sliceCount > 0,
             'sliceCount' => $sliceCount,
+            'frameworkVersion' => FrameworkPackage::version(),
         ]);
     }
 

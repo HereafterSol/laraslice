@@ -86,9 +86,11 @@
         @endphp
 
         @php
-            $laraSliceVersion = class_exists(\Composer\InstalledVersions::class) && \Composer\InstalledVersions::isInstalled('hereafter/laraslice')
-                ? ltrim((string) \Composer\InstalledVersions::getPrettyVersion('hereafter/laraslice'), 'v')
-                : '1.0';
+            $laraSliceVersion = class_exists(\LaraSlice\Support\FrameworkPackage::class)
+                ? ltrim(\LaraSlice\Support\FrameworkPackage::version(), 'v')
+                : (class_exists(\Composer\InstalledVersions::class) && \Composer\InstalledVersions::isInstalled('hereafter/laraslice')
+                    ? ltrim((string) \Composer\InstalledVersions::getPrettyVersion('hereafter/laraslice'), 'v')
+                    : 'dev');
 
             $sliceNavItem = fn (array $s) => [
                 'title'    => $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice',

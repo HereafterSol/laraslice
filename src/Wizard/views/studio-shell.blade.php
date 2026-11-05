@@ -3,16 +3,25 @@
 @section('title', 'Dev Studio')
 
 @section('content')
-<div class="min-h-screen bg-background" x-data="oneStudioShell(@js($initialMode), @js($hasSlices), @js($sliceCount ?? 0))" x-cloak>
+<div class="min-h-screen bg-background" x-data="oneStudioShell(@js($initialMode), @js($hasSlices), @js($sliceCount ?? 0), @js($studioPersona ?? 'developer'))" x-cloak>
     <header class="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur">
         <div class="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
             <div class="flex min-w-0 items-center gap-3">
                 <button type="button" @click="setMode('home')" class="text-left" title="Studio Home (⌘0)">
                     <h1 class="text-lg font-bold leading-tight text-foreground">Dev Studio</h1>
                     <p class="text-[11px] leading-tight text-muted-foreground">
-                        One surface. Six modes.<span x-show="sliceCount > 0" x-cloak> · <span x-text="sliceCount"></span> slices</span>
+                        One surface. Six modes.<span x-show="sliceCount > 0" x-cloak> · <span x-text="sliceCount"></span> host slices</span>
                     </p>
                 </button>
+                <span class="hidden shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline" title="Installed hereafter/laraslice version">v{{ $frameworkVersion ?? 'dev' }}</span>
+                <div class="hidden items-center gap-1 rounded-full border border-border bg-muted/50 p-0.5 sm:flex" title="Studio persona (stub)">
+                    <button type="button" @click="setPersona('developer')"
+                            :class="persona === 'developer' ? 'bg-background text-foreground shadow-sm font-semibold' : 'text-muted-foreground'"
+                            class="rounded-full px-2.5 py-1 text-[10px]">Dev</button>
+                    <button type="button" @click="setPersona('owner')"
+                            :class="persona === 'owner' ? 'bg-background text-foreground shadow-sm font-semibold' : 'text-muted-foreground'"
+                            class="rounded-full px-2.5 py-1 text-[10px]">Owner</button>
+                </div>
             </div>
             {{-- Mode switcher: destinations, not steps. Segmented tabs on desktop, dropdown on mobile. --}}
             <nav aria-label="Studio modes" class="flex items-center gap-1">
@@ -147,11 +156,14 @@
 </div>
 
 <script>
-function oneStudioShell(initialMode, hasSlices, sliceCount) {
+function oneStudioShell(initialMode, hasSlices, sliceCount, initialPersona) {
     const allowed = ['home', 'port', 'design', 'create', 'manage', 'plan', 'operate'];
     const start = allowed.includes(initialMode) ? initialMode : 'home';
+    const personaAllowed = ['developer', 'owner'];
+    const personaStart = personaAllowed.includes(initialPersona) ? initialPersona : (new URLSearchParams(window.location.search).get('persona') === 'owner' ? 'owner' : 'developer');
     return {
         mode: start,
+        persona: personaStart,
         hasSlices: !!hasSlices,
         sliceCount: sliceCount || 0,
         portLoaded: false,
@@ -173,6 +185,7 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
         ],
         init() {
             window.__oneStudioSetMode = (id) => this.setMode(id);
+            window.__studioPersona = this.persona;
             if (this.mode === 'port') {
                 this.mountPort();
             }
@@ -197,11 +210,22 @@ function oneStudioShell(initialMode, hasSlices, sliceCount) {
                 if (m) { e.preventDefault(); this.setMode(m.id); }
             });
         },
+        setPersona(id) {
+            if (!['developer', 'owner'].includes(id)) return;
+            this.persona = id;
+            window.__studioPersona = id;
+            const url = new URL(window.location.href);
+            url.searchParams.set('persona', id);
+            history.replaceState({}, '', url.pathname + url.search);
+        },
         setMode(id) {
             if (!allowed.includes(id)) return;
             this.mode = id;
             const url = new URL(window.location.href);
             url.searchParams.set('mode', id);
+            if (this.persona && this.persona !== 'developer') {
+                url.searchParams.set('persona', this.persona);
+            }
             history.replaceState({}, '', url.pathname + url.search);
             if (id === 'port') {
                 this.mountPort();

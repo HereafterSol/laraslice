@@ -22,8 +22,9 @@
 <div data-ls-filterbar x-data="{ qv: '', fcount: 0, scount: 0 }"
      @table-filters-count.window="fcount = $event.detail"
      @table-sidebar-count.window="scount = $event.detail"
-     class="flex flex-col gap-3 border-b border-border bg-background/95 px-4 py-2 backdrop-blur-md md:flex-row md:items-center md:justify-between lg:px-6">
-    <div class="flex flex-1 flex-wrap items-center gap-2.5">
+     class="flex flex-col gap-2 border-b border-border bg-background/95 px-4 backdrop-blur-md md:flex-row md:items-center md:justify-between lg:px-6"
+     style="padding-block: var(--ls-filterbar-py, 0.375rem);">
+    <div class="flex flex-1 flex-wrap items-center gap-2">
         @isset($toolbarLead)
             {{ $toolbarLead }}
         @endisset

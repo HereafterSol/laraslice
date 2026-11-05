@@ -12,7 +12,7 @@ Branch policy: feature branches + PR to `master` only (never push `master` direc
 5. **Studios after port**: Blueprint/Slice Studio edit YAML (`ui.directory`, workflow, bulk_actions); Porting Studio shows real nav + slim journeys for customization before Apply.
 6. **Every project differs**: Process-core domains differ from multi-module ERP suites. Detect signatures; do not force process-core packs onto ERP or vice versa.
 7. **All domains use `laraslice.journeys.v2`**: ERP → admin/employee/client; process-core/adjudication → admin/complainant/mobile; other → operational nav-derived personas. No mermaid BRD novels in the port plan.
-8. **100% port checklist (ERP benchmark)**: aggregates + settings hub + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order. Apply must leave Porting/Blueprint/Slice Studio useful for customization.
+8. **100% port checklist (ERP benchmark)**: aggregates + settings hub + gated sidebar + enum workflows + persona journeys + Studio-editable YAML + ETL order. Apply must leave Porting/Blueprint/Slice Studio useful for customization. **When Gate V/F block on Kit alone**, use the architect decision tree: [PORTING-DECISION-100-REPLICA.md](PORTING-DECISION-100-REPLICA.md) (page-by-page clone time-boxed per surface — not abandoning Heart globally).
 
 ## Runtime persona foundation (demo parity)
 
@@ -55,4 +55,5 @@ When the source exposes **one operational form** that creates both the login acc
 
 - **Pattern:** extend the slice `*SliceService` `beforeSave` / `afterSave` to create `users`, attach `role_user` (or `roles()->sync()`), then persist the aggregate row (`employee_details`, etc.). Gate the create form with account fields only on **create** (`accountBackedCreate` in the web controller).
 - **Gate T evidence:** erp-port-v201 journey **(a)** — port **pass** via `POST …/employee_details`; source `:7001` may still **fail** on legacy `attachRole()` — record as a **port-only** deviation, not a port regression (`porting/deviations.yaml` `gate-t-employee-create`).
+- **Zero port (`slice:port --scaffold`):** service-layer account-backed create is **not** emitted by the porter — copy the v201 `EmployeeDetails` pattern (or Mind Body spec) before claiming Gate T; **erp-port-v202** proved this on v2.0.2 ([Gate T sprint v202](2c6a45d1-53be-45e2-bb3a-817cc608422e)).
 - **Phase D nav:** after Analyze + hide aux slices, apply sidebar policy in batches — `php porting/apply-phase-d-nav.php --group=all`, then `sync-visible-nav-roles.php` and `slice:cache`. Full runbook: **erp-port-v201** `porting/PHASE-D-ALL.md` (policy YAMLs per module group; ~27 visible roots; Messages stays hidden until a port slice exists — see `gate-d-messages-nav`).

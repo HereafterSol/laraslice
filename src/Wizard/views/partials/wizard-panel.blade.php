@@ -1,3 +1,4 @@
+@php($larasliceFrameworkVersion = \LaraSlice\Support\FrameworkPackage::version())
 <style>[x-cloak] { display: none !important; } .laraslice-studio-root { max-width: 100vw; overflow-x: hidden; } .laraslice-studio-root table { display: block; max-width: 100%; overflow-x: auto; }</style>
 <script>
 function larasliceWizard() {
@@ -3594,7 +3595,7 @@ function larasliceWizard() {
                                         <svg class="inline-block size-4 text-amber-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5v14a2 2 0 0 0 2 2h7"/><path d="M3 12h5"/></svg>
                                         <span>Generated Project Structure</span>
                                     </div>
-                                    <span class="text-[10px] text-muted-foreground dark:text-slate-500 font-mono">LaraSlice v1.0</span>
+                                    <span class="text-[10px] text-muted-foreground dark:text-slate-500 font-mono">LaraSlice v{{ $larasliceFrameworkVersion }}</span>
                                 </div>
 
                                 <div class="text-[11px] leading-relaxed text-foreground/80 dark:text-slate-300 space-y-0.5 overflow-x-auto select-all max-h-96 pr-2">

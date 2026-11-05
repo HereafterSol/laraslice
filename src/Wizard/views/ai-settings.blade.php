@@ -3,6 +3,7 @@
 @section('title', 'AI Copilot & Model Settings')
 
 @section('content')
+@php($schemaTelemetryLabel = \LaraSlice\Support\FrameworkPackage::schemaTelemetryLabel())
 <script>
 function aiSettingsApp() {
     return {
@@ -348,7 +349,7 @@ function aiSettingsApp() {
             <div x-show="activeTab === 'behavior'" class="space-y-5">
                 <div>
                     <h3 class="text-sm font-bold text-foreground">Copilot Reasoning & Framework Telemetry</h3>
-                    <p class="text-xs text-muted-foreground">Control how the Copilot inspects MySQL database metrics, route context, and scaffolding questionnaires.</p>
+                    <p class="text-xs text-muted-foreground">Control how the Copilot inspects {{ $schemaTelemetryLabel }} metrics, route context, and scaffolding questionnaires.</p>
                 </div>
 
                 <div class="space-y-4">

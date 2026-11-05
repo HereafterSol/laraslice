@@ -110,7 +110,9 @@ Record the map in the port plan or Mind notes; gaps become Gate **T** / **V** en
 | D3 | `navigation.roles` / personas on every slice (`admin`, `employee`, `client` when ERP-shaped) |
 | D4 | Batch apply: `porting/apply-phase-d-nav.php`, `sync-visible-nav-roles.php`, `slice:repair --remap-nav --publish-ui`, `slice:cache` |
 
-**Benchmark runbook:** host app `porting/PHASE-D-ALL.md` (canonical tree: **erp-port-v201**). Greenfield projects still benefit from the same **group + visibility** rules when building ERP-shaped products.
+**Scaffold path:** v2.0.2 `slice:port --scaffold` may use `app/Slices/ERP/{Group}` (flat) instead of `app/Slices/ERP/ERP/…`. Scripts must auto-detect the slice root (see `erp-port-v202/porting/apply-phase-d-nav.php` and `ZERO-PORT-2.0.2-LOG.md`) — a silent no-op Phase D pass is a common zero-port failure mode.
+
+**Benchmark runbook:** host app `porting/PHASE-D-ALL.md` (**erp-port-v201** programme; **erp-port-v202** zero port on v2.0.2). Greenfield projects still benefit from the same **group + visibility** rules when building ERP-shaped products.
 
 ---
 
@@ -124,11 +126,15 @@ Walk **in order**. Update `REPLICA-STATUS.md` after each gate run.
 | **D** | Same entities **by joins**, not counts? | Sample users ⋈ details, invoices ⋈ items, both systems |
 | **F** | Furniture matches (labels, columns, cards, actions)? | Per-page element diff; D/M/S classification |
 | **T** | Journeys work with **DB asserts** both sides? | Persona-aware; full forms, not HTTP 200 alone |
-| **V** | Composition matches **paired screenshots by eye**? | Not token probes alone — region order and shell |
+| **V** | Composition matches **paired screenshots by eye**? | Not token probes alone — region order and shell; see [PORTING-DECISION-100-REPLICA.md](PORTING-DECISION-100-REPLICA.md) when Kit path stalls |
 
 **Framework release gate (all programmes):** `slice:drift` → **0 errors** before replica parity claims on in-scope slices.
 
+**Paired HTTP / Gate V automation:** Set `LARASLICE_MFA_ENABLED=false` on dev port trees when running `side-by-side-http.php` or Playwright capture; ensure host `config/laraslice.php` reads env (see **erp-port-v202** `porting/GATE-V-v202.md`, [Side-by-side + Gate V v202](8884ea94-bc5a-43ed-ab90-cc0b6649013d)).
+
 **Replica data:** `slice:port … --import-data --import-auth` (v2.0.1 migrate-before-import). Without `--import-auth`, users import with **no role assignments** — treat porter warning as a failed step.
+
+**Pre-import on v2.0.2 zero port (erp-port-v202 log):** Before `porting/clean-import-data.php`, (1) replace porter **ReferenceData** merged migrations with the **split taxonomy set** from `erp-port-v201` if migrate fails on MySQL row size; (2) keep **Gate S closure** in `porting/migrations-deferred/` until settings tables exist, then `php artisan migrate --path=porting/migrations-deferred` (migration skips missing tables such as `discussions` when the Discussions slice was not scaffolded). Evidence: `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`.
 
 Detail: [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) · Skill §22 · Skill §21 (page contract).
 

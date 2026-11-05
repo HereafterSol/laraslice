@@ -11,6 +11,7 @@ use LaraSlice\Core\Security\Access;
 use LaraSlice\LaraSliceServiceProvider;
 use LaraSlice\Porting\SlicePortService;
 use LaraSlice\Slices\Settings\Models\Setting;
+use LaraSlice\Support\FrameworkPackage;
 
 class AiEngine
 {
@@ -113,7 +114,7 @@ class AiEngine
      * The active provider and whether it can answer: hosted providers need an API key, while
      * Ollama runs locally. Without one, the copilot answers from LaraSlice's built-in rules.
      *
-     * @return array{provider: string, name: string, connected: bool}
+     * @return array{provider: string, name: string, connected: bool, framework_version: string, schema_telemetry_label: string}
      */
     public function copilotStatus(): array
     {
@@ -124,6 +125,8 @@ class AiEngine
             'provider' => $provider,
             'name' => $definition['name'] ?? ucfirst($provider),
             'connected' => $provider === 'ollama' || $this->providerKey($provider) !== null,
+            'framework_version' => FrameworkPackage::version(),
+            'schema_telemetry_label' => FrameworkPackage::schemaTelemetryLabel(),
         ];
     }
 

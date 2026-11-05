@@ -1,10 +1,16 @@
 # LaraSlice — vision, mission, and how we measure truth
 
-**Last updated:** 2026-10-27  
+**Last updated:** 2026-11-05  
 **Owner:** Hereafter Solutions (H. Sol)  
 **Status:** Living document — update when strategy, gates, or runtime roadmap changes.
 
-Related: [RUNTIMES.md](RUNTIMES.md) · [MIND_BODY_HEART.md](MIND_BODY_HEART.md) · [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) · [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) · [BACKLOG.md](BACKLOG.md) · [SDLC.md](SDLC.md) · [NAMING.md](NAMING.md)
+Related: [RUNTIMES.md](RUNTIMES.md) · [MIND_BODY_HEART.md](MIND_BODY_HEART.md) · [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) · [REPLICA-PROTOCOL.md](REPLICA-PROTOCOL.md) · [BACKLOG.md](BACKLOG.md) · [SDLC.md](SDLC.md) · [NAMING.md](NAMING.md) · [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md)
+
+---
+
+## Multi-language Slice family & AI-first SDLC
+
+The **Slice family** (LaraSlice first, then NodeSlice, JavaSlice, .NetSlice, PythonSlice, and UI runtimes when earned) shares one **runtime-neutral contract** — Mind · Body · Heart · Soul, gates, and Studio protocol — not one framework’s code. **AI-first SDLC** means agents and humans follow the same ordered evidence: programme status → port playbook → `REPLICA-STATUS.md`, with `slice:drift` and gates deciding ship — not chat confidence. **Internal Body→kit synthesis** is not the TypeSafe Jev product API; optional closed-choice helpers stay backlog until explicitly shipped. Permanence and second-runtime rows in [RUNTIMES.md](RUNTIMES.md) remain **roadmap-honest** until a sibling passes the same gate discipline.
 
 ---
 

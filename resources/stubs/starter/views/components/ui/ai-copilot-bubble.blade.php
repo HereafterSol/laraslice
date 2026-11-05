@@ -129,7 +129,7 @@
                 </div>
                 <div class="bg-slate-800/90 border border-slate-700/60 rounded-2xl rounded-tl-sm p-3.5 text-slate-200 shadow-md max-w-[88%] leading-relaxed">
                     <p class="font-semibold text-white mb-1">Hello! I am your LaraSlice Copilot.</p>
-                    <p class="text-slate-300 mb-2">@if ($copilotStatus['connected'])Powered by <strong class="text-indigo-300">{{ $copilotStatus['name'] }}</strong>.@else Answering from <strong class="text-indigo-300">LaraSlice's built-in rules</strong>; add an API key in AI settings for full AI answers.@endif I am fully aware of this page (<span class="font-mono text-[10px] text-pink-300" x-text="currentPath"></span>), live MySQL schemas, and relations.</p>
+                    <p class="text-slate-300 mb-2">@if ($copilotStatus['connected'])Powered by <strong class="text-indigo-300">{{ $copilotStatus['name'] }}</strong>.@else Answering from <strong class="text-indigo-300">LaraSlice's built-in rules</strong>; add an API key in AI settings for full AI answers.@endif I am fully aware of this page (<span class="font-mono text-[10px] text-pink-300" x-text="currentPath"></span>), {{ $copilotStatus['schema_telemetry_label'] ?? 'active database schemas' }}, and relations.</p>
                     <div class="text-[11px] text-slate-400">Ask questions, query counts, or type <code class="text-indigo-300 font-mono bg-slate-900 px-1 py-0.5 rounded">/</code> for slash commands:</div>
                 </div>
             </div>
@@ -578,7 +578,7 @@
             </form>
             <div class="flex items-center justify-between text-[10px] text-slate-500 mt-2 px-1">
                 <span>Model: <strong class="text-slate-400">OpenCode AI Free</strong> (Zero Key Required)</span>
-                <span class="font-mono text-indigo-400">LaraSlice v1.0</span>
+                <span class="font-mono text-indigo-400">LaraSlice v{{ $copilotStatus['framework_version'] ?? 'dev' }}</span>
             </div>
         </div>
     </div>

@@ -7,6 +7,8 @@ Readers confuse two different questions:
 
 This page keeps them separate so marketing, AI agents, and project owners quote the right truth.
 
+**Measured ERP programme (5 Nov 2026):** zero port on **v2.0.2** at **~50%** whole-ERP (gates S/V partial) — [PROGRAMME-STATUS-2026-11-05.md](PROGRAMME-STATUS-2026-11-05.md); detail in `erp-port-v202/porting/REPLICA-STATUS.md`.
+
 **Founder intent:** A **production ERP monolith** is the deliberate stress test for the foundation — we *want* a deep port to prove the approach. That ambition does not replace gates; it **requires** them. See [VISION.md](VISION.md). Public docs: [NAMING.md](NAMING.md).
 
 ---

@@ -10,6 +10,9 @@ description: Architectural standards, CLI commands, Declarative Schemas, multi-t
 ### Port 100% programme & Studio (owners + agents)
 
 - **Ordered playbook:** `docs/PORT-100-PLAYBOOK.md` — Analyze → Phase 0 composition → Phase D nav → Gates S/D/F/T/V → Studio handoff; replica **100%** = lowest gate PASS on signed scope; greenfield branch in the same doc (Skill §24).
+- **Architect port mode (page clone vs Heart/Body/Kit):** `docs/PORTING-DECISION-100-REPLICA.md` — decision tree, gate tradeoffs, SDLC checklist; **never** claim 100% from Studio alone.
+- **AI token budget (read order):** `docs/FOUNDATION-EXECUTION-TRACKER.md` → `docs/PROGRAMME-STATUS-2026-11-05.md` (or latest programme status) → `docs/ENTERPRISE-UX-STANDARD.md` → `docs/PORT-100-PLAYBOOK.md` → host `porting/REPLICA-STATUS.md`; details in `docs/AI-FOUNDATION-OPTIMIZATION.md`.
+- **Reference index:** `docs/SHARED-REFERENCES.md` · maturity pillars: `docs/FOUNDATION-MATURITY-ROADMAP.md`.
 - **Non-technical users:** Plan mode Mind is the requirements contract (plain language, human sign-off; drafts never self-promoted). Operate mode is run-state (health, access review, operator manual). Do not quote replica % from chat — point to `REPLICA-STATUS.md` (ports) or release checklist (greenfield). Standard pages stay YAML + Studio — not ad-hoc Blade tours.
 - **JEV honesty:** Internal UI synthesis is Body→kit (`docs/KIT-CONTRACT.md`), not the TypeSafe Jev product API; optional TypeSafe closed-choice helper is backlog-only and separate from `JevDecisionService` (see `docs/BACKLOG.md` UI/JEV items).
 
@@ -2637,6 +2640,34 @@ the vision — a standard not a feature, knowledge in files,
 domain-shaped so it travels beyond web software — are
 written out in `docs/RUNTIMES.md` ('Built to last'). The sequencing stands: mature
 this foundation, ship the flagship demo, then the family.
+
+## 27. Architect port mode — 100% replica decision tree
+
+Full tradeoffs, gates table, and SDLC checklist: **`docs/PORTING-DECISION-100-REPLICA.md`**.
+
+**Compressed tree:**
+
+1. Signed scope in `porting/REPLICA-STATUS.md` (NOT covered list non-empty until owner waives).  
+2. **Analyze + §16.5.1** before scaffold parity language.  
+3. **Multi-model surfaces** → Phase 0 composition + Heart/generator — not permanent page clone.  
+4. **Gate V M/S** after Kit attempt → time-boxed page clone for evidence; fold pattern back to Body.  
+5. **100%** only when S→D→F→T→V PASS on same run and `slice:drift` → 0 errors — quote status file only.
+
+Page-by-page usage clone is a **Gate V tactic**, not the strategic port definition.
+
+## 28. AI token budget — agent read order
+
+Optimization notes: **`docs/AI-FOUNDATION-OPTIMIZATION.md`**.
+
+**Default boot (5 files max):**
+
+1. **`docs/FOUNDATION-EXECUTION-TRACKER.md`** — sprint board + git handoff for Muse.  
+2. Latest **`docs/PROGRAMME-STATUS-*.md`** in the framework repo (or port-only: skip to #4).  
+3. **`docs/ENTERPRISE-UX-STANDARD.md`** when touching shell, Studio, or BlatUI chrome.  
+4. **`docs/PORT-100-PLAYBOOK.md`** for the phase you are executing.  
+5. Host **`porting/REPLICA-STATUS.md`** — lowest gate wins; never replace with chat %.
+
+Add **`docs/PORTING-DECISION-100-REPLICA.md`** when choosing clone vs Kit. Routing P0: **`docs/ROUTING-TRUTH-ALIGNMENT.md`**. Activate **`laraslice-port`** / **`laraslice-start`** task skills instead of loading the entire core skill. MCP/CLI: Skill §11 route index — prefer tools over re-embedding command lists.
 
 ## Branch notes (`feat/workflow-bulk-actions`) — keep in sync with code
 

@@ -1,8 +1,10 @@
 # LaraSlice product backlog
 
-Living backlog for the **framework** (not per-port gate status). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`.
+Living backlog for the **framework** (not per-port gate status). Port truth: [ARCHITECTURE-VS-PORT-TRUTH.md](ARCHITECTURE-VS-PORT-TRUTH.md) and each app’s `porting/REPLICA-STATUS.md`. **Nov 2026 programme close (~50% v202):** [PROGRAMME-STATUS-2026-11-05.md](PROGRAMME-STATUS-2026-11-05.md) ([Complete v202 programme sprint](e616253b-166b-4268-b2f2-70af16520ad8)).
 
-**Release baseline:** [v2.0.1](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.1) · Changes: [CHANGES-v2.0.1.md](../CHANGES-v2.0.1.md) · [NAMING.md](NAMING.md)
+**Release baseline:** [v2.0.2](https://github.com/HereafterSol/laraslice/releases/tag/v2.0.2) · Changes: [CHANGES-v2.0.2.md](../CHANGES-v2.0.2.md) · Evaluator findings: [IMPROVEMENT-REGISTER-2.0.2.md](IMPROVEMENT-REGISTER-2.0.2.md) · [NAMING.md](NAMING.md)
+
+**Reference index (owner / AI):** [SHARED-REFERENCES.md](SHARED-REFERENCES.md) · Foundation maturity: [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · Port architect note: [PORTING-DECISION-100-REPLICA.md](PORTING-DECISION-100-REPLICA.md) · AI token R&D: [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md)
 
 ---
 
@@ -27,10 +29,21 @@ Living backlog for the **framework** (not per-port gate status). Port truth: [AR
 
 ---
 
+## v2.0.2 validation — P0 (from real-user demo, Nov 2026)
+
+1. **Route prefix truth** — Navigation uses `/erp/erp/{area}/{slice}`; `route:list` / skills cite `erp/adjudication/...` → **404**. Align registration, `slice:links`, MCP index ([register § UI/UX #1](IMPROVEMENT-REGISTER-2.0.2.md)).
+2. **Flagship zip installability** — Ship **`composer.lock`** or documented Packagist-only `composer.json` (no SSH VCS repo); optional `vendor` for offline evaluators.
+3. **Windows one-click demo** — `demo.ps1` or doc: `tar -xf`, `.env` `APP_URL` + absolute SQLite path, `slice:cache` ([register § Demo](IMPROVEMENT-REGISTER-2.0.2.md)).
+4. **Studio honesty** — Version from composer (not hard-coded badge); host slice count matches discovery; SQLite-aware Copilot copy. *(Framework: `FrameworkPackage` + Studio shell — Nov 2026.)*
+5. **Porter ReferenceData** — `slice:port --scaffold` can emit merged `currencies` migration over MySQL row limit; split taxonomies in framework or playbook step (see IMPROVEMENT-REGISTER § Zero port erp-port-v202).
+6. **MFA env for port QA** — `auth.mfa_enabled` must respect `LARASLICE_MFA_ENABLED` (**validated on erp-port-v202** Nov 2026; **ship in framework** default config).
+
+---
+
 ## Product backlog
 
 1. **`slice:verify-journeys`** — Mind journeys → Playwright + DB assert (Gate T harness).
-2. **Gate V workbook** — paired screenshots + D/M/S per surface.
+2. **Gate V workbook** — paired screenshots + D/M/S per surface (**erp-port-v202 matrix 5 Nov 2026** — port evidence only; framework workbook still open).
 3. **Employee account-backed create** — nested user + details in one transaction (Part C fail class).
 4. **Report slices** — attendance/finance as first-class port surfaces.
 5. **Studio drift panel** — drift table with jump-to-slice in Dev Studio.
@@ -63,6 +76,7 @@ Truth reference: [JEV truth in LaraSlice](691fd6b7-2361-4c0a-91fb-452a170570b2) 
 | Epic item | Ties to |
 | --- | --- |
 | Benchmark ERP forward path | `erp-port-v201` — drift 0 errors, `--import-auth`, Phase D (`porting/PHASE-D-ALL.md`) |
+| **Zero port v2.0.2 proof** | `erp-port-v202` — scaffold + Gate D/F; Gate **T benchmark PASS**; Gate **S closure applied** (64→16 missing-col tables, 5 Nov 2026); Gate **V D/M/S classified**; headline **~50%**, **not 100%** |
 | Gate T harness | Backlog #1 `slice:verify-journeys` + employee account-backed create (#3) |
 | Gate V workbook | Backlog #2 paired screenshots + D/M/S |
 | Studio daily driver | #5 drift panel, Plan/Operate for non-technical sign-off (playbook § Studio handoff) |
@@ -70,4 +84,5 @@ Truth reference: [JEV truth in LaraSlice](691fd6b7-2361-4c0a-91fb-452a170570b2) 
 | Part C evidence | `erp-replica` — baseline gates, not canonical successor |
 
 **Canonical 2.0.1 tree:** `laragon/www/erp-port-v201` — runbook: host app `VERIFICATION-PROGRAMME.md`.  
+**Zero port 2.0.2 tree:** `laragon/www/erp-port-v202` — `:7005`, `porting/ZERO-PORT-2.0.2-LOG.md`, `porting/RUNBOOK.md`.  
 **Part C baseline (2.0.0):** `laragon/www/erp-replica/porting/REPLICA-STATUS.md`.

@@ -2,7 +2,7 @@
     <!-- Panel chrome lives in the Dev Studio shell; the panel keeps only its action row + tabs. -->
     <div class="sticky top-0 z-30 bg-background/95 backdrop-blur -mx-1 px-1">
     <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
-        <p class="max-w-3xl text-xs text-muted-foreground">Turn a legacy app into vertical slices. <strong class="text-foreground">Analyze</strong> builds a read-only plan; <strong class="text-foreground">Execute</strong> writes code under <code class="rounded bg-muted px-1 font-mono text-[10px]">app/Slices</code>. Day-to-day edits live in <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button>.</p>
+        <p class="max-w-3xl text-xs text-muted-foreground">Turn a legacy app into vertical slices. <strong class="text-foreground">Analyze</strong> builds a read-only plan; <strong class="text-foreground">Execute</strong> writes code under <code class="rounded bg-muted px-1 font-mono text-[10px]">app/Slices</code>. Day-to-day edits live in <button type="button" @click="setMode('manage')" class="font-semibold text-primary underline">Manage</button>. Replica gate truth is measured in <code class="rounded bg-muted px-1 font-mono text-[10px]">porting/REPLICA-STATUS.md</code> — Studio shows plans and progress, not a 100% claim.</p>
         <button @click="analyze()" :disabled="analyzing" title="Inspect the source and build a port plan (does not write files yet)" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 md:px-4 md:text-sm">
             <span x-show="!analyzing">🔍 Analyze source</span>
             <span x-show="analyzing" class="animate-pulse">Analyzing…</span>
@@ -12,13 +12,13 @@
 
             <!-- Mobile: select dropdown -->
             <select x-model="activeTab" class="w-full md:hidden h-10 rounded-lg border border-input bg-background px-3 text-sm font-semibold text-foreground">
-                <template x-for="tab in tabs" :key="tab.id">
+                <template x-for="tab in visibleTabs" :key="tab.id">
                     <option :value="tab.id" x-text="tab.label"></option>
                 </template>
             </select>
             <!-- Desktop: tab bar -->
             <div class="hidden md:flex gap-1 overflow-x-auto pb-1">
-                <template x-for="tab in tabs" :key="tab.id">
+                <template x-for="tab in visibleTabs" :key="tab.id">
                     <button @click="activeTab = tab.id" :class="activeTab === tab.id ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground hover:text-foreground hover:bg-muted'" class="shrink-0 px-3 py-1.5 rounded-md text-xs transition whitespace-nowrap" x-text="tab.label"></button>
                 </template>
             </div>
@@ -860,6 +860,16 @@ function portingStudio() {
             { id: 'json', label: '📋 JSON Plan' },
             { id: 'log', label: '📟 Execution Log' },
         ],
+        ownerTabIds: ['guide', 'journeys', 'sidebar', 'log'],
+        get visibleTabs() {
+            const persona = (typeof window.__studioPersona === 'string' && window.__studioPersona)
+                ? window.__studioPersona
+                : (new URLSearchParams(window.location.search).get('persona') || 'developer');
+            if (persona === 'owner') {
+                return this.tabs.filter(t => this.ownerTabIds.includes(t.id));
+            }
+            return this.tabs;
+        },
         workflowSteps: [
             { title: 'Review User Journeys', desc: 'Understand how end users, admins, and clients flow through the system. This is the most important part.', tab: 'journeys', tabLabel: 'Journeys' },
             { title: 'Inspect Navigation', desc: 'Compare source navigation grouping with proposed VSA grouping. Reorder as needed.', tab: 'sidebar', tabLabel: 'Sidebar' },
