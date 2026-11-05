@@ -19,7 +19,7 @@
 | **D** | **PASS (benchmark)** | `verify-programme.php` / clean import |
 | **F** | **PASS (benchmark)** | Directory counts + task board 9/11/14/16 |
 | **T** | **PASS (benchmark)** | `GateTEmployeeCreateTest` |
-| **V** | **PARTIAL (N5 matrix)** | HTTP **14/16** (**9/9** dirs); 16 PNGs; `gate-v-2026-11-05/SIDE-BY-SIDE-MATRIX.md` · `N5-GATE-V-2026-11-05.md` |
+| **V** | **PARTIAL (X5 refresh)** | HTTP **15/16** (client hub id **3**); hub PNGs refreshed; **no** pixel PASS — `X5-GATE-V-2026-11-05.md`, `gate-v-2026-11-05/SIDE-BY-SIDE-MATRIX.md` |
 
 **Drift:** 0 errors, 44 warnings (`slice:drift` after closure).
 
@@ -33,8 +33,8 @@
 ### Port (erp-port-v202)
 
 1. Scaffold or exclude **Discussions** (exclude documented — optional parent table later); porter closure for **118** source-only tables.
-2. **X5** — Re-capture Gate V PNGs for project/client hubs (hub YAML lift **done** — `HUB-YAML-LIFT-2026-11-05.md`); optional pixel diff tooling.
-3. Expand Gate T beyond single PHPUnit employee create.
+2. ~~**X5** hub PNG re-capture~~ — **done** (`X5-GATE-V-2026-11-05.md`); optional pixel-diff tooling still open.
+3. Directory formatter lift (ClientDetails / Projects **M** rows) or expand **Gate T** journeys.
 
 ### Framework P0 (unchanged — ship in LaraSlice, not port trees)
 
@@ -59,7 +59,8 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 - `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` — N3 Gate S **16→0** matched missing columns
 - `erp-port-v202/porting/POST-MERGE-HOST-SYNC-2026-11-05.md` — path-repo **`f28f762`**, `slice:route-truth-post-merge.json`
 - `erp-port-v202/porting/HUB-YAML-LIFT-2026-11-05.md` — ClientDetails + Projects hub YAML (v201-aligned)
-- `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` — Gate V HTTP **14/16** + 16-row D/M/S matrix
+- `erp-port-v202/porting/X5-GATE-V-2026-11-05.md` — hub PNG re-capture; HTTP **15/16**; benchmark client id **3**
+- `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` — initial Gate V HTTP matrix (superseded to **15/16** in X5)
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`
