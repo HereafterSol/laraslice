@@ -104,7 +104,7 @@ Do **not** start net-new ERP slice scaffolding or Gate V expansion on erp-port-v
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `c0a4b63` (F1 route-truth PASS on v202) |
+| **Last commit** | `667525a` (N3 Now; F1 route-truth `c0a4b63`) |
 | **In flight** | **N3** Gate S column trim / **N5** Gate V matrix (F1 **PASS** on v202); flagship demo YAML may still fail `slice:portability` until porter cleanup |
 
 **Pull before work:**
