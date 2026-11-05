@@ -33,9 +33,9 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | ID | Work | Owner | Target |
 | --- | --- | --- | --- |
-| F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | [ROUTING-TRUTH-ALIGNMENT.md](ROUTING-TRUTH-ALIGNMENT.md) PASS |
-| F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | BACKLOG / audit W1 |
-| F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | IMPROVEMENT-REGISTER P0 |
+| F1 | Routing truth: `slice:qualify-routes` on v202 + agent rules | Framework + port | **PARTIAL** — v202 qualify-routes PASS; `slice:links` FAIL (Settings name + permission_types table); see v202 `REPLICA-STATUS` routing row |
+| F2 | `slice:route-truth` JSON index for MCP (or slice:links enhancement) | Framework | **Done** — `slice:route-truth` + MCP `get_route_truth` (5 Nov 2026) |
+| F3 | Flagship zip install truth (`composer.lock`, no SSH VCS default, `demo.ps1`) | Framework + demo | **In progress** — Packagist stub + `demo.ps1` + lock script shipped; lock in zip next cut |
 | F4 | Portable Heart lint (`slice:portability` or validate extension) | Framework | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
 | F5 | Studio honesty: composer version, discovery slice count, SQLite Copilot | Framework | STUDIO-UX-AUDIT + register |
 
@@ -64,6 +64,8 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 
 | Date | Item | Evidence |
 | --- | --- | --- |
+| 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; `slice:links` FAIL (2 collisions) — `porting/REPLICA-STATUS.md` routing row |
+| 2026-11-05 | **F2 `slice:route-truth` + MCP `get_route_truth`** | `SliceRouteTruthCommand`, `RouteTruthIndex` |
 | 2026-11-05 | **Phase 0 architecture foundation audit** | [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) |
 | 2026-11-05 | Multi-runtime portability contract | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
 | 2026-11-05 | `FOUNDATION-EXECUTION-TRACKER.md` | This file |
@@ -72,6 +74,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | 2026-11-05 | `FrameworkPackage` version / slice count / schema label | Studio + Copilot |
 | 2026-10-28 | Studio UX audit quick wins | STUDIO-UX-AUDIT shipped table |
 | 2026-11-05 | Programme status + improvement register | PROGRAMME-STATUS, IMPROVEMENT-REGISTER |
+| 2026-11-05 | **F3 evaluator install (partial)** | `resources/stubs/flagship/composer.json` (Packagist-only), `demo.ps1`, `docs/demo-windows.ps1`, `porting/generate-flagship-composer-lock.ps1` |
 
 ---
 
@@ -96,8 +99,8 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `95d4037` (audit body `05dfef3`) |
-| **In flight** | F1–F5 **Now**; port N3/N5 paused until F1 |
+| **Last commit** | *(update on push)* — F3 stub + Windows demo scripts |
+| **In flight** | F1, F2, F4, F5 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
 
 **Pull before work:**
 

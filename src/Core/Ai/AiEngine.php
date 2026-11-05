@@ -2123,6 +2123,16 @@ Latency: {$latency}ms.",
                     ],
                 ],
             ],
+            [
+                'name' => 'get_route_truth',
+                'description' => 'JSON index of registered routes (uri, name, slice_id). Use instead of route:list for agent deep links.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'path' => ['type' => 'string', 'description' => 'Optional URI prefix filter (e.g. erp/erp)'],
+                    ],
+                ],
+            ],
         ];
     }
 

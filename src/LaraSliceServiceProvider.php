@@ -41,6 +41,7 @@ use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SliceQualifyRoutesCommand;
 use LaraSlice\Commands\SliceRegenFormCommand;
 use LaraSlice\Commands\SliceRepairCommand;
+use LaraSlice\Commands\SliceRouteTruthCommand;
 use LaraSlice\Commands\SliceSeedCommand;
 use LaraSlice\Commands\SliceSyncCommand;
 use LaraSlice\Commands\SliceToggleCommand;
@@ -164,6 +165,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 SliceDiffCommand::class,
                 SliceLinksCommand::class,
                 SliceQualifyRoutesCommand::class,
+                SliceRouteTruthCommand::class,
                 SliceMigrateJsonToYamlCommand::class,
                 SlicePortCommand::class,
                 SliceDeriveSurfaceCommand::class,

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Routing\RouteTruthIndex;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\LaraSliceServiceProvider;
@@ -357,6 +358,11 @@ class McpServer
                 $path = $args['path'] ?? '/';
 
                 return $this->aiEngine->getSystemContext($path);
+
+            case 'get_route_truth':
+                $prefix = isset($args['path']) && is_string($args['path']) ? $args['path'] : null;
+
+                return app(RouteTruthIndex::class)->build($prefix);
 
             default:
                 return [

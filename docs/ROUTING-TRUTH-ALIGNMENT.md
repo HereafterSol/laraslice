@@ -17,7 +17,7 @@
 | --- | --- |
 | Browser URL in ported flagship | DOM sidebar `href` or **`/erp/erp/...`** pattern from IMPROVEMENT-REGISTER |
 | Named route in PHP/Blade | Qualified name from slice `Routes/web.php` `->name('…')` group |
-| MCP / route index | Regenerate after `slice:qualify-routes` + `slice:cache`; prefer **`slice:links`** when available |
+| MCP / route index | `php artisan slice:route-truth` (JSON `{uri, name, slice_id}`) or MCP tool **`get_route_truth`**; run after `slice:qualify-routes` + `slice:cache` |
 | Deep link from `route:list` alone | **Unsafe** until name/URI audit PASS on host |
 
 ---
@@ -31,7 +31,7 @@ php artisan slice:cache
 php artisan route:list --path=erp
 ```
 
-Track completion in host `porting/REPLICA-STATUS.md` (routing row). Framework follow-up (Next): optional `slice:route-truth` command emitting JSON `{uri, name, slice_id}` for MCP — BACKLOG candidate.
+Track completion in host `porting/REPLICA-STATUS.md` (routing row). Framework: **`slice:route-truth`** + MCP **`get_route_truth`** emit JSON `{uri, name, slice_id}`.
 
 ---
 
@@ -40,6 +40,7 @@ Track completion in host `porting/REPLICA-STATUS.md` (routing row). Framework fo
 | Item | Status |
 | --- | --- |
 | `slice:qualify-routes` | **Shipped** |
+| `slice:route-truth` / MCP `get_route_truth` | **Shipped** (5 Nov 2026) |
 | Skill §11 / §28 read order | Points to this doc via tracker |
 | Auto-fix adjudication prefix in generator | **Not shipped** — documentation-only this sprint |
-| Single JSON route index for agents | **Next** |
+| Host routing row PASS on v202 | Track in `porting/REPLICA-STATUS.md` |
