@@ -65,7 +65,8 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | Date | Item | Evidence |
 | --- | --- | --- |
 | 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; `slice:links` FAIL (2 collisions) — `porting/REPLICA-STATUS.md` routing row |
-| 2026-11-05 | **F2 `slice:route-truth` + MCP `get_route_truth`** | `SliceRouteTruthCommand`, `RouteTruthIndex` |
+| 2026-11-05 | **F3 evaluator install (partial)** | Packagist flagship stub, `demo.ps1`, `demo-windows.ps1`, lock generator — [F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4) |
+| 2026-11-05 | **F5 Studio :7002 browser audit** | `7a5527e` |
 | 2026-11-05 | **Phase 0 architecture foundation audit** | [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) |
 | 2026-11-05 | Multi-runtime portability contract | [MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md) |
 | 2026-11-05 | `FOUNDATION-EXECUTION-TRACKER.md` | This file |
@@ -99,7 +100,7 @@ Do **not** start net-new ERP slice scaffolding, Gate S column closure, or Gate V
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `fe9ef9f` (F3 evaluator install; F2 `c3abc2d`) |
+| **Last commit** | `7a5527e` (F5 Studio :7002 browser audit) |
 | **In flight** | F1, F4 **Now**; F3 lock-in-zip on next flagship cut; port N3/N5 paused until F1 |
 
 **Pull before work:**
@@ -116,7 +117,7 @@ git pull origin v2.0.2-candidate
 ## Muse — suggested next 3 tasks
 
 1. **Close F1 on v202:** resolve Settings slice twin + `permission_types` collision → **`slice:links` PASS**; run **`slice:route-truth`** after path-repo `composer update` to `c3abc2d`.
-2. Ship flagship **`composer.lock`** + run **`demo.ps1`** / `demo-windows.ps1` (F3).
+2. Run **`porting/generate-flagship-composer-lock.ps1`**, embed lock in next **flagship zip**; smoke **`resources/stubs/flagship/demo.ps1`** on clean extract (F3 close).
 3. Studio owner glossary (F5); align **`slice:portability`** with shipped lint (F4).
 
 ---
