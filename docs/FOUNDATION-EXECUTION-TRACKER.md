@@ -106,7 +106,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `667525a` (N3 Now; F1 route-truth `c0a4b63`) |
+| **Last commit** | `ea77e1f` (N3 Gate S docs sync) |
 | **In flight** | **N5** Gate V URL matrix on v202; optional `discussions` scaffold / 118-table programme; flagship demo `slice:portability` YAML cleanup |
 
 **Pull before work:**
