@@ -18,7 +18,7 @@
 | **S** | **PARTIAL (N3 cols closed)** | Matched-table missing columns **16→0** (5 Nov N3); **118** source-only tables; `discussions` **excluded** in `deviations.yaml` — `porting/N3-GATE-S-2026-11-05.md`, `GATE-S-CLOSURE-2026-11-05.md` |
 | **D** | **PASS (benchmark)** | `verify-programme.php` / clean import |
 | **F** | **PASS (benchmark)** | Directory counts + task board 9/11/14/16 |
-| **T** | **PASS (benchmark)** | `GateTEmployeeCreateTest` |
+| **T** | **PARTIAL (expanded benchmark)** | PHPUnit **`GateT*`** **3/3 PASS** (employee, project, client create/update); port HTTP **(a)(b)(g)(c–f)** via `gate-t-run.php` @ **:7005**; source paired HTTP **(a)(b)(g) fail** on **:7001** benchmark — `erp-port-v202/porting/GATE-T-EXPANSION-2026-11-05.md`, `gate-t-results.json` |
 | **V** | **PARTIAL (~50%; X5 + directory formatters)** | HTTP **15/16** (client hub id **3**); hub PNGs refreshed; ClientDetails/Projects directory formatters lifted — **no** pixel PASS — `X5-GATE-V-2026-11-05.md`, `DIRECTORY-FORMATTER-LIFT-2026-11-05.md`, `gate-v-2026-11-05/SIDE-BY-SIDE-MATRIX.md` |
 
 **Drift:** 0 errors, 44 warnings (`slice:drift` after closure).
@@ -35,7 +35,9 @@
 1. Scaffold or exclude **Discussions** (exclude documented — optional parent table later); porter closure for **118** source-only tables.
 2. ~~**X5** hub PNG re-capture~~ — **done** (`X5-GATE-V-2026-11-05.md`); optional pixel-diff tooling still open.
 3. ~~**Directory formatter lift** (ClientDetails / Projects)~~ — **done** (`DIRECTORY-FORMATTER-LIFT-2026-11-05.md`); Gate V stays **PARTIAL (~50%)** — directory **M** chrome backlog (filter band, Worksuite widgets) on matrix rows.
-4. **Gate T** — expand employee-create+ journeys (programme **next** port priority).
+4. ~~**Gate T expansion** (employee / project / client + scripted matrix)~~ — **done (PARTIAL)** — `GATE-T-EXPANSION-2026-11-05.md`; **next:** task-board column **HTTP** move; client **account-backed** create parity (`/account/clients`); fix or accept source benchmark store gaps on **:7001** for **(a)(b)(g)**.
+5. **Gate V** — remaining hub / directory **M** chrome backlog (`SIDE-BY-SIDE-MATRIX.md`); optional pixel diff (no PASS without metrics).
+6. **Gate S** — **118** source-only tables; `discussions` exclude holds; porter closure when owner signs.
 
 ### Framework P0 (unchanged — ship in LaraSlice, not port trees)
 
@@ -61,6 +63,7 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 - `erp-port-v202/porting/POST-MERGE-HOST-SYNC-2026-11-05.md` — path-repo **`f28f762`**, `slice:route-truth-post-merge.json`
 - `erp-port-v202/porting/HUB-YAML-LIFT-2026-11-05.md` — ClientDetails + Projects hub YAML (v201-aligned)
 - `erp-port-v202/porting/DIRECTORY-FORMATTER-LIFT-2026-11-05.md` — ClientDetails + Projects directory formatters (composite_user, progress_bar→completion_percent)
+- `erp-port-v202/porting/GATE-T-EXPANSION-2026-11-05.md` — Gate T expanded benchmark: PHPUnit **3/3**; port HTTP journeys; source **:7001** gaps; **PARTIAL**
 - `erp-port-v202/porting/X5-GATE-V-2026-11-05.md` — hub PNG re-capture; HTTP **15/16**; benchmark client id **3**
 - `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` — initial Gate V HTTP matrix (superseded to **15/16** in X5)
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
