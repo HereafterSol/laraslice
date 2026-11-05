@@ -7,6 +7,7 @@ use LaraSlice\LaraSliceServiceProvider;
 use LaraSlice\Slices\Roles\Models\Permission;
 use LaraSlice\Slices\Roles\Models\Role;
 use LaraSlice\Slices\Users\Models\User;
+use LaraSlice\Support\Directory;
 use Laravel\Sanctum\SanctumServiceProvider;
 use MallardDuck\LucideIcons\BladeLucideIconsServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -32,50 +33,20 @@ abstract class TestCase extends Orchestra
      */
     protected function setUp(): void
     {
-        $this->purgeSharedTestSlicesPath();
-
         parent::setUp();
+
+        // The test slices path is one shared temp directory: clear any
+        // slices a previous test class generated (not every class cleans
+        // up after itself), so generation in this test starts empty.
+        $slicesPath = config('laraslice.slices_path');
+        if (is_string($slicesPath) && $slicesPath !== '' && is_dir($slicesPath)) {
+            Directory::remove($slicesPath);
+        }
 
         @unlink($this->app->bootstrapPath('cache/laraslice_slices.php'));
         @unlink($this->app->bootstrapPath('cache/laraslice_manifest_data.php'));
 
         $this->app['view']->addLocation(dirname(__DIR__).'/resources/stubs/starter/views');
-    }
-
-    /**
-     * Remove generated host slices before the app boots migrations,
-     * so stale migration paths from prior tests cannot break migrate.
-     */
-    private function purgeSharedTestSlicesPath(): void
-    {
-        $slicesPath = sys_get_temp_dir().'/laraslice-test-app-slices';
-        if (! is_dir($slicesPath)) {
-            return;
-        }
-
-        $this->deleteDirectoryTree($slicesPath);
-    }
-
-    private function deleteDirectoryTree(string $directory): void
-    {
-        if (! is_dir($directory)) {
-            return;
-        }
-
-        foreach (scandir($directory) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-
-            $path = $directory.DIRECTORY_SEPARATOR.$entry;
-            if (is_dir($path)) {
-                $this->deleteDirectoryTree($path);
-            } else {
-                @unlink($path);
-            }
-        }
-
-        @rmdir($directory);
     }
 
     protected function defineEnvironment($app): void

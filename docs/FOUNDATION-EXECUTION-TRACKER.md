@@ -107,7 +107,8 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` (base **merged** `origin/master` @ **dd1e0ba** / tag **v2.0.2**) |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `1cac6f1` — `merge: v2.0.2 release (dd1e0bad) into v2.0.2-candidate` (+ post-merge fixes on branch) |
+| **Last commit** | `32ee849` — post-merge fixes (`Kit.php`, `Directory.php`, `SliceManager` import, test harness); merge **`1cac6f1`** (`dd1e0ba` / v2.0.2) |
+| **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **714** tests OK (2620 assertions); `SlicePortabilityCommandTest` + shipped `PortabilityAudit` green; `slice:portability` via Testbench (no host `artisan` in package root) |
 | **Merge conflicts resolved** | `SlicePortabilityCommand.php` (shipped `PortabilityAudit` + `TrilogyPortabilityLint`); `BlueprintStudioController.php` (`BlueprintLibrary` + `FrameworkPackage`); `studio-shell.blade.php` (design-factory loader + persona + design slice hook); `ai-copilot-bubble.blade.php` (released z-index/model line + candidate telemetry/version); `skills/laraslice/SKILL.md` (§27 toolkit path + §28–29 candidate sections); duplicate `SlicePortabilityCommand` registration removed in `LaraSliceServiceProvider.php`; **`Kit.php`** restored to released `resolve()` / `stylesheet()` (candidate stub had won auto-merge) |
 | **In flight** | Hub YAML lift + Gate V PNG refresh (**X5** pixel diff); optional `discussions` scaffold / 118-table programme; flagship demo `slice:portability` YAML cleanup |
 
@@ -126,7 +127,7 @@ git pull origin v2.0.2-candidate
 
 1. ~~**Close F1 on v202:** `slice:links` + **`slice:route-truth` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`).
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). ~~**N5** Gate V matrix~~ — **PARTIAL** (5 Nov — `N5-GATE-V-2026-11-05.md`). ~~**Master merge** (`dd1e0ba` → candidate)~~ — **`1cac6f1`** (5 Nov 2026). **Next:** hub YAML / **X5** pixel diff; push candidate when local suite stable.
+3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). ~~**N5** Gate V matrix~~ — **PARTIAL** (5 Nov — `N5-GATE-V-2026-11-05.md`). ~~**Master merge** (`dd1e0ba` → candidate)~~ — **`1cac6f1`** + **`32ee849`** (5 Nov 2026). **Next:** hub YAML / **X5** pixel diff.
 
 ---
 
