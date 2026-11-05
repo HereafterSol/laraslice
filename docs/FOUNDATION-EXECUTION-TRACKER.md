@@ -23,7 +23,7 @@
 
 ## Porting pause (mandate)
 
-Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **N5 Gate V** matrix is **Now**. Host **repair** (`slice:qualify-routes`, `slice:repair`, `slice:cache`, `slice:route-truth`) on existing trees is allowed.
+Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **X5** Gate V PNG refresh / pixel diff is **Next**. Host **repair** (`slice:qualify-routes`, `slice:repair`, `slice:cache`, `slice:route-truth`) on existing trees is allowed.
 
 ---
 
@@ -45,7 +45,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- | --- |
 | N3 | erp-port-v202 Gate S column closure | **Done (matched cols)** — **16→0** missing-column tables via N3 migration; Gate S still **PARTIAL** (118 source-only, `discussions` excluded) — `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` |
 | N4 | (merged into F3) Flagship install | — |
-| N5 | Gate V URL matrix + qualify-routes on v202 | Depends F1 |
+| N5 | Gate V URL matrix + qualify-routes on v202 | **Done (PARTIAL)** — HTTP **14/16**, 16-row D/M/S; port `kit=replica`; `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` |
 | X1 | Skill family split (core/start/port/operate router) | Audit D10 |
 | X2 | Studio owner persona — glossary tooltips | STUDIO-UX-AUDIT U2 |
 | X3 | Consolidate port modal → single Port panel | STUDIO-UX-AUDIT U3 |
@@ -64,6 +64,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | Date | Item | Evidence |
 | --- | --- | --- |
 | 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
+| 2026-11-05 | **N5 Gate V matrix (v202)** | HTTP **14/16** + **9/9** dirs; port **`kit=replica`**; qualify-routes + **`slice:links` 0** — `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` |
 | 2026-11-05 | **N3 Gate S matched-table columns** | v202 **16→0** missing cols; `discussions` documented exclude — `porting/N3-GATE-S-2026-11-05.md` |
 | 2026-11-05 | **F1 `slice:route-truth` on erp-port-v202** | path-repo **`b1831ce`**; **1056** routes → `porting/route-truth-2026-11-05.json` — `F1-ROUTE-TRUTH-LOG.md` |
 | 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; **`slice:links` PASS** — `porting/F1-SLICE-LINKS-LOG.md` |
@@ -107,7 +108,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
 | **Last commit** | `ea77e1f` (N3 Gate S docs sync) |
-| **In flight** | **N5** Gate V URL matrix on v202; optional `discussions` scaffold / 118-table programme; flagship demo `slice:portability` YAML cleanup |
+| **In flight** | Hub YAML lift + Gate V PNG refresh (**X5** pixel diff); optional `discussions` scaffold / 118-table programme; flagship demo `slice:portability` YAML cleanup |
 
 **Pull before work:**
 

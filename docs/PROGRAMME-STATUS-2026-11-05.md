@@ -19,7 +19,7 @@
 | **D** | **PASS (benchmark)** | `verify-programme.php` / clean import |
 | **F** | **PASS (benchmark)** | Directory counts + task board 9/11/14/16 |
 | **T** | **PASS (benchmark)** | `GateTEmployeeCreateTest` |
-| **V** | **PARTIAL (classified)** | HTTP **9/9**; 16 PNGs; `gate-v-2026-11-05/SIDE-BY-SIDE-MATRIX.md` |
+| **V** | **PARTIAL (N5 matrix)** | HTTP **14/16** (**9/9** dirs); 16 PNGs; `gate-v-2026-11-05/SIDE-BY-SIDE-MATRIX.md` · `N5-GATE-V-2026-11-05.md` |
 
 **Drift:** 0 errors, 44 warnings (`slice:drift` after closure).
 
@@ -33,7 +33,7 @@
 ### Port (erp-port-v202)
 
 1. Scaffold or exclude **Discussions** (exclude documented — optional parent table later); porter closure for **118** source-only tables.
-2. Re-capture Gate V after hub YAML lift from v201; optional pixel diff tooling.
+2. Re-capture Gate V PNGs after hub YAML lift from v201; optional pixel diff tooling (N5 HTTP matrix **done**).
 3. Expand Gate T beyond single PHPUnit employee create.
 
 ### Framework P0 (unchanged — ship in LaraSlice, not port trees)
@@ -57,6 +57,7 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 - `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` — F1 **`slice:links`** closure (ErpSettings + permission_types)
 - `erp-port-v202/porting/F1-ROUTE-TRUTH-LOG.md` — F1 **`slice:route-truth`** index (1056 routes)
 - `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` — N3 Gate S **16→0** matched missing columns
+- `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` — N5 Gate V HTTP **14/16** + 16-row D/M/S matrix
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`
