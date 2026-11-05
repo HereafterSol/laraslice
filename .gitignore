@@ -6,4 +6,6 @@ composer.lock
 .DS_Store
 Thumbs.db
 .phpunit.cache
+/phpunit-*.txt
+/phpunit-junit.xml
 /.phpstan.cache
