@@ -33,14 +33,14 @@
 ### Port (erp-port-v202)
 
 1. Scaffold or exclude **Discussions** (exclude documented — optional parent table later); porter closure for **118** source-only tables.
-2. Re-capture Gate V PNGs after hub YAML lift from v201; optional pixel diff tooling (N5 HTTP matrix **done**).
+2. **X5** — Re-capture Gate V PNGs for project/client hubs (hub YAML lift **done** — `HUB-YAML-LIFT-2026-11-05.md`); optional pixel diff tooling.
 3. Expand Gate T beyond single PHPUnit employee create.
 
 ### Framework P0 (unchanged — ship in LaraSlice, not port trees)
 
 See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md).
 
-1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); **F1 port PASS** on v202 — `slice:links` + **`slice:route-truth`** exit 0 (5 Nov — `F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`). See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
+1. **Routing truth** — **`slice:route-truth`** shipped; **F1 port PASS** on v202 — `slice:links` exit 0; post-merge index **1203** routes (`POST-MERGE-HOST-SYNC-2026-11-05.md`, package **`f28f762`**).
 2. **Flagship zip** — **`resources/stubs/flagship/composer.lock`** tracked (**`23c18d6`**, Packagist `hereafter/laraslice` **v2.0.2**); generator uses **`--no-install`**. **Remaining:** ship lock beside `composer.json` in the **next flagship zip** artifact cut.
 3. **Windows demo** — **`demo.ps1`** / **`docs/demo-windows.ps1`** + **`demo.ps1 -NoServe`** smoke **PASS** on flagship tree; re-validate on **fresh** `tar -xf` extract when cutting zip.
 4. **Portable Heart** — **`slice:portability`** + trilogy lint **PASS** (`f467877`); run on host trees before demo cuts — ported YAML may still report findings until porter cleanup ([MULTI-RUNTIME-PORTABILITY-CONTRACT.md](MULTI-RUNTIME-PORTABILITY-CONTRACT.md)).
@@ -57,7 +57,9 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 - `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` — F1 **`slice:links`** closure (ErpSettings + permission_types)
 - `erp-port-v202/porting/F1-ROUTE-TRUTH-LOG.md` — F1 **`slice:route-truth`** index (1056 routes)
 - `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` — N3 Gate S **16→0** matched missing columns
-- `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` — N5 Gate V HTTP **14/16** + 16-row D/M/S matrix
+- `erp-port-v202/porting/POST-MERGE-HOST-SYNC-2026-11-05.md` — path-repo **`f28f762`**, `slice:route-truth-post-merge.json`
+- `erp-port-v202/porting/HUB-YAML-LIFT-2026-11-05.md` — ClientDetails + Projects hub YAML (v201-aligned)
+- `erp-port-v202/porting/N5-GATE-V-2026-11-05.md` — Gate V HTTP **14/16** + 16-row D/M/S matrix
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`
