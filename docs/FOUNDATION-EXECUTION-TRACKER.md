@@ -23,7 +23,7 @@
 
 ## Porting pause (mandate)
 
-Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **Next port polish:** Gate T follow-ups (task-board HTTP, source store parity); remaining Gate V directory **M** chrome backlog. Host **repair** allowed.
+Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **Next port polish:** Gate T follow-ups (client account-backed create, source store parity); remaining Gate V directory **M** chrome backlog. Host **repair** allowed.
 
 ---
 
@@ -63,6 +63,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 
 | Date | Item | Evidence |
 | --- | --- | --- |
+| 2026-11-05 | **Gate T task-board column HTTP (v202)** | PHPUnit **`GateTTaskBoardColumnMoveTest`**; journey **(c)** HTTP via `PUT /erp/work/tasks/{id}` + `board_column_id`; **`slice:links` 0** — **PARTIAL** — `erp-port-v202/porting/GATE-T-TASK-BOARD-COLUMN-2026-11-05.md` |
 | 2026-11-05 | **Gate T expansion (v202)** | PHPUnit **3/3** (`GateTEmployeeCreateTest`, `GateTProjectCreateTest`, `GateTClientCreateTest`); port HTTP matrix @ **:7005**; source **(a)(b)(g) fail** on benchmark — **PARTIAL** — `erp-port-v202/porting/GATE-T-EXPANSION-2026-11-05.md` |
 | 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
 | 2026-11-05 | **Post-merge host sync (v202)** | LaraSlice **`f28f762`**; route-truth **1203** routes — `POST-MERGE-HOST-SYNC-2026-11-05.md` |
@@ -111,10 +112,10 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` (base **merged** `origin/master` @ **dd1e0ba** / tag **v2.0.2**) |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `3e6b442` (Gate T expansion benchmark docs on v202) |
+| **Last commit** | `4da7630` (Gate T task-board column move docs on v202) |
 | **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **714** tests OK (2620 assertions); `SlicePortabilityCommandTest` + shipped `PortabilityAudit` green; `slice:portability` via Testbench (no host `artisan` in package root) |
 | **Merge conflicts resolved** | `SlicePortabilityCommand.php` (shipped `PortabilityAudit` + `TrilogyPortabilityLint`); `BlueprintStudioController.php` (`BlueprintLibrary` + `FrameworkPackage`); `studio-shell.blade.php` (design-factory loader + persona + design slice hook); `ai-copilot-bubble.blade.php` (released z-index/model line + candidate telemetry/version); `skills/laraslice/SKILL.md` (§27 toolkit path + §28–29 candidate sections); duplicate `SlicePortabilityCommand` registration removed in `LaraSliceServiceProvider.php`; **`Kit.php`** restored to released `resolve()` / `stylesheet()` (candidate stub had won auto-merge) |
-| **In flight** | Gate T follow-ups (task-board column HTTP, client account-backed create, source **:7001** store fixes or documented port-only matrix); remaining Gate V **M** chrome (filter band, Worksuite widgets, other matrix rows); optional pixel diff; `discussions` / 118-table programme; flagship `slice:portability` cleanup |
+| **In flight** | Gate T follow-ups (client account-backed create, source **:7001** store fixes or documented port-only matrix); remaining Gate V **M** chrome (filter band, Worksuite widgets, other matrix rows); optional pixel diff; `discussions` / 118-table programme; flagship `slice:portability` cleanup |
 
 **Pull before work:**
 
@@ -131,7 +132,7 @@ git pull origin v2.0.2-candidate
 
 1. ~~**Close F1 on v202:** `slice:links` + **`slice:route-truth` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`).
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. ~~**Hub YAML lift**~~ / ~~**X5** hub PNG~~ / ~~**directory formatter lift**~~ / ~~**Gate T expansion**~~ — **done (PARTIAL)** on v202 — `GATE-T-EXPANSION-2026-11-05.md`. **Next:** Gate T task-board HTTP + source parity; Gate V **M** chrome backlog; Gate S **118**-table programme; optional pixel diff (no PASS without metrics).
+3. ~~**Hub YAML lift**~~ / ~~**X5** hub PNG~~ / ~~**directory formatter lift**~~ / ~~**Gate T expansion**~~ / ~~**Gate T task-board column HTTP**~~ — **done (PARTIAL)** on v202 — `GATE-T-EXPANSION-2026-11-05.md`, `GATE-T-TASK-BOARD-COLUMN-2026-11-05.md`. **Next:** Gate T client account-backed create + source parity; Gate V **M** chrome backlog; Gate S **118**-table programme; optional pixel diff (no PASS without metrics).
 
 ---
 
