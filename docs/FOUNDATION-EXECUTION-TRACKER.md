@@ -108,7 +108,7 @@ Do **not** start net-new ERP slice scaffolding without programme owner sign-off.
 | --- | --- |
 | **Branch** | `v2.0.2-candidate` (base **merged** `origin/master` @ **dd1e0ba** / tag **v2.0.2**) |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
-| **Last commit** | `74911ca` (test harness); merge **`1cac6f1`** + fixes **`32ee849`** — base **`dd1e0ba`** / v2.0.2 |
+| **Last commit** | `d8058c6` (post-merge + hub YAML programme docs) |
 | **Verification (5 Nov 2026)** | `vendor/bin/phpunit` → **714** tests OK (2620 assertions); `SlicePortabilityCommandTest` + shipped `PortabilityAudit` green; `slice:portability` via Testbench (no host `artisan` in package root) |
 | **Merge conflicts resolved** | `SlicePortabilityCommand.php` (shipped `PortabilityAudit` + `TrilogyPortabilityLint`); `BlueprintStudioController.php` (`BlueprintLibrary` + `FrameworkPackage`); `studio-shell.blade.php` (design-factory loader + persona + design slice hook); `ai-copilot-bubble.blade.php` (released z-index/model line + candidate telemetry/version); `skills/laraslice/SKILL.md` (§27 toolkit path + §28–29 candidate sections); duplicate `SlicePortabilityCommand` registration removed in `LaraSliceServiceProvider.php`; **`Kit.php`** restored to released `resolve()` / `stylesheet()` (candidate stub had won auto-merge) |
 | **In flight** | **X5** Gate V PNG re-capture (+ optional pixel diff); optional `discussions` / 118-table programme; flagship `slice:portability` YAML cleanup |
