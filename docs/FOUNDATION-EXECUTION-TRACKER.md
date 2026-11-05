@@ -2,7 +2,7 @@
 
 **Vision (one line):** Mature LaraSlice so AI, developers, and super-admins adopt it — **enterprise-grade UX**, honest **~50%→100%** port path, skills/MCP discipline, multi-language vision without false shipping claims.
 
-**Headline (5 Nov 2026):** ERP programme **~50%** replica on erp-port-v202 (lowest gate wins — **not 100%**). **Phase 0 foundation audit complete** — **net-new porting paused** until foundation blockers W1–W4 below are in progress or done.
+**Headline (5 Nov 2026):** ERP programme **~50%** replica on erp-port-v202 (lowest gate wins — **not 100%**). **Foundation F1–F3 PASS** — **N3/N5** port work on v202 unblocked; **F4** portable Heart lint **Now**.
 
 **Audit:** [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) · **Maturity stage:** **3 — Defined**
 

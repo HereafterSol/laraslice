@@ -1,6 +1,6 @@
 # LaraSlice v2.0.2 ERP programme — status (5 Nov 2026)
 
-**Honest headline:** **~50%** whole-ERP replica (lowest gate wins). **Not 100%.** **Framework maturity:** **Stage 3 — Defined** — [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) ([Full framework architecture audit](f13b1c79-24c9-4ac4-8965-e7f665a4be90)); **porting paused** until tracker **F1–F3**.
+**Honest headline:** **~50%** whole-ERP replica (lowest gate wins). **Not 100%.** **Framework maturity:** **Stage 3 — Defined** — [ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md](ARCHITECTURE-FOUNDATION-AUDIT-2026-11-05.md) ([Full framework architecture audit](f13b1c79-24c9-4ac4-8965-e7f665a4be90)); **foundation F1–F3 PASS** — **N3/N5 port gates** unblocked on v202 (no net-new scaffold pause).
 
 ## Environments
 
@@ -41,8 +41,8 @@
 See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUNDATION-OPTIMIZATION.md](AI-FOUNDATION-OPTIMIZATION.md).
 
 1. **Routing truth** — **`slice:route-truth`** shipped (`c3abc2d`); **F1 port:** v202 **`slice:links` PASS** (5 Nov — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`). **Remaining:** run **`slice:route-truth`** on v202 after path-repo to `c3abc2d`. See [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e).
-2. **Flagship zip** — Packagist stub + **`porting/generate-flagship-composer-lock.ps1`** shipped ([F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4)); **`composer.lock` inside zip** still open.
-3. **Windows demo** — **`resources/stubs/flagship/demo.ps1`** + **`docs/demo-windows.ps1`** shipped; validate on fresh extract (`tar -xf`).
+2. **Flagship zip** — **`resources/stubs/flagship/composer.lock`** tracked (**`23c18d6`**, Packagist `hereafter/laraslice` **v2.0.2**); generator uses **`--no-install`**. **Remaining:** ship lock beside `composer.json` in the **next flagship zip** artifact cut.
+3. **Windows demo** — **`demo.ps1`** / **`docs/demo-windows.ps1`** + **`demo.ps1 -NoServe`** smoke **PASS** on flagship tree; re-validate on **fresh** `tar -xf` extract when cutting zip.
 
 ### Demo (:7002)
 
