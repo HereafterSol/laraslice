@@ -23,7 +23,7 @@
 
 ## Porting pause (mandate)
 
-Do **not** start net-new ERP slice scaffolding or Gate V expansion on erp-port-v202 without programme owner sign-off. **N3 Gate S** column closure is **Now**. Host **repair** (`slice:qualify-routes`, `slice:repair`, `slice:cache`, `slice:route-truth`) on existing trees is allowed.
+Do **not** start net-new ERP slice scaffolding without programme owner sign-off. **N5 Gate V** matrix is **Now**. Host **repair** (`slice:qualify-routes`, `slice:repair`, `slice:cache`, `slice:route-truth`) on existing trees is allowed.
 
 ---
 
@@ -43,7 +43,7 @@ Do **not** start net-new ERP slice scaffolding or Gate V expansion on erp-port-v
 
 | ID | Work | Notes |
 | --- | --- | --- |
-| N3 | erp-port-v202 Gate S column closure | **Now** — F1 routing **PASS** |
+| N3 | erp-port-v202 Gate S column closure | **Done (matched cols)** — **16→0** missing-column tables via N3 migration; Gate S still **PARTIAL** (118 source-only, `discussions` excluded) — `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` |
 | N4 | (merged into F3) Flagship install | — |
 | N5 | Gate V URL matrix + qualify-routes on v202 | Depends F1 |
 | X1 | Skill family split (core/start/port/operate router) | Audit D10 |
@@ -64,7 +64,9 @@ Do **not** start net-new ERP slice scaffolding or Gate V expansion on erp-port-v
 | Date | Item | Evidence |
 | --- | --- | --- |
 | 2026-11-05 | **F4 `slice:portability` + trilogy lint** | `TrilogyPortabilityLint`, tests; contract §2/§5 updated |
+| 2026-11-05 | **N3 Gate S matched-table columns** | v202 **16→0** missing cols; `discussions` documented exclude — `porting/N3-GATE-S-2026-11-05.md` |
 | 2026-11-05 | **F1 `slice:route-truth` on erp-port-v202** | path-repo **`b1831ce`**; **1056** routes → `porting/route-truth-2026-11-05.json` — `F1-ROUTE-TRUTH-LOG.md` |
+| 2026-11-05 | **F1 routing truth on erp-port-v202** | qualify-routes PASS; **`slice:links` PASS** — `porting/F1-SLICE-LINKS-LOG.md` |
 | 2026-11-05 | **F2 `slice:route-truth` + MCP** | `c3abc2d` — [F1 F2 routing truth](d42146fe-049c-45c5-a106-5b6c580e8a0e) |
 | 2026-11-05 | **F3 flagship lock + install smoke** | `resources/stubs/flagship/composer.lock`; dry-run + `demo.ps1 -NoServe`; lock script `--no-install` |
 | 2026-11-05 | **F3 evaluator install (partial)** | Packagist flagship stub, `demo.ps1`, `demo-windows.ps1`, lock generator — [F3 evaluator install](e952550a-3cc9-4e65-a66d-39320cf4b4e4) |
@@ -105,7 +107,7 @@ Do **not** start net-new ERP slice scaffolding or Gate V expansion on erp-port-v
 | **Branch** | `v2.0.2-candidate` |
 | **Remote** | `origin` → `https://github.com/HereafterSol/laraslice.git` |
 | **Last commit** | `667525a` (N3 Now; F1 route-truth `c0a4b63`) |
-| **In flight** | **N3** Gate S column trim / **N5** Gate V matrix (F1 **PASS** on v202); flagship demo YAML may still fail `slice:portability` until porter cleanup |
+| **In flight** | **N5** Gate V URL matrix on v202; optional `discussions` scaffold / 118-table programme; flagship demo `slice:portability` YAML cleanup |
 
 **Pull before work:**
 
@@ -122,7 +124,7 @@ git pull origin v2.0.2-candidate
 
 1. ~~**Close F1 on v202:** `slice:links` + **`slice:route-truth` PASS~~ (5 Nov 2026 — `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md`, `F1-ROUTE-TRUTH-LOG.md`).
 2. ~~Run lock generator + smoke demo.ps1 (F3)~~ — lock in repo stub path (5 Nov 2026); **next flagship zip cut** must ship `composer.lock` beside `composer.json`.
-3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). **Next:** Owner glossary (STUDIO-UX-AUDIT X2); **N3** Gate S on v202.
+3. ~~**F4** Heart lint / `slice:portability` alignment~~ — **PASS** (5 Nov 2026). **Next:** **N5** Gate V on v202; optional `discussions` / 118-table programme.
 
 ---
 

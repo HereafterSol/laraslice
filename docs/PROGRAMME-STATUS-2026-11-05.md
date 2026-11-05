@@ -15,7 +15,7 @@
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| **S** | **PARTIAL (improved)** | Closure migration applied; `GATE-S-DIFF-2026-11-05.txt` (**16** missing-col tables, **240/358** tables) |
+| **S** | **PARTIAL (N3 cols closed)** | Matched-table missing columns **16→0** (5 Nov N3); **118** source-only tables; `discussions` **excluded** in `deviations.yaml` — `porting/N3-GATE-S-2026-11-05.md`, `GATE-S-CLOSURE-2026-11-05.md` |
 | **D** | **PASS (benchmark)** | `verify-programme.php` / clean import |
 | **F** | **PASS (benchmark)** | Directory counts + task board 9/11/14/16 |
 | **T** | **PASS (benchmark)** | `GateTEmployeeCreateTest` |
@@ -25,14 +25,14 @@
 
 ## Lowest gates & why not 100%
 
-1. **Schema:** Discussions slice skipped; **118** source-only tables; **16** matched tables still missing columns.
+1. **Schema:** `discussions` **documented exclude** (N3); **118** source-only tables; **176** extra-column tables — matched name gaps **closed** (0 missing cols on 215 tables).
 2. **Visual:** No pixel-diff PASS; dashboard/document chrome still **M** class on several surfaces.
 
 ## Next owner actions
 
 ### Port (erp-port-v202)
 
-1. Scaffold or exclude **Discussions**; close **16** residual columns or document class C/D deviations.
+1. Scaffold or exclude **Discussions** (exclude documented — optional parent table later); porter closure for **118** source-only tables.
 2. Re-capture Gate V after hub YAML lift from v201; optional pixel diff tooling.
 3. Expand Gate T beyond single PHPUnit employee create.
 
@@ -55,7 +55,8 @@ See [FOUNDATION-MATURITY-ROADMAP.md](FOUNDATION-MATURITY-ROADMAP.md) · [AI-FOUN
 
 - **`LaraSlice/docs/FOUNDATION-EXECUTION-TRACKER.md`** — **primary sprint board + Muse git handoff** (`v2.0.2-candidate`)
 - `erp-port-v202/porting/F1-SLICE-LINKS-LOG.md` — F1 **`slice:links`** closure (ErpSettings + permission_types)
-- `erp-port-v202/porting/F1-ROUTE-TRUTH-LOG.md` — F1 **`slice:route-truth`** + `porting/route-truth-2026-11-05.json` (1056 routes)
+- `erp-port-v202/porting/F1-ROUTE-TRUTH-LOG.md` — F1 **`slice:route-truth`** index (1056 routes)
+- `erp-port-v202/porting/N3-GATE-S-2026-11-05.md` — N3 Gate S **16→0** matched missing columns
 - `erp-port-v202/porting/REPLICA-STATUS.md` — authoritative port headline
 - `erp-port-v202/porting/ZERO-PORT-2.0.2-LOG.md` §9 — programme close run
 - `erp-port-v202/porting/GATE-S-CLOSURE-2026-11-05.md`
