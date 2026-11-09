@@ -278,4 +278,51 @@ class SliceGeneratorTest extends TestCase
         $this->assertContains('industry', array_column($companyManifest['fields'], 'name'));
         $this->assertContains('email', array_column($contactManifest['fields'], 'name'));
     }
+
+    /**
+     * Regression pin (flagship audit, Phase 1 item 4): generated
+     * index blades must carry the board-axis fallback in their
+     * statusKey derivation — a directory whose status axis is an
+     * FK column (Tasks: board_column_id) otherwise groups every
+     * board row under "Unknown".
+     */
+    public function test_generated_index_blade_carries_the_board_axis_fallback(): void
+    {
+        $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Purchase Order');
+
+        $index = file_get_contents($path.'/Resources/views/index.blade.php');
+        $this->assertStringContainsString('$statusFound', $index);
+        $this->assertStringContainsString("str_contains(\$ck, 'board')", $index);
+    }
+
+    /**
+     * Phase 4 (gap G4): generated index blades pass the board
+     * axis' vocabulary to the data-table component, so a board
+     * renders every column — the empty ones included — instead
+     * of only the columns its rows happen to occupy.
+     */
+    public function test_generated_index_blade_passes_the_board_axis_vocabulary(): void
+    {
+        $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Purchase Order');
+
+        $index = file_get_contents($path.'/Resources/views/index.blade.php');
+        $this->assertStringContainsString('$boardAxis = [];', $index);
+        $this->assertStringContainsString(':board-axis="$boardAxis"', $index);
+    }
+
+    /**
+     * Regression pin (flagship fix programme, Phase 3 item R1):
+     * the generated show blade must gate its Edit/Delete actions on
+     * the viewer's slice abilities ($can). A self-access viewer
+     * (own hub, no slice grants) otherwise renders actions that
+     * 403 when used.
+     */
+    public function test_generated_show_blade_gates_record_actions_on_abilities(): void
+    {
+        $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('Purchase Order');
+
+        $show = file_get_contents($path.'/Resources/views/show.blade.php');
+        $this->assertStringContainsString("@if(\$can['edit'] ?? false)", $show);
+        $this->assertStringContainsString("@if(\$can['delete'] ?? false)", $show);
+    }
 }

@@ -90,6 +90,55 @@ class SettingsUiTest extends TestCase
         $this->assertNull($sections[1]['bind'], 'unbound sections stay on the key-value store');
     }
 
+    public function test_time_fields_survive_collection_and_normalize_on_write(): void
+    {
+        $sections = SettingsUi::collectSections([
+            ['slice' => 'Backup', 'manifest' => ['settings' => [[
+                'handle' => 'backup', 'title' => 'Backup',
+                'fields' => [
+                    ['handle' => 'hour_of_day', 'label' => 'Hour Of Day', 'type' => 'time'],
+                ],
+            ]]]],
+        ], fn ($k, $d) => $d);
+
+        $this->assertSame('time', $sections[0]['fields'][0]['type'], 'time is a first-class settings field type, not a text fallback');
+
+        // A time input submits HH:MM; stored times are HH:MM:SS.
+        $this->assertSame('00:00:00', SettingsUi::normalizeTimeValue('00:00'));
+        $this->assertSame('05:30:00', SettingsUi::normalizeTimeValue('05:30'));
+        $this->assertSame('23:59:58', SettingsUi::normalizeTimeValue('23:59:58'), 'already-complete times pass through');
+        $this->assertSame('', SettingsUi::normalizeTimeValue(''));
+        $this->assertNull(SettingsUi::normalizeTimeValue(null));
+    }
+
+    public function test_enum_toggle_pairs_come_from_the_column_not_the_current_value(): void
+    {
+        $this->assertSame(['active', 'inactive'], SettingsUi::enumValues("enum('active','inactive')"));
+        $this->assertSame(['enable', 'disable'], SettingsUi::enumValues("enum('enable','disable')"));
+        $this->assertSame([], SettingsUi::enumValues('varchar(255)'));
+
+        // 'active' pairs with 'inactive' here, 'deactive' there —
+        // only the enum itself can say which.
+        $this->assertSame(['active', 'inactive'], SettingsUi::togglePairFor(['active', 'inactive']));
+        $this->assertSame(['active', 'deactive'], SettingsUi::togglePairFor(['active', 'deactive']));
+        $this->assertSame(['yes', 'no'], SettingsUi::togglePairFor(['yes', 'no']));
+        $this->assertSame(['enable', 'disable'], SettingsUi::togglePairFor(['enable', 'disable']));
+        $this->assertNull(SettingsUi::togglePairFor(['draft', 'sent']), 'no known toggle vocabulary — caller falls back');
+        $this->assertNull(SettingsUi::togglePairFor([]));
+    }
+
+    public function test_zero_values_match_column_families(): void
+    {
+        $this->assertSame('', SettingsUi::zeroValueFor(['type_name' => 'varchar']));
+        $this->assertSame('', SettingsUi::zeroValueFor(['type_name' => 'enum']));
+        $this->assertSame('', SettingsUi::zeroValueFor(['type_name' => 'text']));
+        $this->assertSame(0, SettingsUi::zeroValueFor(['type_name' => 'int']));
+        $this->assertSame(0, SettingsUi::zeroValueFor(['type_name' => 'decimal']));
+        $this->assertSame('00:00:00', SettingsUi::zeroValueFor(['type_name' => 'time']));
+        $this->assertNull(SettingsUi::zeroValueFor(['type_name' => 'date']), 'no invented dates');
+        $this->assertNull(SettingsUi::zeroValueFor(['type_name' => 'datetime']));
+    }
+
     public function test_toggle_conventions_cover_the_domains_settings_tables_use(): void
     {
         // Read side: every stored "on" spelling counts.

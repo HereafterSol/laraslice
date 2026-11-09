@@ -111,4 +111,77 @@ final class PorterDeclarationTest extends TestCase
         );
         $this->assertSame(['AccountingItemTaxes2'], array_keys($out['mapping']));
     }
+
+    public function test_decimal_precision_parsed_from_raw_type(): void
+    {
+        $parse = new \ReflectionMethod(SlicePortService::class, 'parseDecimalPrecision');
+        $parse->setAccessible(true);
+
+        $this->assertSame('10,8', $parse->invoke(null, 'decimal(10,8)'));
+        $this->assertSame('11,8', $parse->invoke(null, 'decimal(11,8) unsigned'));
+        $this->assertSame('12,2', $parse->invoke(null, 'decimal(12,2)'));
+        $this->assertSame('10,8', $parse->invoke(null, 'decimal(10, 8)'));
+        // No explicit precision in the definition: no length, so the
+        // normalizer's existing default applies — unchanged behaviour.
+        // Doubles stay in that class even when written double(30,2):
+        // they are approximate floats, and the port's decimal(12,2)
+        // representation of them was proven value-exact by Gate D.
+        $this->assertNull($parse->invoke(null, 'double'));
+        $this->assertNull($parse->invoke(null, 'double(30,2)'));
+        $this->assertNull($parse->invoke(null, 'decimal'));
+        $this->assertNull($parse->invoke(null, "enum('a','b')"));
+        $this->assertNull($parse->invoke(null, null));
+        // A precision the generator cannot emit is refused, not carried.
+        $this->assertNull($parse->invoke(null, 'decimal(2,8)'));
+    }
+
+    public function test_decimal_precision_reaches_the_generated_schema(): void
+    {
+        $convert = new \ReflectionMethod(SlicePortService::class, 'convertColumnsToFields');
+        $convert->setAccessible(true);
+        $service = new SlicePortService;
+
+        // Column shape exactly as extractTablesFromSourceDatabase()
+        // produces it: bare type_name + the full raw_type.
+        $fields = $convert->invoke($service, [
+            ['name' => 'latitude', 'type' => 'decimal', 'raw_type' => 'decimal(10,8)'],
+            ['name' => 'total', 'type' => 'decimal', 'raw_type' => 'decimal(12,2)'],
+            ['name' => 'amount', 'type' => 'double', 'raw_type' => 'double'],
+        ]);
+        $byHandle = array_column($fields, null, 'handle');
+
+        $this->assertSame('decimal', $byHandle['latitude']['type']);
+        $this->assertSame('10,8', $byHandle['latitude']['length']);
+        // A source already at the old default keeps it explicitly.
+        $this->assertSame('12,2', $byHandle['total']['length']);
+        // Bare double: no length key at all (byte-identical to before).
+        $this->assertArrayNotHasKey('length', $byHandle['amount']);
+
+        $normalizer = new \LaraSlice\Generator\FieldDefinitionNormalizer;
+        $schemaFor = static function (array $porterField) use ($normalizer): array {
+            $out = $normalizer->normalize([[
+                'name' => $porterField['handle'],
+                'label' => $porterField['label'],
+                'type' => $porterField['type'],
+                'nullable' => true,
+                'length' => $porterField['length'] ?? null,
+            ]]);
+
+            return $out[0];
+        };
+
+        $latitude = $schemaFor($byHandle['latitude']);
+        $this->assertStringContainsString("\$table->decimal('latitude', 10, 8)", $latitude['migration']);
+        // The precision is part of the normalized definition, so the
+        // generator can record it in the manifest (Heart) — a regen
+        // from the Heart then keeps it instead of reverting to (12,2).
+        $this->assertSame('10,8', $latitude['length']);
+
+        $total = $schemaFor($byHandle['total']);
+        $this->assertStringContainsString("\$table->decimal('total', 12, 2)", $total['migration']);
+
+        $amount = $schemaFor($byHandle['amount']);
+        $this->assertStringContainsString("\$table->decimal('amount', 12, 2)", $amount['migration']);
+        $this->assertNull($amount['length']);
+    }
 }

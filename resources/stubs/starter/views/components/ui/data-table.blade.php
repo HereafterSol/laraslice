@@ -22,6 +22,7 @@
     'views' => ['table'],        // YAML ui.directory.views: table | board | calendar
     'defaultView' => 'table',    // YAML ui.directory.default_view
     'statusKey' => 'status',     // column key used for board columns
+    'boardAxis' => [],           // board-axis vocabulary [{value,label}]; empty = derive from the axis column's options
     'inlineEdit' => [],          // YAML ui.directory.inline_edit e.g. ['status']
     'inlineUpdateUrl' => null,   // POST endpoint template (.../{id}/inline with __ID__) for plain inline edits
     'columnsMenu' => true,       // YAML ui.directory.columns_menu: the Columns toggle in the toolbar
@@ -68,6 +69,13 @@
         ];
     })->values();
     $searchKeys = $searchKey ? [$searchKey] : $cols->pluck('key')->all();
+    // Board-axis vocabulary, normalized to {value, label} pairs
+    // from either a pair list or a value => label map.
+    $boardAxisList = collect(is_array($boardAxis ?? null) ? $boardAxis : [])
+        ->map(fn ($label, $value) => is_array($label)
+            ? ['value' => (string) ($label['value'] ?? $value), 'label' => (string) ($label['label'] ?? $label['value'] ?? $value)]
+            : (array_is_list($boardAxis) ? ['value' => (string) $label, 'label' => (string) $label] : ['value' => (string) $value, 'label' => (string) $label]))
+        ->values()->all();
 @endphp
 
 <div
@@ -86,6 +94,7 @@
         views: @js(array_values($views ?: ['table'])),
         defaultView: @js($defaultView ?: 'table'),
         statusKey: @js($statusKey ?: 'status'),
+        boardAxis: @js($boardAxisList),
         inlineEdit: @js(array_values($inlineEdit ?: [])),
         inlineUpdateUrl: @js($inlineUpdateUrl),
         dateKey: @js($dateKey),
@@ -196,9 +205,10 @@
                     <span class="text-xs font-bold uppercase tracking-wide text-foreground" x-text="col.label"></span>
                     <span class="text-[10px] font-mono text-muted-foreground" x-text="col.rows.length"></span>
                 </div>
-                <div class="p-2 space-y-2 flex-1 overflow-y-auto max-h-[28rem]">
+                <div class="p-2 space-y-2 flex-1 overflow-y-auto max-h-[28rem]" @dragover.prevent @drop.prevent="dropOnColumn(col)">
                     <template x-for="row in col.rows" :key="row[rowKey] || JSON.stringify(row)">
-                        <div class="rounded-xl border border-border/80 bg-background p-2.5 shadow-2xs text-xs space-y-1">
+                        <div class="rounded-xl border border-border/80 bg-background p-2.5 shadow-2xs text-xs space-y-1"
+                             :draggable="boardDraggable()" @dragstart="startBoardDrag(row)" @dragend="dragRowId = null">
                             <template x-for="c in cols.slice(0, 3)" :key="c.key">
                                 <div class="truncate" x-html="(c.html && row[c.key]) ? row[c.key] : (row[c.key] ?? '—')"></div>
                             </template>
@@ -447,20 +457,74 @@ if (typeof window.blatDataTable === 'undefined') {
             // every panel hidden (blank list).
             viewMode: (cfg.views && cfg.views.includes(cfg.defaultView)) ? cfg.defaultView : ((cfg.views && cfg.views[0]) || 'table'),
             statusKey: cfg.statusKey || 'status',
+            boardAxis: cfg.boardAxis || [],
+            dragRowId: null,
             get boardColumns() {
                 const key = this.statusKey;
                 const filtered = this.filtered.map(({ r }) => r);
                 const groups = {};
                 for (const row of filtered) {
-                    const raw = String(row[key + '__raw'] ?? row[key] ?? 'unknown').replace(/<[^>]*>/g, '').trim() || 'unknown';
-                    if (!groups[raw]) groups[raw] = [];
-                    groups[raw].push(row);
+                    const disp = String(row[key] ?? '').replace(/<[^>]*>/g, '').trim();
+                    const rawv = row[key + '__raw'];
+                    // FK axes (board_column_id) carry the resolved
+                    // label as the display value and the id as
+                    // __raw: group by the label, order by the id.
+                    // Plain status axes group by the raw value.
+                    const gk = (disp && disp !== '--' && String(rawv ?? '') !== disp)
+                        ? disp
+                        : (String(rawv ?? disp ?? 'unknown').replace(/<[^>]*>/g, '').trim() || 'unknown');
+                    const ord = (rawv !== undefined && rawv !== null && /^\d+$/.test(String(rawv))) ? parseInt(rawv, 10) : null;
+                    if (!groups[gk]) groups[gk] = { rows: [], ord: ord, rawValue: (rawv !== undefined && rawv !== null && String(rawv) !== '') ? rawv : gk };
+                    if (ord !== null && (groups[gk].ord === null || ord < groups[gk].ord)) groups[gk].ord = ord;
+                    groups[gk].rows.push(row);
                 }
-                return Object.keys(groups).sort().map(k => ({
+                const grouped = Object.keys(groups).sort((a, b) => {
+                    const ga = groups[a], gb = groups[b];
+                    if (ga.ord !== null && gb.ord !== null) return ga.ord - gb.ord;
+                    return a.localeCompare(b);
+                }).map(k => ({
                     key: k,
                     label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                    rows: groups[k],
+                    rawValue: groups[k].rawValue,
+                    rows: groups[k].rows,
                 }));
+                // Axis vocabulary: the board renders EVERY value
+                // of its axis — the source boards list the empty
+                // columns too, as valid drop targets. Merge the
+                // vocabulary (an explicit board-axis config wins;
+                // otherwise the axis column's resolved options)
+                // into the row-formed groups, in vocabulary
+                // order, keeping any group it doesn't know.
+                let axis = (this.boardAxis && this.boardAxis.length) ? this.boardAxis : null;
+                if (!axis) {
+                    const axisCol = (this.cols || []).find(c => c.key === key);
+                    axis = (axisCol && axisCol.options && axisCol.options.length) ? axisCol.options : [];
+                }
+                if (!axis || !axis.length) return grouped;
+                const byRaw = {};
+                for (const g of grouped) byRaw[String(g.rawValue)] = g;
+                const labelKeyed = grouped.some(g => String(g.rawValue) !== String(g.key))
+                    || axis.every(o => /^\d+$/.test(String(o.value)));
+                const used = new Set();
+                const merged = [];
+                for (const opt of axis) {
+                    const hit = byRaw[String(opt.value)];
+                    if (hit) {
+                        merged.push(hit);
+                        used.add(hit.key);
+                    } else {
+                        merged.push({
+                            key: labelKeyed ? String(opt.label ?? opt.value) : String(opt.value),
+                            label: String(opt.label ?? opt.value).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                            rawValue: opt.value,
+                            rows: [],
+                        });
+                    }
+                }
+                for (const g of grouped) {
+                    if (!used.has(g.key)) merged.push(g);
+                }
+                return merged;
             },
             hiddenCols: [],
             colMenuOpen: false,
@@ -614,6 +678,27 @@ if (typeof window.blatDataTable === 'undefined') {
                 } catch (e) {
                     alert(e.message || String(e));
                 }
+            },
+            boardDraggable() {
+                // Board drag persists through the inline-update
+                // channel, so it is offered only when the board axis
+                // is declared inline-editable and an endpoint exists
+                // — otherwise cards stay static (no fake affordance).
+                return !!this.inlineUpdateUrl && (this.inlineEdit || []).includes(this.statusKey);
+            },
+            startBoardDrag(row) {
+                this.dragRowId = row[this.rowKey] ?? row.__id ?? row.id;
+            },
+            dropOnColumn(col) {
+                const id = this.dragRowId;
+                this.dragRowId = null;
+                if (id === null || id === undefined || !this.boardDraggable()) return;
+                const row = this.rows.find(r => String(r[this.rowKey] ?? r.__id ?? r.id) === String(id));
+                if (!row) return;
+                const target = (col.rawValue !== undefined && col.rawValue !== null) ? col.rawValue : col.key;
+                const current = row[this.statusKey + '__raw'] ?? row[this.statusKey];
+                if (String(current ?? '') === String(target)) return;
+                this.applyInlineUpdate(row, this.statusKey, target);
             },
             async applyInlineUpdate(row, field, value) {
                 if (!this.inlineUpdateUrl || !field) return;

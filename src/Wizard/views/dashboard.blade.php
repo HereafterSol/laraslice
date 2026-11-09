@@ -88,6 +88,9 @@
                 @foreach($counters as $widget)
                     <x-ui.widget-card :title="$widget['title']" :icon="$widget['icon'] ?? null" :href="$widget['link'] ?? null" action-label="Open">
                         <p class="text-2xl font-semibold text-foreground">{{ $widget['value'] }}</p>
+                        @if(! empty($widget['label']))
+                            <p class="mt-1 text-xs text-muted-foreground">{{ $widget['label'] }}</p>
+                        @endif
                     </x-ui.widget-card>
                 @endforeach
             </div>

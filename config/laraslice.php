@@ -173,6 +173,19 @@ return [
             ],
         ],
 
+        // Two-phase confirmation for AI writes (Proposal #4):
+        // an AI-initiated write never executes in one step. The
+        // first call on a gated surface returns a proposal with
+        // a signed confirmation token; only a repeat call
+        // carrying that token — same surface, same arguments,
+        // same user, before expiry, never used before —
+        // executes. The TTL is server-side configuration, never
+        // a model choice (300 s matches the ServiceStack MCP
+        // reference design verified in the R&D hands-on).
+        'confirmation' => [
+            'ttl_seconds' => (int) env('LARASLICE_AI_CONFIRMATION_TTL', 300),
+        ],
+
         // Tables the copilot may never read rows from or insert into.
         'protected_tables' => [
             'users', 'user_*', 'roles', 'permissions', 'role_user', 'permission_role',
@@ -187,6 +200,34 @@ return [
             'enabled' => (bool) env('LARASLICE_MCP_ENABLED', false),
             'route' => '/.well-known/mcp',
             'middleware' => ['api', 'auth:sanctum'],
+        ],
+
+        // The discovery ladder's per-tier shape (Proposals #1–#3):
+        // how much of the metadata projection a consumer at each
+        // capability tier is handed per step. Harness fit is per
+        // model (Harness Leaderboard evidence, compilation §3.17),
+        // so ladder depth and payload sizes are tuned per tier —
+        // never one shape assumed for all.
+        //
+        //   frontier   hosted frontier APIs (200K-class windows)
+        //   free       free API tiers (OpenCode free, Gemini
+        //              Flash-Lite — the in-app Copilot's configured
+        //              providers today, so in-app consumers run
+        //              at this tier)
+        //   webgpu     browser-local models (WebLLM-class, ~8K)
+        //   on_device  phone/on-device models (the 4K floor)
+        //
+        // index: rows = the tabular index payload; names = slice
+        // names grouped by domain; domain_names = names for the
+        // touched slices' domains only; summary = counts only.
+        'ladder' => [
+            'tier' => env('LARASLICE_AI_LADDER_TIER', 'free'),
+            'tiers' => [
+                'frontier' => ['context_tokens' => 200000, 'index' => 'rows', 'per_page' => 250, 'max_describes' => 4, 'describe_ui' => false],
+                'free' => ['context_tokens' => 32000, 'index' => 'names', 'per_page' => 60, 'max_describes' => 2, 'describe_ui' => false],
+                'webgpu' => ['context_tokens' => 8192, 'index' => 'domain_names', 'per_page' => 24, 'max_describes' => 1, 'describe_ui' => false],
+                'on_device' => ['context_tokens' => 4096, 'index' => 'summary', 'per_page' => 12, 'max_describes' => 1, 'describe_ui' => false],
+            ],
         ],
     ],
 

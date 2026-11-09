@@ -1,6 +1,6 @@
 ---
 name: laraslice-start
-description: Start a NEW LaraSlice project from zero or from a brief — the pre-build dossier (PRD, TRD, app flow, design brief, schema, plan), writing the Mind first, the Studio and AI doors, and the SDLC. Use when the user is starting a fresh project, planning a new system, or asks how to begin with LaraSlice. Load the `laraslice` core skill first; use `laraslice-port` instead when an existing system is being moved onto LaraSlice.
+description: Start a NEW LaraSlice project — greenfield, from zero, from an idea or MVP, or from a brief. Covers installing and setting up LaraSlice, scaffolding the first slice, the pre-build dossier (PRD, TRD, app flow, design brief, schema, plan), writing the Mind first, and the Studio and AI doors. Use when the user is starting, creating, planning or setting up a fresh project or asks how to begin with LaraSlice. Load the laraslice core skill first; use laraslice-port instead for an existing system.
 ---
 
 # LaraSlice — Starting a New Project

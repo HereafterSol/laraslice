@@ -1,6 +1,6 @@
 ---
 name: laraslice
-description: Architectural standards, CLI commands, declarative schemas, multi-table aggregate patterns, cross-slice communication, and AI workflows for LaraSlice applications. Use when building, extending, or reviewing a LaraSlice (Laravel) app. The core skill of the family — load `laraslice-start` for new projects, `laraslice-port` for migrations.
+description: Core reference for LaraSlice (Laravel): architecture, the Heart (slice.yaml), Mind and Body, declarative schemas, CLI commands, multi-table slices, cross-slice contracts, permissions, audit, the Studio and MCP. Use when developing, extending, debugging or reviewing a LaraSlice app, creating or changing a slice or a field, or looking up how LaraSlice works. Load laraslice-start for a brand-new project, laraslice-port to move an existing system, and laraslice-operate for a live system after launch.
 ---
 
 # LaraSlice Framework & AI Assistant Skill
@@ -411,6 +411,10 @@ LaraSlice provides a comprehensive, standardized suite of console commands acros
 
 ### Lifecycle, Data & Studio Operations
 - `php artisan slice:seed {slice?} {--domain=} {--count=10}`: Seed realistic relational demo data for an individual slice or entire domain.
+- `php artisan slice:regen-artefacts <SliceName> {--write}`: Re-sync a slice's generated artefacts (service, model, record views AND the three Contracts) from its Heart. A name-keyed loss detector (`property:`/`method:`/`trait:`/`sortable:`) blocks the write when regeneration would drop hand-written code — regen never silently loses declarations or code.
+- `php artisan slice:absorb {slice?}`: The reverse path — read hand edits in generated files back into the Heart as declared proposals (declarable · vocabulary-gap · hand-owned). Absorb and regen are exact inverses; a clean round trip reports 0/0.
+- `php artisan slice:alter <SliceName> {--write}`: Additive-only Heart→database alter: generates one guarded migration for NEW declared columns and refuses — by name — type/length/nullability changes and unsafe NOT NULL adds. Undeclared database columns are named, never dropped.
+- `php artisan slice:corpus {--write}`: Run the cross-runtime conformance corpus (declaration set + shared assertions + fidelity table) against this runtime's metadata projection. A second runtime is judged by the same corpus; a corrupted corpus entry fails the run.
 - `php artisan slice:toggle {slice?} {--domain=} {--enable} {--disable}`: Toggle activation status (shows or hides in navigation, enables/suspends routes).
 - `php artisan slice:wipe {slice?} {--domain=} {--force}`: Safely truncate/wipe all records from tables of a slice or domain while preserving code files.
 - `php artisan slice:destroy {slice?} {--domain=} {--mode=complete} {--force}`: Safely tear down a slice or domain (`complete`, `code_only`, `db_only`, `wipe_data`).
@@ -630,6 +634,14 @@ When a user asks: `"add [field] in [table]"`, the AI Copilot:
 3. Enforces `nullable: true` by default to prevent breaking existing production rows.
 4. Renders an interactive card in the chat window with enterprise recommendations chips and a single-click button: **`⚡ Apply Migration & Add Field Now`** which executes `POST /laraslice/wizard/add-field` directly.
 
+### 6. The discovery ladder, the Explorer, and confirmed writes (the AI surface contract)
+AI consumers never ingest a whole system. One ladder serves MCP, the Copilot, and HTTP alike, projected at runtime from the Hearts (never from generated files):
+- **Index** — one compact row per slice (`GET /laraslice/studio/metadata`, MCP `list_slices`).
+- **Describe** — one slice's full projection: fields, relations, operations, auth (`GET /laraslice/studio/metadata/{slice}`; `?ui=1` adds the UI tier on request only). A versioned schema contract (`laraslice/slice-schema` v1) plus the **Explorer** (`/laraslice/studio/explorer/{slice}`) turn a describe into invocable forms for the operations the schema can derive; everything else is inspect-only, with the reason stated.
+- **Call** — payload budgets are per capability tier (`ai.ladder`: frontier / free / webgpu / on_device context budgets; unknown tier falls back to `free`). Validation failures return per-issue, self-repair-shaped errors (`{field, problem, expected}`) — fix the named field and resubmit.
+- **Writes are two-phase, always.** No AI-initiated write executes in one step. A write tool called without a token returns a proposal (`status: requires_confirmation`) with a validated approval spec (a typed component catalog: operation · field · warning · note · expiry) and a signed token (`ai.confirmation.ttl_seconds`, default 300): HMAC-bound to the exact tool/operation, the exact arguments, the proposing user, and the surface. Execution verifies signature → binding → user → expiry → argument hash, then consumes the token (single-use; a failed verification does NOT consume it). Tokens from the user-less stdio channel are channel-bound, not person-bound. Direct human-session HTTP is ordinary UI use and is not gated by this protocol.
+- **Strict binding + declared update semantics.** Slice write paths bind strictly: type-invalid input is rejected with a 422 carrying per-issue errors — never silently coerced (a blank string on a blank-allowed field is the one exemption). Update behaviour is declared per slice in the Heart (`update: {mode, declared}` served by the projection): `patch` (default — only provided fields change) or `replace` (a partial body is an error naming what is missing).
+
 ---
 
 ## 23. Concepts Map — teach from this
@@ -718,7 +730,17 @@ Sibling runtimes are roadmap, not shipped goods; never
 describe them as existing. The permanence principles behind
 the vision — a standard not a feature, knowledge in files,
 domain-shaped so it travels beyond web software — are
-written out in `docs/RUNTIMES.md` ('Built to last'). The sequencing stands: mature
+written out in `docs/RUNTIMES.md` ('Built to last'), together
+with the future-proof principles the foundation is built to:
+declaration-first and projection-served; token-lean by design
+(the index → describe → call ladder, §11.6); small-model-first
+(1–8B local models, deterministic tools, a no-model built-in
+responder); provider-agnostic, capability-tiered AI; and an
+offline-capable core loop. Rust (RustSlice) is a family-stage
+candidate in two shapes — a native desktop/client runtime with
+a GPU-accelerated UI kit, or a Rust performance core for
+projection, porter, and conformance — narrow surface, after a
+second runtime and conformance evidence. The sequencing stands: mature
 this foundation, ship the flagship demo, then the family.
 
 ## 27. Spec-driven toolkits — the named path (two doors)

@@ -29,9 +29,20 @@ class FormRegenerator
      * Generate the slice into a staging root and return the
      * staged form views keyed by file name.
      *
+     * $extraOptions are merged into the generator options
+     * last (ArtefactRegenerator passes the Heart's declared
+     * relations so staged models carry them, plus tier
+     * overrides derived from the slice's real namespace;
+     * the form-only caller passes nothing and is
+     * unaffected). $baseNamespace overrides the generator's
+     * base namespace (default: the manifest's full slice
+     * namespace — fine for blades, which carry no namespace,
+     * but ArtefactRegenerator needs the true base so staged
+     * PHP classes land in the slice's real namespace).
+     *
      * @return array{staging: string, sliceDir: string, files: array<string, string>}
      */
-    public function stage(SliceManifest $manifest): array
+    public function stage(SliceManifest $manifest, array $extraOptions = [], ?string $baseNamespace = null): array
     {
         $raw = $manifest->raw;
         $fields = [];
@@ -49,12 +60,49 @@ class FormRegenerator
                 'options' => $def['options'] ?? [],
                 'length' => $def['length'] ?? null,
             ];
-            foreach (['relation', 'references', 'hidden', 'show_in_form', 'show_in_list', 'encrypted'] as $extra) {
+            foreach (['relation', 'references', 'hidden', 'show_in_form', 'show_in_list', 'encrypted', 'cast'] as $extra) {
                 if (array_key_exists($extra, $def)) {
                     $field[$extra] = $def[$extra];
                 }
             }
             $fields[] = $field;
+        }
+
+        // The Heart ALSO declares FK targets on the root
+        // model entry's own field list (models[].fields —
+        // the porter's dialect: handle-keyed entries, some
+        // carrying a relation.model the top-level field
+        // list omits). A staged field with no relation of
+        // its own inherits the model entry's, so staging
+        // re-derives the DECLARED target (the porter's
+        // employee_details.department_id -> team) instead
+        // of falling back to the column stem, which names
+        // a model that does not exist (Department). A
+        // relation declared on the top-level field itself
+        // always wins — this only fills the gap.
+        $modelFieldRelations = [];
+        $rootModel = null;
+        foreach ((array) ($raw['models'] ?? []) as $modelEntry) {
+            if (is_array($modelEntry) && ! empty($modelEntry['root'])) {
+                $rootModel = $modelEntry;
+                break;
+            }
+        }
+        if ($rootModel === null && is_array($raw['models'][0] ?? null)) {
+            $rootModel = $raw['models'][0];
+        }
+        foreach ((array) ($rootModel['fields'] ?? []) as $modelField) {
+            if (is_array($modelField) && ! empty($modelField['handle']) && is_array($modelField['relation'] ?? null)) {
+                $modelFieldRelations[(string) $modelField['handle']] = $modelField['relation'];
+            }
+        }
+        if ($modelFieldRelations !== []) {
+            foreach ($fields as &$stagedField) {
+                if (! isset($stagedField['relation']) && isset($modelFieldRelations[$stagedField['name']])) {
+                    $stagedField['relation'] = $modelFieldRelations[$stagedField['name']];
+                }
+            }
+            unset($stagedField);
         }
 
         $workflow = $raw['workflow'] ?? false;
@@ -68,15 +116,22 @@ class FormRegenerator
             'ui' => is_array($raw['ui'] ?? null) ? $raw['ui'] : [],
             'table' => is_array($raw['tables'] ?? null) ? ($raw['tables'][0] ?? null) : null,
             'table_prefix' => $manifest->table_prefix ?? '',
+            'multitenant' => $manifest->multitenant,
             'tenant_key' => $manifest->tenant_key ?? 'company_id',
             'api' => true,
         ];
         if (is_array($workflow)) {
             $options['workflowConfig'] = $workflow;
         }
+        if (is_array($raw['account_creation'] ?? null)) {
+            $options['account_creation'] = $raw['account_creation'];
+        }
+        foreach ($extraOptions as $key => $value) {
+            $options[$key] = $value;
+        }
 
         $staging = sys_get_temp_dir().'/laraslice-regen-'.bin2hex(random_bytes(6));
-        $generator = new SliceGenerator($staging, $manifest->getNamespace());
+        $generator = new SliceGenerator($staging, $baseNamespace ?? $manifest->getNamespace());
         $sliceDir = $generator->generate($manifest->name, $fields, $includeWorkflow, $options);
 
         $files = [];

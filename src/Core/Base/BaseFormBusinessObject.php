@@ -16,12 +16,37 @@ abstract class BaseFormBusinessObject implements IBusinessObject
     /** Properties set from request data by fromArray(); null when the object was built by hand. */
     private ?array $providedFields = null;
 
+    /**
+     * Values fromArray() could not bind to their property's
+     * declared type (Proposal #6 strict binding). Recorded on
+     * every bind; the base slice controllers reject the write
+     * when the list is non-empty instead of letting the value
+     * vanish silently.
+     *
+     * @var array<int, array{field: string, problem: string, expected: string}>
+     */
+    private array $bindingIssues = [];
+
     public function toArray(): array
     {
         $data = get_object_vars($this);
-        unset($data['providedFields']);
+        unset($data['providedFields'], $data['bindingIssues']);
 
         return $data;
+    }
+
+    /**
+     * Binding failures recorded by fromArray(): one issue per
+     * provided value that did not fit its declared type, in
+     * the shared {field, problem, expected} shape. Empty when
+     * every provided value bound cleanly (or the object was
+     * built by hand, in which case no binding took place).
+     *
+     * @return array<int, array{field: string, problem: string, expected: string}>
+     */
+    public function bindingIssues(): array
+    {
+        return $this->bindingIssues;
     }
 
     /**
@@ -68,20 +93,37 @@ abstract class BaseFormBusinessObject implements IBusinessObject
             if ($property !== null && static::coerce($instance, $property, $value, $coerced)) {
                 $instance->{$property} = $coerced;
                 $instance->providedFields[] = $property;
+            } elseif ($property !== null && $value !== null && $value !== '') {
+                // The value was provided but does not fit the
+                // declared type. Blank values are form semantics
+                // (an untouched optional input), never an issue;
+                // anything else is recorded so the write can be
+                // rejected with the reason instead of the value
+                // being silently dropped (the silent-coercion
+                // wart, Proposal #6).
+                $instance->bindingIssues[] = static::bindingIssue($instance, $property, $value);
             }
         }
 
-        // Seamless bridge between name and title for quick-add drawers & API contracts
+        // Seamless bridge between name and title for quick-add drawers & API contracts.
+        // Only SCALAR candidates move: the bridge is an alias
+        // for a declared string field, not a cast — a
+        // non-scalar under the alias key is skipped like an
+        // unknown key, never stringified into "Array"
+        // (goldfish round). A bridged value counts as
+        // provided, so replace-completeness sees it.
         if (property_exists($instance, 'title') && (empty($instance->title) || ! isset($data['title']))) {
             $candidate = $data['name'] ?? $data['label'] ?? null;
-            if (! empty($candidate)) {
+            if (is_scalar($candidate) && ! empty($candidate)) {
                 $instance->title = (string) $candidate;
+                $instance->providedFields[] = 'title';
             }
         }
         if (property_exists($instance, 'name') && (empty($instance->name) || ! isset($data['name']))) {
             $candidate = $data['title'] ?? $data['label'] ?? null;
-            if (! empty($candidate)) {
+            if (is_scalar($candidate) && ! empty($candidate)) {
                 $instance->name = (string) $candidate;
+                $instance->providedFields[] = 'name';
             }
         }
 
@@ -129,5 +171,43 @@ abstract class BaseFormBusinessObject implements IBusinessObject
         };
 
         return $coerced !== null;
+    }
+
+    /**
+     * Build the per-issue error for one unbindable value: what
+     * was given (rendered readably, truncated), and what the
+     * declared type expects — including the representations
+     * that DO bind, so the caller can self-repair.
+     *
+     * @return array{field: string, problem: string, expected: string}
+     */
+    protected static function bindingIssue(object $instance, string $property, mixed $value): array
+    {
+        $type = (new \ReflectionProperty($instance, $property))->getType();
+        $typeName = $type instanceof \ReflectionNamedType ? $type->getName() : 'mixed';
+
+        $given = match (true) {
+            is_string($value) => "'".(mb_strlen($value) > 60 ? mb_substr($value, 0, 60).'…' : $value)."'",
+            is_bool($value) => $value ? 'true' : 'false',
+            is_int($value), is_float($value) => (string) $value,
+            is_array($value) => 'an array of '.count($value).' item(s)',
+            is_object($value) => 'an object ('.get_class($value).')',
+            default => gettype($value),
+        };
+
+        $expected = match ($typeName) {
+            'int' => 'An integer value (e.g. 42). Integers and integer strings are accepted.',
+            'float' => 'A numeric value (e.g. 12.50). Numbers and numeric strings are accepted.',
+            'bool' => 'A boolean value: true/false, 1/0, yes/no or on/off.',
+            'string' => 'A single text value (not an array or object).',
+            'array' => 'A list of values (an array).',
+            default => "A value matching the declared type ({$typeName}).",
+        };
+
+        return [
+            'field' => $property,
+            'problem' => "The value {$given} cannot be used for '{$property}'.",
+            'expected' => $expected,
+        ];
     }
 }

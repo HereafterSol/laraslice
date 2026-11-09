@@ -1,0 +1,1789 @@
+name: Projects
+feature_module: projects
+title: Projects
+version: 1.0.0
+description: 'Manages projects records and associated child items'
+author: null
+active: true
+workflow: false
+roles: {  }
+fields:
+  project_name:
+    name: project_name
+    label: 'Project Name'
+    type: string
+    nullable: false
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  project_summary:
+    name: project_summary
+    label: 'Project Summary'
+    type: text
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  project_admin:
+    name: project_admin
+    label: 'Project Admin'
+    type: integer
+    relation: user
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  start_date:
+    name: start_date
+    label: 'Start Date'
+    type: date
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  deadline:
+    name: deadline
+    label: Deadline
+    type: date
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  notes:
+    name: notes
+    label: Notes
+    type: text
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  category_id:
+    name: category_id
+    label: 'Category Id'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  client_id:
+    name: client_id
+    label: 'Client Id'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  team_id:
+    name: team_id
+    label: 'Team Id'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  feedback:
+    name: feedback
+    label: Feedback
+    type: text
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  manual_timelog:
+    name: manual_timelog
+    label: 'Manual Timelog'
+    type: string
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  client_view_task:
+    name: client_view_task
+    label: 'Client View Task'
+    type: string
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  allow_client_notification:
+    name: allow_client_notification
+    label: 'Allow Client Notification'
+    type: string
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  completion_percent:
+    name: completion_percent
+    label: 'Completion Percent'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  calculate_task_progress:
+    name: calculate_task_progress
+    label: 'Calculate Task Progress'
+    type: string
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  project_budget:
+    name: project_budget
+    label: 'Project Budget'
+    type: decimal
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  currency_id:
+    name: currency_id
+    label: 'Currency Id'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  hours_allocated:
+    name: hours_allocated
+    label: 'Hours Allocated'
+    type: decimal
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  status:
+    name: status
+    label: Status
+    type: string
+    nullable: true
+    default: 'in progress'
+    options:
+      'not started': 'Not Started'
+      'in progress': 'In Progress'
+      'on hold': 'On Hold'
+      finished: Finished
+      canceled: Canceled
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  added_by:
+    name: added_by
+    label: 'Added By'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: false
+    show_in_list: true
+  last_updated_by:
+    name: last_updated_by
+    label: 'Last Updated By'
+    type: integer
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: false
+    show_in_list: true
+  hash:
+    name: hash
+    label: Hash
+    type: text
+    nullable: true
+    default: null
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  public:
+    name: public
+    label: Public
+    type: boolean
+    nullable: true
+    default: false
+    options: {  }
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+models:
+  -
+    handle: project
+    table: projects
+    root: true
+    fields:
+      -
+        handle: project_name
+        label: 'Project Name'
+        type: string
+        required: true
+      -
+        handle: project_summary
+        label: 'Project Summary'
+        type: text
+        required: false
+      -
+        handle: project_admin
+        label: 'Project Admin'
+        type: integer
+        required: false
+      -
+        handle: start_date
+        label: 'Start Date'
+        type: timestamp
+        required: false
+      -
+        handle: deadline
+        label: Deadline
+        type: timestamp
+        required: false
+      -
+        handle: notes
+        label: Notes
+        type: text
+        required: false
+      -
+        handle: category_id
+        label: 'Category Id'
+        type: integer
+        required: false
+      -
+        handle: client_id
+        label: 'Client Id'
+        type: integer
+        required: false
+      -
+        handle: team_id
+        label: 'Team Id'
+        type: integer
+        required: false
+      -
+        handle: feedback
+        label: Feedback
+        type: text
+        required: false
+      -
+        handle: manual_timelog
+        label: 'Manual Timelog'
+        type: string
+        required: false
+      -
+        handle: client_view_task
+        label: 'Client View Task'
+        type: string
+        required: false
+      -
+        handle: allow_client_notification
+        label: 'Allow Client Notification'
+        type: string
+        required: false
+      -
+        handle: completion_percent
+        label: 'Completion Percent'
+        type: integer
+        required: false
+      -
+        handle: calculate_task_progress
+        label: 'Calculate Task Progress'
+        type: string
+        required: false
+      -
+        handle: project_budget
+        label: 'Project Budget'
+        type: decimal
+        required: false
+      -
+        handle: currency_id
+        label: 'Currency Id'
+        type: integer
+        required: false
+      -
+        handle: hours_allocated
+        label: 'Hours Allocated'
+        type: decimal
+        required: false
+      -
+        handle: status
+        label: Status
+        type: string
+        required: false
+      -
+        handle: added_by
+        label: 'Added By'
+        type: integer
+        required: false
+      -
+        handle: last_updated_by
+        label: 'Last Updated By'
+        type: integer
+        required: false
+      -
+        handle: hash
+        label: Hash
+        type: text
+        required: false
+      -
+        handle: public
+        label: Public
+        type: boolean
+        required: false
+      -
+        handle: project_short_code
+        label: 'Project Short Code'
+        type: string
+        required: false
+      -
+        handle: enable_miroboard
+        label: 'Enable Miroboard'
+        type: boolean
+        required: false
+      -
+        handle: miro_board_id
+        label: 'Miro Board Id'
+        type: string
+        required: false
+      -
+        handle: client_access
+        label: 'Client Access'
+        type: boolean
+        required: false
+    relations:
+      -
+        name: expenses_recurring
+        type: hasMany
+        model: expenses_recurring
+        foreign_key: project_id
+        table: expenses_recurring
+        fields:
+          -
+            handle: category_id
+            label: 'Category Id'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: currency_id
+            label: 'Currency Id'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: user_id
+            label: 'User Id'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: item_name
+            label: 'Item Name'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: day_of_month
+            label: 'Day Of Month'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: day_of_week
+            label: 'Day Of Week'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: payment_method
+            label: 'Payment Method'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: rotation
+            label: Rotation
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: billing_cycle
+            label: 'Billing Cycle'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: unlimited_recurring
+            label: 'Unlimited Recurring'
+            type: boolean
+            required: false
+            options: {  }
+          -
+            handle: price
+            label: Price
+            type: decimal
+            required: false
+            options: {  }
+          -
+            handle: bill
+            label: Bill
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: status
+            label: Status
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: description
+            label: Description
+            type: text
+            required: false
+            options: {  }
+          -
+            handle: purchase_from
+            label: 'Purchase From'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: issue_date
+            label: 'Issue Date'
+            type: date
+            required: true
+            options: {  }
+        document: null
+      -
+        name: invoice_recurring
+        type: hasMany
+        model: invoice_recurring
+        foreign_key: project_id
+        table: invoice_recurring
+        fields:
+          -
+            handle: currency_id
+            label: 'Currency Id'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: client_id
+            label: 'Client Id'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: user_id
+            label: 'User Id'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: issue_date
+            label: 'Issue Date'
+            type: datetime
+            required: false
+            options: {  }
+          -
+            handle: due_date
+            label: 'Due Date'
+            type: datetime
+            required: false
+            options: {  }
+          -
+            handle: sub_total
+            label: 'Sub Total'
+            type: decimal
+            required: false
+            options: {  }
+          -
+            handle: total
+            label: Total
+            type: decimal
+            required: false
+            options: {  }
+          -
+            handle: discount
+            label: Discount
+            type: decimal
+            required: false
+            options: {  }
+          -
+            handle: discount_type
+            label: 'Discount Type'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: status
+            label: Status
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: file
+            label: File
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: file_original_name
+            label: 'File Original Name'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: note
+            label: Note
+            type: text
+            required: false
+            options: {  }
+          -
+            handle: show_shipping_address
+            label: 'Show Shipping Address'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: day_of_month
+            label: 'Day Of Month'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: day_of_week
+            label: 'Day Of Week'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: payment_method
+            label: 'Payment Method'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: rotation
+            label: Rotation
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: billing_cycle
+            label: 'Billing Cycle'
+            type: integer
+            required: false
+            options: {  }
+          -
+            handle: client_can_stop
+            label: 'Client Can Stop'
+            type: boolean
+            required: false
+            options: {  }
+          -
+            handle: unlimited_recurring
+            label: 'Unlimited Recurring'
+            type: boolean
+            required: false
+            options: {  }
+          -
+            handle: shipping_address
+            label: 'Shipping Address'
+            type: text
+            required: false
+            options: {  }
+          -
+            handle: calculate_tax
+            label: 'Calculate Tax'
+            type: string
+            required: false
+            options: {  }
+        document: null
+      -
+        name: project_activity
+        type: hasMany
+        model: project_activity
+        foreign_key: project_id
+        table: project_activity
+        fields:
+          -
+            handle: activity
+            label: Activity
+            type: text
+            required: false
+            options: {  }
+        document: null
+      -
+        name: task_label_list
+        type: hasMany
+        model: task_label_list
+        foreign_key: project_id
+        table: task_label_list
+        fields:
+          -
+            handle: label_name
+            label: 'Label Name'
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: color
+            label: Color
+            type: string
+            required: false
+            options: {  }
+          -
+            handle: description
+            label: Description
+            type: string
+            required: false
+            options: {  }
+        document: null
+      -
+        name: expenses_recurring
+        type: hasMany
+        model: expenses_recurring
+        foreign_key: project_id
+      -
+        name: invoice_recurring
+        type: hasMany
+        model: invoice_recurring
+        foreign_key: project_id
+      -
+        name: project_activity
+        type: hasMany
+        model: project_activity
+        foreign_key: project_id
+      -
+        name: task_label_list
+        type: hasMany
+        model: task_label_list
+        foreign_key: project_id
+      - name: members
+        type: hasMany
+        model: ProjectMember
+        foreign_key: project_id
+      - name: files
+        type: hasMany
+        model: ProjectFile
+        foreign_key: project_id
+      - name: milestones
+        type: hasMany
+        model: ProjectMilestone
+        foreign_key: project_id
+      - name: tasks
+        type: hasMany
+        model: Task
+        foreign_key: project_id
+      - name: invoices
+        type: hasMany
+        model: Invoice
+        foreign_key: project_id
+      - name: orders
+        type: hasMany
+        model: Order
+        foreign_key: project_id
+      - name: projectTimeLogs
+        type: hasMany
+        model: ProjectTimeLog
+        foreign_key: project_id
+      - name: expenses
+        type: hasMany
+        model: Expense
+        foreign_key: project_id
+      - name: payments
+        type: hasMany
+        model: Payment
+        foreign_key: project_id
+      - name: discussion
+        type: hasMany
+        model: Discussion
+        foreign_key: project_id
+      - name: notes
+        type: hasMany
+        model: ProjectNote
+        foreign_key: project_id
+      - name: tickets
+        type: hasMany
+        model: Ticket
+        foreign_key: project_id
+      - name: rating
+        type: hasMany
+        model: ProjectRating
+        foreign_key: project_id
+  -
+    handle: expenses_recurring
+    table: expenses_recurring
+    root: false
+    fields:
+      -
+        handle: category_id
+        label: 'Category Id'
+        type: integer
+        required: false
+      -
+        handle: currency_id
+        label: 'Currency Id'
+        type: integer
+        required: false
+      -
+        handle: project_id
+        label: 'Project Id'
+        type: integer
+        required: false
+      -
+        handle: user_id
+        label: 'User Id'
+        type: integer
+        required: false
+      -
+        handle: created_by
+        label: 'Created By'
+        type: integer
+        required: false
+      -
+        handle: item_name
+        label: 'Item Name'
+        type: string
+        required: false
+      -
+        handle: day_of_month
+        label: 'Day Of Month'
+        type: integer
+        required: false
+      -
+        handle: day_of_week
+        label: 'Day Of Week'
+        type: integer
+        required: false
+      -
+        handle: payment_method
+        label: 'Payment Method'
+        type: string
+        required: false
+      -
+        handle: rotation
+        label: Rotation
+        type: string
+        required: false
+      -
+        handle: billing_cycle
+        label: 'Billing Cycle'
+        type: integer
+        required: false
+      -
+        handle: unlimited_recurring
+        label: 'Unlimited Recurring'
+        type: boolean
+        required: false
+      -
+        handle: price
+        label: Price
+        type: decimal
+        required: false
+      -
+        handle: bill
+        label: Bill
+        type: string
+        required: false
+      -
+        handle: status
+        label: Status
+        type: string
+        required: false
+      -
+        handle: description
+        label: Description
+        type: text
+        required: false
+      -
+        handle: added_by
+        label: 'Added By'
+        type: integer
+        required: false
+      -
+        handle: last_updated_by
+        label: 'Last Updated By'
+        type: integer
+        required: false
+      -
+        handle: purchase_from
+        label: 'Purchase From'
+        type: string
+        required: false
+      -
+        handle: issue_date
+        label: 'Issue Date'
+        type: date
+        required: false
+      -
+        handle: next_expense_date
+        label: 'Next Expense Date'
+        type: date
+        required: false
+      -
+        handle: immediate_expense
+        label: 'Immediate Expense'
+        type: boolean
+        required: false
+      -
+        handle: bank_account_id
+        label: 'Bank Account Id'
+        type: integer
+        required: false
+    relations:
+      -
+        name: project
+        type: belongsTo
+        model: project
+        foreign_key: project_id
+  -
+    handle: invoice_recurring
+    table: invoice_recurring
+    root: false
+    fields:
+      -
+        handle: currency_id
+        label: 'Currency Id'
+        type: integer
+        required: false
+      -
+        handle: project_id
+        label: 'Project Id'
+        type: integer
+        required: false
+      -
+        handle: client_id
+        label: 'Client Id'
+        type: integer
+        required: false
+      -
+        handle: user_id
+        label: 'User Id'
+        type: integer
+        required: false
+      -
+        handle: created_by
+        label: 'Created By'
+        type: integer
+        required: false
+      -
+        handle: issue_date
+        label: 'Issue Date'
+        type: datetime
+        required: false
+      -
+        handle: due_date
+        label: 'Due Date'
+        type: datetime
+        required: false
+      -
+        handle: sub_total
+        label: 'Sub Total'
+        type: decimal
+        required: false
+      -
+        handle: total
+        label: Total
+        type: decimal
+        required: false
+      -
+        handle: discount
+        label: Discount
+        type: decimal
+        required: false
+      -
+        handle: discount_type
+        label: 'Discount Type'
+        type: string
+        required: false
+      -
+        handle: status
+        label: Status
+        type: string
+        required: false
+      -
+        handle: file
+        label: File
+        type: string
+        required: false
+      -
+        handle: file_original_name
+        label: 'File Original Name'
+        type: string
+        required: false
+      -
+        handle: note
+        label: Note
+        type: text
+        required: false
+      -
+        handle: show_shipping_address
+        label: 'Show Shipping Address'
+        type: string
+        required: false
+      -
+        handle: day_of_month
+        label: 'Day Of Month'
+        type: integer
+        required: false
+      -
+        handle: day_of_week
+        label: 'Day Of Week'
+        type: integer
+        required: false
+      -
+        handle: payment_method
+        label: 'Payment Method'
+        type: string
+        required: false
+      -
+        handle: rotation
+        label: Rotation
+        type: string
+        required: false
+      -
+        handle: billing_cycle
+        label: 'Billing Cycle'
+        type: integer
+        required: false
+      -
+        handle: client_can_stop
+        label: 'Client Can Stop'
+        type: boolean
+        required: false
+      -
+        handle: unlimited_recurring
+        label: 'Unlimited Recurring'
+        type: boolean
+        required: false
+      -
+        handle: shipping_address
+        label: 'Shipping Address'
+        type: text
+        required: false
+      -
+        handle: added_by
+        label: 'Added By'
+        type: integer
+        required: false
+      -
+        handle: last_updated_by
+        label: 'Last Updated By'
+        type: integer
+        required: false
+      -
+        handle: calculate_tax
+        label: 'Calculate Tax'
+        type: string
+        required: false
+      -
+        handle: next_invoice_date
+        label: 'Next Invoice Date'
+        type: date
+        required: false
+      -
+        handle: immediate_invoice
+        label: 'Immediate Invoice'
+        type: boolean
+        required: false
+      -
+        handle: bank_account_id
+        label: 'Bank Account Id'
+        type: integer
+        required: false
+    relations:
+      -
+        name: project
+        type: belongsTo
+        model: project
+        foreign_key: project_id
+  -
+    handle: project_activity
+    table: project_activity
+    root: false
+    fields:
+      -
+        handle: project_id
+        label: 'Project Id'
+        type: integer
+        required: false
+      -
+        handle: activity
+        label: Activity
+        type: text
+        required: false
+    relations:
+      -
+        name: project
+        type: belongsTo
+        model: project
+        foreign_key: project_id
+  -
+    handle: task_label_list
+    table: task_label_list
+    root: false
+    fields:
+      -
+        handle: project_id
+        label: 'Project Id'
+        type: integer
+        required: false
+      -
+        handle: label_name
+        label: 'Label Name'
+        type: string
+        required: false
+      -
+        handle: color
+        label: Color
+        type: string
+        required: false
+      -
+        handle: description
+        label: Description
+        type: string
+        required: false
+    relations:
+      -
+        name: project
+        type: belongsTo
+        model: project
+        foreign_key: project_id
+permissions:
+  - project.view
+  - project.create
+  - project.edit
+  - project.delete
+access:
+  own_scope:
+    -
+      field: client_id
+    -
+      pivot: project_members
+      foreign_key: project_id
+      user_key: user_id
+namespace: App\Slices\ERP\Adjudication\Work\Projects
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    default_sort:
+      field: project_short_code
+      direction: desc
+    columns:
+      -
+        handle: project_short_code
+        key: project_short_code
+        label: 'Code'
+        formatter: code_badge
+        type: code_badge
+        sortable: true
+        inferred_from: editColumn
+      -
+        handle: project_name
+        key: project_name
+        label: 'Project Name'
+        formatter: text_with_badge
+        type: text_with_badge
+        sortable: true
+        inferred_from: editColumn
+        badge_from: priority
+      -
+        handle: members
+        key: members
+        label: Members
+        formatter: user_stack
+        type: user_stack
+        sortable: true
+        inferred_from: addColumn
+      -
+        handle: start_date
+        key: start_date
+        label: 'Start Date'
+        formatter: text
+        type: text
+        sortable: true
+        inferred_from: getColumns
+      -
+        handle: deadline
+        key: deadline
+        label: Deadline
+        formatter: date_overdue
+        type: date_overdue
+        sortable: true
+        inferred_from: editColumn
+      -
+        handle: client_id
+        key: client_id
+        label: Client
+        formatter: composite_user
+        type: composite_user
+        subtitle_from: client.clientDetail.company_name
+        sortable: true
+        inferred_from: getColumns
+      -
+        handle: status
+        key: status
+        label: Status
+        formatter: text
+        type: text
+        progress_field: completion_percent
+        inline_edit: true
+        options:
+          - in progress
+          - not started
+          - on hold
+          - canceled
+          - finished
+        sortable: true
+        inferred_from: addColumn
+    searchable:
+      - project_name
+      - project_summary
+      - notes
+      - feedback
+      - manual_timelog
+    search_placeholder: 'Search projects...'
+    quick_filters:
+      -
+        handle: status
+        label: Status
+        display: select
+    sidebar_filters:
+      -
+        handle: start_date
+        label: 'Start Date'
+        type: date_range
+      -
+        handle: deadline
+        label: Deadline
+        type: date_range
+      -
+        handle: category_id
+        label: 'Category Id'
+        type: select
+        options_from: 'relation:category_id'
+      -
+        handle: client_id
+        label: 'Client Id'
+        type: select
+        options_from: 'relation:client_id'
+    summary_cards: {  }
+    views:
+      - table
+      - calendar
+    columns_menu: false
+    default_view: table
+    inline_edit:
+      - status
+    bulk_actions:
+      -
+        handle: export
+        label: 'Export Selected'
+        type: native
+        icon: download
+      -
+        handle: delete
+        label: 'Delete Selected'
+        type: native
+        icon: trash-2
+        danger: true
+    row_actions:
+      display: dropdown
+      items:
+        -
+          handle: view
+          label: View
+          icon: eye
+          placement: inline
+        -
+          handle: edit
+          label: Edit
+          icon: pencil
+          placement: dropdown
+        -
+          handle: delete
+          label: Delete
+          icon: trash-2
+          placement: dropdown
+          danger: true
+    actions:
+      -
+        handle: project_template
+        label: 'Project Template'
+        kind: route
+        route: erp_adjudication_work_project_templates.index
+        icon: layers
+    import:
+      format: csv
+      key: project_short_code
+      columns:
+        'Project Name': project_name
+        'Short Code': project_short_code
+        'Start Date': start_date
+        Deadline: deadline
+        Status: status
+        'Project Budget': project_budget
+        Summary: project_summary
+  dashboard:
+    enabled: true
+    widgets:
+    - type: counter
+      handle: total
+      title: Projects
+      label: Total
+      aggregate: count
+      order: 40
+      roles:
+      - admin
+    - type: counter
+      handle: my_projects
+      title: My Projects
+      label: Total
+      aggregate: count
+      scope: own
+      order: 10
+      roles:
+      - employee
+      - client
+  forms:
+    sections:
+      -
+        key: general
+        title: 'General Information'
+        grid: 2
+        fields:
+          -
+            handle: project_name
+            span: 1
+            is_searchable: false
+          -
+            handle: project_summary
+            span: 2
+            is_searchable: false
+          -
+            handle: project_admin
+            span: 1
+            is_searchable: false
+          -
+            handle: start_date
+            span: 1
+            is_searchable: false
+          -
+            handle: deadline
+            span: 1
+            is_searchable: false
+          -
+            handle: notes
+            span: 2
+            is_searchable: false
+      -
+        key: additional_1
+        title: 'Additional Details'
+        grid: 2
+        fields:
+          -
+            handle: category_id
+            span: 1
+            is_searchable: true
+          -
+            handle: client_id
+            span: 1
+            is_searchable: true
+          -
+            handle: team_id
+            span: 1
+            is_searchable: true
+          -
+            handle: feedback
+            span: 2
+            is_searchable: false
+          -
+            handle: manual_timelog
+            span: 1
+            is_searchable: false
+          -
+            handle: client_view_task
+            span: 1
+            is_searchable: false
+      -
+        key: additional_2
+        title: 'Additional Details'
+        grid: 2
+        fields:
+          -
+            handle: allow_client_notification
+            span: 1
+            is_searchable: false
+          -
+            handle: completion_percent
+            span: 1
+            is_searchable: false
+          -
+            handle: calculate_task_progress
+            span: 1
+            is_searchable: false
+          -
+            handle: project_budget
+            span: 1
+            is_searchable: false
+          -
+            handle: currency_id
+            span: 1
+            is_searchable: true
+          -
+            handle: hours_allocated
+            span: 1
+            is_searchable: false
+      -
+        key: additional_3
+        title: 'Additional Details'
+        grid: 2
+        fields:
+          -
+            handle: status
+            span: 1
+            is_searchable: false
+          -
+            handle: added_by
+            span: 1
+            is_searchable: false
+          -
+            handle: last_updated_by
+            span: 1
+            is_searchable: false
+          -
+            handle: hash
+            span: 2
+            is_searchable: false
+          -
+            handle: public
+            span: 1
+            is_searchable: false
+      -
+        key: items_expenses_recurring
+        title: 'Expenses Recurring'
+        grid: 1
+        fields:
+          -
+            handle: expenses_recurring
+            type: repeater
+            label: 'Expenses Recurring'
+            model: expenses_recurring
+            table: expenses_recurring
+            foreign_key: project_id
+            repeater_fields:
+              - { handle: category_id, label: 'Category Id', type: integer, required: false, options: {  } }
+              - { handle: currency_id, label: 'Currency Id', type: integer, required: false, options: {  } }
+              - { handle: user_id, label: 'User Id', type: integer, required: false, options: {  } }
+              - { handle: item_name, label: 'Item Name', type: string, required: false, options: {  } }
+              - { handle: day_of_month, label: 'Day Of Month', type: integer, required: false, options: {  } }
+              - { handle: day_of_week, label: 'Day Of Week', type: integer, required: false, options: {  } }
+              - { handle: payment_method, label: 'Payment Method', type: string, required: false, options: {  } }
+              - { handle: rotation, label: Rotation, type: string, required: false, options: {  } }
+              - { handle: billing_cycle, label: 'Billing Cycle', type: integer, required: false, options: {  } }
+              - { handle: unlimited_recurring, label: 'Unlimited Recurring', type: boolean, required: false, options: {  } }
+              - { handle: price, label: Price, type: decimal, required: false, options: {  } }
+              - { handle: bill, label: Bill, type: string, required: false, options: {  } }
+              - { handle: status, label: Status, type: string, required: false, options: {  } }
+              - { handle: description, label: Description, type: text, required: false, options: {  } }
+              - { handle: purchase_from, label: 'Purchase From', type: string, required: false, options: {  } }
+              - { handle: issue_date, label: 'Issue Date', type: date, required: true, options: {  } }
+            document: null
+            add_button_text: 'Add Expenses Recurring'
+      -
+        key: items_invoice_recurring
+        title: 'Invoice Recurring'
+        grid: 1
+        fields:
+          -
+            handle: invoice_recurring
+            type: repeater
+            label: 'Invoice Recurring'
+            model: invoice_recurring
+            table: invoice_recurring
+            foreign_key: project_id
+            repeater_fields:
+              - { handle: currency_id, label: 'Currency Id', type: integer, required: false, options: {  } }
+              - { handle: client_id, label: 'Client Id', type: integer, required: false, options: {  } }
+              - { handle: user_id, label: 'User Id', type: integer, required: false, options: {  } }
+              - { handle: issue_date, label: 'Issue Date', type: datetime, required: false, options: {  } }
+              - { handle: due_date, label: 'Due Date', type: datetime, required: false, options: {  } }
+              - { handle: sub_total, label: 'Sub Total', type: decimal, required: false, options: {  } }
+              - { handle: total, label: Total, type: decimal, required: false, options: {  } }
+              - { handle: discount, label: Discount, type: decimal, required: false, options: {  } }
+              - { handle: discount_type, label: 'Discount Type', type: string, required: false, options: {  } }
+              - { handle: status, label: Status, type: string, required: false, options: {  } }
+              - { handle: file, label: File, type: string, required: false, options: {  } }
+              - { handle: file_original_name, label: 'File Original Name', type: string, required: false, options: {  } }
+              - { handle: note, label: Note, type: text, required: false, options: {  } }
+              - { handle: show_shipping_address, label: 'Show Shipping Address', type: string, required: false, options: {  } }
+              - { handle: day_of_month, label: 'Day Of Month', type: integer, required: false, options: {  } }
+              - { handle: day_of_week, label: 'Day Of Week', type: integer, required: false, options: {  } }
+              - { handle: payment_method, label: 'Payment Method', type: string, required: false, options: {  } }
+              - { handle: rotation, label: Rotation, type: string, required: false, options: {  } }
+              - { handle: billing_cycle, label: 'Billing Cycle', type: integer, required: false, options: {  } }
+              - { handle: client_can_stop, label: 'Client Can Stop', type: boolean, required: false, options: {  } }
+              - { handle: unlimited_recurring, label: 'Unlimited Recurring', type: boolean, required: false, options: {  } }
+              - { handle: shipping_address, label: 'Shipping Address', type: text, required: false, options: {  } }
+              - { handle: calculate_tax, label: 'Calculate Tax', type: string, required: false, options: {  } }
+            document: null
+            add_button_text: 'Add Invoice Recurring'
+      -
+        key: items_project_activity
+        title: 'Project Activity'
+        grid: 1
+        fields:
+          -
+            handle: project_activity
+            type: repeater
+            label: 'Project Activity'
+            model: project_activity
+            table: project_activity
+            foreign_key: project_id
+            repeater_fields:
+              - { handle: activity, label: Activity, type: text, required: false, options: {  } }
+            document: null
+            add_button_text: 'Add Project Activity'
+      -
+        key: items_task_label_list
+        title: 'Task Label List'
+        grid: 1
+        fields:
+          -
+            handle: task_label_list
+            type: repeater
+            label: 'Task Label List'
+            model: task_label_list
+            table: task_label_list
+            foreign_key: project_id
+            repeater_fields:
+              - { handle: label_name, label: 'Label Name', type: string, required: false, options: {  } }
+              - { handle: description, label: Description, type: string, required: false, options: {  } }
+              - { handle: color, label: Color, type: string, required: false, options: {  } }
+            document: null
+            add_button_text: 'Add Task Label List'
+  show:
+    tabs:
+      -
+        handle: overview
+        label: Overview
+        type: fields
+        relation: null
+      -
+        handle: members
+        label: Members
+        type: relation
+        relation: members
+      -
+        handle: files
+        label: Files
+        type: relation
+        relation: files
+      -
+        handle: milestones
+        label: Milestones
+        type: relation
+        relation: milestones
+      -
+        handle: tasks
+        label: Tasks
+        type: relation
+        relation: tasks
+      -
+        handle: taskboard
+        label: 'Task Board'
+        type: relation
+        relation: tasks
+        render: board
+        group_by: board_column_id
+      -
+        handle: gantt
+        label: 'Gantt Chart'
+        type: relation
+        relation: tasks
+        render: gantt
+      -
+        handle: invoices
+        label: Invoices
+        type: relation
+        relation: invoices
+      -
+        handle: orders
+        label: Orders
+        type: relation
+        relation: orders
+      -
+        handle: timelogs
+        label: Timesheet
+        type: relation
+        relation: projectTimeLogs
+      -
+        handle: expenses
+        label: Expenses
+        type: relation
+        relation: expenses
+      -
+        handle: miroboard
+        label: Miroboard
+        type: relation
+        relation: miroboard
+      -
+        handle: payments
+        label: Payments
+        type: relation
+        relation: payments
+      -
+        handle: discussion
+        label: Discussion
+        type: relation
+        relation: discussion
+      -
+        handle: notes
+        label: Note
+        type: relation
+        relation: notes
+      -
+        handle: rating
+        label: Rating
+        type: relation
+        relation: rating
+      -
+        handle: burndown_chart
+        label: 'Burndown Chart'
+        type: chart
+        chart: burndown
+        relation: tasks
+      -
+        handle: activity
+        label: Activity
+        type: audit
+        relation: null
+      -
+        handle: tickets
+        label: Tickets
+        type: relation
+        relation: tickets
+    exclude_tabs:
+      - miroboard
+      - expenses_recurring
+      - expensesRecurring
+      - invoice_recurring
+      - invoiceRecurring
+      - task_label_list
+      - taskLabelList
+    composition: overview
+    detail_fields: none
+    stats: none
+    widgets:
+      -
+        handle: project_progress
+        type: gauge
+        title: 'Project Progress'
+        value:
+          field: completion_percent
+        max: 100
+        variant: semicircle
+        color: '#28a745'
+        fields:
+          -
+            label: 'Start Date'
+            from: start_date
+            type: date
+          -
+            label: Deadline
+            from: deadline
+            type: date
+      -
+        handle: tasks_by_column
+        type: chart
+        chart: pie
+        title: Tasks
+        relation: tasks
+        group_by: board_column_id
+        labels:
+          1: Incomplete
+          2: 'To Do'
+          3: Doing
+          4: Completed
+        colors:
+          1: '#d21010'
+          2: '#f5c308'
+          3: '#00b5ff'
+          4: '#679c0d'
+        legend: labels
+      -
+        handle: hours_logged_bars
+        type: bars
+        title: 'Hours Logged'
+        style: columns
+        bars:
+          -
+            label: Planned
+            color: '#16a34a'
+            field: hours_allocated
+            decimals: 2
+          -
+            label: Actual
+            color: '#dc2626'
+            relation: projectTimeLogs
+            aggregate: sum
+            column: total_hours
+            decimals: 2
+      -
+        handle: project_budget_bars
+        type: bars
+        title: 'Project Budget'
+        style: columns
+        bars:
+          -
+            label: Planned
+            color: '#16a34a'
+            field: project_budget
+          -
+            label: Actual
+            color: '#dc2626'
+            relation: invoices
+            aggregate: sum
+            column: total
+      -
+        handle: statistics_overview
+        type: stats
+        title: Statistics
+        placement: rail
+        layout: cards
+        columns: 2
+        heading: Statistics
+        measures:
+          -
+            label: 'Project Budget'
+            field: project_budget
+            default: 0
+            icon: coins
+          -
+            label: 'Hours Logged'
+            relation: projectTimeLogs
+            aggregate: sum
+            column: total_hours
+            default: 0
+            icon: clock
+      -
+        handle: statistics_money
+        type: stats
+        title: Statistics
+        placement: rail
+        layout: cards
+        columns: 3
+        measures:
+          -
+            label: Earnings
+            relation: invoices
+            aggregate: sum
+            column: total
+            prefix: PKR
+            decimals: 2
+            default: 0
+            icon: coins
+          -
+            label: Expenses
+            relation: expenses
+            aggregate: sum
+            column: price
+            prefix: PKR
+            decimals: 2
+            default: 0
+            icon: coins
+          -
+            label: Profit
+            minus:
+              -
+                relation: invoices
+                aggregate: sum
+                column: total
+              -
+                relation: expenses
+                aggregate: sum
+                column: price
+            prefix: PKR
+            decimals: 2
+            icon: coins
+      -
+        handle: project_details_text
+        type: text
+        title: 'Project Details'
+        from: project_summary
+    identity:
+      name: client.name
+      subtitle:
+        - client.clientDetail.company_name
+      title: Client
+      placement: rail
+      avatar: false
+  pages:
+    list:
+      placement: below-facets-left
+navigation:
+  label: Projects
+  url: /erp/adjudication/work/projects
+  icon: package
+  order: 150
+  group: Work
+app: ERP
+super_domain: ERP
+module: Adjudication
+domain: Adjudication
+sub_domain: Work
+table_prefix: null
+multitenant: true
+tenant_key: company_id
+porting_notes:
+  - 'Source controller ProjectSettingController.php has custom method `statusUpdate()` — implement manually in ProjectsService'
+  - 'Source controller ProjectSettingController.php has custom method `changeStatus()` — implement manually in ProjectsService'
+  - 'Source controller ProjectSettingController.php has custom method `setDefault()` — implement manually in ProjectsService'
+  - 'Source controller ProjectSettingController.php has custom method `createCategory()` — implement manually in ProjectsService'
+  - 'Source controller ProjectSettingController.php has custom method `saveProjectCategory()` — implement manually in ProjectsService'
+tables:
+  - projects
+  - expenses_recurring
+  - invoice_recurring
+  - project_activity
+  - task_label_list

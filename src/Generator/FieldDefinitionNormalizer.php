@@ -81,7 +81,13 @@ final class FieldDefinitionNormalizer
                     throw new SliceFieldDefinitionException("Field '{$name}' requires between 1 and 50 options when options are declared.");
                 }
                 foreach ($options as $value => $optionLabel) {
-                    if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $value) || ! is_string($optionLabel) || ! BladeSafeText::isSafe($optionLabel)) {
+                    // Spaces are legal in option VALUES (real-world enum
+                    // vocabularies store them — a project status of
+                    // "in progress" must be declarable). Quotes, angle
+                    // brackets and commas stay excluded: a comma would
+                    // corrupt the generated `in:` validation rule and the
+                    // rest endanger the rendered markup.
+                    if (! is_string($value) || ! preg_match('/^[A-Za-z0-9_. -]{1,80}$/', $value) || ! is_string($optionLabel) || ! BladeSafeText::isSafe($optionLabel)) {
                         throw new SliceFieldDefinitionException("Field '{$name}' has an invalid option.");
                     }
                 }
@@ -180,8 +186,14 @@ final class FieldDefinitionNormalizer
             // date-domain column is a date input even when the
             // storage type is datetime — people pick days, not
             // timestamps, for leave_date / start_date / *_on.
+            // The date-domain names are the ones source systems
+            // consistently use for day-granularity values:
+            // *_date, *_on, valid *_till, date_of_birth, a bare
+            // `date`, `deadline`, `dob` (the comparative test
+            // found every one of these rendered datetime-local
+            // on the ported ERP).
             $input = $types[$type]['input'];
-            if (in_array($type, ['datetime', 'timestamp'], true) && preg_match('/(_date|_on)$/', $name)) {
+            if (in_array($type, ['datetime', 'timestamp'], true) && self::isDateDomainName($name)) {
                 $input = 'date';
             }
 
@@ -213,12 +225,24 @@ final class FieldDefinitionNormalizer
                 'rules' => $rules,
                 'type' => $type,
                 'schema' => $schema,
-                'form' => $this->renderFormField($name, $label, ! empty($options) ? 'select' : $input, $required, $default, $options),
+                'form' => $this->renderFormField($name, $label, ! empty($options) ? 'select' : $input, $required, $default, $options, is_string($definition['relation'] ?? null) ? $definition['relation'] : null),
                 'migration' => $columnExpression.';',
                 'default' => $default,
                 'nullable' => $nullable,
                 'options' => $options,
                 'encrypted' => $encrypted,
+                // Declared Eloquent cast (the field-level
+                // `cast` key, absorbed vocabulary 7 Nov):
+                // carried verbatim so SliceGenerator can
+                // emit it into the model's $casts.
+                'cast' => isset($definition['cast']) && is_string($definition['cast']) && $definition['cast'] !== '' ? $definition['cast'] : null,
+                // Declared length, carried verbatim like `cast`:
+                // for decimal/float fields this is the "p,s"
+                // precision the migration expression above was
+                // baked from — SliceGenerator records it in the
+                // manifest so a regen from the Heart keeps the
+                // precision instead of reverting to (12,2).
+                'length' => $length,
                 'relation' => is_array($definition['relation'] ?? null) ? $definition['relation'] : null,
                 'hidden' => $hidden,
                 'show_in_form' => $showInForm,
@@ -256,7 +280,7 @@ final class FieldDefinitionNormalizer
         return "public {$type} \${$name} = ".var_export($default, true).';';
     }
 
-    private function renderFormField(string $name, string $label, string $type, bool $required, mixed $default, array $options): string
+    private function renderFormField(string $name, string $label, string $type, bool $required, mixed $default, array $options, ?string $relation = null): string
     {
         $safeLabel = htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $requiredHtml = $required ? ' required' : '';
@@ -264,14 +288,27 @@ final class FieldDefinitionNormalizer
         $defaultExpression = var_export($default, true);
         $valueExpression = "old('{$name}', \$form->{$name} ?? {$defaultExpression})";
 
-        if ($type === 'select' || $type === 'foreign_id' || str_ends_with($name, '_id')) {
-            $baseRel = Str::replaceLast('_id', '', $name);
+        // A declared relation makes ANY field a relationship
+        // picker — including source columns that break the *_id
+        // convention (award_to → users, project_admin → users):
+        // the controller's options resolver synthesizes the
+        // relation's conventional options var for exactly these
+        // declarations, so the form must ask for it by that name.
+        // The bare *_id suffix is NOT enough on its own: a
+        // string-typed *_id is a human code, not a foreign key
+        // (employee_details.employee_id stores 'EMP-12') — forcing
+        // it into a picker leaves the stored code unmatched by any
+        // option, so an untouched edit submits '' and wipes it
+        // (Gate T A2d). Real string FKs declare their relation.
+        $suffixPicker = str_ends_with($name, '_id') && ! in_array($type, ['text', 'string', 'textarea'], true);
+        if ($type === 'select' || $type === 'foreign_id' || $suffixPicker || $relation !== null) {
+            $baseRel = str_ends_with($name, '_id') ? Str::replaceLast('_id', '', $name) : ($relation ?? $name);
             $optionsVar = Str::camel(Str::plural($baseRel)).'Options';
             $quickStoreUrlVar = Str::camel(Str::plural($baseRel)).'QuickStoreUrl';
             $requiredBool = $required ? 'true' : 'false';
             $cleanTitle = str_ends_with($name, '_id') ? Str::headline($baseRel) : $safeLabel;
 
-            if (empty($options) || str_ends_with($name, '_id') || $type === 'foreign_id') {
+            if (empty($options) || str_ends_with($name, '_id') || $type === 'foreign_id' || $relation !== null) {
                 return <<<BLADE
                 <div class="space-y-1.5">
                     <x-ui.combobox-relationship
@@ -329,6 +366,18 @@ BLADE;
 BLADE;
         }
 
+        // Date-family inputs accept only their own wire format
+        // (Y-m-d / Y-m-d\TH:i): a stored datetime string rendered
+        // raw is invalid, so the browser shows the field empty
+        // and an untouched edit submits '' — silently wiping the
+        // stored date (comparative Gate T A2d: employee joining
+        // dates nulled by an unrelated edit). Format the value
+        // exactly as BladeFieldInjector does.
+        if ($type === 'date' || $type === 'datetime-local') {
+            $format = $type === 'date' ? 'Y-m-d' : 'Y-m-d\\TH:i';
+            $valueExpression = "old('{$name}', ! empty(\$form->{$name}) ? \\Illuminate\\Support\\Carbon::parse(\$form->{$name})->format('{$format}') : {$defaultExpression})";
+        }
+
         $inputType = $type === 'decimal' ? 'number' : $type;
         $step = $type === 'decimal' ? ' step="0.01"' : '';
 
@@ -342,14 +391,28 @@ BLADE;
     }
 
     /**
+     * Day-granularity field names: a bare `date`, `deadline`
+     * or `dob`, or any *_date / *_on / *_till / *_birth name.
+     * Time-of-day names (logged_at, clock_in_at, *_at) are
+     * deliberately NOT date-domain — they keep their
+     * datetime-local input.
+     */
+    public static function isDateDomainName(string $name): bool
+    {
+        return in_array($name, ['date', 'deadline', 'dob'], true)
+            || preg_match('/(_date|_on|_till|_birth)$/', $name) === 1;
+    }
+
+    /**
      * Audit/system columns that exist for the record's
      * bookkeeping, never for a person to type: author stamps
-     * (*_by), approval stamps, and cross-system event links.
+     * (*_by), approval stamps, cross-system event links, and
+     * server-generated public-link tokens (hash).
      * Mirrors the Body v2 system_fields rule.
      */
     public static function isSystemField(string $name): bool
     {
-        return in_array($name, ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'ip_address'], true)
+        return in_array($name, ['added_by', 'last_updated_by', 'created_by', 'updated_by', 'approved_by', 'approved_at', 'event_id', 'ip_address', 'hash'], true)
             || str_ends_with($name, '_by')
             // Server-stamped network values (clock_in_ip,
             // clock_out_ip, login_ip, …): the server records

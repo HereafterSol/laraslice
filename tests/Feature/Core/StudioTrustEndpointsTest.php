@@ -21,15 +21,27 @@ class StudioTrustEndpointsTest extends TestCase
         if (! is_dir($dir)) {
             mkdir($dir, 0777, true);
         }
+        // Seeded in the shape DeclarationHistory::record() actually
+        // writes — changes keyed by 'path' with kind/from/to, and
+        // entries carrying 'actor' but no 'command'. (The previous
+        // version of this test seeded a fictional 'file'/'action'
+        // shape that matched the endpoint's own wrong read, so the
+        // suite stayed green while every real slice read back
+        // "0 change(s)" — F3, Day-2 drill.)
         $index = [
             'version' => 1,
             'state' => [],
             'entries' => [
-                ['id' => '001', 'recorded_at' => '2026-11-01T10:00:00+00:00', 'actor' => 'test', 'command' => 'slice:cache', 'changes' => [
-                    ['file' => 'app/Slices/ERP/Finance/Invoices/slice.yaml', 'action' => 'changed'],
-                    ['file' => 'app/Slices/ERP/Work/Tasks/slice.yaml', 'action' => 'changed'],
+                ['id' => '001', 'recorded_at' => '2026-11-01T10:00:00+00:00', 'actor' => 'cli', 'changes' => [
+                    ['path' => 'app/Slices/ERP/Finance/Invoices/slice.yaml', 'kind' => 'changed', 'from' => 'aaa', 'to' => 'bbb'],
+                    ['path' => 'app/Slices/ERP/Work/Tasks/slice.yaml', 'kind' => 'changed', 'from' => 'ccc', 'to' => 'ddd'],
                 ]],
-                ['id' => '002', 'recorded_at' => '2026-11-02T10:00:00+00:00', 'actor' => 'test', 'command' => 'slice:sync', 'changes' => [
+                ['id' => '002', 'recorded_at' => '2026-11-02T10:00:00+00:00', 'actor' => 'cli', 'changes' => [
+                    ['path' => 'app/Slices/ERP/Finance/Invoices/slice.yaml', 'kind' => 'changed', 'from' => 'bbb', 'to' => 'eee'],
+                ]],
+                // Legacy/hand-written entries keyed by 'file' (and
+                // carrying an explicit command) must still read.
+                ['id' => '003', 'recorded_at' => '2026-11-03T10:00:00+00:00', 'actor' => 'test', 'command' => 'slice:sync', 'changes' => [
                     ['file' => 'app/Slices/ERP/Finance/Invoices/slice.yaml', 'action' => 'changed'],
                 ]],
             ],
@@ -41,10 +53,14 @@ class StudioTrustEndpointsTest extends TestCase
             $response = $controller->declarationHistory(Request::create('/laraslice/wizard/declaration-history?name=Invoices'));
             $data = json_decode($response->getContent(), true)['data'];
 
-            $this->assertCount(2, $data, 'both Invoices entries, Tasks-only files excluded');
-            $this->assertSame('002', $data[0]['id'], 'newest first');
-            $this->assertSame(['app/Slices/ERP/Finance/Invoices/slice.yaml'], $data[0]['files']);
-            $this->assertCount(1, $data[1]['files'], 'the mixed entry keeps only the Invoices file');
+            $this->assertCount(3, $data, 'all three Invoices entries, Tasks-only files excluded');
+            $this->assertSame('003', $data[0]['id'], 'newest first');
+            $this->assertSame('slice:sync', $data[0]['command'], 'an explicit command wins');
+            $this->assertSame(['app/Slices/ERP/Finance/Invoices/slice.yaml'], $data[0]['files'], 'legacy file-keyed changes still attribute');
+            $this->assertSame('002', $data[1]['id']);
+            $this->assertSame(['app/Slices/ERP/Finance/Invoices/slice.yaml'], $data[1]['files'], 'real ledger entries attribute by path');
+            $this->assertSame('cli', $data[1]['command'], 'command falls back to the recorded actor, as the CLI prints it');
+            $this->assertCount(1, $data[2]['files'], 'the mixed entry keeps only the Invoices file');
 
             $empty = $controller->declarationHistory(Request::create('/laraslice/wizard/declaration-history?name=Nope'));
             $this->assertSame([], json_decode($empty->getContent(), true)['data']);

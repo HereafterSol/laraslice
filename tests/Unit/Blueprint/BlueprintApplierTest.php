@@ -150,6 +150,87 @@ final class BlueprintApplierTest extends TestCase
         $this->assertSame('E-Commerce', $manifest['navigation']['group']);
     }
 
+    public function test_declared_belongs_to_relations_reach_the_generated_heart(): void
+    {
+        // F10 (Day-2 drill): a blueprint declaring an `employee`
+        // belongsTo generated a Heart with `relations: { }` — the
+        // applier never passed the relations to the generator,
+        // and its manifest normalization stripped the field-level
+        // declaration too. The picker then had nothing declared
+        // to resolve against.
+        $path = $this->temporaryDirectory.'/training-record.slice.yaml';
+        file_put_contents($path, <<<'YAML'
+            schema_version: 1
+            name: 'Training Record'
+            handle: training_record
+            domain: HR
+            description: 'Employee training records.'
+            models:
+              -
+                handle: training_record
+                table: training_records
+                root: true
+                fields:
+                  -
+                    handle: employee_id
+                    label: Employee
+                    type: foreign_id
+                    required: true
+                  -
+                    handle: course_name
+                    label: Course
+                    type: string
+                    required: true
+                relations:
+                  -
+                    name: employee
+                    type: belongsTo
+                    model: employee_detail
+                    foreign_key: employee_id
+                    table: employee_details
+            YAML);
+
+        $blueprint = (new BlueprintValidator)->validate((new BlueprintLoader)->load($path));
+        $plan = (new BlueprintPlanner)->plan($blueprint, $this->temporaryDirectory.'/Slices');
+        $target = (new BlueprintApplier)->apply($blueprint, $plan, $this->temporaryDirectory.'/Slices', 'App\\Slices');
+
+        $manifest = \LaraSlice\Core\Discovery\ManifestRepository::read($target.'/slice.yaml');
+        $rootModel = current(array_filter($manifest['models'] ?? [], static fn (array $m): bool => ($m['root'] ?? false) === true));
+        $this->assertIsArray($rootModel);
+        $this->assertSame(
+            [['name' => 'employee', 'type' => 'belongsTo', 'model' => 'employee_detail', 'foreign_key' => 'employee_id', 'table' => 'employee_details']],
+            $rootModel['relations'] ?? null,
+            'the declared belongsTo must land on the Heart root model verbatim'
+        );
+        $this->assertSame(
+            ['name' => 'employee', 'model' => 'employee_detail'],
+            $manifest['fields']['employee_id']['relation'] ?? null,
+            'the field entry keeps its declared relation'
+        );
+        $this->assertSame('employee_details', $manifest['fields']['employee_id']['references'] ?? null);
+
+        $model = file_get_contents($target.'/Models/TrainingRecord.php');
+        $this->assertStringContainsString('function employee(', $model);
+        $this->assertStringContainsString("modelClass('EmployeeDetail')", $model);
+
+        // The directory column for the FK carries the declared
+        // relation + target table into the Heart: listing rows
+        // are BusinessObjects with no relation method to walk,
+        // so the column declaration is the renderer's only
+        // truthful pointer at the target record (F10 live trap:
+        // employee_details #12 rendered as users #12).
+        $employeeColumn = null;
+        foreach ($manifest['ui']['directory']['columns'] ?? [] as $column) {
+            if (($column['handle'] ?? $column['key'] ?? null) === 'employee_id') {
+                $employeeColumn = $column;
+                break;
+            }
+        }
+        $this->assertIsArray($employeeColumn);
+        $this->assertSame('employee', $employeeColumn['relation'] ?? null);
+        $this->assertSame('employee_details', $employeeColumn['label_table'] ?? null);
+    }
+
     private function blueprintAndPlan(): array
     {
         $path = dirname(__DIR__, 3).'/blueprints/examples/service-desk.slice.yaml';

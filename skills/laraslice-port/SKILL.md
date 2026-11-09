@@ -26,9 +26,17 @@ exactly one home in the map at the bottom.
    rendered. One behaviour per investigation; a prediction
    before inspection; a check that can prove you wrong.
    Produce `porting-architecture-plan.json` before any
-   generation. → `references/extraction-workflow.md`
+   generation. Recon also decides the port's **scope**
+   (in / skip-with-reason / undecided — undecided scope is
+   an explicit owner-decision line, never a late surprise),
+   records a **size class**, and creates the port's single
+   checklist, `porting/port-matrix.csv`, from extraction —
+   including a **behaviour inventory**: the source's
+   controller behaviours (defaults, computed writes,
+   document builders, custom actions) as matrix rows, not
+   passive notes. → `references/extraction-workflow.md`
    (§12–14), `references/enterprise-and-analysis.md`
-   (§16.5 AI-first analysis).
+   (§16.5 AI-first analysis), `references/port-matrix.md`.
 2. **Compose the declaration.** Map the source onto
    Mind/Body/Heart: domains and slices from the source's
    own bounded contexts (siblings vs sub-tables decided
@@ -48,13 +56,26 @@ exactly one home in the map at the bottom.
    own intake. → `references/enterprise-and-analysis.md`
    (§15.3, §16.11–16.13),
    `references/non-laravel-and-manifests.md`.
-4. **Prove with the five gates** (below). Fix every
+4. **Prove with the five gates** (below), in the
+   **diff loop**: port → diff (gate runs + matrix score +
+   layout diff) → fix at the layer → re-diff, until the
+   missing list is empty or owner-carried. The porter run
+   itself now emits a **fidelity scorecard** (a durable
+   artefact scored in the matrix's own vocabulary —
+   declaration coverage, relation census, drift state) —
+   quote the scorecard beside the matrix, and treat a
+   degraded re-score as a failing gate, not commentary. Fix every
    residue at its own layer — kit / pattern / declaration
-   / generator — never per-page. Record the outcome in
-   the port's `REPLICA-STATUS.md`; that file is the only
-   quotable status. → `references/replica-protocol.md`
+   / generator — never per-page. Defects carry severities
+   S1–S4; an open S1/S2 blocks any shippable claim, and
+   only reproduced defects are reported. Record the
+   outcome in the port's `REPLICA-STATUS.md` — gate
+   verdict first, the matrix **score line** beside it;
+   that file is the only quotable status. →
+   `references/replica-protocol.md`
    (§22, full text + runbook),
-   `references/verification-gates.md` (§18).
+   `references/verification-gates.md` (§18),
+   `references/port-matrix.md`.
 
 ## The five gates (plain names first)
 
@@ -87,7 +108,12 @@ Status = the LOWEST unverified gate, on a declared scope.
 Converge = `slice:drift` zero errors + the gates.
 Never self-report; a percentage headline always carries
 its declared scope ("benchmark-converged" and
-"whole-port partial" are different claims).
+"whole-port partial" are different claims). The port's
+`porting/port-matrix.csv` score (must 3 / should 2 /
+could 1, partial = ½, skips excluded) prints beside the
+gate verdict in REPLICA-STATUS — the legible number,
+never a verdict upgrade: a port can score 94 and still
+stand at its lowest gate.
 
 ## Non-negotiables
 
@@ -128,4 +154,5 @@ its declared scope ("benchmark-converged" and
 | Declaring UI; chasing composition or appearance parity; wiring list/page contracts | `references/ui-contracts.md` (§17, 19, 19B, 20, 21) |
 | Running real-usage journeys or preparing a release | `references/verification-gates.md` (§18) |
 | Running the Replica Protocol end-to-end | `references/replica-protocol.md` (§22) |
+| Scoping the port; building or scoring the port matrix; the behaviour inventory | `references/port-matrix.md` (+ `tools/port_matrix.py`, `tools/layout_diff.py`; run `tools/selftest.py` once per machine) |
 | Porting a non-Laravel source, or working YAML-only | `references/non-laravel-and-manifests.md` |

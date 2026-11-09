@@ -122,6 +122,38 @@ Gate V's token row only; layout divergence is recorded as
 Gate V divergence no matter how green Gates F and T are,
 and a replica claim names Gate V with the rest.
 
+**Gate V — the automated layout diff (evidence, not the
+verdict).** Before the human read, score every paired
+surface mechanically so the eye starts where the distance
+is. Pair discipline: same viewport (1440×900 desktop,
+390×844 mobile), same state — same data shape, same tab
+open, logged in the same way; the source's shots live with
+the port's evidence, the port's beside them. Run the
+skill's stdlib tool:
+
+```bash
+python3 tools/layout_diff.py evidence/shots/source-<surface>.png \
+    evidence/shots/port-<surface>.png --json \
+    > porting/evidence/layout/<surface>.json
+```
+
+Layout mode compares edge maps on a grid — structure, not
+colour, so a kit change does not count against the port —
+and reports a score with bands (**90+ matches · 75+ close
+· 50+ partly · below 50 different**), the differing
+regions in the source's pixel coordinates, and any height
+delta. `--mode pixel` is reserved for the port's own
+regressions (port today vs port last week), never for
+chasing the source's pixels. Record each surface's score
+in the matrix (a Visual row per flagship surface, evidence
+= the JSON path) and fold the set into the status score
+with `port_matrix.py --visual`. The by-eye read above
+remains the gate: a high layout score never upgrades a
+composition delta the eye catches, and a low one sends the
+reader to the named regions first — that ordering is the
+whole value of the automation (QA9 stands: no computed
+number is a visual pass).
+
 **Gate V — the shell is a scored surface, not backdrop
 (29 Oct 2026).** A port's sidebar, page titles and directory
 chrome are part of the replica, scored element-by-element

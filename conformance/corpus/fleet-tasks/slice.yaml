@@ -1,0 +1,939 @@
+name: Tasks
+feature_module: tasks
+title: Tasks
+version: 1.0.0
+description: Manages tasks records and associated child items
+author: null
+active: true
+workflow: false
+roles: {}
+fields:
+  heading:
+    name: heading
+    label: Heading
+    type: string
+    nullable: false
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  description:
+    name: description
+    label: Description
+    type: text
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  due_date:
+    name: due_date
+    label: Due Date
+    type: timestamp
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  start_date:
+    name: start_date
+    label: Start Date
+    type: timestamp
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  project_id:
+    name: project_id
+    label: Project Id
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  task_category_id:
+    name: task_category_id
+    label: Task Category Id
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  priority:
+    name: priority
+    label: Priority
+    type: string
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  status:
+    name: status
+    label: Status
+    type: string
+    nullable: true
+    default: incomplete
+    options:
+      incomplete: Incomplete
+      completed: Completed
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  board_column_id:
+    name: board_column_id
+    label: Board Column Id
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  column_priority:
+    name: column_priority
+    label: Column Priority
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  completed_on:
+    name: completed_on
+    label: Completed On
+    type: timestamp
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  created_by:
+    name: created_by
+    label: Created By
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: false
+    show_in_list: true
+  recurring_task_id:
+    name: recurring_task_id
+    label: Recurring Task Id
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  dependent_task_id:
+    name: dependent_task_id
+    label: Dependent Task Id
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  milestone_id:
+    name: milestone_id
+    label: Milestone Id
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  is_private:
+    name: is_private
+    label: Is Private
+    type: boolean
+    nullable: true
+    default: false
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  billable:
+    name: billable
+    label: Billable
+    type: boolean
+    nullable: true
+    default: false
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  estimate_hours:
+    name: estimate_hours
+    label: Estimate Hours
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  estimate_minutes:
+    name: estimate_minutes
+    label: Estimate Minutes
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  added_by:
+    name: added_by
+    label: Added By
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: false
+    show_in_list: true
+  last_updated_by:
+    name: last_updated_by
+    label: Last Updated By
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: false
+    show_in_list: true
+  hash:
+    name: hash
+    label: Hash
+    type: string
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  repeat:
+    name: repeat
+    label: Repeat
+    type: boolean
+    nullable: true
+    default: false
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  repeat_complete:
+    name: repeat_complete
+    label: Repeat Complete
+    type: boolean
+    nullable: true
+    default: false
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  repeat_count:
+    name: repeat_count
+    label: Repeat Count
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  repeat_type:
+    name: repeat_type
+    label: Repeat Type
+    type: string
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  repeat_cycles:
+    name: repeat_cycles
+    label: Repeat Cycles
+    type: integer
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: true
+    show_in_list: true
+  event_id:
+    name: event_id
+    label: Event Id
+    type: text
+    nullable: true
+    default: null
+    options: {}
+    hidden: false
+    show_in_form: false
+    show_in_list: true
+models:
+- handle: task
+  table: tasks
+  root: true
+  fields:
+  - handle: heading
+    label: Heading
+    type: string
+    required: true
+  - handle: description
+    label: Description
+    type: text
+    required: false
+  - handle: due_date
+    label: Due Date
+    type: timestamp
+    required: false
+  - handle: start_date
+    label: Start Date
+    type: timestamp
+    required: false
+  - handle: project_id
+    label: Project Id
+    type: integer
+    required: false
+  - handle: task_category_id
+    label: Task Category Id
+    type: integer
+    required: false
+  - handle: priority
+    label: Priority
+    type: string
+    required: false
+  - handle: status
+    label: Status
+    type: string
+    required: false
+  - handle: board_column_id
+    label: Board Column Id
+    type: integer
+    required: false
+  - handle: column_priority
+    label: Column Priority
+    type: integer
+    required: false
+  - handle: completed_on
+    label: Completed On
+    type: timestamp
+    required: false
+  - handle: created_by
+    label: Created By
+    type: integer
+    required: false
+  - handle: recurring_task_id
+    label: Recurring Task Id
+    type: integer
+    required: false
+  - handle: dependent_task_id
+    label: Dependent Task Id
+    type: integer
+    required: false
+  - handle: milestone_id
+    label: Milestone Id
+    type: integer
+    required: false
+  - handle: is_private
+    label: Is Private
+    type: boolean
+    required: false
+  - handle: billable
+    label: Billable
+    type: boolean
+    required: false
+  - handle: estimate_hours
+    label: Estimate Hours
+    type: integer
+    required: false
+  - handle: estimate_minutes
+    label: Estimate Minutes
+    type: integer
+    required: false
+  - handle: added_by
+    label: Added By
+    type: integer
+    required: false
+  - handle: last_updated_by
+    label: Last Updated By
+    type: integer
+    required: false
+  - handle: hash
+    label: Hash
+    type: string
+    required: false
+  - handle: repeat
+    label: Repeat
+    type: boolean
+    required: false
+  - handle: repeat_complete
+    label: Repeat Complete
+    type: boolean
+    required: false
+  - handle: repeat_count
+    label: Repeat Count
+    type: integer
+    required: false
+  - handle: repeat_type
+    label: Repeat Type
+    type: string
+    required: false
+  - handle: repeat_cycles
+    label: Repeat Cycles
+    type: integer
+    required: false
+  - handle: event_id
+    label: Event Id
+    type: text
+    required: false
+  - handle: task_short_code
+    label: Task Short Code
+    type: string
+    required: false
+  relations:
+  - name: task_history
+    type: hasMany
+    model: task_history
+    foreign_key: task_id
+    table: task_history
+    fields:
+    - handle: sub_task_id
+      label: Sub Task Id
+      type: integer
+      required: false
+      options: {}
+    - handle: user_id
+      label: User Id
+      type: integer
+      required: false
+      options: {}
+    - handle: details
+      label: Details
+      type: text
+      required: false
+      options: {}
+    - handle: board_column_id
+      label: Board Column Id
+      type: integer
+      required: false
+      options: {}
+    document: null
+  - name: task_history
+    type: hasMany
+    model: task_history
+    foreign_key: task_id
+  - name: users
+    type: belongsToMany
+    model: User
+    pivot:
+      table: task_users
+      foreign_pivot_key: task_id
+      related_pivot_key: user_id
+  - name: projectTimeLogs
+    type: hasMany
+    model: ProjectTimeLog
+    foreign_key: task_id
+  - name: subTasks
+    type: hasMany
+    model: SubTask
+    foreign_key: task_id
+  - name: taskFiles
+    type: hasMany
+    model: TaskFile
+    foreign_key: task_id
+  - name: taskComments
+    type: hasMany
+    model: TaskComment
+    foreign_key: task_id
+  - name: notes
+    type: hasMany
+    model: TaskNote
+    foreign_key: task_id
+- handle: task_history
+  table: task_history
+  root: false
+  fields:
+  - handle: task_id
+    label: Task Id
+    type: integer
+    required: false
+  - handle: sub_task_id
+    label: Sub Task Id
+    type: integer
+    required: false
+  - handle: user_id
+    label: User Id
+    type: integer
+    required: false
+  - handle: details
+    label: Details
+    type: text
+    required: false
+  - handle: board_column_id
+    label: Board Column Id
+    type: integer
+    required: false
+  relations:
+  - name: task
+    type: belongsTo
+    model: task
+    foreign_key: task_id
+permissions:
+- task.view
+- task.create
+- task.edit
+- task.delete
+access:
+  own_scope:
+  - pivot: task_users
+    foreign_key: task_id
+    user_key: user_id
+namespace: App\Slices\ERP\Adjudication\Work\Tasks
+ui:
+  presentation:
+    create: drawer
+    edit: drawer
+  directory:
+    columns:
+    - handle: task_short_code
+      key: task_short_code
+      label: Code
+      formatter: code_badge
+      type: code_badge
+      sortable: true
+      inferred_from: editColumn
+    - handle: heading
+      key: heading
+      label: Task
+      formatter: text_with_badge
+      type: text_with_badge
+      subtitle_from: project.project_name
+      sortable: true
+      inferred_from: editColumn
+      badge_from: labels
+    - handle: completed_on
+      key: completed_on
+      label: Completed On
+      formatter: date
+      type: date
+      sortable: true
+      inferred_from: editColumn
+    - handle: start_date
+      key: start_date
+      label: Start Date
+      formatter: date
+      type: date
+      sortable: true
+      inferred_from: editColumn
+    - handle: due_date
+      key: due_date
+      label: Due Date
+      formatter: date_overdue
+      type: date_overdue
+      sortable: true
+      inferred_from: editColumn
+    - handle: timeLogged
+      key: timeLogged
+      label: Hours Logged
+      formatter: duration
+      type: duration
+      aggregate:
+        table: project_time_logs
+        sum: total_minutes
+      sortable: true
+      inferred_from: getColumns
+    - handle: users
+      key: users
+      label: Assigned To
+      formatter: user_stack
+      type: user_stack
+      sortable: true
+      inferred_from: editColumn
+    - handle: board_column_id
+      key: board_column_id
+      label: Status
+      formatter: text
+      type: text
+      sortable: true
+      inferred_from: editColumn
+      inline_edit: true
+    searchable:
+    - heading
+    - description
+    - priority
+    - hash
+    - repeat_type
+    search_placeholder: Search tasks...
+    sidebar_filters:
+    - handle: status_scope
+      label: Status
+      type: select
+      default: hide_completed
+      options:
+      - value: hide_completed
+        label: Hide Completed Task
+        criteria:
+          board_column_id:
+            op: not_in
+            value:
+            - 4
+      - value: show_completed
+        label: Show Completed Task
+        criteria:
+          board_column_id:
+            op: in
+            value:
+            - 4
+    - handle: start_date
+      label: Duration
+      type: date_range
+    - handle: project_id
+      label: Project
+      type: select
+      options_from: relation:project_id
+    summary_cards: {}
+    views:
+    - table
+    - board
+    - calendar
+    columns_menu: false
+    default_sort:
+      field: task_short_code
+      direction: desc
+    default_view: table
+    inline_edit:
+    - board_column_id
+    bulk_actions:
+    - handle: export
+      label: Export Selected
+      type: native
+      icon: download
+    - handle: delete
+      label: Delete Selected
+      type: native
+      icon: trash-2
+      danger: true
+    row_actions:
+      display: dropdown
+      items:
+      - handle: view
+        label: View
+        icon: eye
+        placement: inline
+      - handle: edit
+        label: Edit
+        icon: pencil
+        placement: dropdown
+      - handle: delete
+        label: Delete
+        icon: trash-2
+        placement: dropdown
+        danger: true
+    report:
+      title: Task Report
+      group_by: board_column_id
+      group_label: Status
+      date_field: created_at
+      aggregates:
+      - fn: count
+        label: Tasks
+  dashboard:
+    enabled: true
+    widgets:
+    - type: counter
+      handle: total
+      title: Tasks
+      label: Total
+      aggregate: count
+      order: 50
+      roles:
+      - admin
+    - type: counter
+      handle: my_tasks
+      title: My Tasks
+      label: Total
+      aggregate: count
+      scope: own
+      order: 20
+      roles:
+      - employee
+    - type: chart
+      handle: by_board
+      title: Tasks by Status
+      group_by: board_column_id
+      order: 90
+      roles:
+      - admin
+      - employee
+      labels:
+        1: Incomplete
+        2: To Do
+        3: Doing
+        4: Completed
+  forms:
+    sections:
+    - key: general
+      title: General Information
+      grid: 2
+      fields:
+      - handle: heading
+        span: 1
+        is_searchable: false
+      - handle: description
+        span: 2
+        is_searchable: false
+      - handle: due_date
+        span: 1
+        is_searchable: false
+      - handle: start_date
+        span: 1
+        is_searchable: false
+      - handle: project_id
+        span: 1
+        is_searchable: true
+      - handle: task_category_id
+        span: 1
+        is_searchable: true
+    - key: additional_1
+      title: Additional Details
+      grid: 2
+      fields:
+      - handle: priority
+        span: 1
+        is_searchable: false
+      - handle: status
+        span: 1
+        is_searchable: false
+      - handle: board_column_id
+        span: 1
+        is_searchable: true
+      - handle: column_priority
+        span: 1
+        is_searchable: false
+      - handle: completed_on
+        span: 1
+        is_searchable: false
+      - handle: created_by
+        span: 1
+        is_searchable: false
+    - key: additional_2
+      title: Additional Details
+      grid: 2
+      fields:
+      - handle: recurring_task_id
+        span: 1
+        is_searchable: true
+      - handle: dependent_task_id
+        span: 1
+        is_searchable: true
+      - handle: milestone_id
+        span: 1
+        is_searchable: true
+      - handle: is_private
+        span: 1
+        is_searchable: false
+      - handle: billable
+        span: 1
+        is_searchable: false
+      - handle: estimate_hours
+        span: 1
+        is_searchable: false
+    - key: additional_3
+      title: Additional Details
+      grid: 2
+      fields:
+      - handle: estimate_minutes
+        span: 1
+        is_searchable: false
+      - handle: added_by
+        span: 1
+        is_searchable: false
+      - handle: last_updated_by
+        span: 1
+        is_searchable: false
+      - handle: hash
+        span: 1
+        is_searchable: false
+      - handle: repeat
+        span: 1
+        is_searchable: false
+      - handle: repeat_complete
+        span: 1
+        is_searchable: false
+    - key: additional_4
+      title: Additional Details
+      grid: 2
+      fields:
+      - handle: repeat_count
+        span: 1
+        is_searchable: false
+      - handle: repeat_type
+        span: 1
+        is_searchable: false
+      - handle: repeat_cycles
+        span: 1
+        is_searchable: false
+      - handle: event_id
+        span: 2
+        is_searchable: true
+    - key: items_task_history
+      title: Task History
+      grid: 1
+      fields:
+      - handle: task_history
+        type: repeater
+        label: Task History
+        model: task_history
+        table: task_history
+        foreign_key: task_id
+        repeater_fields:
+        - handle: sub_task_id
+          label: Sub Task Id
+          type: integer
+          required: false
+          options: {}
+        - handle: user_id
+          label: User Id
+          type: integer
+          required: false
+          options: {}
+        - handle: details
+          label: Details
+          type: text
+          required: false
+          options: {}
+        - handle: board_column_id
+          label: Board Column Id
+          type: integer
+          required: false
+          options: {}
+        document: null
+        add_button_text: Add Task History
+  show:
+    composition: overview
+    detail_fields:
+    - from: project.project_name
+      label: Project
+    - from: boardColumn.column_name
+      label: Status
+    - from: priority
+      label: Priority
+      map:
+        high: High
+        medium: Medium
+        low: Low
+    - from: start_date
+      label: Start Date
+      type: date
+    - from: due_date
+      label: Due Date
+      type: date
+    - from: taskCategory.category_name
+      label: Category
+    - from: estimate_hours
+      label: Estimate Hours
+    - from: estimate_minutes
+      label: Estimate Minutes
+    - from: completed_on
+      label: Completed On
+      type: date
+    detail_style: list
+    detail_title: Task Details
+    identity:
+      about: description
+      about_title: Description
+      name: heading
+      subtitle:
+      - project.project_name
+    stats:
+    - aggregate: sum
+      column: total_hours
+      handle: hours_logged
+      label: Hours Logged
+      relation: projectTimeLogs
+    - aggregate: count
+      handle: sub_tasks
+      label: Sub Tasks
+      relation: subTasks
+    - aggregate: count
+      handle: files
+      label: Files
+      relation: taskFiles
+    - aggregate: count
+      handle: comments
+      label: Comments
+      relation: taskComments
+    tabs:
+    - handle: overview
+      label: Overview
+      type: fields
+    - handle: sub_tasks
+      label: Sub Tasks
+      relation: subTasks
+      type: relation
+    - handle: files
+      label: Files
+      relation: taskFiles
+      type: relation
+    - handle: comments
+      label: Comments
+      relation: taskComments
+      type: relation
+    - handle: timelogs
+      label: Timesheet
+      relation: projectTimeLogs
+      type: relation
+    - handle: notes
+      label: Notes
+      relation: notes
+      type: relation
+    - handle: task_history
+      label: Task History
+      relation: task_history
+      type: relation
+    - handle: activity
+      label: Activity
+      type: audit
+    widgets:
+    - handle: assignees
+      label_field: name
+      limit: 10
+      placement: rail
+      relation: users
+      title: Assigned To
+      type: list
+navigation:
+  label: Tasks
+  url: /erp/adjudication/work/tasks
+  icon: package
+  order: 160
+  group: Work
+app: ERP
+super_domain: ERP
+module: Adjudication
+domain: Adjudication
+sub_domain: Work
+table_prefix: null
+multitenant: true
+tenant_key: company_id

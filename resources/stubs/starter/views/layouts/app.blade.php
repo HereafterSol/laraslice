@@ -128,6 +128,15 @@
             $workspaceItems = [
                 ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
             ];
+            // My Profile: the signed-in user's own-record hub,
+            // resolved by the framework from the slice that
+            // declares a profile widget for their audience —
+            // present only when the user actually has a record
+            // there (an employee's path to her own hub).
+            $ownProfileUrl = auth()->check() ? \LaraSlice\Support\DashboardUi::ownRecordUrl() : null;
+            if ($ownProfileUrl) {
+                $workspaceItems[] = ['title' => 'My Profile', 'icon' => 'user', 'url' => $ownProfileUrl, 'isActive' => request()->url() === url($ownProfileUrl)];
+            }
             if ($canUseStudio) {
                 $workspaceItems[] = ['title' => 'Slice Studio', 'icon' => 'wand-2', 'url' => route('laraslice.wizard'), 'isActive' => request()->routeIs('laraslice.wizard*')];
             }
@@ -383,7 +392,7 @@
                                   <span>Schema Studio (2-Column Visual Builder)</span>
                               </x-ui.command-item>
                             @endif
-                            @if (Route::has('settings.ai'))
+                            @if (Route::has('settings.ai') && auth()->check() && \LaraSlice\Core\Security\Access::allows(auth()->user(), ['ai.settings.view', 'ai.settings.edit', 'settings.view']))
                               <x-ui.command-item href="{{ route('settings.ai') }}">
                                   <x-lucide-sparkles class="size-4 mr-2 text-indigo-400" />
                                   <span>AI Copilot & Model Settings</span>
