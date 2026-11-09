@@ -74,7 +74,7 @@
                 <button type="submit" class="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold">Show</button>
             </form>
         </div>
-        @if(($bulkEntryUrl ?? null) || ($importUrl ?? null))
+        @if(($bulkEntryUrl ?? null) || ($importUrl ?? null) || ($exportUrl ?? null))
         <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2">
                 @if($bulkEntryUrl ?? null)
@@ -87,6 +87,12 @@
                 <x-ui.button href="{{ $importUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
                     <x-lucide-upload class="size-3.5" />
                     <span>Import</span>
+                </x-ui.button>
+                @endif
+                @if($exportUrl ?? null)
+                <x-ui.button href="{{ $exportUrl }}" as="a" size="sm" variant="outline" class="gap-1.5 font-semibold">
+                    <x-lucide-download class="size-3.5" />
+                    <span>Export</span>
                 </x-ui.button>
                 @endif
             </div>

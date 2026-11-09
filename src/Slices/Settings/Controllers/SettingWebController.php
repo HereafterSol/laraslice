@@ -64,6 +64,11 @@ class SettingWebController extends Controller
         }
         if (! empty($target['bind']['table'])) {
             $this->saveBoundSection($request, $target);
+            // A bound save may have changed a consumed table
+            // (company, currency format, theme, storage):
+            // drop the read cache so the same request never
+            // renders the pre-save values (SettingsUi readers).
+            \LaraSlice\Support\SettingsUi::forgetBoundSettings();
 
             return redirect()
                 ->route('settings.hub', ['section' => $section])
@@ -73,6 +78,16 @@ class SettingWebController extends Controller
             $value = $request->input($field['handle']);
             if ($field['type'] === 'toggle') {
                 $value = $request->boolean($field['handle']) ? '1' : '0';
+            }
+            if ($field['type'] === 'time') {
+                $value = \LaraSlice\Support\SettingsUi::normalizeTimeValue($value);
+            }
+            if ($field['type'] === 'roles') {
+                $ids = array_values(array_filter(
+                    array_map('intval', (array) $value),
+                    static fn (int $v) => $v > 0
+                ));
+                $value = json_encode($ids);
             }
             if ($field['secret'] && ($value === null || $value === '')) {
                 continue;
@@ -199,6 +214,31 @@ class SettingWebController extends Controller
                 }
                 $section['fields'][$i]['value'] = $value;
             }
+            if (($field['type'] ?? '') === 'roles') {
+                // The stored value is a JSON list of role ids
+                // (the source's time-log daily_report_roles);
+                // the hub renders checkboxes over the role set.
+                $stored = $section['fields'][$i]['value'] ?? null;
+                $decoded = is_string($stored) ? json_decode($stored, true) : null;
+                $section['fields'][$i]['value'] = is_array($decoded)
+                    ? array_values(array_map('intval', $decoded))
+                    : [];
+                $section['fields'][$i]['role_options'] = \LaraSlice\Support\SettingsUi::roleOptions();
+            }
+            if (($field['type'] ?? '') === 'select' && ! empty($field['options_source'])) {
+                // Options resolve live from their source (e.g.
+                // enabled languages) — the picker offers what
+                // the source system offers. The stored value
+                // stays selectable even when its row is
+                // currently disabled: the picker narrows what
+                // can be newly chosen, it never strands a value.
+                $options = \LaraSlice\Support\SettingsUi::optionsForSource((string) $field['options_source']);
+                $current = $section['fields'][$i]['value'] ?? null;
+                if ($current !== null && $current !== '' && ! array_key_exists((string) $current, $options)) {
+                    $options[(string) $current] = (string) $current;
+                }
+                $section['fields'][$i]['options'] = $options;
+            }
         }
 
         return $section;
@@ -211,7 +251,11 @@ class SettingWebController extends Controller
      * when the table is still empty. Toggle values are
      * written in the convention the existing row already
      * uses ('yes'/'no' stays 'yes'/'no', ints stay ints).
-     * Blank secret fields keep their current value.
+     * Blank secret fields keep their current value. A blank
+     * field never writes null into a NOT NULL column (that
+     * 500s the save under strict SQL modes): on update the
+     * stored value is kept, on insert the column's zero
+     * value is used.
      */
     protected function saveBoundSection(Request $request, array $target): void
     {
@@ -248,6 +292,10 @@ class SettingWebController extends Controller
             return;
         }
         $existing = \Illuminate\Support\Facades\DB::table($table)->orderBy('id')->first();
+        $columnMeta = [];
+        foreach (\Illuminate\Support\Facades\Schema::getColumns($table) as $info) {
+            $columnMeta[(string) $info['name']] = $info;
+        }
         $payload = [];
         foreach ($target['fields'] as $field) {
             $column = $field['handle'];
@@ -259,9 +307,52 @@ class SettingWebController extends Controller
                 $on = $request->boolean($column);
                 $current = $existing?->{$column};
                 $value = \LaraSlice\Support\SettingsUi::toggleValueFor($current, $on);
+                if (($columnMeta[$column]['type_name'] ?? '') === 'enum') {
+                    // An enum column declares the toggle's exact
+                    // vocabulary; when it holds a known pair, the
+                    // pair wins over the current-value convention
+                    // ('active' alone cannot say whether off is
+                    // 'deactive' or 'inactive' — guessing wrong
+                    // is rejected by the column).
+                    $pair = \LaraSlice\Support\SettingsUi::togglePairFor(
+                        \LaraSlice\Support\SettingsUi::enumValues((string) ($columnMeta[$column]['type'] ?? ''))
+                    );
+                    if ($pair !== null) {
+                        $value = $on ? $pair[0] : $pair[1];
+                    }
+                }
             }
             if ($field['secret'] && ($value === null || $value === '')) {
                 continue;
+            }
+            if ($field['type'] === 'time') {
+                $value = \LaraSlice\Support\SettingsUi::normalizeTimeValue($value);
+            }
+            if ($field['type'] === 'roles') {
+                // Checkboxes submit the chosen role ids; the
+                // column stores them as a JSON list of ints —
+                // the source's daily_report_roles shape.
+                $ids = array_values(array_filter(
+                    array_map('intval', (array) $value),
+                    static fn (int $v) => $v > 0
+                ));
+                $value = json_encode($ids);
+            }
+            if ($value === null && isset($columnMeta[$column]) && ! ($columnMeta[$column]['nullable'] ?? true)) {
+                // A blank field arrives as null (the
+                // ConvertEmptyStringsToNull middleware), but a
+                // NOT NULL column can never hold it — writing
+                // it 500s the whole save (the ported
+                // payroll_settings.tds_salary shape: NOT NULL
+                // varchar holding ''). Like blank secrets, a
+                // blank field keeps the stored value on update;
+                // on insert it takes the column's zero value.
+                $value = $existing !== null
+                    ? $existing->{$column}
+                    : \LaraSlice\Support\SettingsUi::zeroValueFor($columnMeta[$column]);
+                if ($value === null) {
+                    continue;
+                }
             }
             $payload[$column] = $value;
         }

@@ -404,7 +404,7 @@ class SlicePortService
             }
         }
 
-        return [
+        $result = [
             'success' => true,
             'domain' => $domain,
             'mode' => $mode,
@@ -420,6 +420,55 @@ class SlicePortService
             'migrations' => $migrationRun,
             'data_import' => $dataImport,
         ];
+
+        // Fidelity scorecard (Proposal #5): the run scores
+        // its own output and leaves the durable artefact in
+        // the target app's porting/ directory. A scorecard
+        // failure never fails the port — it is recorded on
+        // the result, loudly, instead of vanishing.
+        $result['scorecard'] = $this->emitRunScorecard($inspection, $result);
+
+        return $result;
+    }
+
+    /**
+     * Build + emit the fidelity scorecard for a source-mode
+     * run into the target app's porting/ directory.
+     *
+     * @param  array<string, mixed>  $inspection
+     * @param  array<string, mixed>  $run
+     * @return array<string, mixed> the scorecard (with 'files'), or ['error' => …]
+     */
+    public function emitRunScorecard(array $inspection, array $run): array
+    {
+        try {
+            $card = PortScorecard::fromInspectionRun($inspection, $run);
+            $card['files'] = PortScorecard::emit($card, base_path('porting'));
+
+            return $card;
+        } catch (\Throwable $e) {
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Build + emit the fidelity scorecard for a plan-mode
+     * run into the target app's porting/ directory.
+     *
+     * @param  array<string, mixed>  $plan
+     * @param  array<string, mixed>  $run
+     * @return array<string, mixed> the scorecard (with 'files'), or ['error' => …]
+     */
+    public function emitPlanScorecard(array $plan, array $run): array
+    {
+        try {
+            $card = PortScorecard::fromPlanRun($plan, $run);
+            $card['files'] = PortScorecard::emit($card, base_path('porting'));
+
+            return $card;
+        } catch (\Throwable $e) {
+            return ['error' => $e->getMessage()];
+        }
     }
 
     /**
@@ -753,6 +802,12 @@ class SlicePortService
                         'rules' => $nullable ? ['nullable'] : ['required'],
                         'options' => $f['options'] ?? [],
                         'relation' => $f['relation'] ?? null,
+                        // Decimal precision parsed from the source
+                        // raw_type (see convertColumnsToFields); without
+                        // carrying it here the generator fell back to
+                        // (12,2) and the wire dropped exactly like the
+                        // multitenant flag once did.
+                        'length' => $f['length'] ?? null,
                     ];
                 }
 
@@ -1242,6 +1297,21 @@ PHP;
                         }
                     }
                 }
+                // Enum vocabularies: the column regex truncates
+                // the type token at the first quote, so an
+                // enum's values would be lost (the produced
+                // field would carry no options). Recover them
+                // from the CREATE TABLE text as raw_type.
+                foreach ($cols as &$colRef) {
+                    if (($colRef['type'] ?? '') === 'enum' && ! isset($colRef['raw_type'])) {
+                        $enumPattern = '/[`"]'.preg_quote((string) $colRef['name'], '/').'[`"]\s+enum\s*\(([^)]*)\)/i';
+                        if (preg_match($enumPattern, $block, $em) === 1
+                            && preg_match_all("/'((?:[^'\\\\]|\\\\.)*)'/", $em[1], $enumVals) > 0) {
+                            $colRef['raw_type'] = 'enum('.implode(',', array_map(static fn ($v) => "'{$v}'", $enumVals[1])).')';
+                        }
+                    }
+                }
+                unset($colRef);
                 $tables[$tableName] = [
                     'name' => $tableName,
                     'columns' => $cols,
@@ -1331,6 +1401,26 @@ PHP;
                         $fkTargets[$fc[1]] = $fc[2];
                     }
                 }
+
+                // Enum vocabularies: the column pass above
+                // captures only the method + first string
+                // argument, so an enum's declared values would
+                // be lost here and the produced field would
+                // carry no options — a silent allowable-values
+                // drop (live-DB extraction retains the values
+                // in COLUMN_TYPE). Recover them from the
+                // enum() call in this block and retain them as
+                // raw_type, the shape the field builder parses.
+                foreach ($cols as &$colRef) {
+                    if (($colRef['type'] ?? '') === 'enum' && ! isset($colRef['raw_type'])) {
+                        $enumPattern = '/enum\s*\(\s*['.$q.$dq.']'.preg_quote((string) $colRef['name'], '/').'['.$q.$dq.']\s*,\s*\[([^\]]*)\]/';
+                        if (preg_match($enumPattern, $blockContent, $em) === 1
+                            && preg_match_all('/['.$q.$dq.']([^'.$q.$dq.']*)['.$q.$dq.']/', $em[1], $enumVals) > 0) {
+                            $colRef['raw_type'] = "enum('".implode("','", $enumVals[1])."')";
+                        }
+                    }
+                }
+                unset($colRef);
 
                 $tables[$tableName] = [
                     'name' => $tableName,
@@ -1978,7 +2068,7 @@ PHP;
      *
      * @return array<string, string>|null
      */
-    protected static function parseEnumOptions(?string $rawType): ?array
+    public static function parseEnumOptions(?string $rawType): ?array
     {
         if ($rawType === null || ! preg_match('/^\s*enum\s*\((.*)\)/is', $rawType, $m)) {
             return null;
@@ -1995,6 +2085,31 @@ PHP;
         }
 
         return $options !== [] ? $options : null;
+    }
+
+    /**
+     * Parse the precision/scale out of a MySQL decimal(p,s) (or numeric(p,s))
+     * column definition into the field `length` format the generator's
+     * normalizer honours ("p,s"). Returns null when the definition carries
+     * no explicit precision — bare `double`, `float` and plain `decimal`
+     * keep the normalizer's default, byte-identical to before. Without
+     * this, extractTablesFromSourceDatabase() captured the full raw_type
+     * but convertColumnsToFields() dropped the precision, so every
+     * source decimal(10,8) silently ported as decimal(12,2) and the
+     * carry rounded the values (the companies latitude/longitude loss).
+     */
+    protected static function parseDecimalPrecision(?string $rawType): ?string
+    {
+        if ($rawType === null || ! preg_match('/\b(?:decimal|numeric)\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/i', $rawType, $m)) {
+            return null;
+        }
+        $precision = (int) $m[1];
+        $scale = (int) $m[2];
+        if ($precision < 1 || $precision > 65 || $scale > $precision) {
+            return null;
+        }
+
+        return "{$precision},{$scale}";
     }
 
     /**
@@ -2070,6 +2185,16 @@ PHP;
             if (! array_key_exists('nullable', $col) && in_array($cName, ['title', 'name', 'email', 'code', 'invoice_number', 'project_name', 'heading', 'subject'], true)) {
                 $isNullable = false;
             }
+
+            // Decimal precision lives only in the full raw_type
+            // (decimal(10,8)); the bare type name drops it. Carry it
+            // as the field length so the generated schema keeps the
+            // source's precision instead of the normalizer's (12,2)
+            // fallback — the drop that rounded companies' coordinates.
+            $decimalLength = $studioType === 'decimal'
+                ? (self::parseDecimalPrecision($col['raw_type'] ?? null)
+                    ?? self::parseDecimalPrecision(is_string($rawType) ? $rawType : null))
+                : null;
             $field = [
                 'handle' => $cName,
                 'label' => Str::headline($cName),
@@ -2096,6 +2221,10 @@ PHP;
                 if ($targetHandle !== Str::replaceLast('_id', '', $cName)) {
                     $field['relation'] = ['model' => $targetHandle];
                 }
+            }
+
+            if ($decimalLength !== null) {
+                $field['length'] = $decimalLength;
             }
 
             $fields[] = $field;
@@ -3816,7 +3945,7 @@ PHP;
             }
         }
 
-        return [
+        $result = [
             'success' => empty($errors),
             'domain' => $domain,
             'slices_created' => $createdSlices,
@@ -3826,6 +3955,13 @@ PHP;
             'renames' => $renames,
             'data_import' => $dataImportResult,
         ];
+
+        // Fidelity scorecard (Proposal #5), plan-mode flavour:
+        // the plan carries no column/FK detail, so those
+        // dimensions are recorded NOT MEASURED on the card.
+        $result['scorecard'] = $this->emitPlanScorecard($plan, $result);
+
+        return $result;
     }
 
     /**

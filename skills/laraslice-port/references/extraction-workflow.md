@@ -49,6 +49,7 @@ Never cram 50+ tables into a single monolithic slice. Partition the database int
    - Cause lists & session sheets -> `Hearings` slice.
    - Order drafting & vetting -> `Orders` slice.
 2. **Synthesize RBAC Capabilities**: Declare role permissions strictly scoped to their functional slice (e.g., `complaint.scrutiny` for Assistant Registrar, `hearing.schedule` for Registrar, `order.sign` for Ombudsperson).
+3. **Write the behaviour inventory (mandatory recon artefact)**: Schema and templates do not carry behaviour — controllers do. For every controller, enumerate its non-CRUD behaviour: custom actions (convert / send / remind / approve / generate), store/update side effects (computed totals, status defaults, multi-model writes), validation beyond presence, document builders (line items, taxes, discounts), and background effects. Land **one row per behaviour** in the port's `porting/port-matrix.csv` (priority by user impact; evidence = `source: <Controller>@<method>` until a gate measures the port). A behaviour with no declaration home is entered in the deviation register NOW — priced at recon, not discovered at Gate T. Method: read the method, not the route name — a `store()` that also writes items, stamps a status and mails a link is three behaviours and three rows. Full method: `references/port-matrix.md`.
 
 ### Step 5: Specialized Attributes & EAV Strategy
 When a system supports multiple distinct statutory subtypes (e.g., Harassment with incident date and organization vs. Property Rights with khasra number and acquisition mode):

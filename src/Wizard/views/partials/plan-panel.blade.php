@@ -136,7 +136,7 @@
                     </li>
                 </template>
             </ul>
-            <p class="mt-2 text-[11px] text-muted-foreground" x-show="impact && impact.candidate && impact.candidate.removed.length" x-text="'Saving removes: ' + impact.candidate.removed.join(', ') + ' — their surfaces stay; the declared intent goes.'"></p>
+            <p class="mt-2 text-[11px] text-muted-foreground" x-show="impact && impact.candidate && impact.candidate.removed.length" x-text="(impact && impact.candidate) ? 'Saving removes: ' + impact.candidate.removed.join(', ') + ' — their surfaces stay; the declared intent goes.' : ''"></p>
             <p class="mt-1 text-[10px] text-muted-foreground">Step→slice linking follows the App Flow rule: a step is linked when its text names a slice's navigation label.</p>
         </div>
     </form>

@@ -139,12 +139,16 @@
                 </button>
             </div>
 
-            <!-- YAML validation chip: live js-yaml parse + shape check of the current source -->
+            <!-- Validation chip: live js-yaml parse + shape check of the current
+                 source, PLUS the engine's own verdict (BlueprintValidator via
+                 the validate endpoint — the same code slice:blueprint:plan
+                 runs). The chip never claims plain "valid" while the engine
+                 rejects the blueprint (Day-2 drill F8). -->
             <span x-show="source && source.trim()" x-cloak class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
-                  :class="yamlStatus.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-rose-500/30 bg-rose-500/10 text-rose-500'"
-                  :title="yamlStatus.message">
-                <span class="size-1.5 rounded-full" :class="yamlStatus.ok ? 'bg-emerald-500' : 'bg-rose-500'"></span>
-                <span x-text="yamlStatus.ok ? 'YAML valid' : 'YAML error'"></span>
+                  :class="validityStatus.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-rose-500/30 bg-rose-500/10 text-rose-500'"
+                  :title="validityStatus.message">
+                <span class="size-1.5 rounded-full" :class="validityStatus.ok ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                <span x-text="validityStatus.label"></span>
             </span>
 
             <!-- Unsaved-draft badge: visual edits change the

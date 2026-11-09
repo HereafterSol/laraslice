@@ -59,4 +59,29 @@ final class DocumentMathTest extends TestCase
         $this->assertSame(0.0, $r['rows'][0]['amount']);
         $this->assertSame(0.0, $r['total']);
     }
+
+    public function test_percent_header_discount_reduces_total_not_subtotal(): void
+    {
+        $r = DocumentMath::apply([
+            ['quantity' => 7, 'unit_price' => 1300],
+            ['quantity' => 6, 'unit_price' => 1458],
+        ], ['quantity' => 'quantity', 'unit_price' => 'unit_price', 'amount' => 'amount',
+            'discount' => 10, 'discount_type' => 'percent']);
+
+        $this->assertSame(17848.0, $r['subtotal']);
+        $this->assertSame(1784.8, $r['discount']);
+        $this->assertSame(16063.2, $r['total']);
+    }
+
+    public function test_amount_header_discount_and_tax_compose(): void
+    {
+        $r = DocumentMath::apply([
+            ['quantity' => 2, 'unit_price' => 100, '__tax_amount' => 20],
+        ], ['quantity' => 'quantity', 'unit_price' => 'unit_price', 'amount' => 'amount',
+            'tax_amount' => '__tax_amount', 'discount' => 50, 'discount_type' => 'amount']);
+
+        $this->assertSame(200.0, $r['subtotal']);
+        $this->assertSame(50.0, $r['discount']);
+        $this->assertSame(170.0, $r['total'], 'total = subtotal - discount + tax');
+    }
 }

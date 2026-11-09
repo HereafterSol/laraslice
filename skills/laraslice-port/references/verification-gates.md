@@ -184,3 +184,96 @@ or record as a deviation:
   arrived empty while deals referenced its ids — reports and
   directories printed raw ids. When a label resolves nowhere,
   suspect the reference carry before the label machinery.
+
+## The severity-gated diff loop (the port's main loop)
+
+Gates are not a phase at the end; they are the loop the port
+runs in, from the first generated slice:
+
+```
+port → diff → fix at the layer → re-diff
+```
+
+1. **Diff** = the gate runs for the scope just built +
+   `tools/port_matrix.py` on `porting/port-matrix.csv` +
+   the Gate V layout scores for the surfaces just touched.
+   The matrix's missing list, in build order, is the next
+   work queue — not a report nobody acts on.
+2. **Every defect found gets a severity** in the port's bug
+   register (one line each: id, severity, steps, expected,
+   actual, evidence, the layer that owns the fix):
+
+   | Sev | Means |
+   | --- | --- |
+   | S1 | data loss, security hole, money wrong, core journey blocked |
+   | S2 | a feature broken, no workaround |
+   | S3 | broken with a workaround, or visibly wrong |
+   | S4 | cosmetic |
+
+   **Only reproduced defects are reported.** A suspicion
+   goes on a separate "to check" list; it is not a bug
+   until its steps run. (The comparative pass's "attendance
+   cannot be deleted" was an S-reading of an icon-only
+   control — reproduced properly in the fix programme, it
+   was not a defect at all.)
+3. **Fix at the layer** (§22: kit / pattern / declaration /
+   generator), S1 first, then S2. For every fix, the check
+   that caught it becomes the re-test: re-run that journey
+   or gate leg and watch it pass before the batch closes.
+4. **Re-diff** the same scope and re-score the matrix. A
+   batch is done when its defects are closed in the
+   register AND the matrix rows they touched carry the new
+   evidence.
+5. **Shippable is a gate, not a mood:** any open S1 or S2
+   blocks a shippable claim for the scope, whatever the
+   matrix score says; the score's own verdict line
+   (port-matrix.md) applies the same rule to must-haves.
+
+## Gate V filming: contact sheets and named fault lines
+
+The layout-diff score is a locator, not a verdict. The visual
+leg of a Gate V pass runs as a film-and-gate loop (pattern
+adopted from the Stageshow skill, compilation §3.14):
+
+1. **Film the journey into one contact sheet.** For each
+   surface under test, capture the resting state and every
+   state change (menu open, modal, hover, submit result) as
+   frames on a single sheet, at the working width AND at a
+   narrow (~390px) width. The sheet — not a folder of
+   screenshots — is the unit the reviewer reads: one image,
+   the whole story, cheap for a person and for a vision
+   model alike.
+2. **Read the sheet against named fault lines.** Each line
+   found is printed with its frame; the catalogue for real
+   applications:
+   - `clipped text:` words cut by a box, card or viewport edge
+   - `unit wrapped:` a stat's or amount's unit on its own line
+   - `empty pane:` a void under a list or panel's content
+   - `loose list:` rows spread to fill a pane instead of
+     sitting at their own pitch
+   - `uneven inset:` content sitting visibly closer to one
+     edge of its card or row than the others
+   - `cut by the crop:` an action, chip or control sliced by
+     the frame edge (filler may bleed; actions read whole)
+   - `jump:` / `drift:` an element that moves between states
+     with no visible cause
+   - `appears, then moves:` content that renders, then shifts
+     as late data or fonts land
+   - `kit override:` page CSS reshaping a kit part's geometry
+     instead of restyling it through tokens
+   Lines the source itself exhibits are recorded as
+   source-true, not port defects — the pair decides.
+3. **Gate discipline.** A visual pass is clean only when
+   every line reads zero or is named in the pass report with
+   its frame and the reason it stands. An incomplete or
+   gapped capture is **inconclusive**, never a pass.
+   Clearing a line by hiding, removing or cropping away the
+   thing it points at is itself a defect; a line called
+   intentional is re-judged by the fresh-eye (goldfish)
+   review, not settled by the builder.
+4. **The rehearsal note.** Every Gate V pass leaves a note
+   beside its evidence: the source surfaces compared
+   against, the widths and states captured, the fault lines
+   found and their dispositions, and an explicit
+   **not checked** list. A pass without the note is not a
+   completed pass.

@@ -268,9 +268,33 @@ class UserWebController extends BaseSliceWebController
             $device = UserDevice::where('user_id', $user->id)->findOrFail($id);
         }
 
+        $this->terminateDeviceSession($device);
         $device->delete();
 
+        UserSecurityLog::log($device->user_id, 'session_revoked', 'info', 'Device session revoked; the underlying session was terminated.');
+
         return redirect()->back()->with('success', 'Device session revoked successfully.');
+    }
+
+    /**
+     * Destroy the live session a device row points at. Deleting the
+     * registry row alone leaves that session fully usable until it
+     * expires, so a revocation must also remove the stored session
+     * (file / database / redis handler, per the app's session driver).
+     */
+    protected function terminateDeviceSession(UserDevice $device): void
+    {
+        if (empty($device->session_id)) {
+            return;
+        }
+
+        try {
+            app('session')->driver()->getHandler()->destroy($device->session_id);
+        } catch (\Throwable) {
+            // The stored session is already gone (expired, or a driver
+            // without server-side storage) — the registry deletion
+            // still stands.
+        }
     }
 
     /**
@@ -548,6 +572,8 @@ class UserWebController extends BaseSliceWebController
         $this->authorizeSlice('mfa');
 
         $user = User::findOrFail($id);
+        UserDevice::where('user_id', $user->id)->get()
+            ->each(fn (UserDevice $device) => $this->terminateDeviceSession($device));
         UserDevice::where('user_id', $user->id)->delete();
         UserSecurityLog::log($user->id, 'mfa_devices_revoked', 'info', 'All remembered device bypass tokens revoked.');
 

@@ -94,7 +94,7 @@ HTML;
                     \$rawOpts = \Illuminate\Support\Facades\Schema::hasTable(\$relatedTableStr) ? \Illuminate\Support\Facades\DB::table(\$relatedTableStr)->get() : collect();
                     \$optsMap = [];
                     foreach (\$rawOpts as \$o) {
-                        \$lbl = \$o->name ?? \$o->title ?? \$o->label ?? null;
+                        \$lbl = \$o->name ?? \$o->title ?? \$o->heading ?? \$o->subject ?? \$o->label ?? null;
                         if (\$lbl === null) {
                             foreach (get_object_vars(\$o) as \$k => \$v) {
                                 if (str_ends_with(\$k, '_name') && filled(\$v)) { \$lbl = \$v; break; }

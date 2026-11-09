@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    @include('auth::partials.head', ['title' => 'Two-Factor Authentication - LaraSlice'])
+    @include('auth::partials.head', ['title' => 'Two-Factor Authentication - ' . \LaraSlice\Support\SettingsUi::appName()])
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-6 relative overflow-y-auto" 
       x-data="{ 

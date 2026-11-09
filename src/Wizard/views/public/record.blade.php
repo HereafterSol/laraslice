@@ -25,7 +25,12 @@
             <dl>
                 @foreach ($rows as $row)
                     <dt>{{ $row['label'] ?? '' }}</dt>
-                    <dd>{{ is_scalar($row['value'] ?? null) ? $row['value'] : '—' }}</dd>
+                    {{-- detailRows() flags formatter-generated values
+                         (e.g. the status pill) as 'html' — the same
+                         contract the authenticated show view honours.
+                         Escaping them prints the markup as literal
+                         text on the page a client reads. --}}
+                    <dd>@if (! empty($row['html'])){!! is_scalar($row['value'] ?? null) ? $row['value'] : '—' !!}@else{{ is_scalar($row['value'] ?? null) ? $row['value'] : '—' }}@endif</dd>
                 @endforeach
             </dl>
         @endif

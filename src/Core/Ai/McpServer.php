@@ -5,8 +5,10 @@ namespace LaraSlice\Core\Ai;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Schema;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Metadata\LadderTier;
+use LaraSlice\Core\Metadata\MetadataIssues;
+use LaraSlice\Core\Metadata\MetadataProjector;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\LaraSliceServiceProvider;
@@ -17,10 +19,16 @@ class McpServer
 
     protected SliceManager $sliceManager;
 
-    public function __construct(AiEngine $aiEngine, SliceManager $sliceManager)
+    protected MetadataProjector $projector;
+
+    public function __construct(AiEngine $aiEngine, SliceManager $sliceManager, ?MetadataProjector $projector = null)
     {
         $this->aiEngine = $aiEngine;
         $this->sliceManager = $sliceManager;
+        // The discovery ladder (Proposals #1–#3): MCP reads the
+        // same runtime projection the Studio endpoints serve —
+        // one path, one payload, no parallel registry walk.
+        $this->projector = $projector ?? new MetadataProjector($sliceManager);
     }
 
     /**
@@ -123,6 +131,19 @@ class McpServer
                 'tools' => ['listChanged' => false],
                 'resources' => ['listChanged' => false, 'subscribe' => false],
             ],
+            // The server teaches the confirmation protocol up
+            // front (the reference design's move): a client that
+            // follows it never has to discover the flow from a
+            // refusal.
+            'instructions' => 'Write tools (toggle_slice, seed_slice, scaffold_slice, wipe_slice_data, '
+                .'destroy_slice, prune_audit_logs) are TWO-PHASE. A call without a confirmation_token '
+                .'does not execute: it returns status "requires_confirmation" with a human-readable '
+                .'proposal (spec) and a signed confirmation_token. Show the proposal to the user; only '
+                .'if the user approves, repeat the call with exactly the same arguments plus '
+                .'"confirmation_token". Tokens expire (see ttl_seconds in the proposal), are bound to '
+                .'the exact arguments and the proposing user, and are single-use. Read tools '
+                .'(list_slices, get_slice_schema, query_database_metrics, get_page_context) execute '
+                .'immediately.',
         ];
     }
 
@@ -227,20 +248,9 @@ class McpServer
 
     protected function slicesIndexJson(): string
     {
-        try {
-            $rows = [];
-            foreach ($this->sliceManager->getAllSlices() as $slice) {
-                $rows[] = [
-                    'name' => $slice->name ?? null,
-                    'namespace' => $slice->namespace ?? null,
-                    'path' => isset($slice->path) ? str_replace(base_path().'/', '', (string) $slice->path) : null,
-                ];
-            }
-        } catch (\Throwable) {
-            $rows = [];
-        }
-
-        return (string) json_encode($rows, JSON_PRETTY_PRINT);
+        // The projector's index, identical in facts to the
+        // list_slices tool and the HTTP endpoint (one ladder).
+        return (string) json_encode($this->projector->index(), JSON_PRETTY_PRINT);
     }
 
     /**
@@ -290,15 +300,22 @@ class McpServer
 
     /**
      * Tools that change code or data: the permissions they need over HTTP, and
-     * whether the caller must repeat the target's name in a "confirm" argument.
+     * whether they are destructive (stated on the confirmation proposal).
+     *
+     * This registry is also the confirmation gate's coverage
+     * list (Proposal #4): every tool named here is two-phase —
+     * a call without a valid confirmation token returns a
+     * proposal instead of executing. The list is explicit in
+     * code, NOT derived from the metadata projection's
+     * operations (which are not a census — see Phase A).
      */
     private const WRITE_TOOLS = [
-        'toggle_slice' => ['abilities' => ['system.slices.toggle', 'slice.toggle'], 'confirm' => false],
-        'seed_slice' => ['abilities' => ['system.slices.seed', 'slice.seed'], 'confirm' => false],
-        'scaffold_slice' => ['abilities' => ['studio.create'], 'confirm' => false],
-        'wipe_slice_data' => ['abilities' => ['system.slices.wipe', 'slice.wipe'], 'confirm' => true],
-        'destroy_slice' => ['abilities' => ['system.slices.delete', 'slice.delete'], 'confirm' => true],
-        'prune_audit_logs' => ['abilities' => ['studio.wipe'], 'confirm' => true],
+        'toggle_slice' => ['abilities' => ['system.slices.toggle', 'slice.toggle'], 'destructive' => false],
+        'seed_slice' => ['abilities' => ['system.slices.seed', 'slice.seed'], 'destructive' => false],
+        'scaffold_slice' => ['abilities' => ['studio.create'], 'destructive' => false],
+        'wipe_slice_data' => ['abilities' => ['system.slices.wipe', 'slice.wipe'], 'destructive' => true],
+        'destroy_slice' => ['abilities' => ['system.slices.delete', 'slice.delete'], 'destructive' => true],
+        'prune_audit_logs' => ['abilities' => ['studio.wipe'], 'destructive' => true],
     ];
 
     /**
@@ -321,14 +338,32 @@ class McpServer
             return "You do not have permission to use the {$name} tool.";
         }
 
-        if ($rule['confirm']) {
-            $expected = $name === 'prune_audit_logs' ? 'prune' : (string) ($args['slice'] ?? $args['domain'] ?? '');
-            if ($expected === '' || ! is_string($args['confirm'] ?? null) || strcasecmp($args['confirm'], $expected) !== 0) {
-                return "Refusing {$name}: pass confirm=\"{$expected}\" to confirm this destructive action.";
-            }
+        return null;
+    }
+
+    /**
+     * The two-phase gate for a write tool (Proposal #4).
+     * Returns null when the call may execute (verified token);
+     * otherwise the response the caller gets instead: the
+     * proposal payload (no token presented) or the per-issue
+     * rejection (token presented but not valid for this call).
+     */
+    protected function confirmationGate(string $name, array $args): ?array
+    {
+        $confirmer = app(WriteConfirmer::class);
+        $userId = auth()->id() !== null ? (int) auth()->id() : null;
+
+        $token = $args['confirmation_token'] ?? null;
+        $callArgs = $args;
+        unset($callArgs['confirmation_token']);
+
+        if (! is_string($token) || $token === '') {
+            return $confirmer->proposeMcp($name, $callArgs, $userId, (bool) (self::WRITE_TOOLS[$name]['destructive'] ?? false));
         }
 
-        return null;
+        $verdict = $confirmer->verifyMcp($token, $name, $callArgs, $userId);
+
+        return ($verdict['ok'] ?? false) ? null : $verdict['result'];
     }
 
     public function callTool(string $name, array $args): mixed
@@ -337,25 +372,28 @@ class McpServer
             return ['success' => false, 'error' => $refusal];
         }
 
+        // Proposal #4: write tools are two-phase. The ability
+        // and production guards above run in BOTH phases; the
+        // gate below decides whether this call proposes or —
+        // with a verified token — executes.
+        if (isset(self::WRITE_TOOLS[$name])) {
+            $gate = $this->confirmationGate($name, $args);
+            if ($gate !== null) {
+                return $gate;
+            }
+        }
+
         switch ($name) {
             case 'list_slices':
-                $domain = $args['domain'] ?? null;
-                $slices = $this->sliceManager->getActiveSlices();
-                $output = [];
-                foreach ($slices as $sName => $manifest) {
-                    if ($domain && strcasecmp($manifest->domain ?? '', $domain) !== 0) {
-                        continue;
-                    }
-                    $output[$sName] = [
-                        'title' => $manifest->title ?? $sName,
-                        'domain' => $manifest->domain ?? 'General',
-                        'enabled' => $manifest->enabled ?? true,
-                        'version' => $manifest->version ?? '1.0.0',
-                        'permissions' => $manifest->permissions ?? [],
-                    ];
-                }
-
-                return $output;
+                // Ladder rung 1: the projector's compact index —
+                // the same payload the HTTP endpoint serves
+                // (identity + declared counts, discovery totals),
+                // paged at the configured tier's page size.
+                return $this->projector->index([
+                    'domain' => isset($args['domain']) && is_string($args['domain']) ? $args['domain'] : null,
+                    'page' => isset($args['page']) ? (int) $args['page'] : 1,
+                    'per_page' => (int) LadderTier::current()['per_page'],
+                ]);
 
             case 'toggle_slice':
                 $slice = $args['slice'] ?? null;
@@ -446,21 +484,22 @@ class McpServer
                 ];
 
             case 'get_slice_schema':
-                $slice = $args['slice'] ?? 'Users';
-                $tables = [];
-                $allTables = array_column(Schema::getTables(), 'name');
-                $sliceLower = strtolower($slice);
-
-                foreach ($allTables as $tbl) {
-                    if (str_contains(strtolower($tbl), $sliceLower) || ($sliceLower === 'users' && str_starts_with($tbl, 'user_'))) {
-                        $tables[$tbl] = Schema::getColumnListing($tbl);
-                    }
+                // Ladder rung 2: the per-slice schema contract
+                // (Proposal #2) — the projector's describe core,
+                // versioned. NOT a database introspection: the
+                // Heart is the truth, the schema is its
+                // projection. Rejections are per-issue and
+                // readable so the caller can correct and retry.
+                $slice = isset($args['slice']) && is_string($args['slice']) ? trim($args['slice']) : '';
+                if ($slice === '') {
+                    return MetadataIssues::missingArgument('slice', 'A slice id, name or handle listed by the metadata index (see list_slices).');
+                }
+                $schema = $this->projector->schema($slice, ! empty($args['ui']));
+                if ($schema === null) {
+                    return MetadataIssues::unknownSlice($slice);
                 }
 
-                return [
-                    'slice' => $slice,
-                    'tables' => $tables,
-                ];
+                return $schema;
 
             case 'scaffold_slice':
                 $name = $args['name'] ?? 'Feature';

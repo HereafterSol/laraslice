@@ -59,6 +59,21 @@ One Slice architecture, implemented per stack:
 | **HtmlSlice** | Plain HTML | Roadmap |
 | **FlutterSlice** | Flutter | Roadmap (mobile generator exists in LaraSlice today) |
 | **AndroidSlice** | Android | Roadmap |
+| **RustSlice** | Rust | Family stage only — candidate shapes under study, narrow surface (see below) |
+
+**RustSlice — two candidate shapes, not yet a commitment.**
+Rust enters the family only after a second runtime exists and
+the conformance evidence (the declaration corpus every runtime
+is judged against) can say what "the same system" means in
+practice. Two shapes are candidates: (a) a **native
+desktop/client runtime**, rendering Body declarations through
+a GPU-accelerated UI kit of the class Rust desktop toolkits
+now provide, beside FlutterSlice/AndroidSlice; or (b) a
+**Rust performance core** — the projection, porter, and
+conformance engines as a shared native library every runtime
+calls. Either way the surface stays narrow: Rust is a
+projection target or an engine room, never a reason to
+re-think a declared system.
 
 The end state this table serves: one YAML describing a whole
 domain — an ERP, a CRM, a clinic system — generating working
@@ -149,3 +164,43 @@ those failure modes:
 The aim, plainly: build the layer that outlives its builders'
 tools — for the developers and the AI alike who will build on
 it next.
+
+## Future-proof by design — the AI that is actually there
+
+The permanence principles above answer "what survives". This
+section answers "what it must run on": a foundation designed
+for frontier cloud models alone would age exactly like a
+framework welded to one stack. The framework is therefore
+built, deliberately, to run on **offline AI and fewer
+tokens** — a local model on a laptop, an on-device model on a
+phone, or no model at all — with the same declarations as the
+only truth. Five principles, each already load-bearing in the
+reference implementation:
+
+1. **Declaration-first, projection-served.** Truth lives in
+   the owner's declared files (Mind, Body, Heart). Every
+   surface — UI, API, AI context — is a projection of those
+   files, computed at runtime and cacheable, never a second
+   copy of the truth that can drift or be held hostage.
+2. **Token-lean by design.** AI consumers never ingest a
+   whole system. A discovery ladder (index → describe → call)
+   serves compact, budgeted projections: an index row per
+   slice, a schema only for the slice in hand, payload budgets
+   set per capability tier. The measured effect is an order of
+   magnitude fewer tokens than handing a model the raw
+   declarations.
+3. **Small-model-first.** Surfaces are designed for 1–8B
+   local models with small context windows: fewer choices per
+   step, schema-first interactions, deterministic tools over
+   free-form reasoning — and a built-in, no-model responder
+   that answers inventory, count, and health questions with
+   zero model tokens at all.
+4. **Provider-agnostic, capability-tiered AI.** Frontier
+   cloud APIs, free hosted tiers, browser-local inference
+   (WebGPU), and on-device mobile inference sit behind one
+   abstraction with graceful degradation: the ladder depth and
+   payload size follow the tier, the contract does not change.
+5. **Offline-capable core loop.** Porting, generation, drift
+   and conformance gates, and the metadata ladder run with
+   zero network. Connectivity buys a stronger model; it is
+   never a precondition for the framework to work.

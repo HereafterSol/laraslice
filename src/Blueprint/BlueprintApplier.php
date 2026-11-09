@@ -5,6 +5,7 @@ namespace LaraSlice\Blueprint;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\ManifestRepository;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Generator\HeartUiCanonicalizer;
 use LaraSlice\Generator\SliceGenerator;
 use LaraSlice\Generator\SliceModifier;
 use LaraSlice\Generator\SliceName;
@@ -161,6 +162,27 @@ final class BlueprintApplier
             }
         }
 
+        // The root's declared belongsTo relations in Heart shape.
+        // SliceGenerator writes options['relations'] onto the
+        // manifest's root model entry and emits the relation
+        // methods from it; without this pass the blueprint's
+        // relations never reached the generator at all and the
+        // generated Heart carried `relations: { }` for a slice
+        // whose blueprint declared them (F10, Day-2 drill).
+        $heartRelations = [];
+        foreach ($belongsTo as $foreignKey => $info) {
+            $entry = [
+                'name' => $info['relation']['name'],
+                'type' => 'belongsTo',
+                'model' => $info['relation']['model'],
+                'foreign_key' => $foreignKey,
+            ];
+            if ($info['references'] !== null) {
+                $entry['table'] = $info['references'];
+            }
+            $heartRelations[] = $entry;
+        }
+
         $rootFields = [];
         foreach ($root['fields'] ?? [] as $field) {
             $type = $field['type'] === 'enum' ? 'select' : $field['type'];
@@ -191,6 +213,7 @@ final class BlueprintApplier
                 'soft_deletes' => (bool) ($root['soft_deletes'] ?? false),
                 'workflowConfig' => $blueprint['workflow'] ?? null,
                 'roles' => $blueprint['roles'] ?? [],
+                'relations' => $heartRelations,
             ]);
 
             foreach ($root['relations'] ?? [] as $relation) {
@@ -330,14 +353,71 @@ final class BlueprintApplier
         // Keep last 50 entries
         $manifest['version_history'] = array_slice($history, -50);
         $manifest['tables'] = array_values(array_map(static fn (array $model): string => $model['table'], $models));
-        $manifest['fields'] = ManifestRepository::fieldMap(array_map(static fn (array $field): array => [
-            'name' => $field['handle'],
-            'label' => $field['label'] ?? Str::headline($field['handle']),
-            'type' => $field['type'],
-            'nullable' => $field['nullable'] ?? ! ($field['required'] ?? false),
-            'default' => $field['default'] ?? null,
-            'options' => $field['options'] ?? [],
-        ], $root['fields'] ?? []));
+        // Declared belongsTo relations stay on the field entries
+        // too (relation + references table): this rebuild used to
+        // strip them, so the Heart's fields map lost the very
+        // declaration the form runtime resolves pickers from (F10).
+        $fieldBelongsTo = [];
+        foreach ($root['relations'] ?? [] as $relation) {
+            if (($relation['type'] ?? null) === 'belongsTo' && ! empty($relation['foreign_key'])) {
+                $relatedModel = $this->findModel($models, (string) ($relation['model'] ?? ''));
+                $fieldBelongsTo[$relation['foreign_key']] = [
+                    'relation' => ['name' => $relation['name'] ?? null, 'model' => $relation['model'] ?? null],
+                    'references' => $relation['table'] ?? $relatedModel['table'] ?? null,
+                ];
+            }
+        }
+        $manifest['fields'] = ManifestRepository::fieldMap(array_map(static function (array $field) use ($fieldBelongsTo): array {
+            $entry = [
+                'name' => $field['handle'],
+                'label' => $field['label'] ?? Str::headline($field['handle']),
+                'type' => $field['type'],
+                'nullable' => $field['nullable'] ?? ! ($field['required'] ?? false),
+                'default' => $field['default'] ?? null,
+                'options' => $field['options'] ?? [],
+            ];
+            if (isset($fieldBelongsTo[$field['handle']])) {
+                $entry['relation'] = $fieldBelongsTo[$field['handle']]['relation'];
+                $entry['references'] = $fieldBelongsTo[$field['handle']]['references'];
+            }
+
+            return $entry;
+        }, $root['fields'] ?? []));
+        // Directory columns for FK fields carry the declared
+        // relation + target table (label_table) into the final
+        // Heart: listing rows are BusinessObjects with no
+        // relation method to walk, so the column declaration is
+        // the renderer's only truthful pointer at the target
+        // record (F10: employee_id -> employee_details, whose
+        // id is not a user id).
+        if (! empty($manifest['ui']['directory']['columns']) && is_array($manifest['ui']['directory']['columns'])) {
+            foreach ($manifest['ui']['directory']['columns'] as $columnIndex => $directoryColumn) {
+                if (! is_array($directoryColumn)) {
+                    continue;
+                }
+                $columnHandle = (string) ($directoryColumn['handle'] ?? $directoryColumn['key'] ?? '');
+                $declaredBelongsTo = $fieldBelongsTo[$columnHandle] ?? null;
+                if ($declaredBelongsTo === null) {
+                    continue;
+                }
+                if (empty($directoryColumn['relation']) && ! empty($declaredBelongsTo['relation']['name'])) {
+                    $manifest['ui']['directory']['columns'][$columnIndex]['relation'] = (string) $declaredBelongsTo['relation']['name'];
+                }
+                if (empty($directoryColumn['label_table']) && ! empty($declaredBelongsTo['references'])) {
+                    $manifest['ui']['directory']['columns'][$columnIndex]['label_table'] = (string) $declaredBelongsTo['references'];
+                }
+            }
+        }
+        // OBS-B2: whatever door the ui arrived by (the design
+        // factory's compact blueprint ui, a hand-written blueprint,
+        // or the generator's own default), the Heart on disk is
+        // written in the one canonical producer form — the form
+        // the Manage save path produces — so a first Manage save
+        // previews the user's change, not a normalization of the
+        // producer's shape. Idempotent over the generator's pass.
+        if (is_array($manifest['ui'] ?? null)) {
+            $manifest['ui'] = HeartUiCanonicalizer::canonicalize($manifest['ui'], $root['fields'] ?? []);
+        }
         ManifestRepository::writeYaml($sliceDirectory, $manifest);
 
         // Seed declared roles and demo users immediately

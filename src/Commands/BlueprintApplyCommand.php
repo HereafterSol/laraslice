@@ -57,17 +57,68 @@ final class BlueprintApplyCommand extends Command
 
             if ($doMigrate) {
                 $this->comment('Running migrations…');
+                $exitCode = 0;
                 try {
-                    Artisan::call('migrate', ['--force' => true]);
+                    $exitCode = Artisan::call('migrate', ['--force' => true]);
                     $out = trim(Artisan::output());
                     if ($out !== '') {
                         $this->line($out);
                     }
-                    $this->components->info('Migrations finished.');
+
+                    // F9 (Day-2 drill): the slice's migrations
+                    // live in the slice's own Migrations
+                    // directory, which is NOT on the default
+                    // migrate path — the plain call above
+                    // migrates the app's own migrations and
+                    // reports success while the slice's table
+                    // is never created. Run the applied
+                    // slice's migrations explicitly.
+                    $sliceMigrations = $target.'/Migrations';
+                    if (is_dir($sliceMigrations)) {
+                        $sliceExit = Artisan::call('migrate', [
+                            '--path' => $sliceMigrations,
+                            '--realpath' => true,
+                            '--force' => true,
+                        ]);
+                        $sliceOut = trim(Artisan::output());
+                        if ($sliceOut !== '') {
+                            $this->line($sliceOut);
+                        }
+                        $exitCode = $exitCode !== 0 ? $exitCode : $sliceExit;
+                    }
                 } catch (Throwable $e) {
                     $this->components->error('Migration failed: '.$e->getMessage());
                     $this->line('You can retry with: php artisan migrate');
+
+                    return self::FAILURE;
                 }
+
+                if ($exitCode !== 0) {
+                    $this->components->error("Migration failed: artisan migrate exited with code {$exitCode}. The slice's tables were not verified — apply failed.");
+
+                    return self::FAILURE;
+                }
+
+                // Never print success on faith: every table
+                // the plan promised (and a migration exists
+                // for) must exist now, or apply has failed.
+                $missing = [];
+                foreach ($plan['database_operations'] ?? [] as $operation) {
+                    $kind = $operation['kind'] ?? null;
+                    if ($kind === 'create_table' && ! Schema::hasTable((string) $operation['table'])) {
+                        $missing[] = (string) $operation['table'];
+                    }
+                    if ($kind === 'pivot_table' && $this->sliceHasMigrationFor($target, (string) $operation['table'])
+                        && ! Schema::hasTable((string) $operation['table'])) {
+                        $missing[] = (string) $operation['table'];
+                    }
+                }
+                if ($missing !== []) {
+                    $this->components->error('Migration reported success but these planned tables do not exist: '.implode(', ', $missing).'. The slice is NOT usable — apply failed.');
+
+                    return self::FAILURE;
+                }
+                $this->components->info('Migrations finished.');
             } else {
                 $this->comment('Migrations were not run. Next: php artisan migrate');
             }
@@ -95,5 +146,26 @@ final class BlueprintApplyCommand extends Command
 
             return self::FAILURE;
         }
+    }
+
+    /**
+     * Whether the applied slice carries a migration file
+     * naming the given table (used to scope the F9
+     * post-migrate existence check to tables this apply
+     * was actually responsible for creating).
+     */
+    private function sliceHasMigrationFor(string $target, string $table): bool
+    {
+        $dir = $target.'/Migrations';
+        if (! is_dir($dir)) {
+            return false;
+        }
+        foreach (glob($dir.'/*.php') ?: [] as $file) {
+            if (str_contains(basename($file), $table)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

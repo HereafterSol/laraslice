@@ -61,6 +61,64 @@ class SliceRepairTest extends TestCase
         $this->assertSame([], app(SliceManager::class)->repairSlice($users));
     }
 
+    public function test_repair_heals_the_legacy_inline_status_key_scan(): void
+    {
+        // Blades stamped by older generators carry an inline scan
+        // that matches only literal status/state/stage columns, so
+        // a board whose axis is an FK column (board_column_id,
+        // labelled "Status") groups every row under "Unknown".
+        // The repair re-stamps the scan with the current
+        // generator's FK-axis fallback.
+        $boardPath = config('laraslice.slices_path').DIRECTORY_SEPARATOR.'LegacyBoard';
+        @mkdir($boardPath.'/Resources/views', 0755, true);
+        ManifestRepository::writeYaml($boardPath, [
+            'name' => 'LegacyBoard',
+            'active' => true,
+            'ui' => ['directory' => [
+                'views' => ['table', 'board'],
+                'columns' => [
+                    ['key' => 'heading', 'label' => 'Task'],
+                    ['key' => 'board_column_id', 'label' => 'Status'],
+                ],
+            ]],
+        ]);
+        $index = $boardPath.'/Resources/views/index.blade.php';
+        file_put_contents($index, <<<'BLADE'
+@php
+    $tableViews = ['table', 'board'];
+            $statusKey = 'status';
+            $dateKey = null;
+            foreach ($columns as $c) {
+                $ck = $c['key'] ?? '';
+                if (in_array($ck, ['status', 'state', 'stage'], true)) {
+                    $statusKey = $ck;
+                }
+                if ($dateKey === null && (str_contains($ck, 'date') || str_ends_with($ck, '_at'))) {
+                    $dateKey = $ck;
+                }
+            }
+            foreach (['due_date', 'start_date', 'issue_date', 'date'] as $preferDate) {
+            }
+@endphp
+<x-ui.data-table :columns="$columns" :rows="$rows" :views="$tableViews" :status-key="$statusKey">
+</x-ui.data-table>
+BLADE);
+
+        try {
+            $this->artisan('slice:repair', ['slice' => 'LegacyBoard'])->assertSuccessful();
+            $healed = file_get_contents($index);
+            $this->assertStringContainsString('$statusFound', $healed);
+            $this->assertStringContainsString('Board-axis fallback', $healed);
+
+            $this->artisan('slice:repair', ['slice' => 'LegacyBoard'])->assertSuccessful();
+            $second = file_get_contents($index);
+            $this->assertSame(1, substr_count($second, 'Board-axis fallback'), 'the heal must not duplicate the fallback on a second run');
+            $this->assertSame(1, substr_count($second, '$statusFound = false;'));
+        } finally {
+            app('files')->deleteDirectory($boardPath);
+        }
+    }
+
     public function test_remap_nav_does_not_crash_on_undefined_changed(): void
     {
         // Regression (a916eef): $changed was used before initialization when

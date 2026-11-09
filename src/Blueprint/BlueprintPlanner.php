@@ -79,13 +79,6 @@ final class BlueprintPlanner
                 'nullable' => false,
                 'default' => null,
             ]];
-            if (($model['root'] ?? false) === true) {
-                $columns = array_merge($columns, [
-                    ['column' => 'title', 'type' => 'string', 'nullable' => false, 'default' => null],
-                    ['column' => 'description', 'type' => 'text', 'nullable' => true, 'default' => null],
-                    ['column' => 'status', 'type' => 'string', 'nullable' => false, 'default' => 'draft'],
-                ]);
-            }
             foreach ($model['fields'] ?? [] as $field) {
                 $storageType = match ($field['type']) {
                     'enum', 'email', 'url' => 'string',
@@ -135,6 +128,28 @@ final class BlueprintPlanner
                         'table' => $relation['pivot_table'],
                         'models' => [$table, $this->findModel($models, $relation['model'])['table']],
                     ];
+                }
+            }
+
+            if (($model['root'] ?? false) === true) {
+                // The plan must list what the migration will
+                // actually create (F9: the drill found the
+                // plan promising title/description/status
+                // columns the generator never emits, while
+                // omitting the ones it does). The generator
+                // appends the audit columns to the ROOT
+                // model's table only, after every declared
+                // column: created_by / updated_by foreign ids
+                // to users, nullable. It never invents
+                // title/description/status — those exist only
+                // when declared (the generator's lone-default
+                // fallback applies only to slices declared
+                // with NO fields at all, which a blueprint
+                // root model is not).
+                foreach (['created_by', 'updated_by'] as $auditColumn) {
+                    if (! in_array($auditColumn, array_column($columns, 'column'), true)) {
+                        $columns[] = ['column' => $auditColumn, 'type' => 'foreign_id', 'nullable' => true, 'default' => null];
+                    }
                 }
             }
 

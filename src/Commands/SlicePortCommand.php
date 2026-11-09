@@ -176,6 +176,8 @@ class SlicePortCommand extends Command
                 $this->surfaceDataImportWarnings($di);
             }
 
+            $this->surfaceScorecard($result['scorecard'] ?? null);
+
             $this->line('');
             $this->info('🎉 Porting from architecture plan completed successfully!');
             $this->comment('Next: Run `php artisan slice:install` to sync super-admin permissions and access.');
@@ -364,6 +366,8 @@ class SlicePortCommand extends Command
             }
         }
 
+        $this->surfaceScorecard($result['scorecard'] ?? null);
+
         if (! empty($result['seeders_generated'])) {
             $this->info('✓ Master seeders generated: '.count($result['seeders_generated']).' file(s)');
         }
@@ -431,11 +435,44 @@ class SlicePortCommand extends Command
             }
         }
 
+        // When this invocation also scaffolded (and possibly
+        // ran the deferred data import after scaffolding),
+        // re-emit the fidelity scorecard so the durable
+        // artefact reflects the whole run, not just execute().
+        if (isset($scaffoldResult)) {
+            $card = $portService->emitRunScorecard($inspection, [
+                'data_import' => $dataImport ?? ($result['data_import'] ?? null),
+                'slices_generated' => $result['slices_generated'] ?? [],
+            ]);
+            $this->surfaceScorecard($card);
+        }
+
         $this->line('');
         $this->info('🎉 Porting analysis, blueprint synthesis & slice scaffolding completed successfully!');
         $this->info('You can now open /laraslice/wizard in your browser to view the active modules and slices.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Print the run's fidelity scorecard verdict (Proposal
+     * #5), or the loud reason it could not be emitted. The
+     * score is the port matrix's legible number — it never
+     * upgrades a gate verdict, and this line says so by
+     * pointing at the artefact that carries the gate note.
+     */
+    private function surfaceScorecard(?array $card): void
+    {
+        if ($card === null) {
+            return;
+        }
+        if (isset($card['error'])) {
+            $this->warn('⚠ Fidelity scorecard could not be emitted: '.$card['error']);
+
+            return;
+        }
+        $must = $card['must_haves'] ?? ['done' => 0, 'total' => 0];
+        $this->info("📋 Fidelity scorecard: {$card['score']}/100 · must-haves {$must['done']}/{$must['total']} · {$card['verdict']} → ".($card['files']['markdown'] ?? 'porting/scorecard.md'));
     }
 
     /**

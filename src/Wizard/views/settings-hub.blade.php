@@ -106,6 +106,19 @@
                                         </select>
                                     @elseif($field['type'] === 'textarea')
                                         <textarea name="{{ $field['handle'] }}" rows="3" class="w-full max-w-xl rounded-lg border border-border bg-background px-2.5 py-2 text-[13px] text-foreground">{{ $field['value'] ?? '' }}</textarea>
+                                    @elseif($field['type'] === 'time')
+                                        <input type="time" step="1" name="{{ $field['handle'] }}" value="{{ $field['value'] ?? '' }}"
+                                            class="h-9.5 w-full max-w-md rounded-lg border border-border bg-background px-2.5 text-[13px] text-foreground" />
+                                    @elseif($field['type'] === 'roles')
+                                        <div class="flex flex-col gap-1.5">
+                                            @foreach($field['role_options'] ?? [] as $roleId => $roleName)
+                                                <label class="inline-flex items-center gap-2 text-[13px] text-foreground cursor-pointer">
+                                                    <input type="checkbox" name="{{ $field['handle'] }}[]" value="{{ $roleId }}" @checked(in_array((int) $roleId, (array) ($field['value'] ?? []), true))
+                                                        class="size-4.5 rounded border-border accent-primary" />
+                                                    <span>{{ $roleName }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
                                     @elseif($field['type'] === 'secret')
                                         <input type="password" name="{{ $field['handle'] }}" value="" placeholder="{{ ($field['value'] ?? '') !== '' && $field['value'] !== null ? '•••••••• (leave blank to keep)' : '' }}"
                                             class="h-9.5 w-full max-w-md rounded-lg border border-border bg-background px-2.5 text-[13px] text-foreground" autocomplete="new-password" />

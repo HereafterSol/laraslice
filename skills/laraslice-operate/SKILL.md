@@ -1,6 +1,6 @@
 ---
 name: laraslice-operate
-description: Run a LaraSlice system AFTER launch — customize it, optimize it, improve it safely, operate it day to day, and upgrade it. Use when the user is changing a live system (new fields, design changes), asking about performance, health, backups, access reviews, or framework/slice upgrades, or wants the whole SDLC tail managed from the CLI, the Studio, or an AI assistant. Load the `laraslice` core skill first.
+description: Run and maintain a LaraSlice system in production AFTER launch — customize it, optimize it, improve it safely, operate and monitor it day to day, troubleshoot it, and upgrade it. Use when the user is maintaining or changing a live or production system (new fields, design changes), asking about performance, health, backups, access or security reviews, or framework and slice upgrades, or wants that work managed from the CLI, the Studio, or an AI assistant. Load the laraslice core skill first.
 ---
 
 # LaraSlice — After Launch (the SDLC tail)

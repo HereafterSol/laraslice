@@ -29,6 +29,8 @@
             </form>
             @endif
             <a href="{{ $indexUrl }}" class="h-8 px-3 inline-flex items-center rounded-lg border border-border text-xs font-semibold">List view</a>
+            <button type="button" onclick="window.lsReportExportCsv()" class="h-8 px-3 inline-flex items-center rounded-lg border border-border text-xs font-semibold">Export</button>
+            <button type="button" onclick="window.print()" class="h-8 px-3 inline-flex items-center rounded-lg border border-border text-xs font-semibold">Print</button>
         </div>
     </div>
 
@@ -44,7 +46,7 @@
     @endif
 
     <div class="overflow-x-auto rounded-xl border border-border/60">
-        <table class="w-full text-sm">
+        <table id="ls-report-table" class="w-full text-sm">
             <thead>
                 <tr class="bg-muted/50">
                     <th class="text-left font-semibold px-4 py-2.5">{{ $report['groupLabel'] }}</th>
@@ -78,4 +80,27 @@
         </table>
     </div>
 </div>
+<script>
+// Export prints exactly what the report shows: the rendered
+// table (groups, values and the totals row) as a CSV download.
+window.lsReportExportCsv = function () {
+    var table = document.getElementById('ls-report-table');
+    if (!table) { return; }
+    var esc = function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+    var lines = [];
+    table.querySelectorAll('tr').forEach(function (tr) {
+        var cells = [];
+        tr.querySelectorAll('th, td').forEach(function (td) { cells.push(esc(td.textContent.trim())); });
+        if (cells.length) { lines.push(cells.join(',')); }
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = @json($report['title']).toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-report.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 500);
+};
+</script>
 @endsection

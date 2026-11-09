@@ -470,6 +470,7 @@ final class BlueprintStudioController extends Controller
             if ($planScope === 'domain' && ! empty($allSlicesJson)) {
                 $slicesList = json_decode($allSlicesJson, true) ?: [];
                 $generatedTargets = [];
+                $generatedPlans = [];
                 $applier = new BlueprintApplier(static fn (string $table): bool => Schema::hasTable($table));
                 $namespace = config('laraslice.slices_namespace', 'App\\Slices');
 
@@ -484,6 +485,7 @@ final class BlueprintStudioController extends Controller
                     $sPlan = $planner->plan($validBp, $slicesPath);
                     $target = $applier->apply($validBp, $sPlan, $slicesPath, $namespace, $overwriteExisting);
                     $generatedTargets[] = $target;
+                    $generatedPlans[] = $sPlan;
                 }
 
                 $installedSlices = $this->getInstalledSlices($slicesPath);
@@ -505,6 +507,15 @@ final class BlueprintStudioController extends Controller
                         }
                     } catch (Throwable $e) {
                         $migrationMessage = 'Migration warning: '.$e->getMessage();
+                    }
+                    // OBS-A: executeMigrations records per-folder
+                    // failures as output text, so verify the
+                    // outcome it claims — every planned table of
+                    // every slice in the suite must exist, or the
+                    // apply fails loudly (outside the warning
+                    // downgrade above, on purpose).
+                    if ($migrated) {
+                        $this->assertPlannedTablesExist($generatedPlans, $generatedTargets);
                     }
                 }
 
@@ -551,14 +562,17 @@ final class BlueprintStudioController extends Controller
             if ($request->boolean('auto_migrate', false) && ! $mayMigrate) {
                 $migrationMessage = 'Migrations were not run: running migrations requires the studio.migrate permission.';
             } elseif ($request->boolean('auto_migrate', false)) {
-                try {
-                    Artisan::call('migrate', ['--force' => true]);
-                    $migrationOutput = trim(Artisan::output());
-                    $migrated = true;
-                    $migrationMessage = ! empty($migrationOutput) ? $migrationOutput : 'Database migrations applied.';
-                } catch (Throwable $e) {
-                    $migrationMessage = 'Migration warning: '.$e->getMessage();
-                }
+                // OBS-A: run the applied slice's own migrations
+                // and verify its planned tables exist. A failure
+                // throws to the outer catch (error view) — the
+                // CLI's F9 contract — instead of the old behaviour:
+                // a default-path-only migrate that reported
+                // success while the slice's table was never
+                // created, with real failures downgraded to a
+                // "warning" under a success headline.
+                $migrationOutput = $this->migrateAppliedSlice($target, $plan);
+                $migrated = true;
+                $migrationMessage = $migrationOutput !== '' ? $migrationOutput : 'Database migrations applied.';
             }
 
             // Calculate domain-scoped URL for the newly generated slice
@@ -636,6 +650,91 @@ final class BlueprintStudioController extends Controller
      *
      * @return array<int, string>
      */
+    /**
+     * Migrate one Studio-applied slice and PROVE its planned
+     * tables exist before the caller may report success — the
+     * Studio twin of the CLI apply's F9 fix. The plain migrate
+     * call only walks the app's default path; a generated
+     * slice's migrations live in its own Migrations directory,
+     * which is not on it, so the Studio used to print
+     * "migrations were automatically executed" while the
+     * slice's table was never created (OBS-A, Phase 2). A
+     * failure here throws: the apply reports an error, never a
+     * success with a warning, exactly like the CLI.
+     */
+    protected function migrateAppliedSlice(string $target, array $plan): string
+    {
+        $outputs = [];
+        Artisan::call('migrate', ['--force' => true]);
+        $out = trim(Artisan::output());
+        if ($out !== '') {
+            $outputs[] = $out;
+        }
+
+        $sliceMigrations = $target.'/Migrations';
+        if (is_dir($sliceMigrations)) {
+            Artisan::call('migrate', [
+                '--path' => $sliceMigrations,
+                '--realpath' => true,
+                '--force' => true,
+            ]);
+            $out = trim(Artisan::output());
+            if ($out !== '') {
+                $outputs[] = $out;
+            }
+        }
+
+        $this->assertPlannedTablesExist([$plan], [$target]);
+
+        return implode("\n", $outputs);
+    }
+
+    /**
+     * Every create_table the plans promised must exist now (and
+     * every pivot_table a slice migration exists for). Anything
+     * missing is a loud failure with the CLI's wording — a slice
+     * whose table does not exist is NOT usable.
+     *
+     * @param  list<array<string, mixed>>  $plans
+     * @param  list<string|null>  $targets
+     */
+    protected function assertPlannedTablesExist(array $plans, array $targets): void
+    {
+        $missing = [];
+        foreach ($plans as $i => $plan) {
+            $target = $targets[$i] ?? null;
+            foreach ($plan['database_operations'] ?? [] as $operation) {
+                $kind = $operation['kind'] ?? null;
+                if ($kind === 'create_table' && ! Schema::hasTable((string) $operation['table'])) {
+                    $missing[] = (string) $operation['table'];
+                }
+                if ($kind === 'pivot_table' && $target !== null
+                    && $this->sliceHasMigrationFor($target, (string) $operation['table'])
+                    && ! Schema::hasTable((string) $operation['table'])) {
+                    $missing[] = (string) $operation['table'];
+                }
+            }
+        }
+        if ($missing !== []) {
+            throw new RuntimeException('Migration reported success but these planned tables do not exist: '.implode(', ', array_values(array_unique($missing))).'. The slice is NOT usable — apply failed.');
+        }
+    }
+
+    private function sliceHasMigrationFor(string $target, string $table): bool
+    {
+        $dir = $target.'/Migrations';
+        if (! is_dir($dir)) {
+            return false;
+        }
+        foreach (glob($dir.'/*.php') ?: [] as $file) {
+            if (str_contains(basename($file), $table)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     protected function executeMigrations(): array
     {
         $outputs = [];
@@ -2379,6 +2478,34 @@ PROMPT;
             'source' => (string) file_get_contents($path),
             'saved_at' => date('Y-m-d H:i:s', (int) filemtime($path)),
         ]);
+    }
+
+    /**
+     * Engine-truth validation for the Design editor's status badge.
+     * Runs the exact front half of plan() (parse → sanitize → the
+     * engine's BlueprintValidator) so the Studio's verdict can never
+     * diverge from slice:blueprint:plan again (Day-2 drill F8: the
+     * in-browser check only parsed YAML, while the engine rejected
+     * the Studio's own emitted length: '255'). Pure check — no writes.
+     */
+    public function blueprintValidate(Request $request, BlueprintLoader $loader, BlueprintValidator $validator): mixed
+    {
+        $input = $request->validate([
+            'source' => ['required', 'string', 'max:1048576'],
+            'format' => ['nullable', 'in:yaml,yml,json'],
+        ]);
+
+        try {
+            $parsed = $loader->parse($input['source'], $input['format'] ?? 'yaml');
+            $parsed = $this->sanitizeBlueprint($parsed);
+            $validator->validate($parsed);
+
+            return response()->json(['valid' => true, 'errors' => []]);
+        } catch (BlueprintValidationException $exception) {
+            return response()->json(['valid' => false, 'errors' => $exception->errors()]);
+        } catch (Throwable $exception) {
+            return response()->json(['valid' => false, 'errors' => [$exception->getMessage()]]);
+        }
     }
 
     public function blueprintDraftSave(Request $request): mixed

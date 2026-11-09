@@ -303,6 +303,16 @@ php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --dry
   3. *Data Mode (`system-base` clean slate vs `full-data` production migration)*
 
 
+## 🆕 What's new in v2.1.0 — The AI Surface, Completed
+
+Released 2026-11-09. Full notes: CHANGES-v2.1.0.md and the CHANGELOG's 2.1.0 section.
+
+- **The declarations serve themselves.** A runtime metadata projection answers "what slices exist, what does this one look like" from the Heart files — index, describe, and a versioned schema contract — cached by content hash, with the live row counts overlaid at request time. One ladder (index → describe → call) serves MCP, the Copilot, and HTTP, with payload budgets per AI capability tier: the design point is a small local model with a small window, not only a frontier API.
+- **An Explorer for every slice.** The schema contract becomes invocable forms for the operations it can derive; the rest are inspect-only, with the reason stated. Errors come back per-issue and self-repair-shaped, so a model (or a developer) can fix the named field and resubmit.
+- **AI writes need a signature.** Every AI-initiated write is two-phase: a proposal with a validated approval spec, then a signed token — bound to the operation, the exact arguments, and the proposing user; 300 seconds; single-use — and only then execution. Slice writes meanwhile bind strictly: type-garbage is a 422 with named issues, never a silent coercion, and each slice declares whether updates patch or replace.
+- **Declarations round-trip, ports score themselves.** `slice:regen-artefacts` re-syncs generated code (Contracts included) under a loss detector; `slice:absorb` reads hand edits back into the declaration; `slice:alter` grows the database additively and refuses the rest by name. Every port run emits a fidelity scorecard, and `slice:corpus` keeps the conformance corpus a future second runtime will be judged by.
+- **The demo, audited for real.** A clean-room functional audit (dashboards per role, record hubs, board, messaging, session revocation that actually revokes) plus a screen-by-screen comparison against the original software drove the fixes — install-and-login smoke is no longer accepted as "working". Full suite: 953 tests, 3709 assertions.
+
 ## 🆕 What's new in v2.0.2 — The Convergence Release
 
 v2.0.2 is what a second from-scratch port — built in a clean sandbox from the shipped skill alone and converged surface-by-surface against the running original until its benchmark passed every gate, including scripted admin **and** employee journeys (24/24) — demanded of the framework:

@@ -23,13 +23,21 @@ namespace LaraSlice\Support;
  * 'tax' rows add to the total only. Untyped rows are
  * items. A declared per-row tax-amount field adds to
  * the total for item rows.
+ *
+ * A header discount may be resolved into the block by
+ * the caller ('discount' => value, 'discount_type' =>
+ * 'percent'|'amount' — BaseSliceService reads them from
+ * the declared header fields): a percent discount takes
+ * that share of the subtotal, an amount discount is
+ * absolute; either reduces the grand total. The applied
+ * discount amount is returned as 'discount'.
  */
 final class DocumentMath
 {
     /**
      * @param  array<int, array<string, mixed>>  $rows
-     * @param  array{quantity?: string, unit_price?: string, amount?: string, type_field?: ?string, tax_amount?: ?string}  $document
-     * @return array{rows: array<int, array<string, mixed>>, subtotal: float, total: float}
+     * @param  array{quantity?: string, unit_price?: string, amount?: string, type_field?: ?string, tax_amount?: ?string, discount?: mixed, discount_type?: ?string}  $document
+     * @return array{rows: array<int, array<string, mixed>>, subtotal: float, discount: float, total: float}
      */
     public static function apply(array $rows, array $document): array
     {
@@ -61,7 +69,16 @@ final class DocumentMath
             $out[] = $row;
         }
 
-        return ['rows' => $out, 'subtotal' => round($subtotal, 2), 'total' => round($total, 2)];
+        $discountAmount = 0.0;
+        $discount = self::num($document['discount'] ?? null);
+        if ($discount > 0) {
+            $discountAmount = ($document['discount_type'] ?? 'amount') === 'percent'
+                ? round($subtotal * $discount / 100, 2)
+                : round($discount, 2);
+            $total -= $discountAmount;
+        }
+
+        return ['rows' => $out, 'subtotal' => round($subtotal, 2), 'discount' => $discountAmount, 'total' => round($total, 2)];
     }
 
     private static function num(mixed $v): float

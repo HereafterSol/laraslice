@@ -218,4 +218,164 @@ class RelatedTabsTest extends TestCase
         $controller = (string) file_get_contents(dirname(__DIR__, 3).'/src/Core/Base/BaseSliceWebController.php');
         $this->assertStringContainsString('fieldsTabLabelFromManifest', $controller);
     }
+
+    public function test_snake_case_relation_name_resolves_the_camel_case_model_method(): void
+    {
+        // Manifests name relations in the porter's snake_case form
+        // (project_activity) while generated models expose camelCase
+        // methods (projectActivity): the tab must still resolve its
+        // count instead of rendering a false "no records" panel.
+        $record = new class
+        {
+            public function projectActivity(): object
+            {
+                return new class
+                {
+                    public function count(): int
+                    {
+                        return 7;
+                    }
+                };
+            }
+        };
+        $manifest = ['ui' => ['show' => ['tabs' => [
+            ['handle' => 'project_activity', 'label' => 'Project Activity', 'type' => 'relation', 'relation' => 'project_activity'],
+        ]]]];
+
+        $tabs = DirectoryUi::relatedTabsFromManifest($manifest, $record);
+
+        $this->assertSame('project_activity', $tabs[0]['handle']);
+        $this->assertSame(7, $tabs[0]['count'] ?? null);
+    }
+
+    public function test_chart_tab_resolves_with_kind_and_relation(): void
+    {
+        $record = new class
+        {
+            public function tasks(): object
+            {
+                return new class
+                {
+                    public function count(): int
+                    {
+                        return 3;
+                    }
+                };
+            }
+        };
+        $manifest = ['ui' => ['show' => ['tabs' => [
+            ['handle' => 'burndown', 'label' => 'Burndown', 'type' => 'chart', 'chart' => 'burndown', 'relation' => 'tasks'],
+        ]]]];
+
+        $tabs = DirectoryUi::relatedTabsFromManifest($manifest, $record);
+
+        $this->assertSame('burndown', $tabs[0]['handle']);
+        $this->assertSame('chart', $tabs[0]['type']);
+        $this->assertSame('burndown', $tabs[0]['chart']);
+        $this->assertSame('tasks', $tabs[0]['relation']);
+    }
+
+    public function test_permissions_tab_resolves(): void
+    {
+        $record = new class
+        {
+            public ?int $user_id = 5;
+        };
+        $manifest = ['ui' => ['show' => ['tabs' => [
+            ['handle' => 'permissions', 'label' => 'Permissions', 'type' => 'permissions'],
+        ]]]];
+
+        $tabs = DirectoryUi::relatedTabsFromManifest($manifest, $record);
+
+        $this->assertSame('permissions', $tabs[0]['handle']);
+        $this->assertSame('permissions', $tabs[0]['type']);
+    }
+
+    public function test_calendar_and_thread_render_modes_supply_raw_records(): void
+    {
+        $makeRecord = static fn () => new class
+        {
+            public function employeeShiftSchedules(): object
+            {
+                return new class
+                {
+                    public function count(): int
+                    {
+                        return 2;
+                    }
+
+                    public function get(): array
+                    {
+                        return ['a', 'b'];
+                    }
+
+                    public function limit(int $n): static
+                    {
+                        return $this;
+                    }
+                };
+            }
+
+            public function replies(): object
+            {
+                return $this->employeeShiftSchedules();
+            }
+        };
+
+        foreach (['calendar', 'thread'] as $render) {
+            $relation = $render === 'calendar' ? 'employee_shift_schedules' : 'replies';
+            $manifest = ['ui' => ['show' => ['tabs' => [
+                ['handle' => 't', 'label' => 'T', 'type' => 'relation', 'relation' => $relation, 'render' => $render],
+            ]]]];
+
+            $tabs = DirectoryUi::relatedTabsFromManifest($manifest, $makeRecord());
+
+            $this->assertSame($render, $tabs[0]['render'], $render);
+            $this->assertSame(['a', 'b'], $tabs[0]['records'] ?? null, $render);
+        }
+    }
+
+    public function test_show_default_tab_validates_against_declared_tabs(): void
+    {
+        $tabs = [['handle' => 'replies', 'label' => 'Replies', 'type' => 'relation', 'relation' => 'replies']];
+        $this->assertSame('replies', DirectoryUi::showDefaultTabFromManifest(
+            ['ui' => ['show' => ['default_tab' => 'replies', 'tabs' => $tabs]]]
+        ));
+        $this->assertSame('overview', DirectoryUi::showDefaultTabFromManifest(
+            ['ui' => ['show' => ['default_tab' => 'overview', 'tabs' => $tabs]]]
+        ));
+        $this->assertNull(DirectoryUi::showDefaultTabFromManifest(
+            ['ui' => ['show' => ['default_tab' => 'missing', 'tabs' => $tabs]]]
+        ));
+        $this->assertNull(DirectoryUi::showDefaultTabFromManifest(
+            ['ui' => ['show' => ['tabs' => $tabs]]]
+        ));
+        $this->assertNull(DirectoryUi::showDefaultTabFromManifest(
+            ['ui' => ['show' => ['default_tab' => 'replies', 'tabs' => [
+                ['handle' => 'replies', 'label' => 'Replies', 'type' => 'relation', 'relation' => 'replies', 'hidden' => true],
+            ]]]]
+        ));
+    }
+
+    public function test_generator_and_repair_carry_the_chart_and_permissions_panels(): void
+    {
+        $generator = (string) file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
+        $this->assertStringContainsString('partials.related-tab-chart', $generator);
+        $this->assertStringContainsString('partials.related-tab-permissions', $generator);
+        $this->assertStringContainsString("'calendar', 'thread'", $generator);
+        $this->assertStringContainsString('\$showDefaultTab ?? \'overview\'', $generator);
+
+        $manager = (string) file_get_contents(dirname(__DIR__, 3).'/src/Core/Discovery/SliceManager.php');
+        $this->assertStringContainsString('(ao) Chart tab panel', $manager);
+        $this->assertStringContainsString('(ap) Permissions tab panel', $manager);
+        $this->assertStringContainsString('function addChartTabPanel', $manager);
+        $this->assertStringContainsString('function addPermissionsTabPanel', $manager);
+
+        $controller = (string) file_get_contents(dirname(__DIR__, 3).'/src/Core/Base/BaseSliceWebController.php');
+        $this->assertStringContainsString('showDefaultTabFromManifest', $controller);
+
+        foreach (['related-tab-chart', 'related-tab-calendar', 'related-tab-thread', 'related-tab-permissions'] as $partial) {
+            $this->assertFileExists(dirname(__DIR__, 3).'/src/Wizard/views/partials/'.$partial.'.blade.php', $partial);
+        }
+    }
 }
