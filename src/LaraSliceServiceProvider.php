@@ -24,6 +24,7 @@ use LaraSlice\Commands\SliceAiCommand;
 use LaraSlice\Commands\SliceCacheCommand;
 use LaraSlice\Commands\SliceClearCommand;
 use LaraSlice\Commands\SliceConformanceCommand;
+use LaraSlice\Commands\SliceCorpusCommand;
 use LaraSlice\Commands\SliceDeriveNavigationCommand;
 use LaraSlice\Commands\SliceDeriveSchemaClosureCommand;
 use LaraSlice\Commands\SliceDeriveSurfaceCommand;
@@ -45,7 +46,10 @@ use LaraSlice\Commands\SlicePlanDraftCommand;
 use LaraSlice\Commands\SlicePortCommand;
 use LaraSlice\Commands\SlicePublishCommand;
 use LaraSlice\Commands\SliceQualifyRoutesCommand;
+use LaraSlice\Commands\SliceRegenArtefactsCommand;
+use LaraSlice\Commands\SliceAlterCommand;
 use LaraSlice\Commands\SliceRegenFormCommand;
+use LaraSlice\Commands\SliceAbsorbCommand;
 use LaraSlice\Commands\SliceRepairCommand;
 use LaraSlice\Commands\SliceSeedCommand;
 use LaraSlice\Commands\SliceHistoryCommand;
@@ -62,6 +66,9 @@ use LaraSlice\Core\Ai\AiChatController;
 use LaraSlice\Core\Ai\AiEngine;
 use LaraSlice\Core\Ai\McpServer;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Metadata\ConfirmationController;
+use LaraSlice\Core\Metadata\ExplorerController;
+use LaraSlice\Core\Metadata\MetadataController;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\Core\Workflow\Events\WorkflowTransitioned;
 use LaraSlice\Core\Workflow\Listeners\NotifyWorkflowTransition;
@@ -97,7 +104,11 @@ class LaraSliceServiceProvider extends ServiceProvider
 
         // 4. Register McpServer Singleton
         $this->app->singleton(McpServer::class, function ($app) {
-            return new McpServer($app->make(AiEngine::class), $app->make(SliceManager::class));
+            return new McpServer(
+                $app->make(AiEngine::class),
+                $app->make(SliceManager::class),
+                $app->make(\LaraSlice\Core\Metadata\MetadataProjector::class)
+            );
         });
     }
 
@@ -185,6 +196,9 @@ class LaraSliceServiceProvider extends ServiceProvider
                 SliceCacheCommand::class,
                 SliceRepairCommand::class,
                 SliceRegenFormCommand::class,
+                SliceRegenArtefactsCommand::class,
+                SliceAlterCommand::class,
+                SliceAbsorbCommand::class,
                 SlicePlanDraftCommand::class,
                 SliceFlowCommand::class,
                 SliceOperateCommand::class,
@@ -192,6 +206,7 @@ class LaraSliceServiceProvider extends ServiceProvider
                 SliceIndexCommand::class,
                 SliceDriftCommand::class,
                 SliceConformanceCommand::class,
+                SliceCorpusCommand::class,
                 SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,
@@ -236,6 +251,15 @@ class LaraSliceServiceProvider extends ServiceProvider
                 ->name('laraslice.record_action');
             Route::post('/bulk-actions/{prefix}/{action}', BulkActionController::class)
                 ->name('laraslice.bulk_action');
+            // Per-user permission types: the employee hub
+            // Permissions tab's write endpoints (the controller
+            // gates on the employee edit ability / super personas).
+            Route::post('/user-permissions/{userId}', [\LaraSlice\Core\Security\UserPermissionTypeController::class, 'update'])
+                ->whereNumber('userId')
+                ->name('laraslice.user_permissions.update');
+            Route::post('/user-permissions/{userId}/reset', [\LaraSlice\Core\Security\UserPermissionTypeController::class, 'reset'])
+                ->whereNumber('userId')
+                ->name('laraslice.user_permissions.reset');
         });
 
         // Public record links (ui.public_link): unauthenticated,
@@ -263,11 +287,28 @@ class LaraSliceServiceProvider extends ServiceProvider
                     Route::get('/studio/blueprint/porting-modal', [BlueprintStudioController::class, 'blueprintPortingModal'])->name('laraslice.studio.blueprint_porting_modal');
                     Route::get('/studio/blueprint/library', [BlueprintStudioController::class, 'blueprintLibraryIndex'])->name('laraslice.studio.blueprint_library');
                     Route::get('/studio/blueprint/library/{slug}', [BlueprintStudioController::class, 'blueprintLibraryShow'])->name('laraslice.studio.blueprint_library_show');
+                    // Proposal #1: the runtime metadata projection —
+                    // the discovery ladder's first two rungs (compact
+                    // fleet index, per-slice describe). Read-only and
+                    // behind the same studio.access gate as the shell.
+                    Route::get('/studio/metadata', [MetadataController::class, 'index'])->name('laraslice.studio.metadata');
+                    Route::get('/studio/metadata/{slice}', [MetadataController::class, 'describe'])->name('laraslice.studio.metadata_slice');
+                    // Proposal #2: the per-slice schema contract +
+                    // the executable form (Explorer) over it.
+                    Route::get('/studio/metadata/{slice}/schema', [MetadataController::class, 'schema'])->name('laraslice.studio.metadata_schema');
+                    Route::get('/studio/explorer/{slice}', [ExplorerController::class, 'show'])->name('laraslice.studio.explorer');
                     Route::middleware($guard)->group(function () {
+                        // Proposal #4: the Explorer's write
+                        // confirmation seat — propose (issue a
+                        // signed token + approval spec) and
+                        // execute (verify, then dispatch).
+                        Route::post('/studio/confirm/propose', [ConfirmationController::class, 'propose'])->name('laraslice.studio.confirm_propose');
+                        Route::post('/studio/confirm/execute', [ConfirmationController::class, 'execute'])->name('laraslice.studio.confirm_execute');
                         Route::post('/studio/blueprint/draft', [BlueprintStudioController::class, 'blueprintDraftSave'])->name('laraslice.studio.blueprint_draft_save');
                         Route::post('/studio/blueprint/library', [BlueprintStudioController::class, 'blueprintLibraryStore'])->name('laraslice.studio.blueprint_library_store');
                         Route::delete('/studio/blueprint/library/{slug}', [BlueprintStudioController::class, 'blueprintLibraryDestroy'])->name('laraslice.studio.blueprint_library_destroy');
                         Route::post('/studio/blueprint/draft-from-brief', [BlueprintStudioController::class, 'draftFromBrief'])->name('laraslice.studio.blueprint_draft_from_brief');
+                        Route::post('/studio/blueprint/validate', [BlueprintStudioController::class, 'blueprintValidate'])->name('laraslice.studio.blueprint_validate');
                         Route::post('/studio/mind-seed/apply', [BlueprintStudioController::class, 'applyMindSeed'])->name('laraslice.studio.mind_seed_apply');
                         Route::post('/studio/plan/propose-journeys', [BlueprintStudioController::class, 'proposeMindJourneys'])->name('laraslice.studio.plan_propose_journeys');
                         Route::post('/studio/plan/preview', [BlueprintStudioController::class, 'planPreview'])->name('laraslice.studio.plan_preview');
@@ -477,6 +518,14 @@ class LaraSliceServiceProvider extends ServiceProvider
                 })->name('checklist');
             }
         });
+
+        // 9. Bound storage settings drive the filesystem config
+        // (closure Item 2): when the app carries the ported
+        // file_storage_settings table, its enabled row selects
+        // the default disk — the counterpart of the source's
+        // FileStorageCustomConfigProvider. Guarded inside
+        // SettingsUi; a no-op for apps without the table.
+        \LaraSlice\Support\SettingsUi::applyStorageSettings();
     }
 
     /**

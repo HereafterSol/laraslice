@@ -200,6 +200,25 @@ class SliceGenerator
             ];
         }
 
+        // Companion-account creation (declared account_creation:):
+        // the account's foreign key is supplied by the store when
+        // the account section is filled, so the picker field must
+        // not be hard-required — neither in the form markup the
+        // normalizer is about to bake nor in the generated
+        // validation (the controller guards the case where neither
+        // path supplies a user). Applied BEFORE normalize() because
+        // the normalizer pre-renders each field's form markup.
+        $accountDeclOpt = is_array($options['account_creation'] ?? null) ? $options['account_creation'] : null;
+        if ($accountDeclOpt !== null && ! empty($accountDeclOpt['foreign_key'])) {
+            foreach ($fields as &$fieldDef) {
+                if (($fieldDef['name'] ?? null) === (string) $accountDeclOpt['foreign_key']) {
+                    $fieldDef['required'] = false;
+                    $fieldDef['nullable'] = true;
+                }
+            }
+            unset($fieldDef);
+        }
+
         $fields = $this->fieldNormalizer->normalize($fields);
         $fieldsByName = [];
         foreach ($fields as $field) {
@@ -209,9 +228,26 @@ class SliceGenerator
         $softDeletes = (bool) ($options['soft_deletes'] ?? false);
         $migrationSoftDeletes = $softDeletes ? "\n                \$table->softDeletes();" : '';
         $encryptedColumns = array_column(array_filter($fields, fn (array $f) => ! empty($f['encrypted'])), 'name');
-        $modelCasts = $encryptedColumns === []
+        // Declared per-field casts (the field-level `cast`
+        // key, absorbed vocabulary 7 Nov): a field may name
+        // the Eloquent cast its column carries, and the
+        // generator emits it into $casts alongside the
+        // encrypted casts. The encrypted flag is the
+        // stronger declaration for its own columns and
+        // overlays any cast named there. With no declared
+        // casts this reduces to the historical expression.
+        $castMap = [];
+        foreach ($fields as $castField) {
+            if (! empty($castField['cast']) && is_string($castField['cast'])) {
+                $castMap[(string) $castField['name']] = $castField['cast'];
+            }
+        }
+        foreach ($encryptedColumns as $encryptedColumn) {
+            $castMap[$encryptedColumn] = 'encrypted';
+        }
+        $modelCasts = $castMap === []
             ? ''
-            : "\n    protected \$casts = ".var_export(array_fill_keys($encryptedColumns, 'encrypted'), true).';';
+            : "\n    protected \$casts = ".var_export($castMap, true).';';
 
         $titleField = $fieldsByName['title'] ?? null;
         $descriptionField = $fieldsByName['description'] ?? null;
@@ -220,17 +256,41 @@ class SliceGenerator
         $extraFields = array_values(array_filter($fields, fn (array $f) => ! in_array($f['name'], ['title', 'description', 'status'], true)));
         $customColumns = array_column($fields, 'name');
 
-        $manifestFields = array_map(fn (array $field) => [
-            'name' => $field['name'],
-            'label' => $field['label'],
-            'type' => $field['type'],
-            'nullable' => $field['nullable'],
-            'default' => $field['default'],
-            'options' => $field['options'] ?? [],
-            'hidden' => ! empty($field['hidden']),
-            'show_in_form' => isset($field['show_in_form']) ? (bool) $field['show_in_form'] : empty($field['hidden']),
-            'show_in_list' => isset($field['show_in_list']) ? (bool) $field['show_in_list'] : empty($field['hidden']),
-        ], $fields);
+        $manifestFields = array_map(function (array $field) {
+            $manifestField = [
+                'name' => $field['name'],
+                'label' => $field['label'],
+                'type' => $field['type'],
+            ];
+            // Decimal precision ("p,s") survives into the Heart so
+            // staging/regen from the manifest keeps it; without the
+            // record, the first regen reverted the column to the
+            // (12,2) fallback even when generation had it right.
+            if (in_array($field['type'], ['decimal', 'float'], true) && ($field['length'] ?? null) !== null) {
+                $manifestField['length'] = $field['length'];
+            }
+            // A field's declared relation (name/model + the table
+            // it references) survives into the Heart's fields map:
+            // the form runtime resolves FK pickers from the
+            // declaration, and a Heart that drops it leaves the
+            // picker to table-name guessing (F10, Day-2 drill).
+            if (! empty($field['relation']) && is_array($field['relation'])) {
+                $manifestField['relation'] = $field['relation'];
+                if (($field['references'] ?? null) !== null) {
+                    $manifestField['references'] = $field['references'];
+                }
+            }
+            $manifestField += [
+                'nullable' => $field['nullable'],
+                'default' => $field['default'],
+                'options' => $field['options'] ?? [],
+                'hidden' => ! empty($field['hidden']),
+                'show_in_form' => isset($field['show_in_form']) ? (bool) $field['show_in_form'] : empty($field['hidden']),
+                'show_in_list' => isset($field['show_in_list']) ? (bool) $field['show_in_list'] : empty($field['hidden']),
+            ];
+
+            return $manifestField;
+        }, $fields);
 
         $fillable = var_export(array_values(array_unique($customColumns)), true);
         $sortableColumns = implode(', ', array_map(fn (string $column) => var_export($column, true), array_values(array_unique(array_merge(['id'], $customColumns, ['created_at', 'updated_at'])))));
@@ -567,6 +627,19 @@ HTML;
 
                     // Find field matching handle
                     $fieldObj = collect($fields)->firstWhere('name', $fHandle);
+                    // Form hygiene parity with the default (non-sectioned)
+                    // path above: audit/system columns and fields the
+                    // Heart keeps off forms never become inputs just
+                    // because a ported manifest lists their handle in a
+                    // form section (the comparative test found added_by /
+                    // last_updated_by / hash rendered as editable number
+                    // inputs across the ported ERP's sectioned forms).
+                    if ($fieldObj && (in_array($fHandle, $formAuditBlacklist, true)
+                        || FieldDefinitionNormalizer::isSystemField($fHandle)
+                        || ! empty($fieldObj['hidden'])
+                        || ($fieldObj['show_in_form'] ?? true) === false)) {
+                        continue;
+                    }
                     if ($fieldObj && ! empty($fieldObj['form'])) {
                         $markup = $fieldObj['form'];
                         if ($fSpan >= 3 || $fSpan >= $sCols) {
@@ -610,6 +683,49 @@ CARD;
 
 ', $customCards);
             }
+        }
+
+        // Companion-account creation (declared account_creation:):
+        // the create form opens with a Login Account card whose
+        // account[...] inputs the store turns into a real user
+        // (BaseSliceWebController::applyCompanionAccount).
+        $accountDecl = is_array($options['account_creation'] ?? null) ? $options['account_creation'] : null;
+        if ($accountDecl !== null && ! empty($accountDecl['role'])) {
+            $accountRole = (string) $accountDecl['role'];
+            $accountCard = <<<HTML
+        @if(\$isNew)
+        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden">
+            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4">
+                <div class="flex items-center gap-2">
+                    <x-lucide-key-round class="size-4 text-primary" />
+                    <x-ui.card-title class="text-base font-bold text-foreground">Login Account</x-ui.card-title>
+                </div>
+                <x-ui.card-description class="text-xs">Create the {$accountRole} login account in the same step — or leave blank and pick an existing user below.</x-ui.card-description>
+            </x-ui.card-header>
+            <x-ui.card-content class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
+                    <div class="space-y-1.5">
+                        <x-ui.label for="account_name">Full Name</x-ui.label>
+                        <x-ui.input id="account_name" type="text" name="account[name]" value="{{ old('account.name') }}" autocomplete="off" />
+                        @error('account.name') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
+                    </div>
+                    <div class="space-y-1.5">
+                        <x-ui.label for="account_email">Email</x-ui.label>
+                        <x-ui.input id="account_email" type="email" name="account[email]" value="{{ old('account.email') }}" autocomplete="off" />
+                        @error('account.email') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
+                    </div>
+                    <div class="space-y-1.5">
+                        <x-ui.label for="account_password">Password</x-ui.label>
+                        <x-ui.input id="account_password" type="password" name="account[password]" autocomplete="new-password" />
+                        @error('account.password') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
+                    </div>
+                </div>
+            </x-ui.card-content>
+        </x-ui.card>
+        @endif
+
+HTML;
+            $formSectionsHtml = $accountCard.$formSectionsHtml;
         }
 
         $includeApi = (bool) ($options['api'] ?? true);
@@ -707,6 +823,46 @@ CARD;
                     $manifestRelations[] = $declaredRelation;
                 }
             }
+
+            // Directory columns for FK fields carry the field's
+            // DECLARED relation (name + target table) into the
+            // Heart, so cell renderers resolve the actual target
+            // record instead of guessing from the handle. Neither
+            // the Studio-built UI payload nor the default
+            // directory tags both, and a renderer left to
+            // conventions renders the wrong record for
+            // non-conventional targets (F10: employee_id ->
+            // employee_details, whose id is not a user id).
+            if (! empty($uiOption['directory']['columns']) && is_array($uiOption['directory']['columns'])) {
+                $declaredByHandle = [];
+                foreach ($manifestFields as $manifestField) {
+                    if (is_array($manifestField) && ! empty($manifestField['name'])) {
+                        $declaredByHandle[(string) $manifestField['name']] = $manifestField;
+                    }
+                }
+                foreach ($uiOption['directory']['columns'] as $columnIndex => $directoryColumn) {
+                    if (! is_array($directoryColumn)) {
+                        continue;
+                    }
+                    $columnHandle = (string) ($directoryColumn['handle'] ?? $directoryColumn['key'] ?? '');
+                    $declaredField = $declaredByHandle[$columnHandle] ?? null;
+                    if ($declaredField === null) {
+                        continue;
+                    }
+                    if (empty($directoryColumn['relation']) && ! empty($declaredField['relation']['name'])) {
+                        $uiOption['directory']['columns'][$columnIndex]['relation'] = (string) $declaredField['relation']['name'];
+                    }
+                    if (empty($directoryColumn['label_table']) && ! empty($declaredField['references'])) {
+                        $uiOption['directory']['columns'][$columnIndex]['label_table'] = (string) $declaredField['references'];
+                    }
+                }
+            }
+
+            // OBS-B2: the Heart is born in the one canonical
+            // producer form (see HeartUiCanonicalizer) — the form
+            // the Manage save path produces — so a first Studio
+            // save previews the user's change, not a normalization.
+            $uiOption = HeartUiCanonicalizer::canonicalize($uiOption, $manifestFields);
 
             $manifestData = [
                 'name' => $pluralName,
@@ -848,7 +1004,7 @@ REL;
                     continue;
                 }
                 $declType = (string) ($declaredRelation['type'] ?? 'hasMany');
-                if (! in_array($declType, ['hasMany', 'belongsTo', 'belongsToMany'], true)) {
+                if (! in_array($declType, ['hasMany', 'belongsTo', 'belongsToMany', 'hasManyThrough'], true)) {
                     continue;
                 }
                 $declTarget = Str::studly(Str::singular((string) ($declaredRelation['model'] ?? $declaredRelation['name'])));
@@ -862,6 +1018,17 @@ REL;
                     $pivotArgs = var_export($pivotTable, true).', '
                         .var_export((string) ($pivot['foreign_pivot_key'] ?? Str::singular($tableName).'_id'), true).', '
                         .var_export((string) ($pivot['related_pivot_key'] ?? Str::singular(Str::snake($declTarget)).'_id'), true);
+                    // Absorb (7 Nov): a pivot declaration may
+                    // carry the parent/related keys the call
+                    // is keyed on (hub relations keyed on
+                    // user_id, not id). Absent = the historical
+                    // three-argument emission, unchanged.
+                    if (! empty($pivot['parent_key']) || ! empty($pivot['related_key'])) {
+                        $pivotArgs .= ', '.var_export((string) ($pivot['parent_key'] ?? 'id'), true);
+                        if (! empty($pivot['related_key'])) {
+                            $pivotArgs .= ', '.var_export((string) $pivot['related_key'], true);
+                        }
+                    }
                     $modelRelations .= <<<REL
 
 
@@ -878,16 +1045,84 @@ REL;
 
                     continue;
                 }
+                if ($declType === 'hasManyThrough') {
+                    // Through relation (absorbed vocabulary,
+                    // 7 Nov): the declaration names the final
+                    // model, the through model, and the key
+                    // chain (first_key on the through table,
+                    // second_key on the final table, local_key
+                    // on this model, second_local_key on the
+                    // through model). Undeclared keys fall
+                    // back to Eloquent's own conventions; a
+                    // declaration carrying NO keys emits the
+                    // bare two-class call.
+                    $throughDecl = (string) ($declaredRelation['through'] ?? '');
+                    if ($throughDecl === '') {
+                        continue;
+                    }
+                    $throughTarget = Str::studly(Str::singular($throughDecl));
+                    $throughExport = var_export($throughTarget, true);
+                    $firstKey = (string) ($declaredRelation['first_key'] ?? Str::snake(Str::singular($tableName)).'_id');
+                    $secondKey = (string) ($declaredRelation['second_key'] ?? Str::snake($throughTarget).'_id');
+                    $localKey = (string) ($declaredRelation['local_key'] ?? 'id');
+                    $secondLocalKey = (string) ($declaredRelation['second_local_key'] ?? 'id');
+                    $throughArgs = '';
+                    if (isset($declaredRelation['first_key']) || isset($declaredRelation['second_key'])
+                        || isset($declaredRelation['local_key']) || isset($declaredRelation['second_local_key'])) {
+                        $throughArgs = ', '.var_export($firstKey, true).', '.var_export($secondKey, true)
+                            .', '.var_export($localKey, true).', '.var_export($secondLocalKey, true);
+                    }
+                    $modelRelations .= <<<REL
+
+
+    public function {$declMethod}(): \\Illuminate\\Database\\Eloquent\\Relations\\HasManyThrough
+    {
+        // Resolved among installed slices (and App\\Models) when first used
+        \$class = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$declTargetExport})
+            ?? throw new \\LogicException('No model class named {$declTarget} was found for {$secondKey}.');
+        \$throughClass = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$throughExport})
+            ?? throw new \\LogicException('No model class named {$throughTarget} was found for {$firstKey}.');
+
+        return \$this->hasManyThrough(\$class, \$throughClass{$throughArgs});
+    }
+REL;
+                    $emittedRelationMethods[$declMethod] = true;
+
+                    continue;
+                }
                 $declFk = (string) ($declaredRelation['foreign_key'] ?? ($declType === 'hasMany'
                     ? Str::singular($tableName).'_id'
                     : Str::snake((string) $declaredRelation['name']).'_id'));
                 $declFkExport = var_export($declFk, true);
+                // Absorb (7 Nov): a declaration may carry
+                // the relation's other-side key (local_key
+                // for hasMany, owner_key for belongsTo) —
+                // emitted as the call's third argument.
+                // Absent = the historical two-argument
+                // emission, unchanged.
+                $declOtherKey = $declType === 'hasMany'
+                    ? ($declaredRelation['local_key'] ?? null)
+                    : ($declaredRelation['owner_key'] ?? null);
+                if (is_string($declOtherKey) && $declOtherKey !== '') {
+                    $declFkExport .= ', '.var_export($declOtherKey, true);
+                }
                 $declReturn = $declType === 'hasMany' ? 'HasMany' : 'BelongsTo';
                 $declCall = $declType === 'hasMany' ? 'hasMany' : 'belongsTo';
+                // The generated model already imports
+                // Relations\BelongsTo, and the field-level
+                // emitter below (and every porter-generated
+                // model) uses the short name — the declared
+                // emitter must match, or the same relation
+                // changes shape depending on which loop emits it
+                // first (F10: blueprint applies now always feed
+                // declared relations through this loop).
+                $declReturnType = $declType === 'belongsTo'
+                    ? 'BelongsTo'
+                    : '\\Illuminate\\Database\\Eloquent\\Relations\\'.$declReturn;
                 $modelRelations .= <<<REL
 
 
-    public function {$declMethod}(): \\Illuminate\\Database\\Eloquent\\Relations\\{$declReturn}
+    public function {$declMethod}(): {$declReturnType}
     {
         // Resolved among installed slices (and App\\Models) when first used
         \$class = app(\\LaraSlice\\Core\\Discovery\\SliceManager::class)->modelClass({$declTargetExport})
@@ -1669,14 +1904,41 @@ ACTIONS;
                 \$inlineEdit = [];
             }
             \$statusKey = 'status';
+            \$statusFound = false;
             \$dateKey = null;
             foreach (\$columns as \$c) {
                 \$ck = \$c['key'] ?? '';
                 if (in_array(\$ck, ['status', 'state', 'stage'], true)) {
                     \$statusKey = \$ck;
+                    \$statusFound = true;
                 }
                 if (\$dateKey === null && (str_contains(\$ck, 'date') || str_ends_with(\$ck, '_at'))) {
                     \$dateKey = \$ck;
+                }
+            }
+            if (! \$statusFound) {
+                // Board-axis fallback: an FK column the declaration
+                // labels "Status"/"Stage" (Tasks: board_column_id)
+                // is the board's grouping axis — without it the
+                // board groups every row under "Unknown".
+                foreach (\$columns as \$c) {
+                    \$ck = \$c['key'] ?? '';
+                    \$clabel = \$c['label'] ?? '';
+                    if (str_ends_with(\$ck, '_id')
+                        && (in_array(\$clabel, ['Status', 'Stage'], true)
+                            || str_contains(\$ck, 'board')
+                            || str_contains(\$ck, 'stage')
+                            || str_contains(\$ck, 'status'))) {
+                        \$statusKey = \$ck;
+                        break;
+                    }
+                }
+            }
+            \$boardAxis = [];
+            foreach (\$columns as \$c) {
+                if ((\$c['key'] ?? '') === \$statusKey && ! empty(\$c['options']) && is_array(\$c['options'])) {
+                    \$boardAxis = \$c['options'];
+                    break;
                 }
             }
             foreach (['due_date', 'start_date', 'issue_date', 'date'] as \$preferDate) {
@@ -1700,6 +1962,7 @@ ACTIONS;
             :views="\$tableViews"
             :default-view="\$defaultView"
             :status-key="\$statusKey"
+            :board-axis="\$boardAxis"
             :inline-edit="\$inlineEdit"
             :date-key="\$dateKey"
             :inline-update-url="\$inlineUpdateUrl ?? null"
@@ -1962,10 +2225,21 @@ BLADE;
 
 @section('content')
 <div class="w-full max-w-5xl mx-auto space-y-6" data-ls-form-root>
-    <div class="flex items-center gap-2 text-xs text-muted-foreground">
-        <a href="{{ route('{$routeNamePrefix}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
-        <span>/</span>
-        <span class="text-foreground font-medium">{{ \$isNew ? 'Create {$studlyName}' : 'Edit {$studlyName} #' . \$form->id }}</span>
+    <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <a href="{{ route('{$routeNamePrefix}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
+            <span>/</span>
+            <span class="text-foreground font-medium">{{ \$isNew ? 'Create {$studlyName}' : 'Edit {$studlyName} #' . \$form->id }}</span>
+        </div>
+        @if(!\$isNew && (\$can['delete'] ?? false))
+        <form action="{{ route('{$routeNamePrefix}.destroy', \$form->id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
+            @csrf
+            @method('DELETE')
+            <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive gap-1.5">
+                <x-lucide-trash-2 class="size-3.5" /><span>Delete</span>
+            </x-ui.button>
+        </form>
+        @endif
     </div>
 
     @if (session('success'))
@@ -1996,11 +2270,13 @@ BLADE;
         </div>
     @endif
 
-    <form action="{{ \$isNew ? route('{$routeNamePrefix}.store') : route('{$routeNamePrefix}.update', \$form->id) }}" method="POST" class="space-y-6">
+    <form action="{{ \$isNew ? route('{$routeNamePrefix}.store') : route('{$routeNamePrefix}.update', \$form->id) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
         @csrf
         @if(!\$isNew) @method('PUT') @endif
 
 {$formSectionsHtml}
+
+        @include('laraslice::partials.custom-fields-form')
 
         <!-- Sticky Bottom Form Actions Bar -->
         <div class="sticky bottom-4 z-10 p-4 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-lg flex items-center justify-between">
@@ -2049,7 +2325,7 @@ BLADE;
     \$isOverview = (\$composition['mode'] ?? 'standard') === 'overview';
 @endphp
 
-<div class="space-y-4" x-data="{ activeTab: new URLSearchParams(window.location.search).get('tab') || 'overview' }" @ls-show-tab.window="activeTab = \$event.detail">
+<div class="space-y-4" x-data="{ activeTab: new URLSearchParams(window.location.search).get('tab') || '{{ \$showDefaultTab ?? 'overview' }}' }" @ls-show-tab.window="activeTab = \$event.detail">
 @if(\$isOverview)
 {{-- Layout kit step 3: overview composition — the record title
      lives in the topbar (layout page-title section). --}}
@@ -2115,20 +2391,25 @@ BLADE;
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
+                @if(\$can['view'] ?? false)
                 <x-ui.button href="{{ route('{$routeNamePrefix}.index') }}" as="a" variant="outline" size="sm" class="gap-1.5">
                     <x-lucide-arrow-left class="size-3.5" />
                     <span>Back</span>
                 </x-ui.button>
+                @endif
                 @isset(\$documentUrl)
                 <x-ui.button href="{{ \$documentUrl }}" as="a" variant="outline" size="sm" class="gap-1.5">
                     <x-lucide-file-text class="size-3.5" />
                     Document
                 </x-ui.button>
                 @endisset
+                @if(\$can['edit'] ?? false)
                 <x-ui.button href="{{ route('{$routeNamePrefix}.edit', \$id) }}" as="a" variant="outline" size="sm" class="gap-1.5">
                     <x-lucide-pencil class="size-3.5" />
                     <span>Edit</span>
                 </x-ui.button>
+                @endif
+                @if(\$can['delete'] ?? false)
                 <form action="{{ route('{$routeNamePrefix}.destroy', \$id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
                     @csrf
                     @method('DELETE')
@@ -2136,6 +2417,7 @@ BLADE;
                         <x-lucide-trash-2 class="size-3.5" />
                     </x-ui.button>
                 </form>
+                @endif
             </div>
         </div>
     </x-ui.card>
@@ -2203,7 +2485,7 @@ BLADE;
     @push('page-title'){{ \$recordName ?? \$showIdentity['name'] ?? \$label }}@endpush
     @push('filterbar')
     <div class="flex w-full min-w-0 items-center gap-1 border-b border-border bg-background px-4 lg:px-6" data-ls-ribbon
-         x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || 'overview' }"
+         x-data="{ tab: new URLSearchParams(window.location.search).get('tab') || '{{ \$showDefaultTab ?? 'overview' }}' }"
          @ls-show-tab.window="tab = \$event.detail">
         <button type="button" data-ls-tab="overview" @click="\$dispatch('ls-show-tab', 'overview'); window.history.replaceState(null, '', '?tab=overview')"
             class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer"
@@ -2224,9 +2506,12 @@ BLADE;
         @endforeach
         <div class="ml-auto flex items-center gap-2 py-1.5 shrink-0 sticky right-0 bg-background pl-3" data-ls-ribbon-actions>
             <x-ui.status-pill :status="\$currentState" :label="\$stateLabel" :color="\$badgeColor" size="sm" />
+            @if(\$can['edit'] ?? false)
             <x-ui.button href="{{ route('{$routeNamePrefix}.edit', \$id) }}" as="a" variant="outline" size="sm" class="gap-1.5">
                 <x-lucide-pencil class="size-3.5" /><span>Edit</span>
             </x-ui.button>
+            @endif
+            @if(\$can['delete'] ?? false)
             <form action="{{ route('{$routeNamePrefix}.destroy', \$id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
                 @csrf
                 @method('DELETE')
@@ -2234,6 +2519,7 @@ BLADE;
                     <x-lucide-trash-2 class="size-3.5" />
                 </x-ui.button>
             </form>
+            @endif
         </div>
     @include('laraslice::partials.tab-ribbon-script')
     </div>
@@ -2255,12 +2541,16 @@ BLADE;
                 Action <x-lucide-more-vertical class="size-4 text-muted-foreground" />
             </button>
             <div x-show="open" x-cloak @click.outside="open = false" class="absolute right-0 top-full z-50 mt-1 min-w-40 rounded-xl border border-border bg-card p-1 shadow-lg">
+                @if(\$can['edit'] ?? false)
                 <a href="{{ route('{$routeNamePrefix}.edit', \$id) }}" class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-foreground hover:bg-muted"><x-lucide-pencil class="size-3.5" /><span>Edit</span></a>
+                @endif
+                @if(\$can['delete'] ?? false)
                 <form action="{{ route('{$routeNamePrefix}.destroy', \$id) }}" method="POST" onsubmit="return confirm('Delete this record?')">
                     @csrf
                     @method('DELETE')
                     <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-destructive hover:bg-muted"><x-lucide-trash-2 class="size-3.5" /><span>Delete</span></button>
                 </form>
+                @endif
             </div>
         </div>
         <div class="relative" x-data="{ open: false }">
@@ -2343,12 +2633,16 @@ BLADE;
                                 <x-lucide-more-horizontal class="size-5" />
                             </button>
                             <div x-show="open" x-cloak @click.outside="open = false" class="absolute right-0 top-full z-50 mt-1 min-w-40 rounded-xl border border-border bg-card p-1 shadow-lg">
+                                @if(\$can['edit'] ?? false)
                                 <a href="{{ route('{$routeNamePrefix}.edit', \$id) }}" class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-foreground hover:bg-muted"><x-lucide-pencil class="size-3.5" /><span>Edit</span></a>
+                                @endif
+                                @if(\$can['delete'] ?? false)
                                 <form action="{{ route('{$routeNamePrefix}.destroy', \$id) }}" method="POST" onsubmit="return confirm('Delete this record?')">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-destructive hover:bg-muted"><x-lucide-trash-2 class="size-3.5" /><span>Delete</span></button>
                                 </form>
+                                @endif
                             </div>
                         </div>
                         @endif
@@ -2752,7 +3046,7 @@ BLADE;
             <div class="flex items-center justify-between gap-2">
                 <h3 class="text-sm font-bold text-foreground">{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</h3>
             </div>
-            @if(in_array(\$rtab['render'] ?? 'table', ['board', 'gantt'], true) && isset(\$rtab['records']))
+            @if(in_array(\$rtab['render'] ?? 'table', ['board', 'gantt', 'calendar', 'thread', 'stack'], true) && isset(\$rtab['records']))
                 @include('laraslice::partials.related-tab-' . (\$rtab['render'] ?? 'table'), ['rtab' => \$rtab])
             @elseif(!empty(\$rtab['columns']))
                 @if(count(\$rtab['rows'] ?? []) === 0)
@@ -2803,6 +3097,9 @@ BLADE;
                 </div>
             @endif
             @endif
+            @if(!empty(\$rtab['post']) && !empty(\$rtab['post_url']))
+                @include('laraslice::partials.related-tab-post', ['rtab' => \$rtab, 'record' => \$record])
+            @endif
         </div>
         @endif
     @endforeach
@@ -2814,6 +3111,42 @@ BLADE;
         @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'audit')
         <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
             @include('laraslice::partials.related-tab-audit', ['rtab' => \$rtab])
+        </div>
+        @endif
+    @endforeach
+
+    {{-- Declared chart tabs (ui.show.tabs type: chart): the
+         relation's computed series via the shared partial —
+         payload or empty state, never a silently missing panel. --}}
+    @foreach(\$relatedTabs ?? [] as \$rtab)
+        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'chart')
+        <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
+            @include('laraslice::partials.related-tab-chart', ['rtab' => \$rtab])
+        </div>
+        @endif
+    @endforeach
+
+    {{-- Declared permissions tabs (ui.show.tabs type:
+         permissions): the record's person's module permission
+         matrix via the shared partial. --}}
+    @foreach(\$relatedTabs ?? [] as \$rtab)
+        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'permissions')
+        <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
+            @include('laraslice::partials.related-tab-permissions', ['rtab' => \$rtab])
+        </div>
+        @endif
+    @endforeach
+
+    {{-- Custom fields tab: appended by the controller when the
+         record's model carries a field group — values via the
+         shared partial. --}}
+    @foreach(\$relatedTabs ?? [] as \$rtab)
+        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'custom_fields')
+        <div x-show="activeTab === '{{ \$rtab['handle'] }}'" x-transition class="space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm font-bold text-foreground">{{ \$rtab['label'] ?? 'Custom Fields' }}</h3>
+            </div>
+            @include('laraslice::partials.related-tab-custom-fields', ['rtab' => \$rtab])
         </div>
         @endif
     @endforeach

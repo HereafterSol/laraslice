@@ -934,6 +934,12 @@ function larasliceWizard() {
         uiSummaryCards: [],
         uiSidebarFilters: [],
         uiBulkActions: ['delete', 'export'],
+        // OBS-B: the selected slice's declared bulk-action entries
+        // and directory columns, kept verbatim so the config
+        // payload round-trips the Heart instead of rebuilding it.
+        uiBulkActionsRaw: {},
+        uiDeclaredColumns: [],
+        uiPresentation: null,
         uiViews: ['table'],
         uiDefaultView: 'table',
         uiInlineEdit: [],
@@ -1012,10 +1018,32 @@ function larasliceWizard() {
                     width: 50,
                     required: true,
                     nullable: false,
-                    length: '255',
+                    length: 255,
                     default: '',
                     optionsText: '',
                     is_existing: false
+                });
+            }
+
+            // OBS-B: the Heart's declared directory columns are
+            // the list editor's truth for the primary table —
+            // formatter, column header, sortable and "In Table"
+            // membership hydrate from them. Without this the
+            // field model rebuilt every column from defaults
+            // (formatter 'text', the field's own label, every
+            // table column shown) and the next config save
+            // flattened the declared columns away.
+            if (isPrimary && Array.isArray(this.uiDeclaredColumns) && this.uiDeclaredColumns.length) {
+                const declaredByHandle = {};
+                this.uiDeclaredColumns.forEach(c => { if (c && c.handle) declaredByHandle[c.handle] = c; });
+                fieldsList.forEach(f => {
+                    const dc = declaredByHandle[f.handle];
+                    f.show_in_list = !!dc;
+                    if (dc) {
+                        f.formatter = dc.formatter || dc.type || f.formatter;
+                        f.column_label = dc.label || null;
+                        f.sortable = dc.sortable !== false;
+                    }
                 });
             }
 
@@ -1061,7 +1089,7 @@ function larasliceWizard() {
                 width: 50,
                 required: false,
                 nullable: true,
-                length: '255',
+                length: 255,
                 default: '',
                 optionsText: '',
                 is_existing: false
@@ -1681,6 +1709,53 @@ function larasliceWizard() {
             this.uiDefaultView = slice.ui?.directory?.default_view || 'table';
             this.uiInlineEdit = Array.isArray(slice.ui?.directory?.inline_edit) ? [...slice.ui.directory.inline_edit] : [];
             this.uiDashboardWidgets = Array.isArray(slice.ui?.dashboard?.widgets) ? [...slice.ui.dashboard.widgets] : [];
+            // OBS-B: hydrate the rest of the UI editor state from
+            // the slice's DECLARED ui. buildUiConfig() sends these
+            // sections back in the save payload, so any section
+            // left to field-derived reconstruction would silently
+            // rewrite the Heart's declarations on save — and the
+            // preview diff showed the reconstruction, not the
+            // user's change (a one-setting edit produced a
+            // 10,247-char diff). Declared state wins; derivation
+            // remains the fallback for slices declaring nothing.
+            const dirUi = slice.ui?.directory || {};
+            this.uiQuickFilters = Array.isArray(dirUi.quick_filters) ? JSON.parse(JSON.stringify(dirUi.quick_filters)) : [];
+            this.uiSidebarFilters = Array.isArray(dirUi.sidebar_filters) ? JSON.parse(JSON.stringify(dirUi.sidebar_filters)) : [];
+            this.uiSummaryCards = Array.isArray(dirUi.summary_cards) ? JSON.parse(JSON.stringify(dirUi.summary_cards)) : [];
+            // Only when the Heart declares at least one of the
+            // three does derivation stand down; a slice declaring
+            // none still gets field-derived suggestions when the
+            // UI editor opens.
+            this.uiInitialized = ('quick_filters' in dirUi) || ('sidebar_filters' in dirUi) || ('summary_cards' in dirUi);
+            const formsUi = slice.ui?.forms || {};
+            this.uiFormMode = formsUi.mode || formsUi.presentation || 'drawer';
+            if (Array.isArray(formsUi.sections) && formsUi.sections.length) {
+                this.uiFormSections = formsUi.sections.map(s => ({
+                    title: s.title || s.name || 'Section',
+                    description: s.description || '',
+                    columns: s.grid || s.columns || 2,
+                    fields: JSON.parse(JSON.stringify(s.fields || [])),
+                    raw: JSON.parse(JSON.stringify(s)),
+                }));
+                this.uiFormInitialized = true;
+            } else {
+                this.uiFormSections = [];
+                this.uiFormInitialized = false;
+            }
+            // Bulk actions are membership-only in this editor —
+            // labels/icons are never edited here, so keep the
+            // declared entries verbatim for the payload.
+            this.uiBulkActionsRaw = {};
+            if (Array.isArray(dirUi.bulk_actions)) {
+                dirUi.bulk_actions.forEach(b => {
+                    if (b && typeof b === 'object' && b.handle) this.uiBulkActionsRaw[b.handle] = JSON.parse(JSON.stringify(b));
+                });
+            }
+            // Declared directory columns hydrate the list editor
+            // in syncStudioFields() (formatter, header label,
+            // sortable, membership).
+            this.uiDeclaredColumns = Array.isArray(dirUi.columns) ? JSON.parse(JSON.stringify(dirUi.columns)) : [];
+            this.uiPresentation = slice.ui?.presentation ? JSON.parse(JSON.stringify(slice.ui.presentation)) : null;
             // Hydrate workflow editor from manifest (Slice Studio GitOps)
             if (slice.workflow && typeof slice.workflow === 'object') {
                 this.workflowConfig = JSON.parse(JSON.stringify(slice.workflow));
@@ -1894,16 +1969,37 @@ function larasliceWizard() {
         },
         buildStudioConfigPayload() {
                 const ui = this.buildUiConfig();
-                ui.dashboard = { enabled: true, widgets: this.uiDashboardWidgets || [] };
-                const navigation = {
-                    roles: this.navRoles || [],
-                    visible: this.navVisible !== false,
-                    label: this.navConfig?.title || this.selectedSlice.navigation?.label || this.selectedSlice.title || this.selectedSlice.name,
-                    icon: this.navConfig?.icon || this.selectedSlice.navigation?.icon || 'package',
-                    group: this.navGroup || this.navConfig?.group || this.selectedSlice.navigation?.group || 'General',
-                    order: this.navConfig?.order || 50,
-                    hidden: !!this.navConfig?.hidden,
-                };
+                // OBS-B: only slices that declare a dashboard (or
+                // have widgets staged in the editor) send one —
+                // the unconditional block used to create an
+                // enabled dashboard on slices that never had one.
+                if (this.selectedSlice.ui?.dashboard || (this.uiDashboardWidgets || []).length) {
+                    ui.dashboard = { ...(this.selectedSlice.ui?.dashboard || {}), enabled: true, widgets: this.uiDashboardWidgets || [] };
+                }
+                // OBS-B: start from the slice's declared navigation
+                // and overlay only values that actually differ
+                // (compared against the reader defaults for keys
+                // the Heart does not declare). The payload used to
+                // rebuild the whole block from editor defaults, so
+                // every save materialized roles/visible/hidden —
+                // and could restate icon/order/group — into Hearts
+                // that never declared them.
+                const curNav = this.selectedSlice.navigation || {};
+                const navigation = { ...curNav };
+                const wantRoles = this.navRoles || [];
+                if (JSON.stringify(wantRoles) !== JSON.stringify(curNav.roles || [])) navigation.roles = wantRoles;
+                const wantVisible = this.navVisible !== false;
+                if (wantVisible !== (curNav.visible !== false)) navigation.visible = wantVisible;
+                const wantLabel = this.navConfig?.title || curNav.label || this.selectedSlice.title || this.selectedSlice.name;
+                if (wantLabel !== undefined && wantLabel !== curNav.label) navigation.label = wantLabel;
+                const wantIcon = this.navConfig?.icon || curNav.icon || 'package';
+                if (wantIcon !== curNav.icon) navigation.icon = wantIcon;
+                const wantGroup = this.navGroup || this.navConfig?.group || curNav.group || 'General';
+                if (wantGroup !== curNav.group) navigation.group = wantGroup;
+                const wantOrder = this.navConfig?.order || curNav.order || 50;
+                if (wantOrder !== curNav.order) navigation.order = wantOrder;
+                const wantHidden = !!this.navConfig?.hidden;
+                if (wantHidden !== !!curNav.hidden) navigation.hidden = wantHidden;
                 const workflowPayload = this.includeWorkflow && this.workflowConfig
                     ? {
                         enabled: true,
@@ -2185,17 +2281,52 @@ function larasliceWizard() {
             this.uiFormInitialized = true;
         },
         buildUiConfig() {
-            const activeCols = (this.studioFields || [])
-                .filter(f => f.show_in_list !== false && f.handle && f.handle.trim())
-                .map(f => ({
-                    handle: f.handle,
-                    key: f.handle,
-                    label: f.label || f.handle.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                    type: f.formatter || 'text',
-                    formatter: f.formatter || 'text',
-                    sortable: f.sortable !== false,
-                    searchable: true
-                }));
+            const shownFields = (this.studioFields || [])
+                .filter(f => f.show_in_list !== false && f.handle && f.handle.trim());
+            const modelColumn = (f) => ({
+                handle: f.handle,
+                key: f.handle,
+                label: f.column_label || f.label || f.handle.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                type: f.formatter || 'text',
+                formatter: f.formatter || 'text',
+                sortable: f.sortable !== false,
+                searchable: true
+            });
+            const declaredCols = Array.isArray(this.uiDeclaredColumns) ? this.uiDeclaredColumns : [];
+            let activeCols;
+            if (declaredCols.length) {
+                // OBS-B: declared columns lead. Their order and
+                // unmodelled keys (subtitle_from, badge_from,
+                // inferred_from, ...) survive verbatim; the field
+                // model overlays only the keys the list editor
+                // edits; computed columns with no field behind
+                // them (timeLogged, users) carry through
+                // untouched; a declared column whose field was
+                // unchecked drops out; newly checked fields append
+                // in field order.
+                const shownByHandle = {};
+                shownFields.forEach(f => { shownByHandle[f.handle] = f; });
+                const allHandles = new Set((this.studioFields || []).map(f => f.handle));
+                const declaredHandles = new Set(declaredCols.map(c => c && c.handle).filter(Boolean));
+                activeCols = [];
+                declaredCols.forEach(dc => {
+                    if (!dc || !dc.handle) return;
+                    const f = shownByHandle[dc.handle];
+                    if (f) {
+                        const entry = { ...dc, ...modelColumn(f) };
+                        // Keys the declaration does not carry are
+                        // not the model's to materialize.
+                        if (!('searchable' in dc)) delete entry.searchable;
+                        if (!('sortable' in dc)) delete entry.sortable;
+                        activeCols.push(entry);
+                    } else if (!allHandles.has(dc.handle)) {
+                        activeCols.push(dc);
+                    }
+                });
+                shownFields.forEach(f => { if (!declaredHandles.has(f.handle)) activeCols.push(modelColumn(f)); });
+            } else {
+                activeCols = shownFields.map(modelColumn);
+            }
 
             // Use editable UI state (auto-detect on first use, then preserve manual edits)
             if (!this.uiInitialized) this.refreshUiFromFields();
@@ -2212,16 +2343,29 @@ function larasliceWizard() {
 
             // Use editable form sections (auto-generate on first use, preserve manual edits)
             if (!this.uiFormInitialized) this.refreshFormSections();
-            const sections = this.uiFormSections.length > 0 ? this.uiFormSections.map(s => ({
-                name: s.title, title: s.title, description: s.description || '',
-                grid: s.columns || 2, columns: s.columns || 2,
-                fields: s.fields,
-            })) : [
+            const sections = this.uiFormSections.length > 0 ? this.uiFormSections.map(s => {
+                if (s.raw) {
+                    // OBS-B: a section hydrated from the Heart
+                    // keeps its declared shape — only the keys it
+                    // already carries (plus title/grid/fields,
+                    // which the editor manages) are emitted back.
+                    const out = { ...s.raw, title: s.title, grid: s.columns || 2, fields: s.fields };
+                    if ('name' in s.raw) out.name = s.title;
+                    if ('columns' in s.raw) out.columns = s.columns || 2;
+                    if ('description' in s.raw || s.description) out.description = s.description || '';
+                    return out;
+                }
+                return {
+                    name: s.title, title: s.title, description: s.description || '',
+                    grid: s.columns || 2, columns: s.columns || 2,
+                    fields: s.fields,
+                };
+            }) : [
                 { name: 'General Information', title: 'General Information', grid: 2, columns: 2, fields: [{ handle: 'name', span: 1, width: 50, searchable: false }] }
             ];
 
             return {
-                presentation: { create: 'drawer', edit: 'drawer' },
+                presentation: this.uiPresentation || { create: 'drawer', edit: 'drawer' },
                 directory: {
                     presentation: 'table',
                     columns: activeCols.length > 0 ? activeCols : [
@@ -2232,6 +2376,12 @@ function larasliceWizard() {
                     summary_cards: this.uiSummaryCards,
                     bulk_actions: (this.uiBulkActions || []).map(ba => {
                         if (typeof ba === 'object') return ba;
+                        // OBS-B: a declared entry round-trips
+                        // verbatim — this editor toggles membership
+                        // only, so a re-synthesized label would
+                        // rename 'Export Selected' to 'Export' on
+                        // every unrelated save.
+                        if (this.uiBulkActionsRaw && this.uiBulkActionsRaw[ba]) return this.uiBulkActionsRaw[ba];
                         return { handle: ba, label: ba.charAt(0).toUpperCase() + ba.slice(1), type: ba === 'delete' ? 'native' : (ba === 'export' ? 'native' : 'workflow') };
                     }),
                     row_actions: this.uiRowActions || { display: 'dropdown', items: [
@@ -5035,7 +5185,7 @@ function larasliceWizard() {
                                             </td>
                                             <td class="px-3 py-2 font-mono font-semibold text-foreground text-xs" x-text="f.handle"></td>
                                             <td class="px-3 py-2">
-                                                <input type="text" x-model="f.label" class="h-7 w-full rounded border border-input bg-card px-2 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                                                <input type="text" :value="f.column_label || f.label || ''" @input="f.column_label = $event.target.value" class="h-7 w-full rounded border border-input bg-card px-2 text-xs text-foreground focus:ring-1 focus:ring-primary">
                                             </td>
                                             <td class="px-3 py-2">
                                                 <select x-model="f.formatter" class="h-7 w-full rounded border border-input bg-card px-2 text-xs text-foreground focus:ring-1 focus:ring-primary">
@@ -5694,9 +5844,12 @@ function larasliceWizard() {
 
         @include('laraslice::partials.porting-modal')
 
-    </div>
-
-    <!-- YAML diff confirm modal (no silent overwrite) -->
+    <!-- YAML diff confirm modal (no silent overwrite). This block must stay
+         INSIDE #laraslice-wizard-root: its x-show/x-text/@click bindings
+         resolve against the wizard component's state, and placed after the
+         root's closing tag Alpine resolves them against the Studio shell
+         instead — "showDiffModal is not defined" on every Manage mount,
+         and the modal could never open (Day-2 drill F2). -->
     <div x-show="showDiffModal" x-cloak class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
          @keydown.escape.window="showDiffModal = false">
         <div class="w-full max-w-3xl rounded-2xl border border-border bg-card shadow-2xl flex flex-col max-h-[85vh]">
@@ -5712,4 +5865,6 @@ function larasliceWizard() {
                         class="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">Save & write history</button>
             </div>
         </div>
+    </div>
+
     </div>

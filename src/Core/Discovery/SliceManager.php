@@ -750,6 +750,103 @@ class SliceManager
     }
 
     /**
+     * (ao) Chart tab panel on show blades: a declared
+     * `type: chart` hub tab resolves in DirectoryUi (series
+     * computed server-side) but blades generated before that
+     * render panels only for relation/audit tabs. Insert the
+     * chart panel loop — rendering the shared
+     * laraslice::partials.related-tab-chart partial —
+     * immediately before the workflow timeline block.
+     */
+    private function addChartTabPanel(string $content): ?string
+    {
+        if (str_contains($content, 'related-tab-chart')) {
+            return null;
+        }
+        $needle = "    @if(\$workflow)\n    <!-- Tab 2: Workflow History & Decision Timeline -->";
+        $pos = strpos($content, $needle);
+        if ($pos === false) {
+            return null;
+        }
+        $panel = "    @foreach(\$relatedTabs ?? [] as \$rtab)\n"
+            ."        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'chart')\n"
+            ."        <div x-show=\"activeTab === '{{ \$rtab['handle'] }}'\" x-transition class=\"space-y-4\">\n"
+            ."            @include('laraslice::partials.related-tab-chart', ['rtab' => \$rtab])\n"
+            ."        </div>\n"
+            ."        @endif\n"
+            ."    @endforeach\n"
+            ."\n";
+
+        return substr($content, 0, $pos).$panel.substr($content, $pos);
+    }
+
+    /**
+     * (ap) Permissions tab panel on show blades: a declared
+     * `type: permissions` hub tab resolves in DirectoryUi
+     * (the person's module permission matrix) but blades
+     * generated before that render panels only for
+     * relation/audit tabs. Insert the permissions panel loop
+     * — rendering the shared
+     * laraslice::partials.related-tab-permissions partial —
+     * immediately before the workflow timeline block.
+     */
+    private function addPermissionsTabPanel(string $content): ?string
+    {
+        if (str_contains($content, 'related-tab-permissions')) {
+            return null;
+        }
+        $needle = "    @if(\$workflow)\n    <!-- Tab 2: Workflow History & Decision Timeline -->";
+        $pos = strpos($content, $needle);
+        if ($pos === false) {
+            return null;
+        }
+        $panel = "    @foreach(\$relatedTabs ?? [] as \$rtab)\n"
+            ."        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'permissions')\n"
+            ."        <div x-show=\"activeTab === '{{ \$rtab['handle'] }}'\" x-transition class=\"space-y-4\">\n"
+            ."            @include('laraslice::partials.related-tab-permissions', ['rtab' => \$rtab])\n"
+            ."        </div>\n"
+            ."        @endif\n"
+            ."    @endforeach\n"
+            ."\n";
+
+        return substr($content, 0, $pos).$panel.substr($content, $pos);
+    }
+
+    /**
+     * (aq) Custom-fields tab panel (closure completion): show
+     * pages render the record's bound custom-field values when
+     * the controller appended the synthetic custom_fields tab.
+     * Same needle + guard discipline as the chart/permissions
+     * panels — blades without the workflow anchor keep their
+     * shape (the tab simply has no panel there, as with the
+     * other type panels).
+     */
+    private function addCustomFieldsTabPanel(string $content): ?string
+    {
+        if (str_contains($content, 'related-tab-custom-fields')) {
+            return null;
+        }
+        $needle = "    @if(\$workflow)\n    <!-- Tab 2: Workflow History & Decision Timeline -->";
+        $pos = strpos($content, $needle);
+        if ($pos === false) {
+            return null;
+        }
+        $panel = "    @foreach(\$relatedTabs ?? [] as \$rtab)\n"
+            ."        @if(!empty(\$rtab['handle']) && (\$rtab['type'] ?? '') === 'custom_fields')\n"
+            ."        <div x-show=\"activeTab === '{{ \$rtab['handle'] }}'\" x-transition class=\"space-y-4\">\n"
+            ."            <div class=\"flex items-center justify-between gap-2\">\n"
+            ."                <h3 class=\"text-sm font-bold text-foreground\">{{ \$rtab['label'] ?? 'Custom Fields' }}</h3>\n"
+            ."            </div>\n"
+            ."            @include('laraslice::partials.related-tab-custom-fields', ['rtab' => \$rtab])\n"
+            ."        </div>\n"
+            ."        @endif\n"
+            ."    @endforeach\n"
+            ."\n";
+
+        return substr($content, 0, $pos).$panel.substr($content, $pos);
+    }
+
+    /**
      * (ak) Show-page widget placements: the overview widgets
      * region renders MAIN-placement widgets only (with the
      * stats/list card branches), and RAIL-placement widgets
@@ -1930,6 +2027,27 @@ BLADE;
                             );
                             $vChanged = true;
                         }
+                        // (ar) Custom-fields section: the model's
+                        // bound custom fields render through the
+                        // shared partial (it self-guards — slices
+                        // with no field group render nothing).
+                        if (! str_contains($vContent, 'custom-fields-form') && str_contains($vContent, '<!-- Sticky Bottom Form Actions Bar -->')) {
+                            $vContent = str_replace(
+                                '<!-- Sticky Bottom Form Actions Bar -->',
+                                "@include('laraslice::partials.custom-fields-form')\n\n        <!-- Sticky Bottom Form Actions Bar -->",
+                                $vContent
+                            );
+                            $vChanged = true;
+                        }
+                        // (as) File-carrying forms need multipart:
+                        // no generated form carried the enctype,
+                        // so custom-field (and any future) file
+                        // inputs could never transmit. Multipart
+                        // submits ordinary fields identically.
+                        if (! str_contains($vContent, 'multipart/form-data') && str_contains($vContent, '<form ')) {
+                            $vContent = preg_replace('/<form /', '<form enctype="multipart/form-data" ', $vContent, 1) ?? $vContent;
+                            $vChanged = true;
+                        }
                     }
                     if ($base === 'show.blade.php' && str_contains($vContent, "x-show=\"activeTab === 'overview'\"")) {
                         // (c) Timer include + declared-stats strip inside
@@ -2187,6 +2305,48 @@ BLADE;
                         $auditPaneled = $this->addAuditTabPanel($vContent);
                         if ($auditPaneled !== null) {
                             $vContent = $auditPaneled;
+                            $vChanged = true;
+                        }
+                        // (ao) Chart tab panel for declared
+                        // type: chart hub tabs.
+                        $chartPaneled = $this->addChartTabPanel($vContent);
+                        if ($chartPaneled !== null) {
+                            $vContent = $chartPaneled;
+                            $vChanged = true;
+                        }
+                        // (ap) Permissions tab panel for
+                        // declared type: permissions hub tabs.
+                        $permissionsPaneled = $this->addPermissionsTabPanel($vContent);
+                        if ($permissionsPaneled !== null) {
+                            $vContent = $permissionsPaneled;
+                            $vChanged = true;
+                        }
+                        // (aq) Custom-fields tab panel for the
+                        // controller's synthetic custom_fields tab.
+                        $customFieldsPaneled = $this->addCustomFieldsTabPanel($vContent);
+                        if ($customFieldsPaneled !== null) {
+                            $vContent = $customFieldsPaneled;
+                            $vChanged = true;
+                        }
+                        // (at) Render-mode dispatch: stacked
+                        // tabs (render: stack) join the raw-record
+                        // render modes the panel dispatch honours;
+                        // older lists predate calendar/thread too —
+                        // the superset only fixes tabs that would
+                        // otherwise misrender as plain tables.
+                        if (str_contains($vContent, "['board', 'gantt']") && ! str_contains($vContent, "'stack'")) {
+                            $vContent = str_replace(
+                                "['board', 'gantt']",
+                                "['board', 'gantt', 'calendar', 'thread', 'stack']",
+                                $vContent
+                            );
+                            $vChanged = true;
+                        } elseif (str_contains($vContent, "['board', 'gantt', 'calendar', 'thread']") && ! str_contains($vContent, "'stack'")) {
+                            $vContent = str_replace(
+                                "['board', 'gantt', 'calendar', 'thread']",
+                                "['board', 'gantt', 'calendar', 'thread', 'stack']",
+                                $vContent
+                            );
                             $vChanged = true;
                         }
                     }
@@ -3231,6 +3391,7 @@ BLADE;
         $defaultView = is_string($dir['default_view'] ?? null) ? $dir['default_view'] : 'table';
         $inlineEdit = is_array($dir['inline_edit'] ?? null) ? array_values($dir['inline_edit']) : [];
         $statusKey = 'status';
+        $statusFound = false;
         $dateKey = null;
         foreach ($dir['columns'] ?? [] as $c) {
             if (! is_array($c)) {
@@ -3239,9 +3400,33 @@ BLADE;
             $ck = (string) ($c['key'] ?? $c['handle'] ?? '');
             if (in_array($ck, ['status', 'state', 'stage'], true)) {
                 $statusKey = $ck;
+                $statusFound = true;
             }
             if ($dateKey === null && (str_contains($ck, 'date') || str_ends_with($ck, '_at'))) {
                 $dateKey = $ck;
+            }
+        }
+        if (! $statusFound) {
+            // Board-axis fallback: some directories carry their
+            // status axis as an FK column the declaration labels
+            // "Status"/"Stage" (Tasks: board_column_id -> the
+            // taskboard columns). Without this, the scan defaults
+            // to a 'status' key the row payload does not carry
+            // and the board groups every row under "Unknown".
+            foreach ($dir['columns'] ?? [] as $c) {
+                if (! is_array($c)) {
+                    continue;
+                }
+                $ck = (string) ($c['key'] ?? $c['handle'] ?? '');
+                $label = (string) ($c['label'] ?? '');
+                if (str_ends_with($ck, '_id')
+                    && (in_array($label, ['Status', 'Stage'], true)
+                        || str_contains($ck, 'board')
+                        || str_contains($ck, 'stage')
+                        || str_contains($ck, 'status'))) {
+                    $statusKey = $ck;
+                    break;
+                }
             }
         }
         foreach (['due_date', 'start_date', 'issue_date', 'date'] as $prefer) {
@@ -3310,6 +3495,75 @@ PHP;
             }
             if ($newTag !== $tag) {
                 $content = preg_replace('/<x-ui\.data-table\b[^>]*>/s', $newTag, $content, 1) ?? $content;
+            }
+        }
+
+        // Heal the inline status-key scan older generators emitted
+        // into the blade itself: it matched only literal
+        // status/state/stage columns, so a directory whose board
+        // axis is an FK column (Tasks: board_column_id, labelled
+        // "Status") kept the 'status' default — a key its rows do
+        // not carry — and the board grouped every row under
+        // "Unknown". The current generator emits the scan with an
+        // FK-axis fallback; re-stamp the old block when it is
+        // present verbatim (each anchor exactly once) and the
+        // fallback is missing. Blades stamped by any other era
+        // are left untouched.
+        if (! str_contains($content, '$statusFound')) {
+            $scanHead = <<<'BLADE'
+            $statusKey = 'status';
+            $dateKey = null;
+BLADE;
+            $scanHeadNew = <<<'BLADE'
+            $statusKey = 'status';
+            $statusFound = false;
+            $dateKey = null;
+BLADE;
+            $scanMatch = <<<'BLADE'
+                if (in_array($ck, ['status', 'state', 'stage'], true)) {
+                    $statusKey = $ck;
+                }
+BLADE;
+            $scanMatchNew = <<<'BLADE'
+                if (in_array($ck, ['status', 'state', 'stage'], true)) {
+                    $statusKey = $ck;
+                    $statusFound = true;
+                }
+BLADE;
+            $scanTail = <<<'BLADE'
+            }
+            foreach (['due_date', 'start_date', 'issue_date', 'date'] as $preferDate) {
+BLADE;
+            $scanTailNew = <<<'BLADE'
+            }
+            if (! $statusFound) {
+                // Board-axis fallback: an FK column the declaration
+                // labels "Status"/"Stage" (Tasks: board_column_id)
+                // is the board's grouping axis — without it the
+                // board groups every row under "Unknown".
+                foreach ($columns as $c) {
+                    $ck = $c['key'] ?? '';
+                    $clabel = $c['label'] ?? '';
+                    if (str_ends_with($ck, '_id')
+                        && (in_array($clabel, ['Status', 'Stage'], true)
+                            || str_contains($ck, 'board')
+                            || str_contains($ck, 'stage')
+                            || str_contains($ck, 'status'))) {
+                        $statusKey = $ck;
+                        break;
+                    }
+                }
+            }
+            foreach (['due_date', 'start_date', 'issue_date', 'date'] as $preferDate) {
+BLADE;
+            if (substr_count($content, $scanHead) === 1
+                && substr_count($content, $scanMatch) === 1
+                && substr_count($content, $scanTail) === 1) {
+                $content = str_replace(
+                    [$scanHead, $scanMatch, $scanTail],
+                    [$scanHeadNew, $scanMatchNew, $scanTailNew],
+                    $content
+                );
             }
         }
 
@@ -3456,6 +3710,51 @@ PHP;
     public function getAllSlices(): array
     {
         return $this->slices;
+    }
+
+    /**
+     * The display label for a slice's domain group: the app
+     * (super domain) joined with the module (domain) when both
+     * exist and differ — the same grouping the Studio's Manage
+     * tree renders (e.g. "ERP Adjudication").
+     */
+    public static function domainLabelFor(SliceManifest $slice): string
+    {
+        $app = trim((string) ($slice->app ?? $slice->super_domain ?? ''));
+        $module = trim((string) ($slice->module ?? $slice->domain ?? ''));
+
+        if ($app !== '' && $module !== '' && strcasecmp($app, $module) !== 0) {
+            return $app.' '.$module;
+        }
+
+        return $app !== '' ? $app : ($module !== '' ? $module : 'General');
+    }
+
+    /**
+     * THE slice inventory: every discovered slice, counted once,
+     * grouped by domain label. Discovery — not the name-keyed
+     * registry and not the active-only subset — is the source of
+     * truth, exactly as the Studio inventory (WizardController::
+     * listSlices) established: the name-keyed map silently hides
+     * a same-named twin (the framework Settings slice behind an
+     * app Settings slice), and the active filter drops slices
+     * that are installed but switched off. Consumers that report
+     * "how many slices are installed" (Studio, slice:list, the AI
+     * copilot) must all read this summary instead of counting a
+     * parallel source.
+     *
+     * @return array{total: int, domains: array<string, int>}
+     */
+    public function inventorySummary(): array
+    {
+        $domains = [];
+        foreach ($this->discoveredSlices() as $slice) {
+            $label = self::domainLabelFor($slice);
+            $domains[$label] = ($domains[$label] ?? 0) + 1;
+        }
+        arsort($domains);
+
+        return ['total' => array_sum($domains), 'domains' => $domains];
     }
 
     /**
@@ -3663,6 +3962,7 @@ PHP;
         }
 
         $nav = [];
+        $reportNav = [];
 
         $isSuperAdmin = $currentUser && Access::isSuperAdmin($currentUser);
 
@@ -3904,7 +4204,62 @@ PHP;
                 'permission' => $requiredPermission,
                 'children' => $children,
             ];
+
+            // Declared reports join a dedicated Reports group so
+            // the reporting surface is discoverable from the
+            // sidebar (the source app's Reports menu) instead of
+            // living only at per-slice /report URLs. A slice
+            // contributes its reports only when the slice itself
+            // passed every navigation gate above.
+            $directoryDecl = $slice->raw['ui']['directory'] ?? [];
+            $reportBase = rtrim((string) $url, '/');
+            $reportSeq = [
+                'Tasks' => 1, 'ProjectTimeLogs' => 2, 'Invoices' => 3,
+                'Leaves' => 5, 'Attendances' => 6, 'Expenses' => 7,
+                'Deals' => 8, 'Orders' => 9,
+            ][$slice->name] ?? 50;
+            $mkReport = function (string $rLabel, string $rUrl, int $seq) use ($slice, $requiredPermission) {
+                return [
+                    'name' => 'report-'.$slice->name.'-'.$seq,
+                    'label' => $rLabel,
+                    'route' => null,
+                    'url' => $rUrl,
+                    'icon' => 'file-text',
+                    'order' => 5000 + $seq,
+                    'active' => request()->url() === url($rUrl),
+                    'badge' => null,
+                    'version' => $slice->version,
+                    'super_domain' => $slice->super_domain,
+                    'domain' => $slice->domain,
+                    'sub_domain' => $slice->sub_domain,
+                    'group' => 'Reports',
+                    'table_prefix' => $slice->table_prefix,
+                    'multitenant' => $slice->multitenant,
+                    'tenant_key' => $slice->tenant_key,
+                    'core' => false,
+                    'permission' => $requiredPermission,
+                    'children' => [],
+                ];
+            };
+            if (is_array($directoryDecl['report'] ?? null)) {
+                $reportNav[] = $mkReport(
+                    (string) ($directoryDecl['report']['title'] ?? ($label.' Report')),
+                    $reportBase.'/report',
+                    $reportSeq
+                );
+            }
+            foreach ((array) ($directoryDecl['reports'] ?? []) as $extraReport) {
+                if (is_array($extraReport) && ! empty($extraReport['handle'])) {
+                    $reportNav[] = $mkReport(
+                        (string) ($extraReport['title'] ?? Str::headline((string) $extraReport['handle'])),
+                        $reportBase.'/report/'.$extraReport['handle'],
+                        $reportSeq + 1
+                    );
+                }
+            }
         }
+
+        $nav = array_merge($nav, $reportNav);
 
         usort($nav, fn ($a, $b) => $a['order'] <=> $b['order']);
 
