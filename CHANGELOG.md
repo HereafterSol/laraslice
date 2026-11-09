@@ -1,4 +1,34 @@
-## [Unreleased]
+## [2.1.0] - 2026-11-09
+
+**The AI-surface release. Driven by a full functional audit of the flagship demo, a screen-by-screen comparison against a production application running the original software, a day-2 operations drill, and a four-phase runtime programme. Full suite: 953 tests, 3709 assertions. Full notes: CHANGES-v2.1.0.md.**
+
+### Added
+- **Runtime metadata projection.** Schema and discovery are served from the declarations at runtime: a compact fleet index and a per-slice describe (fields, relations, operations, auth), with content-hash caching, ETag/304, pagination, domain filtering, and a live row-count overlay that is never cached.
+- **One discovery ladder for MCP, Copilot, and HTTP** — index → describe → call, with per-tier payload budgets (`ai.ladder`: frontier / free / webgpu / on_device; unknown tiers fall back to `free`). The Copilot's provider path no longer assembles a whole-fleet dump per call.
+- **Per-slice schema contract + Explorer.** A versioned contract (`laraslice/slice-schema` v1, with a JSON-Schema rendering) and an Explorer page that generates invocable forms for the operations a schema can derive; everything else is inspect-only with the reason stated. Validation failures return per-issue, self-repair-shaped errors (`{field, problem, expected}`).
+- **Two-phase confirmation for AI writes.** No AI-initiated write executes in one step: proposal → a signed token bound to the surface, the tool/operation, the exact arguments, and the proposing user (300s default, single-use, consumed only after every check passes) → verified execution. Approval forms are validated catalog specs (operation · field · warning · note · expiry). An absent APP_KEY fails closed. Covers the MCP write tools and every Explorer write; named non-goals are documented (direct human-session HTTP is ordinary UI use).
+- **`slice:regen-artefacts`** — re-syncs a slice's service, model, record views, and its three Contracts from the declaration, with a name-keyed loss detector that blocks any write that would drop hand-written code.
+- **`slice:absorb`** — the reverse path: hand edits in generated files are read back into the declaration as proposals (declarable · vocabulary-gap · hand-owned). New declaration vocabulary: `hasManyThrough` relations and field-level `cast:`.
+- **`slice:alter`** — additive-only declaration→database alters: one guarded migration for new columns; type/length/nullability changes and unsafe NOT NULL adds are refused and named; undeclared columns are named, never dropped.
+- **`slice:corpus`** — a cross-runtime conformance corpus (fleet-derived + synthetic declarations), a runner asserting projection invariants, and a fidelity table. Pattern only: cross-runtime proof awaits a second runtime executing the same corpus.
+- **Porter fidelity scorecard** — every port run emits a scored fidelity artefact in the port matrix's vocabulary (live reference run: 80.4 NOT SHIPPABLE on unmapped pivot foreign keys; a deliberately degraded re-score: 60.9).
+- **Custom Fields runtime** — declared groups and fields render on slice forms and record pages with source-faithful storage semantics (select stores the option index, checkbox joins with `', '`, required-only validation), generated for new slices and healed fleet-wide for existing ones.
+- **Declared hub tab types** — `permissions` (a unified grant matrix with a per-user typed-scope layer), `chart` (burndown series), `calendar` and `thread` relation-tab render modes, a `stack` composition mode, and `ui.show.default_tab`.
+- **Settings wiring** — one framework read path consumes the settings hub's bound tables (company identity, app name, currency formatting, theme tokens, storage), so hub edits take effect on the surfaces that display them.
+
+### Changed — behaviour existing consumers will notice
+- **Strict binding on slice write paths.** Type-invalid input (e.g. text into a foreign key) is rejected with a 422 carrying per-issue errors instead of being coerced or partially saved. A blank string on a blank-allowed field remains the one exemption.
+- **Update semantics are explicit.** Each slice's projection serves `update: {mode, declared}`; the default is `patch` (only provided fields change). A slice declaring `replace` rejects partial bodies with an error naming what is missing.
+- **Permission re-sync totals.** A rebuild now derives the grant state deterministically (1,148 permission rows on the reference fleet, corroborated by a from-scratch rebuild); carried grants with a module total 427.
+- New optional config sections `ai.ladder` and `ai.confirmation` — existing installs without them run on the built-in defaults (free tier, 300s TTL); no config publish is required.
+
+### Fixed
+- Regeneration covers the three Contracts (a silent data-loss path: added Contract fields rendered and validated but never persisted).
+- Blueprint apply — in the CLI and in the Studio alike — reports success only after verifying the planned tables exist; migrations run from the slice's own folder.
+- Studio stability: the Design factory loads in the standalone Studio wrapper, the save-preview diff modal binds inside the wizard root, slice-directory resolution searches the framework's real nesting depth, and a blueprint validate endpoint lets the engine itself judge declarations.
+- Copilot factual reliability: one inventory source for counts, slice-aware routing ahead of table handlers, and complete count/health answers that name their basis.
+- Declaration→preview fidelity: new slices are born in the canonical declaration shape (first preview diff 132 characters, previously ~5,200), and relation resolution is declaration-first — including a fix for person labels resolving through the wrong table (a record could render a different person's name).
+- The flagship demo: session revocation destroys the stored session; role dashboards, record hubs, the task board, and messaging all work end-to-end (found by a clean-room functional audit, not by install smoke).
 
 ## [2.0.2] - 2026-11-02
 

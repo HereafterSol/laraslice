@@ -860,6 +860,29 @@ PHP;
             }
         }
 
+        // 2b. Deeper nesting: the framework's own segmented layout puts
+        // slices at Slices/<SuperDomain>/<Domain>/<Module>/<Slice>
+        // (e.g. ERP/Adjudication/Work/Tasks) — three segments down,
+        // beyond the guesses above, so name-based Studio saves 422'd
+        // for every such slice (Day-2 drill F2's unexercisable modal
+        // had this second cause). Search bounded depths, accepting
+        // only a UNIQUE match per depth that actually holds a
+        // slice.yaml; same-name twins stay unresolved rather than
+        // guessed (the step-0 pin is for callers who know exactly).
+        foreach (['*/*/', '*/*/*/'] as $depthPattern) {
+            $candidates = glob(rtrim($this->slicesPath, '/\\').'/'.$depthPattern.$pluralName, GLOB_ONLYDIR) ?: [];
+            $candidates = array_values(array_filter(
+                $candidates,
+                static fn (string $dir): bool => is_file($dir.DIRECTORY_SEPARATOR.'slice.yaml')
+            ));
+            if (count($candidates) === 1) {
+                return $candidates[0];
+            }
+            if (count($candidates) > 1) {
+                break;
+            }
+        }
+
         // 3. Core slices ship inside the package; changes there would be lost on composer update
         if (is_dir(dirname(__DIR__).'/Slices/'.$pluralName)) {
             throw new \RuntimeException("[{$pluralName}] is a core LaraSlice slice inside the package and cannot be modified from the studio.");
@@ -2005,6 +2028,7 @@ PHP;
      */
     protected function applyStudioConfig(array $manifest, array $ui, array $navigation, ?array $workflow): array
     {
+        $original = $manifest;
         $oldVersion = $manifest['version'] ?? '1.0.0';
         $parts = explode('.', (string) $oldVersion);
         while (count($parts) < 3) {
@@ -2015,6 +2039,21 @@ PHP;
 
         if ($ui !== []) {
             $manifest['ui'] = array_replace_recursive($manifest['ui'] ?? [], $ui);
+            // Keyed-list reconciliation (OBS-B): the recursive
+            // merge pairs list entries BY INDEX, so a payload list
+            // whose order or membership differs from the Heart's
+            // declared list cross-contaminates entries (one
+            // column's subtitle_from landing on another) and the
+            // preview diff drowns the real change in churn. The
+            // Studio's lists are keyed (columns/filters/actions/
+            // widgets/sections all carry a handle), so reconcile
+            // them by identity against the CURRENT Heart: declared
+            // entries keep their order and their unmodelled keys,
+            // payload entries overlay per top-level key, genuinely
+            // new entries append. The same reconciliation serves
+            // the preview and the save, so the diff stays a
+            // truthful picture of the write.
+            $manifest['ui'] = $this->reconcileStudioKeyedLists($manifest['ui'], $original['ui'] ?? [], $ui);
         }
         if ($navigation !== []) {
             $manifest['navigation'] = array_merge($manifest['navigation'] ?? [], $navigation);
@@ -2031,7 +2070,195 @@ PHP;
             }
         }
 
+        // Default-materialization pruning (OBS-B): the Studio
+        // payload always carries its own resting defaults
+        // (navigation visible/hidden/roles, directory
+        // presentation, an empty quick_filters list, the form
+        // mode at rest). When the Heart does not declare the key
+        // at all, writing the default changes the file without
+        // changing any behaviour — readers treat absent exactly
+        // as the default (navigation hides only on visible ===
+        // false / a non-empty hidden; an empty filter list
+        // iterates as none). Those additions are not user
+        // changes, so they are not written and never previewed.
+        // A payload value that DIFFERS from the resting default
+        // is a real change and is always kept.
+        foreach ([
+            ['navigation', 'visible', true],
+            ['navigation', 'hidden', false],
+            ['navigation', 'roles', []],
+        ] as [$section, $key, $resting]) {
+            if (! array_key_exists($key, $original[$section] ?? [])
+                && ($manifest[$section][$key] ?? null) === $resting) {
+                unset($manifest[$section][$key]);
+            }
+        }
+        foreach ([
+            [['ui', 'directory'], 'presentation', 'table'],
+            [['ui', 'directory'], 'quick_filters', []],
+            [['ui', 'forms'], 'mode', 'drawer'],
+            [['ui', 'forms'], 'presentation', 'drawer'],
+            [['ui', 'forms'], 'sections', []],
+        ] as [$path, $key, $resting]) {
+            $cursor = $original;
+            foreach ($path as $segment) {
+                $cursor = $cursor[$segment] ?? [];
+            }
+            if (! is_array($cursor) || array_key_exists($key, $cursor)) {
+                continue;
+            }
+            $exists = is_array($manifest);
+            $probe = $manifest;
+            foreach ($path as $segment) {
+                if (! is_array($probe) || ! array_key_exists($segment, $probe)) {
+                    $exists = false;
+                    break;
+                }
+                $probe = $probe[$segment];
+            }
+            if (! $exists || ! is_array($probe)) {
+                continue;
+            }
+            $target = &$manifest;
+            foreach ($path as $segment) {
+                $target = &$target[$segment];
+            }
+            if (is_array($target) && ($target[$key] ?? null) === $resting) {
+                unset($target[$key]);
+            }
+            unset($target);
+        }
+        // A container the pruning emptied (ui.forms held only
+        // resting defaults) must not survive as an empty block
+        // when the Heart never declared the container at all.
+        foreach ([['ui', 'forms'], ['ui', 'directory']] as $path) {
+            $cursor = $original;
+            foreach ($path as $segment) {
+                $cursor = $cursor[$segment] ?? null;
+            }
+            if ($cursor !== null) {
+                continue;
+            }
+            $parent = &$manifest;
+            foreach (array_slice($path, 0, -1) as $segment) {
+                $parent = &$parent[$segment];
+            }
+            $leaf = $path[count($path) - 1];
+            if (isset($parent[$leaf]) && $parent[$leaf] === []) {
+                unset($parent[$leaf]);
+            }
+            unset($parent);
+        }
+
         return $manifest;
+    }
+
+    /**
+     * Reconcile the Studio's keyed ui lists between the current
+     * Heart and the payload, by entry identity — see
+     * applyStudioConfig. Paths not present on both sides keep
+     * the plain recursive-merge result.
+     */
+    protected function reconcileStudioKeyedLists(array $merged, array $currentUi, array $payloadUi): array
+    {
+        $paths = [
+            [['directory', 'columns'], ['handle', 'key']],
+            [['directory', 'quick_filters'], ['handle', 'field']],
+            [['directory', 'sidebar_filters'], ['handle', 'field']],
+            [['directory', 'summary_cards'], ['handle']],
+            [['directory', 'bulk_actions'], ['handle']],
+            [['directory', 'row_actions', 'items'], ['handle']],
+            [['dashboard', 'widgets'], ['handle']],
+            [['forms', 'sections'], ['key', 'title', 'name']],
+        ];
+        foreach ($paths as [$path, $identityKeys]) {
+            $current = $currentUi;
+            $payload = $payloadUi;
+            foreach ($path as $segment) {
+                $current = $current[$segment] ?? null;
+                $payload = $payload[$segment] ?? null;
+            }
+            if (! is_array($current) || ! is_array($payload)
+                || ! array_is_list($current) || ! array_is_list($payload)) {
+                continue;
+            }
+            $target = &$merged;
+            foreach ($path as $segment) {
+                if (! isset($target[$segment]) || ! is_array($target[$segment])) {
+                    continue 2;
+                }
+                $target = &$target[$segment];
+            }
+            $target = $this->overlayKeyedList($current, $payload, $identityKeys);
+            unset($target);
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Overlay a payload list onto the current list by entry
+     * identity: current order and unmodelled keys survive,
+     * payload entries overlay per top-level key, new identities
+     * append in payload order, and entries the payload does not
+     * mention are kept (the Studio model is a partial projection
+     * of the Heart — absence is not a deletion instruction).
+     *
+     * @param  list<string>  $identityKeys
+     */
+    protected function overlayKeyedList(array $current, array $payload, array $identityKeys): array
+    {
+        $identityOf = static function (mixed $entry) use ($identityKeys): ?string {
+            if (is_string($entry)) {
+                return $entry;
+            }
+            if (! is_array($entry)) {
+                return null;
+            }
+            foreach ($identityKeys as $key) {
+                if (isset($entry[$key]) && is_string($entry[$key]) && $entry[$key] !== '') {
+                    return $entry[$key];
+                }
+            }
+
+            return null;
+        };
+
+        $payloadByIdentity = [];
+        $payloadAnonymous = [];
+        foreach ($payload as $entry) {
+            $identity = $identityOf($entry);
+            if ($identity === null) {
+                $payloadAnonymous[] = $entry;
+            } elseif (! array_key_exists($identity, $payloadByIdentity)) {
+                $payloadByIdentity[$identity] = $entry;
+            }
+        }
+
+        $result = [];
+        $seen = [];
+        foreach ($current as $entry) {
+            $identity = $identityOf($entry);
+            if ($identity !== null && array_key_exists($identity, $payloadByIdentity)) {
+                $seen[$identity] = true;
+                $overlay = $payloadByIdentity[$identity];
+                $result[] = is_array($entry) && is_array($overlay)
+                    ? array_merge($entry, $overlay)
+                    : $overlay;
+            } else {
+                $result[] = $entry;
+            }
+        }
+        foreach ($payloadByIdentity as $identity => $entry) {
+            if (! isset($seen[$identity])) {
+                $result[] = $entry;
+            }
+        }
+        foreach ($payloadAnonymous as $entry) {
+            $result[] = $entry;
+        }
+
+        return $result;
     }
 
     protected function dumpYaml(array $manifest): string

@@ -58,7 +58,7 @@
                     </div>
                     <div>
                         <span class="font-extrabold text-white text-base tracking-tight">LaraSlice</span>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v2.0.1</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold ml-1.5">v2.0.0</span>
                     </div>
                 </a>
             </div>
@@ -69,7 +69,7 @@
                 <a href="#anatomy" class="hover:text-amber-400 transition">Slice Anatomy</a>
                 <a href="#three-layers" class="hover:text-amber-400 transition">3-Layer Model</a>
                 <a href="#faq" class="hover:text-amber-400 transition">Developer FAQ</a>
-                <a href="changelog.html" class="text-amber-400 hover:text-amber-300 transition font-bold flex items-center gap-1.5"><span>Changelog</span><span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v2.0.1</span></a>
+                <a href="changelog.html" class="text-amber-400 hover:text-amber-300 transition font-bold flex items-center gap-1.5"><span>Changelog</span><span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">v2.0.0</span></a>
             </nav>
 
             <div class="flex items-center gap-3">
@@ -172,9 +172,6 @@
             </div>
         </div>
         <p class="text-center text-slate-500 text-sm mt-8">Porting an old system? The porter drafts all three from it. Starting fresh? Write the Mind, derive the Body, generate the Hearts. <span class="text-slate-300 font-semibold">Same three files, at every moment of a system's life</span> — and, by design, on any runtime: the declarations are the asset, each stack maps them to its own. <a href="RUNTIMES.md" class="text-amber-400 hover:text-amber-300 font-semibold">The portability vision →</a></p>
-        <div class="mt-10 max-w-3xl mx-auto rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 text-center text-sm text-slate-300 leading-relaxed">
-            <strong class="text-amber-400">Replica truth.</strong> Production-scale ERP ports are our foundation exam — ambition needs evidence. Quote status from <code class="font-mono text-xs text-amber-200/90">porting/REPLICA-STATUS.md</code> (lowest gate wins). <a href="VISION.md" class="text-amber-400 hover:text-amber-300 font-semibold">Vision &amp; mission →</a> · <a href="ARCHITECTURE-VS-PORT-TRUTH.md" class="text-amber-400 hover:text-amber-300 font-semibold">Framework vs port →</a> · <a href="REPLICA-PROTOCOL.md" class="text-amber-400 hover:text-amber-300 font-semibold">Five gates →</a>
-        </div>
     </section>
 
     <!-- SECTION 1: 3 WAYS TO GENERATE SLICES (UI / CLI / AI) -->
@@ -259,7 +256,7 @@
                         </p>
                     </div>
                     <ul class="text-xs text-slate-400 space-y-1.5 font-medium">
-                        <li class="flex items-center gap-2 text-slate-300">✓ Declarative <code>ui:</code> + kit contract (BlatUI today; multi-kit roadmap)</li>
+                        <li class="flex items-center gap-2 text-slate-300">✓ Jev System One typed decision engine</li>
                         <li class="flex items-center gap-2 text-slate-300">✓ LaraSlice Skill prompt integration</li>
                         <li class="flex items-center gap-2 text-slate-300">✓ Autonomous test and schema generation</li>
                     </ul>
@@ -633,6 +630,32 @@
         </div>
     </section>
 
+    <!-- SECTION: v2.1.0 (released 2026-11-09) -->
+    <section id="next" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
+        <div class="text-center max-w-3xl mx-auto mb-12">
+            <span class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">NEW — v2.1.0</span>
+            <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight mt-4 mb-4">The AI Surface, <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">Completed</span></h2>
+            <p class="text-slate-400 leading-relaxed">Built and verified on the same production-grade port that proved the foundation: every capability below was exercised on the real surfaces it ships on.</p>
+        </div>
+        <div class="grid md:grid-cols-3 gap-6">
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🪜</div>
+                <h3 class="text-white font-bold text-lg mb-1">One Discovery Ladder</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Schema and discovery are projected at runtime from the declarations — an index, a per-slice schema contract, and an Explorer that turns operations into invocable forms. MCP, the Copilot, and HTTP climb the same ladder, with payload budgets per AI capability tier, so small and offline models stay first-class.</p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">✍️</div>
+                <h3 class="text-white font-bold text-lg mb-1">AI Writes You Approve</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">No AI-initiated write executes in one step: proposal, a signed token bound to the exact operation, arguments, and user, then verified execution — single-use, five minutes, replay-proof. Slice writes bind strictly (bad input is rejected with per-issue errors, never silently coerced), and update semantics — patch or replace — are declared per slice.</p>
+            </div>
+            <div class="rounded-2xl bg-slate-900/60 border border-slate-700/60 p-6">
+                <div class="text-2xl mb-3">🔁</div>
+                <h3 class="text-white font-bold text-lg mb-1">Declarations Round-Trip</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">Regenerate artefacts from the declaration with a loss detector, absorb hand edits back into it, alter the database additively under guard — and every port run emits its own fidelity scorecard, while a conformance corpus stands ready to judge the next runtime by the same standard.</p>
+            </div>
+        </div>
+    </section>
+
     <section id="faq" class="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto border-t border-slate-800/80">
         <div class="text-center mb-16">
             <div class="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest mb-2">Team Guidance</div>
@@ -674,7 +697,7 @@
                     <span class="font-mono text-base" x-text="faqOpen === 3 ? '−' : '+'">+</span>
                 </button>
                 <div x-show="faqOpen === 3" class="px-6 pb-5 text-xs sm:text-sm text-slate-400 leading-relaxed border-t border-slate-800/60 pt-4" style="display: none;">
-                    Yes! LaraSlice ships with specialized skills (<code>skills/laraslice/SKILL.md</code>) and declarative Body <code>ui:</code> manifests. Agents can run <code>slice:make</code>, configure multi-table schemas, and generate BlatUI Blade views today. Internal Body→kit synthesis (“JEV” in <code>docs/MIND_BODY_HEART.md</code>) is on the roadmap; TypeSafe Jev is a separate optional integration pattern—not bundled in core.
+                    Yes! LaraSlice ships with specialized skills (<code>skills/laraslice/SKILL.md</code>) and Jev System One integration. You can give an AI agent a natural language user story or specification, and it will autonomously run <code>slice:make</code>, configure parent-child multi-table schemas, and produce valid BlatUI Blade templates and Flutter code.
                 </div>
             </div>
 

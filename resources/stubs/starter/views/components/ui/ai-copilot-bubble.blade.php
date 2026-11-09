@@ -61,6 +61,7 @@
 
             <!-- Header Actions -->
             <div class="flex items-center gap-1">
+                @if (auth()->check() && \LaraSlice\Core\Security\Access::allows(auth()->user(), ['ai.settings.view', 'ai.settings.edit', 'settings.view']))
                 <a 
                     href="{{ route('settings.ai') }}" 
                     title="AI Settings & Models" 
@@ -70,6 +71,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                 </a>
+                @endif
                 <button 
                     @click="clearHistory()" 
                     title="Clear Chat History" 

@@ -22,6 +22,8 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
         _syncReady: false,
         draftAvailable: null,
         draftStatus: '',
+        engineCheck: { state: 'idle', errors: [] },
+        _engineCheckTimer: null,
         libraryItems: [],
         librarySlug: null,
         fieldFilters: {},
@@ -806,7 +808,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                                 required: true,
                                 nullable: false,
                                 width: 50,
-                                length: '255',
+                                length: 255,
                                 default: '',
                                 options: {},
                                 optionsText: ''
@@ -1088,6 +1090,11 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             // First open of the Porting Studio modal loads its
             // markup into the panel's slot (see ensurePortingModal).
             this.$watch('showPortModal', (v) => { if (v) this.ensurePortingModal(); });
+            // Engine-truth validation (F8): keep the chip's verdict
+            // in step with the engine's BlueprintValidator as the
+            // source changes; checked once on settle too.
+            this.$watch('source', () => this.scheduleEngineCheck());
+            setTimeout(() => this.scheduleEngineCheck(), 900);
             // Arm dirty tracking after init's own
             // programmatic syncs have run (see syncToYaml).
             setTimeout(() => { this._syncReady = true; }, 0);
@@ -1350,6 +1357,13 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                         model: this.toSnakeCase(r.model || ''),
                         foreign_key: r.foreign_key || ''
                     };
+                    // The relation's target table must round-trip:
+                    // without it the applier cannot record the
+                    // field's references, and generation emits a
+                    // plain index column instead of the foreign
+                    // key constraint the blueprint declared (F10).
+                    if (r.table) relObj.table = r.table;
+                    if (r.external) relObj.external = true;
                     modelObj.relations.push(relObj);
                     this.allRelations.push(relObj);
                 });
@@ -1450,6 +1464,57 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
             }
         },
 
+        /**
+         * The chip's combined verdict: the local syntax/shape check
+         * (yamlStatus) AND the engine's BlueprintValidator verdict
+         * (runEngineCheck — the same validator slice:blueprint:plan
+         * runs). The Studio must never claim plain "YAML valid" for a
+         * blueprint the engine would reject (Day-2 drill F8).
+         */
+        get validityStatus() {
+            const syntax = this.yamlStatus;
+            if (!syntax.ok) return { ok: false, tone: 'error', label: 'YAML error', message: syntax.message };
+            if (!(this.source || '').trim()) return { ok: true, tone: 'neutral', label: 'YAML valid', message: syntax.message };
+            if (this.engineCheck.state === 'invalid') {
+                const first = (this.engineCheck.errors || [])[0] || 'invalid blueprint';
+                return { ok: false, tone: 'error', label: 'Engine rejects', message: 'The generation engine rejects this blueprint: ' + first };
+            }
+            if (this.engineCheck.state === 'valid') {
+                return { ok: true, tone: 'ok', label: 'YAML valid', message: 'YAML valid — the generation engine accepts this blueprint.' };
+            }
+            return { ok: true, tone: 'ok', label: 'YAML valid', message: 'YAML valid (engine check pending).' };
+        },
+
+        scheduleEngineCheck() {
+            if (this._engineCheckTimer) clearTimeout(this._engineCheckTimer);
+            this._engineCheckTimer = setTimeout(() => this.runEngineCheck(), 600);
+        },
+
+        async runEngineCheck() {
+            const source = this.source || '';
+            if (!source.trim()) { this.engineCheck = { state: 'idle', errors: [] }; return; }
+            const previous = this.engineCheck;
+            this.engineCheck = { state: 'checking', errors: previous.errors || [] };
+            try {
+                const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                const res = await fetch('/laraslice/studio/blueprint/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token },
+                    body: JSON.stringify({ source: source, format: this.format || 'yaml' }),
+                });
+                if (!res.ok) { this.engineCheck = { state: 'idle', errors: [] }; return; }
+                const data = await res.json();
+                // A newer edit may have landed while the check ran;
+                // only apply the verdict if the source is unchanged.
+                if ((this.source || '') !== source) return;
+                this.engineCheck = data.valid
+                    ? { state: 'valid', errors: [] }
+                    : { state: 'invalid', errors: data.errors || ['Invalid blueprint'] };
+            } catch (e) {
+                this.engineCheck = { state: 'idle', errors: [] };
+            }
+        },
+
         parseYamlToBlueprint(yamlText) {
             const raw = yamlText || this.source;
             if (!raw || !raw.trim()) return;
@@ -1481,13 +1546,18 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                             handle: sHandle,
                             domain: s.domain || this.domainName,
                             blueprint: JSON.parse(JSON.stringify(s)),
-                            allRelations: (s.models || []).flatMap(m => (m.relations || []).map(r => ({
-                                source_model: this.toSnakeCase(m.handle || ''),
-                                name: this.toSnakeCase(r.name || ''),
-                                type: r.type || 'belongsTo',
-                                model: this.toSnakeCase(r.model || ''),
-                                foreign_key: r.foreign_key || ''
-                            }))),
+                            allRelations: (s.models || []).flatMap(m => (m.relations || []).map(r => {
+                                const relEntry = {
+                                    source_model: this.toSnakeCase(m.handle || ''),
+                                    name: this.toSnakeCase(r.name || ''),
+                                    type: r.type || 'belongsTo',
+                                    model: this.toSnakeCase(r.model || ''),
+                                    foreign_key: r.foreign_key || ''
+                                };
+                                if (r.table) relEntry.table = r.table;
+                                if (r.external) relEntry.external = true;
+                                return relEntry;
+                            })),
                             source: sSource
                         };
                     });
@@ -1705,7 +1775,24 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                                 width: parseInt(f.width) || 50,
                             };
                             if (f.hidden) fObj.hidden = true;
-                            if (f.length) fObj.length = f.length;
+                            if (f.length) {
+                                // The engine (BlueprintValidator) requires an
+                                // integer length for string/email/url fields
+                                // and a "precision,scale" string for decimal/
+                                // float. The visual editor's length input is a
+                                // text box, so values arrive as digit-strings;
+                                // serialize them in the engine's form here —
+                                // the same funnel width already uses — or the
+                                // Studio emits YAML its own plan rejects (F8).
+                                const lenType = f.type || 'string';
+                                if (['decimal', 'float'].includes(lenType)) {
+                                    fObj.length = String(f.length);
+                                } else if (typeof f.length === 'string' && /^\d+$/.test(f.length.trim())) {
+                                    fObj.length = parseInt(f.length, 10);
+                                } else {
+                                    fObj.length = f.length;
+                                }
+                            }
                             if (f.default) fObj.default = f.default;
                             if (f.type === 'enum' && f.options && Object.keys(f.options).length) {
                                 fObj.options = f.options;
@@ -1715,12 +1802,21 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                     relations: (this.allRelations && this.allRelations.length > 0
                         ? this.allRelations.filter(r => r.source_model === mHandle)
                         : (m.relations || [])
-                    ).map(r => ({
-                        name: this.toSnakeCase(r.name || 'relation'),
-                        type: r.type || 'belongsTo',
-                        model: this.toSnakeCase(r.model || ''),
-                        foreign_key: r.foreign_key || ''
-                    }))
+                    ).map(r => {
+                        const relOut = {
+                            name: this.toSnakeCase(r.name || 'relation'),
+                            type: r.type || 'belongsTo',
+                            model: this.toSnakeCase(r.model || ''),
+                            foreign_key: r.foreign_key || ''
+                        };
+                        // Target table / externality round-trip
+                        // (see loadParsedBlueprint): dropping them
+                        // here silently downgraded declared FK
+                        // constraints to plain indexes (F10).
+                        if (r.table) relOut.table = r.table;
+                        if (r.external) relOut.external = true;
+                        return relOut;
+                    })
                 };
                 return mObj;
             });
@@ -1913,8 +2009,8 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 soft_deletes: false,
                 description: '',
                 fields: [
-                    { handle: 'name', label: 'Name', type: 'string', required: true, nullable: false, width: 50, length: '255', default: '' },
-                    { handle: 'status', label: 'Status', type: 'string', required: true, nullable: false, width: 50, length: '30', default: 'active' }
+                    { handle: 'name', label: 'Name', type: 'string', required: true, nullable: false, width: 50, length: 255, default: '' },
+                    { handle: 'status', label: 'Status', type: 'string', required: true, nullable: false, width: 50, length: 30, default: 'active' }
                 ],
                 relations: []
             });
@@ -2445,7 +2541,7 @@ window.blueprintStudio = ({ initialSource, initialFormat, initialBlueprint, csrf
                 required: false,
                 nullable: true,
                 width: 50,
-                length: '255',
+                length: 255,
                 default: ''
             });
             this.syncToYaml();

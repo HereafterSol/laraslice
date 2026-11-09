@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Discovery\SliceManifest;
+use LaraSlice\Core\Metadata\LadderTier;
+use LaraSlice\Core\Metadata\MetadataProjector;
 use LaraSlice\Core\Security\Access;
 use LaraSlice\LaraSliceServiceProvider;
 use LaraSlice\Porting\SlicePortService;
@@ -33,9 +36,21 @@ class AiEngine
 
     protected SliceManager $sliceManager;
 
+    protected ?MetadataProjector $projector = null;
+
     public function __construct(SliceManager $sliceManager)
     {
         $this->sliceManager = $sliceManager;
+    }
+
+    /**
+     * The runtime metadata projector — the discovery ladder's
+     * single source (Proposals #1–#3). Resolved lazily so the
+     * engine's constructor contract does not change.
+     */
+    protected function projector(): MetadataProjector
+    {
+        return $this->projector ??= app(MetadataProjector::class);
     }
 
     /**
@@ -341,6 +356,12 @@ class AiEngine
             'version' => LaraSliceServiceProvider::VERSION,
             'current_page' => $pagePath ?? '/',
             'active_slices' => $slicesData,
+            // The inventory is counted ONCE, from discovery, by
+            // SliceManager::inventorySummary() — the same source the
+            // Studio inventory reads. Never re-count active_slices
+            // for "how many slices" answers: that subset drops
+            // name-shadowed twins and inactive-but-installed slices.
+            'inventory' => $this->sliceManager->inventorySummary(),
             'database_metrics' => $dbMetrics,
             'studio_capabilities' => $studioCapabilities,
         ];
@@ -845,6 +866,329 @@ class AiEngine
         return null;
     }
 
+    /**
+     * Resolve the slice a message names, or null. The explicit
+     * "the X slice" phrasing goes through the registry's own
+     * strictness passes (SliceManager::getSlice); otherwise the
+     * longest registry name/title appearing in the message wins.
+     */
+    protected function resolveNamedSlice(string $msg, SliceManager $manager): ?SliceManifest
+    {
+        if (preg_match('/\b([a-z0-9][a-z0-9 _-]{1,60}?)\s+slice\b/', $msg, $m)) {
+            $candidate = trim($m[1]);
+            $fillers = ['what', 'fields', 'field', 'does', 'do', 'the', 'a', 'an', 'tell', 'me', 'about', 'describe', 'show', 'list', 'give', 'details', 'detail', 'information', 'info', 'on', 'of', 'for', 'is', 'are', 'has', 'have', 'this', 'that'];
+            $words = preg_split('/\s+/', $candidate) ?: [];
+            while ($words !== [] && in_array($words[0], $fillers, true)) {
+                array_shift($words);
+            }
+            $candidate = implode(' ', $words);
+            if ($candidate !== '') {
+                $found = $manager->getSlice($candidate) ?: $manager->getSlice(Str::studly($candidate));
+                if ($found) {
+                    return $found;
+                }
+            }
+        }
+
+        $best = null;
+        $bestLen = 0;
+        foreach ($manager->getSlices() as $name => $slice) {
+            foreach (array_unique([(string) $name, (string) ($slice->title ?? '')]) as $needle) {
+                $n = strtolower(trim($needle));
+                if (strlen($n) >= 3 && strlen($n) > $bestLen && preg_match('/\b'.preg_quote($n, '/').'\b/', $msg)) {
+                    $best = $slice;
+                    $bestLen = strlen($n);
+                }
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * The fact sheet for a named slice, composed from the slice
+     * registry and the slice's declared Heart (fields, relations,
+     * tables) — registry-level facts. This handler exists because
+     * "Tell me about the Tasks slice: what fields does it have?"
+     * used to fall through to the table-schema handler, whose
+     * resolver guessed a table (defaulting to `users`) and answered
+     * a spurious "access restricted" — even to the super admin.
+     * Registry facts are not table rows: no table permission gate
+     * applies, and no refusal path may fire for them.
+     */
+    protected function sliceFactSheetAnswer(string $msg, SliceManager $manager): ?string
+    {
+        $aboutSlice = str_contains($msg, 'slice')
+            || preg_match('/\b(tell me about|describe|details (?:on|about)|information (?:on|about))\b/', $msg);
+        if (! $aboutSlice) {
+            return null;
+        }
+        if (! preg_match('/\b(about|describe|tell|detail|info|field|column|schema|structure|what|show|list|contain|have|has|inside|overview)\b/', $msg)) {
+            return null;
+        }
+
+        $manifest = $this->resolveNamedSlice($msg, $manager);
+        if (! $manifest) {
+            return null;
+        }
+
+        $title = $manifest->title ?? $manifest->name;
+        $reply = "### 🧩 {$title} (`{$manifest->name}`)\n\n";
+        $reply .= '- **Domain:** '.SliceManager::domainLabelFor($manifest)."\n";
+        $reply .= '- **Status:** '.($manifest->active ? 'Active' : 'Inactive').' • **Version:** '.($manifest->version ?? '1.0.0')."\n";
+        if (! empty($manifest->description)) {
+            $reply .= "- **About:** {$manifest->description}\n";
+        }
+        if (! empty($manifest->dependencies)) {
+            $reply .= '- **Depends on:** '.implode(', ', (array) $manifest->dependencies)."\n";
+        }
+
+        try {
+            $tables = $manager->getSliceTables($manifest);
+        } catch (\Throwable $e) {
+            $tables = (array) ($manifest->tables ?? []);
+        }
+        if (! empty($tables)) {
+            $tableBits = [];
+            foreach ($tables as $t) {
+                $tableBits[] = Schema::hasTable($t) ? "`{$t}` (".DB::table($t)->count().' records)' : "`{$t}`";
+            }
+            $reply .= '- **Tables:** '.implode(' · ', $tableBits)."\n";
+        }
+
+        // Declared fields from the Heart: models[].fields wins,
+        // a top-level fields map is the fallback.
+        $fields = [];
+        $raw = (array) ($manifest->raw ?? []);
+        foreach ((array) ($raw['models'] ?? []) as $model) {
+            foreach ((array) ($model['fields'] ?? []) as $fname => $fdef) {
+                if (is_string($fname) && ! isset($fields[$fname])) {
+                    $fields[$fname] = is_array($fdef) ? (string) ($fdef['type'] ?? 'string') : 'string';
+                }
+            }
+        }
+        if ($fields === [] && isset($raw['fields']) && is_array($raw['fields'])) {
+            foreach ($raw['fields'] as $fname => $fdef) {
+                if (is_string($fname)) {
+                    $fields[$fname] = is_array($fdef) ? (string) ($fdef['type'] ?? 'string') : 'string';
+                }
+            }
+        }
+
+        if ($fields !== []) {
+            $shown = array_slice($fields, 0, 40, true);
+            $bits = [];
+            foreach ($shown as $fname => $ftype) {
+                $bits[] = "`{$fname}` ({$ftype})";
+            }
+            $reply .= "\n#### Declared fields (".count($fields)."):\n".implode(' · ', $bits);
+            if (count($fields) > count($shown)) {
+                $reply .= ' · …and '.(count($fields) - count($shown)).' more';
+            }
+            $reply .= "\n";
+        } elseif (! empty($tables) && Schema::hasTable($tables[0])) {
+            $cols = Schema::getColumnListing($tables[0]);
+            $reply .= "\n#### Fields on `{$tables[0]}` (".count($cols).", live schema):\n".implode(' · ', array_map(fn ($c) => "`{$c}`", $cols))."\n";
+        }
+
+        $relations = [];
+        $seenRelations = [];
+        $addRelation = function (string $rname, array|string $rdef) use (&$relations, &$seenRelations) {
+            if (is_array($rdef)) {
+                $type = (string) ($rdef['type'] ?? $rdef['relation'] ?? 'relation');
+                $target = (string) ($rdef['table'] ?? $rdef['model'] ?? $rdef['related'] ?? '');
+            } else {
+                $type = $rdef;
+                $target = '';
+            }
+            $key = strtolower($rname.'|'.$type);
+            if ($rname === '' || isset($seenRelations[$key])) {
+                return;
+            }
+            $seenRelations[$key] = true;
+            $relations[] = "`{$rname}` — {$type}".($target !== '' ? " → `{$target}`" : '');
+        };
+        foreach ((array) ($manifest->relations ?? []) as $rname => $rdef) {
+            if (is_array($rdef) || is_string($rdef)) {
+                $addRelation(is_string($rname) ? $rname : (string) ($rdef['name'] ?? ''), $rdef);
+            }
+        }
+        // Porter Hearts declare relations per model, as a list of
+        // {name, type, model/table} definitions.
+        foreach ((array) ($raw['models'] ?? []) as $model) {
+            foreach ((array) ($model['relations'] ?? []) as $rdef) {
+                if (is_array($rdef) && isset($rdef['name'])) {
+                    $addRelation((string) $rdef['name'], $rdef);
+                }
+            }
+        }
+        if ($relations !== []) {
+            $reply .= "\n#### Relations (".count($relations)."):\n- ".implode("\n- ", $relations)."\n";
+        }
+
+        return $reply."\n_Source: slice registry (live)._";
+    }
+
+    /**
+     * Render the shared inventory summary (SliceManager::
+     * inventorySummary) the same way everywhere it is answered.
+     *
+     * @param  array{total: int, domains: array<string, int>}  $inventory
+     */
+    protected function formatInventory(array $inventory): string
+    {
+        $lines = [];
+        foreach ($inventory['domains'] as $domain => $count) {
+            $lines[] = "- **{$domain}** — {$count} ".($count === 1 ? 'slice' : 'slices');
+        }
+
+        return '**'.$inventory['total'].' slices** across **'.count($inventory['domains'])." domains**:\n\n".
+               implode("\n", $lines).
+               "\n\nAsk about a domain (\"HR slices\") or a slice by name (\"Tell me about Projects\") for details.".
+               "\n\n_Source: slice registry (live)._";
+    }
+
+    /**
+     * "How many slices are installed, and which domains?" —
+     * answered from the shared inventory summary, never from a
+     * locally counted subset.
+     */
+    protected function sliceInventoryAnswer(string $msg, array $context): ?string
+    {
+        if (! preg_match('/\b(list|show|what|which|how many|count)\b[^.?!]*\b(slices?|modules?|apps?|features?)\b|\b(slices?|modules?)\b[^.?!]*\b(list|installed|active|available|exist|belong)\b/', $msg)) {
+            return null;
+        }
+
+        $inventory = $context['inventory'] ?? null;
+        if (! is_array($inventory) || ! isset($inventory['total'], $inventory['domains'])) {
+            $inventory = $this->sliceManager->inventorySummary();
+        }
+
+        return $this->formatInventory($inventory);
+    }
+
+    /**
+     * Multi-part status questions: "Is the system healthy? How
+     * many users, tasks and invoices are there?" Every entity
+     * named IN THE MESSAGE gets its count (from the live tables
+     * the copilot's telemetry already reads); an entity the
+     * caller may not count is named as not counted, never
+     * silently dropped, and the whole question never collapses
+     * into one table's telemetry. Entities are resolved from the
+     * message text only — page affinity is deliberately NOT used
+     * here, because the page's table answering for every named
+     * entity was the collapse being fixed.
+     *
+     * Health, when asked, is composed only from checks this
+     * engine actually runs for the answer (database reachability
+     * proven by the count queries themselves, the table list,
+     * the slice registry, the audit trail) and the answer names
+     * that basis — no monitoring check is invented.
+     */
+    protected function multiPartStatusAnswer(string $msg, array $context): ?string
+    {
+        $healthAsked = (bool) preg_match('/\b(health|healthy|status|working|online|alive)\b/', $msg);
+        $countAsked = (bool) preg_match('/\b(how many|count|total|number of)\b/', $msg);
+
+        $entities = [];
+        foreach ($this->listTables() as $table) {
+            $forms = array_unique([
+                $table,
+                str_replace('_', ' ', $table),
+                Str::singular($table),
+                str_replace('_', ' ', Str::singular($table)),
+                Str::plural($table),
+            ]);
+            $pos = null;
+            foreach ($forms as $form) {
+                if (preg_match('/\b'.preg_quote(strtolower($form), '/').'\b/', $msg, $mm, PREG_OFFSET_CAPTURE)) {
+                    $pos = $pos === null ? $mm[0][1] : min($pos, $mm[0][1]);
+                }
+            }
+            if ($pos !== null) {
+                $entities[$table] = $pos;
+            }
+        }
+        asort($entities);
+        $entities = array_slice($entities, 0, 6, true);
+
+        if (! (($countAsked && count($entities) >= 2) || ($healthAsked && count($entities) >= 1))) {
+            return null;
+        }
+
+        $dbOk = true;
+        $counted = [];
+        $declined = [];
+        foreach (array_keys($entities) as $table) {
+            if (! $this->canAccessTable($table, 'count')) {
+                $declined[] = $table;
+                continue;
+            }
+            try {
+                $counted[$table] = DB::table($table)->count();
+            } catch (\Throwable $e) {
+                $dbOk = false;
+                $declined[] = $table;
+            }
+        }
+
+        $reply = '';
+        if ($healthAsked) {
+            $inventory = $context['inventory'] ?? null;
+            if (! is_array($inventory) || ! isset($inventory['total'])) {
+                $inventory = $this->sliceManager->inventorySummary();
+            }
+            $auditCount = null;
+            try {
+                if (Schema::hasTable('laraslice_audit_logs')) {
+                    $auditCount = DB::table('laraslice_audit_logs')->count();
+                }
+            } catch (\Throwable $e) {
+                $dbOk = false;
+            }
+
+            // Tables in the CURRENT database: Schema::getTables()
+            // spans every schema the connection's user can see on
+            // some drivers (a shared MariaDB reported 616 tables
+            // for a 258-table app), so scope by schema when the
+            // driver reports one.
+            $tableCount = count($this->listTables());
+            try {
+                $currentDb = (string) DB::connection()->getDatabaseName();
+                $scoped = array_filter(Schema::getTables(), fn ($t) => ($t['schema'] ?? $currentDb) === $currentDb);
+                if ($scoped !== []) {
+                    $tableCount = count($scoped);
+                }
+            } catch (\Throwable $e) {
+            }
+
+            $verdict = $dbOk
+                ? '✅ **Operational at the data layer** — every check below ran live for this answer and passed.'
+                : '⚠️ **Degraded** — one or more of the checks below failed; see which.';
+            $reply .= "### 🩺 System Health\n\n{$verdict}\n\n";
+            $reply .= '- **Database:** '.($dbOk ? "reachable — {$tableCount} tables in the current database" : 'a live count query failed — see the counts below')."\n";
+            $reply .= "- **Slice registry:** {$inventory['total']} slices discovered\n";
+            if ($auditCount !== null) {
+                $reply .= "- **Audit trail:** {$auditCount} entries in `laraslice_audit_logs`\n";
+            }
+            $reply .= "\n_Basis: health is computed from the live database counts executed for this answer plus the slice registry. The copilot runs no external monitoring, uptime or infrastructure checks, so this is a data-layer view._\n";
+        }
+
+        if ($counted !== [] || $declined !== []) {
+            $reply .= ($healthAsked ? "\n" : '')."### 📊 Live Counts\n\n";
+            foreach ($counted as $table => $total) {
+                $entityTitle = ucwords(str_replace(['shop_', '_'], ['', ' '], $table));
+                $reply .= "- **{$entityTitle}** (`{$table}`): **{$total}**\n";
+            }
+            foreach ($declined as $table) {
+                $entityTitle = ucwords(str_replace(['shop_', '_'], ['', ' '], $table));
+                $reply .= "- **{$entityTitle}** (`{$table}`): not counted — you don't have count access to this table\n";
+            }
+        }
+
+        return $reply."\n_Source: database (live counts)".($healthAsked ? ' + slice registry (live)' : '').'._';
+    }
+
     protected function handleDirectDatabaseQueries(string $message, array $context, array $pageContext): mixed
     {
         $raw = trim($message);
@@ -897,6 +1241,28 @@ class AiEngine
         $selectedSlice = $pageContext['selected_slice'] ?? null;
         $manager = app(SliceManager::class);
 
+        // -------------------------------------------------------------
+        // REGISTRY & STATUS HANDLERS — questions ABOUT slices and
+        // multi-part status/count questions are answered here,
+        // BEFORE the table-centric handlers below. The table
+        // handlers resolve ONE table (with page affinity) and used
+        // to hijack these questions: a named-slice question landed
+        // on whatever table the resolver guessed (and could end in
+        // a spurious "access restricted"), and a three-count
+        // question collapsed into a single table's telemetry.
+        // -------------------------------------------------------------
+        if ($factSheet = $this->sliceFactSheetAnswer($msg, $manager)) {
+            return $factSheet;
+        }
+
+        if ($inventoryReply = $this->sliceInventoryAnswer($msg, $context)) {
+            return $inventoryReply;
+        }
+
+        if ($statusReply = $this->multiPartStatusAnswer($msg, $context)) {
+            return $statusReply;
+        }
+
         // A. Specific Table Fields / Columns Inspection
         // e.g. "whats fields in user details table?", "fields in user_details", "columns of users", "/fields user_details", "/schema user_details"
         if (preg_match('/(?:what(?:\s*s|\s+are)?\s+)?(?:fields|columns|schema|structure)\s+(?:in|of|for)?\s*([a-z0-9_ -]+)/i', $msg, $fm)
@@ -916,7 +1282,11 @@ class AiEngine
                 $targetTable = Str::plural($candidateClean);
             } elseif (in_array(Str::singular($candidateClean), $allDbTables, true)) {
                 $targetTable = Str::singular($candidateClean);
-            } else {
+            } elseif (strlen($candidateClean) >= 3) {
+                // Fuzzy matching needs a real needle: with an empty
+                // or tiny candidate, str_contains() matches the
+                // first table in the list and the question gets
+                // answered (or refused) against a guessed table.
                 foreach ($allDbTables as $dt) {
                     if ($dt === $candidateClean || str_ends_with($dt, '_'.$candidateClean) || str_contains($dt, $candidateClean)) {
                         $targetTable = $dt;
@@ -1517,13 +1887,18 @@ class AiEngine
         // 6. Slash Command / Intent: /schema or "schema for [table]"
         if (preg_match('/^\/schema\b/i', $msg) || preg_match('/(schema|columns|fields|structure)\s+(?:of|for)?\s*([a-z0-9_ -]*)/i', $msg, $sm)) {
             $tableName = ! empty($sm[2]) ? $this->resolveTableFromQuery(trim($sm[2]), $currentPath) : $this->resolveTableFromQuery('', $currentPath);
-            $targetTable = $tableName ?: 'users';
+            // No invented default: when no table resolves, this
+            // handler has nothing to inspect and falls through.
+            // Defaulting to `users` here turned unrelated questions
+            // ("What fields does the Tasks slice have?") into a
+            // users-table inspection and a spurious refusal.
+            $targetTable = $tableName;
 
-            if (! $this->canAccessTable($targetTable, 'view')) {
+            if ($targetTable && ! $this->canAccessTable($targetTable, 'view')) {
                 return "### 🔒 Access restricted\n\nYou don't have permission to inspect the `{$targetTable}` table.";
             }
 
-            if (Schema::hasTable($targetTable)) {
+            if ($targetTable && Schema::hasTable($targetTable)) {
                 $cols = Schema::getColumnListing($targetTable);
                 $entityTitle = ucwords(str_replace(['shop_', '_'], ['', ' '], $targetTable));
 
@@ -1757,7 +2132,7 @@ class AiEngine
      */
     public function callCustomProvider(string $message, array $context, array $pageContext, string $provider, array $history = []): ?string
     {
-        $systemPrompt = $this->buildSystemPrompt($context, $pageContext);
+        $systemPrompt = $this->buildSystemPrompt($context, $pageContext, $message, $history);
 
         try {
             switch ($provider) {
@@ -1887,22 +2262,210 @@ class AiEngine
     }
 
     /**
-     * Build rich system prompt with live framework telemetry.
+     * The PROVIDER path's context (Proposals #1–#3): the
+     * discovery ladder, not the registry dump.
+     *
+     * Before Phase B, a provider call was built over
+     * getSystemContext() — every active slice's metadata
+     * (title, description, version, domain, permissions,
+     * dependencies for ~172 slices; ≈52.7 KB of JSON on the
+     * proof app) assembled per call, from the name-keyed
+     * subset that also undercounts discovery (172 vs 174).
+     * The study track named it the live token leak (T5):
+     * context = inventory summary + page context + the
+     * resolved slices' fact sheets, from the one projection
+     * the Studio and MCP read.
+     *
+     * What this returns, at the configured ladder tier:
+     *  - inventory: totals + domain split from discovery;
+     *  - index: the fleet index in the tier's rendering
+     *    (rows / names / domain_names / summary);
+     *  - describes: the projector's describe payload for
+     *    each slice the conversation actually touches (the
+     *    message, recent user turns, the current page),
+     *    capped by the tier.
+     *
+     * The built-in responder does NOT use this — it answers
+     * from the registry directly at zero model tokens; its
+     * behaviour is unchanged.
+     *
+     * @param  array<string, mixed>  $pageContext
+     * @param  array<int, mixed>  $history
+     * @return array<string, mixed>
      */
-    protected function buildSystemPrompt(array $context, array $pageContext): string
+    public function ladderContext(string $message, array $pageContext = [], array $history = []): array
     {
-        $slicesList = implode(', ', array_keys($context['active_slices']));
-        $usersCount = $context['database_metrics']['users_total'];
-        $tablesCount = $context['database_metrics']['tables_count'];
+        $tier = LadderTier::current();
+        $summary = $this->sliceManager->inventorySummary();
+
+        $describes = [];
+        foreach ($this->touchedSlices($message, $pageContext, $history, (int) $tier['max_describes']) as $manifest) {
+            $id = (string) ($manifest->canonical_id ?? $manifest->name);
+            $describe = $this->projector()->describe($id, (bool) $tier['describe_ui']);
+            if ($describe !== null) {
+                $describes[(string) $manifest->name] = $describe;
+            }
+        }
+
+        return [
+            'tier' => $tier['name'],
+            'inventory' => [
+                'total' => $summary['total'],
+                'domains' => $summary['domains'],
+            ],
+            'index' => $this->ladderIndexPayload($tier, $describes),
+            'describes' => $describes,
+        ];
+    }
+
+    /**
+     * The slices this conversation touches, resolved with the
+     * F5 resolver: the current message first, then recent user
+     * turns (newest first), then the current page's path.
+     *
+     * @param  array<string, mixed>  $pageContext
+     * @param  array<int, mixed>  $history
+     * @return array<int, SliceManifest>
+     */
+    protected function touchedSlices(string $message, array $pageContext, array $history, int $cap): array
+    {
+        $texts = [strtolower($message)];
+        $userTurns = [];
+        foreach ($history as $turn) {
+            if (is_array($turn) && ($turn['role'] ?? 'user') === 'user' && is_string($turn['content'] ?? null)) {
+                $userTurns[] = strtolower($turn['content']);
+            }
+        }
+        $texts = array_merge($texts, array_reverse($userTurns));
+        if (! empty($pageContext['path'])) {
+            $texts[] = strtolower((string) $pageContext['path']);
+        }
+
+        $found = [];
+        foreach ($texts as $text) {
+            if (count($found) >= $cap) {
+                break;
+            }
+            $manifest = $this->resolveNamedSlice($text, $this->sliceManager);
+            if ($manifest !== null) {
+                $found[(string) ($manifest->canonical_id ?? $manifest->name)] = $manifest;
+            }
+        }
+
+        return array_values($found);
+    }
+
+    /**
+     * The fleet index in the tier's shape (see LadderTier):
+     * the projector is the only source — this method chooses
+     * how much of it a consumer at this tier is handed, never
+     * a different set of facts.
+     *
+     * @param  array<string, mixed>  $tier
+     * @param  array<string, mixed>  $describes
+     * @return array<string, mixed>
+     */
+    protected function ladderIndexPayload(array $tier, array $describes): array
+    {
+        $mode = (string) ($tier['index'] ?? 'names');
+        if ($mode === 'summary') {
+            return ['mode' => 'summary'];
+        }
+
+        if ($mode === 'rows') {
+            $index = $this->projector()->index([
+                'format' => 'rows',
+                'per_page' => (int) $tier['per_page'],
+            ]);
+
+            return ['mode' => 'rows', 'columns' => $index['columns'], 'rows' => $index['rows']];
+        }
+
+        $index = $this->projector()->index(['per_page' => 500]);
+        $groups = [];
+        foreach ((array) ($index['slices'] ?? []) as $row) {
+            $groups[(string) $row['domain']][] = (string) $row['name'];
+        }
+
+        if ($mode === 'domain_names') {
+            $touchedDomains = [];
+            foreach ($describes as $describe) {
+                $touchedDomains[(string) ($describe['domain'] ?? '')] = true;
+            }
+            $other = [];
+            foreach ($groups as $domain => $names) {
+                if (! isset($touchedDomains[$domain])) {
+                    $other[$domain] = count($names);
+                }
+            }
+            $groups = array_filter($groups, fn (string $domain): bool => isset($touchedDomains[$domain]), ARRAY_FILTER_USE_KEY);
+
+            return ['mode' => 'domain_names', 'groups' => $groups, 'other_domains' => $other];
+        }
+
+        return ['mode' => 'names', 'groups' => $groups];
+    }
+
+    /**
+     * Render the ladder index payload into prompt text.
+     *
+     * @param  array<string, mixed>  $index
+     */
+    protected function renderLadderIndex(array $index): string
+    {
+        return match ((string) ($index['mode'] ?? 'summary')) {
+            'rows' => (string) json_encode(['columns' => $index['columns'] ?? [], 'rows' => $index['rows'] ?? []], JSON_UNESCAPED_SLASHES),
+            'names', 'domain_names' => implode("\n", array_map(
+                fn (string $domain, array $names): string => "- {$domain}: ".implode(', ', $names),
+                array_keys((array) ($index['groups'] ?? [])),
+                array_values((array) ($index['groups'] ?? []))
+            )),
+            default => '',
+        };
+    }
+
+    /**
+     * Build the provider's system prompt from the ladder
+     * context: inventory summary + the tier's index rendering +
+     * describe payloads for the slices the conversation
+     * touches. (Before Phase B this embedded the bare names of
+     * the name-keyed active-slices subset — the model was told
+     * WHAT exists but nothing true about any of it, while the
+     * full per-slice metadata dump rode along in the assembled
+     * context. See ladderContext().)
+     */
+    protected function buildSystemPrompt(array $context, array $pageContext, string $message = '', array $history = []): string
+    {
+        $ladder = $this->ladderContext($message, $pageContext, $history);
+        $usersCount = $context['database_metrics']['users_total'] ?? 0;
+        $tablesCount = $context['database_metrics']['tables_count'] ?? 0;
         $page = $pageContext['path'] ?? '/';
         $domInfo = ! empty($pageContext['dom_content']) ? "\n- Current Visible Page Screen Inner Content:\n".substr($pageContext['dom_content'], 0, 2000)."\n" : '';
 
-        return "You are the LaraSlice AI Copilot, an elite pair programmer and operational assistant for the LaraSlice Enterprise framework (Vertical Slice Architecture for Laravel 13+).\n\n".
+        $inventory = $ladder['inventory'];
+        $domainSummary = implode(', ', array_map(
+            fn (string $domain, int $count): string => "{$domain}: {$count}",
+            array_keys($inventory['domains']),
+            array_values($inventory['domains'])
+        ));
+
+        $prompt = "You are the LaraSlice AI Copilot, an elite pair programmer and operational assistant for the LaraSlice Enterprise framework (Vertical Slice Architecture for Laravel 13+).\n\n".
                "LIVE SYSTEM TELEMETRY:\n".
                "- Current Screen: {$page}\n".$domInfo.
-               "- Active Vertical Slices: {$slicesList}\n".
+               "- Slice Inventory: {$inventory['total']} slices ({$domainSummary}) — live from the runtime metadata projection, the same discovery ladder the Studio and MCP read.\n".
                ($this->telemetryAllowed() ? "- Live Database Metrics: {$usersCount} users registered across {$tablesCount} database tables\n" : '').
-               "- Studio Capabilities: Slices can be scaffolded, toggled, seeded, wiped at slice/domain level, and destroyed.\n\n".
+               "- Studio Capabilities: Slices can be scaffolded, toggled, seeded, wiped at slice/domain level, and destroyed.\n\n";
+
+        $indexText = $this->renderLadderIndex($ladder['index']);
+        if ($indexText !== '') {
+            $prompt .= "SLICE INDEX ({$ladder['tier']} tier):\n".$indexText."\n\n";
+        }
+
+        foreach ($ladder['describes'] as $name => $describe) {
+            $prompt .= "SLICE DESCRIBE — {$name}:\n".(string) json_encode($describe, JSON_UNESCAPED_SLASHES)."\n\n";
+        }
+
+        return $prompt.
                "GUIDELINES:\n".
                "1. Always format responses in clean GitHub-style Markdown with tables, code blocks, and bold highlights.\n".
                "2. Provide concrete, accurate answers regarding LaraSlice architecture and MySQL data.\n".
@@ -1966,7 +2529,16 @@ class AiEngine
         }
 
         // Slice inventory: counts by domain, never the full name dump.
+        // The shared inventory summary (discovery-counted) wins when
+        // the context carries it; counting $slices here is only a
+        // fallback for hand-built contexts — that subset undercounts
+        // installed slices (name-shadowed twins, inactive slices).
         if (preg_match('/\b(list|show|what|which|how many)\b[^.?!]*\b(slices?|modules?|apps?|features?)\b|\b(slices?|modules?)\b[^.?!]*\b(list|installed|active|available|exist)\b/', $msg)) {
+            $inventory = $context['inventory'] ?? null;
+            if (is_array($inventory) && isset($inventory['total'], $inventory['domains']) && is_array($inventory['domains']) && $inventory['domains'] !== []) {
+                return $this->formatInventory($inventory);
+            }
+
             $byDomain = [];
             foreach ($slices as $data) {
                 $byDomain[(string) ($data['domain'] ?? 'General')] = ($byDomain[(string) ($data['domain'] ?? 'General')] ?? 0) + 1;
@@ -2105,81 +2677,83 @@ Latency: {$latency}ms.",
         return [
             [
                 'name' => 'list_slices',
-                'description' => 'List all vertical slices with domain grouping, status, version, and models.',
+                'description' => 'Discovery ladder, rung 1: the compact slice index from the runtime metadata projection — identity and declared counts per slice, fleet totals from discovery. The same payload the Studio metadata endpoint serves.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
-                        'domain' => ['type' => 'string', 'description' => 'Optional domain filter (e.g. CRM, Billing, Commerce)'],
+                        'domain' => ['type' => 'string', 'description' => 'Optional domain label filter (e.g. ERP Adjudication)'],
+                        'page' => ['type' => 'integer', 'description' => 'Index page (the page size is set by the configured ladder tier)'],
                     ],
                 ],
             ],
             [
                 'name' => 'toggle_slice',
-                'description' => 'Enable or disable a vertical slice or entire domain group.',
+                'description' => 'Enable or disable a vertical slice or entire domain group. Two-phase write: the first call returns a proposal (status "requires_confirmation") and executes nothing; repeat the call with the same arguments plus confirmation_token once the user has approved the proposal.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
                         'slice' => ['type' => 'string', 'description' => 'Name of the slice to toggle'],
                         'domain' => ['type' => 'string', 'description' => 'Domain group to toggle'],
                         'action' => ['type' => 'string', 'enum' => ['enable', 'disable', 'toggle'], 'description' => 'Action to perform'],
+                        'confirmation_token' => ['type' => 'string', 'description' => 'The signed token from the requires_confirmation proposal. Omit on the first call.'],
                     ],
                 ],
             ],
             [
                 'name' => 'seed_slice',
-                'description' => 'Generate realistic relational seed data for a slice or domain.',
+                'description' => 'Generate realistic relational seed data for a slice or domain. Two-phase write: the first call returns a proposal (status "requires_confirmation") and executes nothing; repeat the call with the same arguments plus confirmation_token once the user has approved the proposal.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
                         'slice' => ['type' => 'string', 'description' => 'Name of the slice'],
                         'domain' => ['type' => 'string', 'description' => 'Domain name to batch seed'],
                         'count' => ['type' => 'integer', 'description' => 'Number of records (default 10)'],
+                        'confirmation_token' => ['type' => 'string', 'description' => 'The signed token from the requires_confirmation proposal. Omit on the first call.'],
                     ],
                 ],
             ],
             [
                 'name' => 'wipe_slice_data',
-                'description' => 'Truncate all records of a slice or domain while keeping code files intact. Destructive: requires confirm set to the slice or domain name.',
+                'description' => 'Truncate all records of a slice or domain while keeping code files intact. Destructive. Two-phase write: the first call returns a proposal (status "requires_confirmation") and executes nothing; repeat the call with the same arguments plus confirmation_token once the user has approved the proposal.',
                 'annotations' => ['destructiveHint' => true],
                 'parameters' => [
                     'type' => 'object',
-                    'required' => ['confirm'],
                     'properties' => [
                         'slice' => ['type' => 'string', 'description' => 'Name of the slice'],
                         'domain' => ['type' => 'string', 'description' => 'Domain name to wipe'],
-                        'confirm' => ['type' => 'string', 'description' => 'Repeat the slice (or domain) name to confirm'],
+                        'confirmation_token' => ['type' => 'string', 'description' => 'The signed token from the requires_confirmation proposal. Omit on the first call.'],
                     ],
                 ],
             ],
             [
                 'name' => 'destroy_slice',
-                'description' => 'Completely remove a slice: drop tables, clean migrations, and delete slice directory. Destructive: requires confirm set to the slice or domain name. Core slices cannot be destroyed.',
+                'description' => 'Completely remove a slice: drop tables, clean migrations, and delete slice directory. Destructive. Core slices cannot be destroyed. Two-phase write: the first call returns a proposal (status "requires_confirmation") and executes nothing; repeat the call with the same arguments plus confirmation_token once the user has approved the proposal.',
                 'annotations' => ['destructiveHint' => true],
                 'parameters' => [
                     'type' => 'object',
-                    'required' => ['confirm'],
                     'properties' => [
                         'slice' => ['type' => 'string', 'description' => 'Name of the slice to destroy'],
                         'domain' => ['type' => 'string', 'description' => 'Domain to destroy'],
                         'mode' => ['type' => 'string', 'enum' => ['complete', 'code_only', 'db_only', 'wipe_data']],
-                        'confirm' => ['type' => 'string', 'description' => 'Repeat the slice (or domain) name to confirm'],
+                        'confirmation_token' => ['type' => 'string', 'description' => 'The signed token from the requires_confirmation proposal. Omit on the first call.'],
                     ],
                 ],
             ],
             [
                 'name' => 'get_slice_schema',
-                'description' => 'Get the complete declarative schema, fields, child tables, and relationships for any slice.',
+                'description' => 'Discovery ladder, rung 2: the per-slice schema contract (laraslice/slice-schema v1) — declared fields with types/required/enums, tables, relations, operations and a draft-07 json_schema, projected from the slice\'s Heart. Unknown slices return per-issue errors (field / problem / expected) you can correct and retry.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['slice'],
                     'properties' => [
-                        'slice' => ['type' => 'string', 'description' => 'Slice name (e.g. Users, Roles, Orders)'],
+                        'slice' => ['type' => 'string', 'description' => 'Slice id, name or handle from list_slices (e.g. Tasks)'],
+                        'ui' => ['type' => 'boolean', 'description' => 'Also include the UI tier (directory columns/views, form fields) — off by default, as on the HTTP describe endpoint'],
                     ],
                 ],
             ],
             [
                 'name' => 'scaffold_slice',
-                'description' => 'Scaffold a new vertical slice with domain, fields, workflow, and Flutter models.',
+                'description' => 'Scaffold a new vertical slice with domain, fields, workflow, and Flutter models. Two-phase write: the first call returns a proposal (status "requires_confirmation") and executes nothing; repeat the call with the same arguments plus confirmation_token once the user has approved the proposal.',
                 'parameters' => [
                     'type' => 'object',
                     'required' => ['name'],
@@ -2189,6 +2763,7 @@ Latency: {$latency}ms.",
                         'fields' => ['type' => 'string', 'description' => 'Comma-separated fields (name:type)'],
                         'workflow' => ['type' => 'boolean', 'description' => 'Include state machine workflow'],
                         'flutter' => ['type' => 'boolean', 'description' => 'Generate Flutter client slice'],
+                        'confirmation_token' => ['type' => 'string', 'description' => 'The signed token from the requires_confirmation proposal. Omit on the first call.'],
                     ],
                 ],
             ],
@@ -2202,15 +2777,14 @@ Latency: {$latency}ms.",
             ],
             [
                 'name' => 'prune_audit_logs',
-                'description' => 'Permanently delete audit and security log records older than the retention period. Destructive: requires confirm set to "prune".',
+                'description' => 'Permanently delete audit and security log records older than the retention period. Destructive. Two-phase write: the first call returns a proposal (status "requires_confirmation") and executes nothing; repeat the call with the same arguments plus confirmation_token once the user has approved the proposal.',
                 'annotations' => ['destructiveHint' => true],
                 'parameters' => [
                     'type' => 'object',
-                    'required' => ['confirm'],
                     'properties' => [
                         'days' => ['type' => 'integer', 'description' => 'Retention threshold in days (default 90)'],
                         'slice' => ['type' => 'string', 'description' => 'Optional slice name filter'],
-                        'confirm' => ['type' => 'string', 'description' => 'Must be "prune"'],
+                        'confirmation_token' => ['type' => 'string', 'description' => 'The signed token from the requires_confirmation proposal. Omit on the first call.'],
                     ],
                 ],
             ],

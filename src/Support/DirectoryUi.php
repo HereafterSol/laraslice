@@ -580,6 +580,96 @@ final class DirectoryUi
     }
 
     /**
+     * Resolve a declared tab post (ui.show.tabs[].post) to the
+     * child slice's store URL. The declaration names the child
+     * slice, the body field, and the foreign key the parent
+     * record fills. The route name prefix is read from the
+     * child slice's own routes file (the same source
+     * SliceManager registers declared routes from), and the
+     * form is offered only when the current user holds the
+     * child slice's create ability — its store controller
+     * authorizes again on submit regardless.
+     *
+     * @param  array<string, mixed>  $post
+     * @return array{post: array<string, mixed>, post_url: string}|null
+     */
+    public static function tabPost(array $post): ?array
+    {
+        $sliceName = (string) ($post['slice'] ?? '');
+        $field = (string) ($post['field'] ?? '');
+        $foreignKey = (string) ($post['foreign_key'] ?? '');
+        if ($sliceName === '' || $field === '' || $foreignKey === '') {
+            return null;
+        }
+
+        try {
+            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            $slice = $manager->getSlice($sliceName);
+            if ($slice === null) {
+                return null;
+            }
+            $routesPath = $slice->getRoutesPath();
+            $webFile = $routesPath ? $routesPath.'/web.php' : null;
+            if (! $webFile || ! is_file($webFile)) {
+                return null;
+            }
+            if (! preg_match("/Route::prefix\\('([^']+)'\\)->name\\('([^']+)\\.'\\)/", (string) file_get_contents($webFile), $m)) {
+                return null;
+            }
+            $namePrefix = $m[2];
+            if (! \Illuminate\Support\Facades\Route::has($namePrefix.'.store')) {
+                return null;
+            }
+            $user = auth()->user();
+            if ($user !== null) {
+                foreach ((array) ($slice->raw['permissions'] ?? []) as $permission) {
+                    if (is_string($permission) && str_ends_with($permission, '.create') && ! $user->can($permission)) {
+                        return null;
+                    }
+                }
+            }
+
+            return [
+                'post' => [
+                    'field' => $field,
+                    'foreign_key' => $foreignKey,
+                    'label' => (string) ($post['label'] ?? 'Add'),
+                    'button' => (string) ($post['button'] ?? 'Post'),
+                    'placeholder' => (string) ($post['placeholder'] ?? ''),
+                ],
+                'post_url' => route($namePrefix.'.store'),
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * The declared companion-account creation for a details slice
+     * (account_creation: {foreign_key: user_id, role: employee}):
+     * the create form additionally collects a login account
+     * (name/email/password) and the store creates the user — with
+     * the declared role — in the same step, exactly like the
+     * source's single Add Employee / Add Client form. Null when
+     * the slice declares none.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{foreign_key: string, role: string}|null
+     */
+    public static function accountCreationFromManifest(array $manifest): ?array
+    {
+        $decl = $manifest['account_creation'] ?? null;
+        if (! is_array($decl) || empty($decl['role'])) {
+            return null;
+        }
+
+        return [
+            'foreign_key' => (string) ($decl['foreign_key'] ?? 'user_id'),
+            'role' => (string) $decl['role'],
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $manifest
      * @return list<array{handle: string, label: string, type: string, relation: string, count?: int}>
      */
@@ -602,7 +692,7 @@ final class DirectoryUi
             // (board / gantt) is an additional presentation of
             // its relation, keyed by its declared handle — a
             // table and a board over one relation are two tabs.
-            $isRenderMode = in_array($extras['render'] ?? 'table', ['board', 'gantt'], true);
+            $isRenderMode = in_array($extras['render'] ?? 'table', ['board', 'gantt', 'calendar', 'thread', 'stack'], true);
             $key = $isRenderMode ? ($handle !== null && $handle !== '' ? $handle : $relation) : $relation;
             if ($relation === '' || isset($seen[$key])) {
                 return;
@@ -641,8 +731,42 @@ final class DirectoryUi
                         $extras[$k] = (string) $tab[$k];
                     }
                 }
+                // Stacked composition (render: stack): several
+                // relation blocks in ONE tab, in declared order —
+                // the shape of composite hub tabs in the source
+                // (a card above a table). The tab's primary
+                // relation is its first block's.
+                $stackRelation = null;
+                if (($tab['render'] ?? '') === 'stack' && is_array($tab['blocks'] ?? null)) {
+                    $blocks = [];
+                    foreach ($tab['blocks'] as $block) {
+                        if (! is_array($block) || empty($block['relation'])) {
+                            continue;
+                        }
+                        $blocks[] = [
+                            'relation' => (string) $block['relation'],
+                            'label' => isset($block['label']) ? (string) $block['label'] : '',
+                            'layout' => (string) ($block['layout'] ?? 'table'),
+                        ];
+                    }
+                    if ($blocks !== []) {
+                        $extras['blocks'] = $blocks;
+                        $stackRelation = $blocks[0]['relation'];
+                    }
+                }
+                // Declared inline post (a reply box on a ticket's
+                // Replies tab): resolve the child slice's store
+                // route; unresolved or unpermitted posts render
+                // no form at all.
+                if (is_array($tab['post'] ?? null)) {
+                    $resolved = self::tabPost($tab['post']);
+                    if ($resolved !== null) {
+                        $extras['post'] = $resolved['post'];
+                        $extras['post_url'] = $resolved['post_url'];
+                    }
+                }
                 $add(
-                    (string) ($tab['relation'] ?? $tab['handle'] ?? ''),
+                    (string) ($tab['relation'] ?? $tab['handle'] ?? $stackRelation ?? ''),
                     isset($tab['label']) ? (string) $tab['label'] : null,
                     isset($tab['handle']) ? (string) $tab['handle'] : null,
                     $extras
@@ -661,6 +785,42 @@ final class DirectoryUi
                     'handle' => $handle,
                     'label' => ! empty($tab['label']) ? (string) $tab['label'] : 'Activity',
                     'type' => 'audit',
+                    'relation' => '',
+                ];
+            } elseif (($tab['type'] ?? '') === 'chart') {
+                // Chart tabs aggregate a relation into a series
+                // (today: the project burndown over the record's
+                // tasks). The series is computed below when a
+                // record is supplied; the declaration carries
+                // the chart kind + the relation it aggregates.
+                $handle = (string) ($tab['handle'] ?? 'chart');
+                if ($handle === '' || isset($seen['chart:'.$handle]) || isset($exclude[$handle])) {
+                    continue;
+                }
+                $seen['chart:'.$handle] = true;
+                $tabs[] = [
+                    'handle' => $handle,
+                    'label' => ! empty($tab['label']) ? (string) $tab['label'] : 'Chart',
+                    'type' => 'chart',
+                    'chart' => (string) ($tab['chart'] ?? ''),
+                    'relation' => (string) ($tab['relation'] ?? ''),
+                ];
+            } elseif (($tab['type'] ?? '') === 'permissions') {
+                // Permissions tabs render the record's person's
+                // module permission matrix (the source employee
+                // hub's Permissions tab): modules × permission
+                // types from permission_role + permission_types,
+                // with per-user customisations. Data attaches
+                // below when a record is supplied.
+                $handle = (string) ($tab['handle'] ?? 'permissions');
+                if ($handle === '' || isset($seen['permissions:'.$handle]) || isset($exclude[$handle])) {
+                    continue;
+                }
+                $seen['permissions:'.$handle] = true;
+                $tabs[] = [
+                    'handle' => $handle,
+                    'label' => ! empty($tab['label']) ? (string) $tab['label'] : 'Permissions',
+                    'type' => 'permissions',
                     'relation' => '',
                 ];
             }
@@ -695,12 +855,23 @@ final class DirectoryUi
 
                     continue;
                 }
+                if (($tab['type'] ?? '') === 'chart') {
+                    $tabs[$i]['chart_data'] = self::chartTabData($tab, $record);
+
+                    continue;
+                }
+                if (($tab['type'] ?? '') === 'permissions') {
+                    $tabs[$i] = self::enrichPermissionsTab($tab, $record);
+
+                    continue;
+                }
                 $relation = $tab['relation'];
-                if (! method_exists($record, $relation)) {
+                $method = self::relationMethod($record, (string) $relation);
+                if ($method === null) {
                     continue;
                 }
                 try {
-                    $query = $record->{$relation}();
+                    $query = $record->{$method}();
                     if (is_object($query)) {
                         // Relations forward count() via __call, so probe by
                         // calling it — the catch keeps a bad relation safe.
@@ -719,6 +890,133 @@ final class DirectoryUi
         }
 
         return $tabs;
+    }
+
+    /**
+     * Series data for a declared chart tab. One kind today:
+     * 'burndown' — the record's tasks aggregated by
+     * BurndownChart (the source systems' burndown math). The
+     * window defaults to the record's own start/deadline; the
+     * tab's date form may narrow it via bd_from / bd_to.
+     *
+     * @param  array<string, mixed>  $tab
+     * @return array<string, mixed>|null
+     */
+    private static function chartTabData(array $tab, object $record): ?array
+    {
+        if (($tab['chart'] ?? '') !== 'burndown') {
+            return null;
+        }
+        $relation = (string) ($tab['relation'] ?? '');
+        $method = $relation === '' ? null : self::relationMethod($record, $relation);
+        if ($method === null) {
+            return null;
+        }
+        try {
+            $query = $record->{$method}();
+            if (! is_object($query) || ! method_exists($query, 'get')) {
+                return null;
+            }
+            $tasks = $query->limit(1000)->get();
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        try {
+            $request = function_exists('request') ? request() : null;
+        } catch (\Throwable $e) {
+            $request = null;
+        }
+        $from = $request !== null ? $request->query('bd_from') : null;
+        $to = $request !== null ? $request->query('bd_to') : null;
+
+        return BurndownChart::series(
+            $tasks,
+            isset($record->start_date) ? (string) $record->start_date : null,
+            isset($record->deadline) ? (string) $record->deadline : null,
+            is_string($from) && $from !== '' ? $from : null,
+            is_string($to) && $to !== '' ? $to : null,
+        );
+    }
+
+    /**
+     * Data for a declared permissions tab: the record's
+     * person's permission matrix (modules × types, effective
+     * values from role grants + per-user customisations), the
+     * write endpoints, and whether the VIEWER may edit — only
+     * a user holding the employee edit ability (or a super
+     * persona) edits another person's types, and never for an
+     * admin-role target (the source's own rule).
+     *
+     * @param  array<string, mixed>  $tab
+     * @return array<string, mixed>
+     */
+    private static function enrichPermissionsTab(array $tab, object $record): array
+    {
+        $userId = null;
+        if (isset($record->user_id) && is_numeric($record->user_id)) {
+            $userId = (int) $record->user_id;
+        } elseif (method_exists($record, 'getTable') && $record->getTable() === 'users' && $record->getKey()) {
+            $userId = (int) $record->getKey();
+        }
+        if ($userId === null) {
+            return $tab + ['matrix' => null, 'editable' => false];
+        }
+
+        $tab['user_id'] = $userId;
+        $tab['matrix'] = \LaraSlice\Core\Security\UserPermissionTypes::matrixForUser($userId);
+
+        try {
+            $viewer = function_exists('auth') ? auth()->user() : null;
+        } catch (\Throwable $e) {
+            $viewer = null;
+        }
+        $tab['editable'] = is_object($viewer)
+            && ($tab['matrix'] !== null && ($tab['matrix']['admin_role'] ?? false) !== true)
+            && (\LaraSlice\Core\Security\Access::isSuperAdmin($viewer)
+                || \LaraSlice\Core\Security\Access::isSuperDev($viewer)
+                || \LaraSlice\Core\Security\Access::allows($viewer, 'employee_detail.edit'));
+
+        try {
+            $tab['update_url'] = \Illuminate\Support\Facades\Route::has('laraslice.user_permissions.update')
+                ? route('laraslice.user_permissions.update', ['userId' => $userId]) : null;
+            $tab['reset_url'] = \Illuminate\Support\Facades\Route::has('laraslice.user_permissions.reset')
+                ? route('laraslice.user_permissions.reset', ['userId' => $userId]) : null;
+        } catch (\Throwable $e) {
+            $tab['update_url'] = null;
+            $tab['reset_url'] = null;
+        }
+
+        return $tab;
+    }
+
+    /**
+     * The declared landing tab for a show page
+     * (ui.show.default_tab): the handle of a declared show tab
+     * (or 'overview') the page opens on when no ?tab= is in
+     * the URL — e.g. a ticket hub opens on its conversation,
+     * as the source systems' ticket page does. Null when the
+     * declaration names nothing resolvable; callers fall back
+     * to 'overview'.
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    public static function showDefaultTabFromManifest(array $manifest): ?string
+    {
+        $declared = $manifest['ui']['show']['default_tab'] ?? null;
+        if (! is_string($declared) || $declared === '') {
+            return null;
+        }
+        if ($declared === 'overview') {
+            return 'overview';
+        }
+        foreach ((array) ($manifest['ui']['show']['tabs'] ?? []) as $tab) {
+            if (is_array($tab) && ($tab['handle'] ?? null) === $declared && empty($tab['hidden'])) {
+                return $declared;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -851,30 +1149,111 @@ final class DirectoryUi
      * @param  array<string, mixed>  $tab
      * @return array<string, mixed>
      */
+    /**
+     * The callable relation method for a declared relation name.
+     * Manifests name relations in the porter's snake_case form
+     * (project_activity, task_history) while generated models
+     * expose camelCase methods (projectActivity, taskHistory):
+     * an exact method wins, the camel form is the fallback, and
+     * a name that resolves neither way is not a relation at all.
+     */
+    private static function relationMethod(object $record, string $relation): ?string
+    {
+        if ($relation === '') {
+            return null;
+        }
+        if (method_exists($record, $relation)) {
+            return $relation;
+        }
+        $camel = Str::camel($relation);
+        if ($camel !== $relation && method_exists($record, $camel)) {
+            return $camel;
+        }
+
+        return null;
+    }
+
     private static function enrichTabularTab(array $tab, object $record): array
     {
-        $relation = (string) ($tab['relation'] ?? '');
-        if ($relation === '' || ! method_exists($record, $relation)) {
+        // Stacked composition (render: stack): enrich each
+        // declared block as a tabular tab of its own relation,
+        // then hand the panel the ordered blocks. A block whose
+        // relation does not resolve renders its empty state.
+        if (($tab['render'] ?? '') === 'stack' && is_array($tab['blocks'] ?? null)) {
+            $blocks = [];
+            foreach ($tab['blocks'] as $block) {
+                $sub = self::enrichTabularTab([
+                    'handle' => (string) ($block['relation'] ?? ''),
+                    'label' => (string) ($block['label'] ?? ''),
+                    'type' => 'relation',
+                    'relation' => (string) ($block['relation'] ?? ''),
+                ], $record);
+                $blocks[] = [
+                    'relation' => (string) ($block['relation'] ?? ''),
+                    'label' => (string) ($block['label'] ?? ''),
+                    'layout' => (string) ($block['layout'] ?? 'table'),
+                    'columns' => $sub['columns'] ?? [],
+                    'rows' => $sub['rows'] ?? [],
+                    'create_url' => $sub['create_url'] ?? null,
+                    'create_label' => $sub['create_label'] ?? 'Add',
+                    'export_name' => $sub['export_name'] ?? null,
+                    'inline' => $sub['inline'] ?? null,
+                    'slice' => $sub['slice'] ?? null,
+                    'records' => $sub['records'] ?? null,
+                ];
+            }
+            $tab['blocks'] = $blocks;
+            // The show blade's render-mode dispatch gates on
+            // records being set; the stack's payload is its
+            // blocks, so records is an intentional empty set.
+            $tab['records'] = [];
+
             return $tab;
         }
-        // Render-mode tabs (board / gantt) consume the RAW
-        // related records in their own kit partials — the
-        // tabular column pipeline does not apply.
+        $relation = (string) ($tab['relation'] ?? '');
+        $method = $relation === '' ? null : self::relationMethod($record, $relation);
+        if ($method === null) {
+            return $tab;
+        }
+        // Render-mode tabs (board / gantt / calendar / thread)
+        // consume the RAW related records in their own kit
+        // partials — the tabular column pipeline does not apply.
         $render = (string) ($tab['render'] ?? 'table');
-        if ($render === 'board' || $render === 'gantt') {
+        if ($render === 'board' || $render === 'gantt' || $render === 'calendar' || $render === 'thread') {
             try {
-                $query = $record->{$relation}();
+                $query = $record->{$method}();
                 if (is_object($query) && method_exists($query, 'get')) {
-                    $tab['records'] = $query->limit(100)->get();
+                    $limit = $render === 'calendar' ? 500 : ($render === 'thread' ? 200 : 100);
+                    $tab['records'] = $query->limit($limit)->get();
+                    if ($render === 'calendar' && is_object($tab['records']) && method_exists($tab['records'], 'loadMissing')) {
+                        // A schedule's display rides on its shift
+                        // relation (name / short code / colour) —
+                        // loaded under either conventional name
+                        // the model carries.
+                        foreach (['shift', 'employeeShift'] as $shiftRelation) {
+                            try {
+                                $first = is_object($tab['records']) && method_exists($tab['records'], 'first') ? $tab['records']->first() : null;
+                                if (is_object($first) && method_exists($first, $shiftRelation)) {
+                                    $tab['records']->loadMissing($shiftRelation);
+                                    break;
+                                }
+                            } catch (\Throwable $e) {
+                                // Rows render without shift dressing.
+                            }
+                        }
+                    }
                 }
             } catch (\Throwable $e) {
                 $tab['records'] = [];
+            }
+            if ($render === 'board') {
+                $tab = self::enrichBoardTab($tab, $record, $method);
             }
 
             return $tab;
         }
         try {
-            $query = $record->{$relation}();
+            $query = $record->{$method}();
             if (! is_object($query) || ! method_exists($query, 'getRelated')) {
                 return $tab;
             }
@@ -1017,6 +1396,68 @@ final class DirectoryUi
         }
 
         return null;
+    }
+
+    /**
+     * Board-tab enrichment: the group_by axis vocabulary and,
+     * when the related slice declares the axis inline-editable,
+     * the drag channel. A hub board must render EVERY axis
+     * column (the source boards list empty columns too — a
+     * project whose tasks all sit in later columns still shows
+     * the first one, empty), so the tab carries the related
+     * slice's axis options alongside its records; the partial
+     * seeds its groups from them. The drag channel mirrors the
+     * directory board's: the related slice's own inline endpoint
+     * and allowlist, offered only to viewers the related slice
+     * lets edit.
+     *
+     * @param  array<string, mixed>  $tab
+     * @return array<string, mixed>
+     */
+    private static function enrichBoardTab(array $tab, object $record, string $method): array
+    {
+        try {
+            $query = $record->{$method}();
+            if (! is_object($query) || ! method_exists($query, 'getRelated')) {
+                return $tab;
+            }
+            $sliceName = self::sliceNameForTable($query->getRelated()->getTable());
+            if ($sliceName === null) {
+                return $tab;
+            }
+            $manifest = self::readManifest($sliceName);
+            if ($manifest === []) {
+                return $tab;
+            }
+            $groupBy = (string) ($tab['group_by'] ?? 'status');
+            $axis = self::boardAxis($manifest, $groupBy);
+            if ($axis !== null) {
+                $tab['axis_options'] = $axis['options'];
+            }
+            $inlineFields = (array) ($manifest['ui']['directory']['inline_edit'] ?? []);
+            if (! in_array($groupBy, $inlineFields, true)) {
+                return $tab;
+            }
+            $prefix = self::routePrefixForSlice($sliceName);
+            if ($prefix === null || ! Route::has($prefix.'.inline')) {
+                return $tab;
+            }
+            $tabManifest = self::manifestForSlice($sliceName);
+            $tabPerms = $tabManifest?->permissions ?? [];
+            $editSlugs = array_values(array_filter($tabPerms, fn ($s) => str_ends_with((string) $s, '.edit') || str_ends_with((string) $s, '.update')));
+            $tabUser = function_exists('auth') ? auth()->user() : null;
+            if ($editSlugs !== [] && ($tabUser === null || ! Access::allows($tabUser, $editSlugs))) {
+                return $tab;
+            }
+            $tab['inline'] = [
+                'field' => $groupBy,
+                'url' => route($prefix.'.inline', ['id' => '__ID__']),
+            ];
+        } catch (\Throwable $e) {
+            // The board still renders its records without the surface.
+        }
+
+        return $tab;
     }
 
     /**
@@ -2354,6 +2795,11 @@ final class DirectoryUi
 
         return [
             'title' => (string) ($decl['title'] ?? Str::headline((string) ($manifest['name'] ?? 'Document'))),
+            // The issuing company's identity heads the document,
+            // as the source's documents print company()->company_name
+            // — read through the SettingsUi accessor (the bound
+            // companies row), never a per-template table read.
+            'company' => SettingsUi::companyIdentity(),
             'header' => $header,
             'items' => $items,
             'totals' => $totals,
@@ -2370,13 +2816,21 @@ final class DirectoryUi
         }
         $inference = FieldInference::analyze($handle, (string) ($def['type'] ?? 'string'));
         if ((($inference['is_money'] ?? false) || ($inference['formatter'] ?? null) === 'money') && is_numeric($raw)) {
-            return number_format((float) $raw, 2);
+            // Documents render amounts under the effective
+            // currency format (SettingsUi) — the same store
+            // lists read — not a hard-coded 2-decimal shape.
+            return SettingsUi::formatAmount((float) $raw);
         }
-        if (is_string($raw) && (str_ends_with($handle, '_at') || str_contains((string) ($def['type'] ?? ''), 'date'))) {
-            $ts = strtotime($raw);
-            if ($ts !== false) {
-                return date('M j, Y', $ts);
-            }
+        if (($inference['is_date'] ?? false) || str_ends_with($handle, '_date')) {
+            // Format exactly like the hub/detail pipeline does.
+            // The old substring check ('date' inside the type)
+            // silently missed the manifest field index's real
+            // vocabulary — ported date columns are typed
+            // 'timestamp' — so document dates printed raw
+            // ('2024-01-12 00:00:00'). FieldInference's is_date
+            // knows the full type list; formatDateValue falls
+            // back to the raw string for unparseable values.
+            return DataTableRows::formatDateValue($raw, (string) ($def['type'] ?? 'date'));
         }
 
         return is_scalar($raw) ? (string) $raw : json_encode($raw);
@@ -2888,7 +3342,7 @@ final class DirectoryUi
         if (empty($decl['compare']) || ! is_array($decl['compare']) || $sources === []) {
             return null;
         }
-        $money = fn ($v) => number_format((float) $v, 2);
+        $money = fn ($v) => SettingsUi::formatAmount((float) $v);
         $periods = [];
         $totals = array_fill(0, count($sources), 0.0);
         $count = 0;
@@ -3062,6 +3516,153 @@ final class DirectoryUi
      * @return list<string>
      */
     /**
+     * The board axis of a slice's directory: the column the board
+     * view groups by, with its full value vocabulary. Derivation
+     * mirrors the generated index blades exactly — a literal
+     * status/state/stage column wins; otherwise an FK column the
+     * declaration labels Status/Stage (or whose key names the
+     * board/stage/status) is the axis. Options resolve the way
+     * directory columns resolve them: declared on the column,
+     * declared on the field, else the FK target table's rows.
+     * Boards render EVERY axis value (the source boards list
+     * empty columns too); consumers merge this vocabulary with
+     * the groups the rows actually form. Null when the slice
+     * declares no resolvable axis. $onlyKey pins the axis to a
+     * declared group_by (hub board tabs) instead of deriving it.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{key: string, options: list<array{value: string, label: string}>}|null
+     */
+    public static function boardAxis(array $manifest, ?string $onlyKey = null): ?array
+    {
+        $dir = is_array($manifest['ui']['directory'] ?? null) ? $manifest['ui']['directory'] : [];
+        $columns = [];
+        foreach ((array) ($dir['columns'] ?? []) as $c) {
+            if (is_array($c) && (string) ($c['key'] ?? $c['handle'] ?? '') !== '') {
+                $columns[] = $c;
+            }
+        }
+        $key = null;
+        $colDef = [];
+        if ($onlyKey !== null && $onlyKey !== '') {
+            $key = $onlyKey;
+            foreach ($columns as $c) {
+                if ((string) ($c['key'] ?? $c['handle'] ?? '') === $key) {
+                    $colDef = $c;
+                    break;
+                }
+            }
+        } else {
+            foreach ($columns as $c) {
+                $ck = (string) ($c['key'] ?? $c['handle'] ?? '');
+                if (in_array($ck, ['status', 'state', 'stage'], true)) {
+                    $key = $ck;
+                    $colDef = $c;
+                    break;
+                }
+            }
+            if ($key === null) {
+                foreach ($columns as $c) {
+                    $ck = (string) ($c['key'] ?? $c['handle'] ?? '');
+                    $label = (string) ($c['label'] ?? '');
+                    if (str_ends_with($ck, '_id')
+                        && (in_array($label, ['Status', 'Stage'], true)
+                            || str_contains($ck, 'board')
+                            || str_contains($ck, 'stage')
+                            || str_contains($ck, 'status'))) {
+                        $key = $ck;
+                        $colDef = $c;
+                        break;
+                    }
+                }
+            }
+        }
+        if ($key === null) {
+            return null;
+        }
+        $options = self::normalizeOptions($colDef['options'] ?? null);
+        if ($options === []) {
+            $fields = self::fieldIndex($manifest);
+            $options = self::normalizeOptions($fields[$key]['options'] ?? null);
+        }
+        if ($options === [] && str_ends_with($key, '_id')) {
+            $options = self::foreignKeyOptions($colDef, $key);
+        }
+        if ($options === []) {
+            return null;
+        }
+        $list = [];
+        foreach ($options as $value => $label) {
+            $list[] = ['value' => (string) $value, 'label' => (string) $label];
+        }
+
+        return ['key' => $key, 'options' => $list];
+    }
+
+    /**
+     * The role a user-picker field is bound to, when any: a field
+     * or column def may declare `options_role: client`; otherwise
+     * the people stems whose base IS a role name in this domain
+     * family (client, agent) bind to that role by convention.
+     * Null = the picker is not role-bound.
+     *
+     * @param  array<string, mixed>  $def
+     */
+    public static function pickerRole(array $def, string $base): ?string
+    {
+        $declared = $def['options_role'] ?? null;
+        if (is_string($declared) && trim($declared) !== '') {
+            return trim($declared);
+        }
+
+        return in_array($base, ['client', 'agent'], true) ? $base : null;
+    }
+
+    /**
+     * Ids of the users holding a role, or null when the role does
+     * not resolve in this app (no roles table, no such role, no
+     * recognizable membership store) — callers then leave the
+     * picker unfiltered rather than emptying it on a guess.
+     *
+     * @return list<int>|null
+     */
+    public static function roleMemberIds(string $role): ?array
+    {
+        try {
+            if (! Schema::hasTable('roles')) {
+                return null;
+            }
+            $cols = Schema::getColumnListing('roles');
+            $roleId = null;
+            foreach (DB::table('roles')->get() as $row) {
+                $name = (string) ($row->name ?? '');
+                $display = in_array('display_name', $cols, true) ? (string) ($row->display_name ?? '') : '';
+                if (mb_strtolower($name) === mb_strtolower($role)
+                    || ($display !== '' && mb_strtolower($display) === mb_strtolower($role))) {
+                    $roleId = (int) $row->id;
+                    break;
+                }
+            }
+            if ($roleId === null) {
+                return null;
+            }
+            if (Schema::hasTable('role_user')) {
+                return array_map('intval', DB::table('role_user')->where('role_id', $roleId)->pluck('user_id')->all());
+            }
+            if (Schema::hasTable('model_has_roles')) {
+                return array_map('intval', DB::table('model_has_roles')->where('role_id', $roleId)->pluck('model_id')->all());
+            }
+            if (Schema::hasTable('users') && in_array('role_id', Schema::getColumnListing('users'), true)) {
+                return array_map('intval', DB::table('users')->where('role_id', $roleId)->pluck('id')->all());
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
      * Options for an FK column from its target table
      * (id => label), using the same table/label conventions as
      * the row pipeline's FK resolution. Empty when no target
@@ -3080,7 +3681,14 @@ final class DirectoryUi
             : match ($base) {
                 'department' => ['teams', 'departments', 'department'],
                 'client' => ['users', 'client_details', 'clients'],
+                'agent' => ['users', 'agents', 'agent'],
                 'board_column' => ['taskboard_columns', 'board_columns'],
+                // Support-desk stems live in the ticket-prefixed
+                // tables (ticket_channels / ticket_types); without
+                // the alias the Ticket channel/type pickers and
+                // filters resolve no table and render empty.
+                'channel' => ['ticket_channels', 'channels', 'channel'],
+                'type' => ['ticket_types', 'types', 'type'],
                 default => [Str::plural($base), $base],
             };
         foreach ($candidates as $tbl) {
@@ -3097,7 +3705,7 @@ final class DirectoryUi
                     $labelCol = (string) $c['label_column'];
                 }
                 if ($labelCol === null) {
-                    foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
+                    foreach (['name', 'title', 'heading', 'subject', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
                         if (in_array($candidate, $cols, true)) {
                             $labelCol = $candidate;
                             break;
@@ -3105,12 +3713,39 @@ final class DirectoryUi
                     }
                 }
                 if ($labelCol === null) {
+                    // Person-shaped target (employee_details and
+                    // kin): no label column of its own, but the
+                    // person's name resolves through the linked
+                    // user — the same join the row pipeline uses
+                    // (F10, Day-2 drill).
+                    $personMap = DataTableRows::personNameMap($tbl, null, 200);
+                    if (! empty($personMap)) {
+                        $out = [];
+                        foreach ($personMap as $id => $name) {
+                            $out[(string) $id] = $name;
+                        }
+
+                        return $out;
+                    }
                     continue;
                 }
                 $out = [];
                 foreach (DB::table($tbl)->orderBy('id')->limit(200)->pluck($labelCol, 'id') as $id => $label) {
                     if (trim((string) $label) !== '') {
                         $out[(string) $id] = (string) $label;
+                    }
+                }
+                if ($tbl === 'users') {
+                    // A role-bound people column (client/agent)
+                    // lists only that role's members — the same
+                    // contract the form options resolver honours.
+                    // An unresolvable role leaves the list as is.
+                    $role = self::pickerRole($c, $base);
+                    $memberIds = $role !== null ? self::roleMemberIds($role) : null;
+                    if ($memberIds !== null) {
+                        $keep = array_flip(array_map('strval', $memberIds));
+
+                        return array_intersect_key($out, $keep);
                     }
                 }
                 if ($out !== []) {

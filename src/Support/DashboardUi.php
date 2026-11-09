@@ -4,6 +4,8 @@ namespace LaraSlice\Support;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Security\Access;
 
 /**
  * Declared dashboard widgets (S-UI 4, pattern P4): each slice
@@ -34,11 +36,40 @@ use Illuminate\Support\Str;
  * (no user, no clause, no column) the widget is skipped —
  * personal data is never silently widened to everyone's.
  *
+ * Audience + scope enforcement: a widget may declare
+ * `roles:` (role names, e.g. [admin, employee]); it renders
+ * only for users holding one of those roles (super roles
+ * always pass). Independently, when the slice's Heart
+ * declares permissions, the signed-in user's view scope
+ * for the slice (the same Access::scopeFor resolution the
+ * slice controllers enforce) gates and narrows every
+ * widget: scope 'none' drops the slice's widgets entirely
+ * (no dead links, no leaked totals), and owned / added /
+ * both narrow widget queries with the same clauses the
+ * controllers narrow lists with — field, relation and
+ * pivot clauses alike. A module hidden for the user
+ * (ModuleSettings) drops the slice's widgets too, exactly
+ * as its pages 403. With no signed-in user (CLI, unit
+ * contexts) nothing is filtered, as before.
+ *
  * A widget that cannot be computed is skipped, never
  * misreported.
  */
 class DashboardUi
 {
+    /** @var array<string, string> Memoized slice view scopes, keyed user|permission-base. */
+    protected static array $scopeCache = [];
+
+    /** @var array<int, array<int, string>> Memoized normalized role names, keyed by user id. */
+    protected static array $roleCache = [];
+
+    /** Test seam: forget memoized resolutions. */
+    public static function flush(): void
+    {
+        self::$scopeCache = [];
+        self::$roleCache = [];
+    }
+
     /**
      * @param  array<int, array{manifest: array, model: ?string, routes: array{index?: ?string, show?: ?string}}>  $entries
      * @return array<int, array<string, mixed>>
@@ -64,6 +95,69 @@ class DashboardUi
     }
 
     /**
+     * The signed-in user's own-record URL ("My Profile"): the
+     * show URL of the viewer's own record in the slice that
+     * declares a profile dashboard widget for their audience.
+     * Layouts link it from the workspace nav so a user whose
+     * role holds no directory grant on the people slice (an
+     * employee, say) still has an in-app path to their own
+     * hub — the show page itself admits the owner through
+     * self-record access. Null when the user has no profile
+     * record in any slice that declares one for them.
+     */
+    public static function ownRecordUrl(): ?string
+    {
+        $user = self::currentUser();
+        if ($user === null || ! function_exists('app') || ! app()->bound(SliceManager::class)) {
+            return null;
+        }
+        try {
+            $manager = app(SliceManager::class);
+            $manager->discover();
+            $slices = $manager->discoveredSlices();
+            if ($slices === []) {
+                $slices = $manager->getActiveSlices();
+            }
+            foreach ($slices as $slice) {
+                if (isset($slice->active) && ! $slice->active) {
+                    continue;
+                }
+                $manifest = (array) ($slice->raw ?? []);
+                $defs = $manifest['ui']['dashboard']['widgets'] ?? [];
+                if (! is_array($defs) || $defs === []) {
+                    continue;
+                }
+                foreach ($defs as $def) {
+                    if (! is_array($def) || ($def['type'] ?? '') !== 'profile') {
+                        continue;
+                    }
+                    if (! self::rolesAllow($def, $user)) {
+                        continue;
+                    }
+                    $modelClass = $slice->getModelClass();
+                    if (! $modelClass || ! class_exists($modelClass)) {
+                        continue;
+                    }
+                    $routesPath = $slice->getRoutesPath();
+                    $webFile = $routesPath ? $routesPath.'/web.php' : null;
+                    if (! $webFile || ! is_file($webFile)
+                        || ! preg_match("/Route::prefix\('([^']+)'\)/", (string) file_get_contents($webFile), $m)) {
+                        continue;
+                    }
+                    $widget = self::profile($def, $modelClass, ['show' => '/'.trim($m[1], '/').'/{id}']);
+                    if ($widget !== null && ! empty($widget['url'])) {
+                        return (string) $widget['url'];
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
      * @param  array{index?: ?string, show?: ?string}  $routes  URI patterns; show carries an {id} placeholder
      * @return array<int, array<string, mixed>>
      */
@@ -74,9 +168,40 @@ class DashboardUi
             return [];
         }
 
+        $user = self::currentUser();
+        $scopeNone = false;
+        if ($user !== null) {
+            // A slice the user cannot view at all contributes
+            // nothing — no dead links, no leaked totals. The
+            // one exception is the profile widget: it reads the
+            // viewer's OWN record by construction, and the show
+            // page admits the owner through self-record access
+            // even when their role holds no view grant on the
+            // people slice (the source's arrangement — employees
+            // hold no "view employees" permission, yet their
+            // dashboard carries their own card). A hidden
+            // feature module still suppresses everything (its
+            // pages 403 for this user too).
+            $scopeNone = self::sliceViewScope($manifest, $user) === 'none';
+            try {
+                if (ModuleSettings::isHiddenFor($user, isset($manifest['feature_module']) ? (string) $manifest['feature_module'] : null)) {
+                    return [];
+                }
+            } catch (\Throwable) {
+                // Module visibility is best-effort here; the
+                // controllers remain the enforcement point.
+            }
+        }
+
         $widgets = [];
         foreach ($defs as $def) {
             if (! is_array($def)) {
+                continue;
+            }
+            if ($scopeNone && (string) ($def['type'] ?? '') !== 'profile') {
+                continue;
+            }
+            if (! self::rolesAllow($def, $user)) {
                 continue;
             }
             $type = (string) ($def['type'] ?? '');
@@ -115,49 +240,360 @@ class DashboardUi
     protected static function baseQuery(array $def, string $modelClass, array $manifest): mixed
     {
         $query = $modelClass::query();
-        if ((string) ($def['scope'] ?? '') !== 'own') {
-            return $query;
-        }
-        $uid = auth()->id();
-        if ($uid === null) {
-            return null;
-        }
-        $clauses = [];
-        if (isset($def['own']) && is_array($def['own'])) {
-            $clauses = [$def['own']];
-        } elseif (! empty($manifest['access']['own_scope']) && is_array($manifest['access']['own_scope'])) {
-            $clauses = $manifest['access']['own_scope'];
-        } else {
-            try {
-                $table = (new $modelClass)->getTable();
-                foreach (['user_id', 'created_by'] as $column) {
-                    if (\Illuminate\Support\Facades\Schema::hasColumn($table, $column)) {
-                        $clauses = [['field' => $column]];
-                        break;
+        $user = self::currentUser();
+
+        if ((string) ($def['scope'] ?? '') === 'own') {
+            // Personal widget (pattern D2): narrow to the
+            // signed-in user via the def's own spec, else the
+            // slice's declared own-scope clauses, else a
+            // conventional owner column. Unresolvable means
+            // the widget is skipped — personal data is never
+            // widened to everyone's.
+            if ($user === null) {
+                return null;
+            }
+            $uid = (int) $user->id;
+            $declared = [];
+            if (isset($def['own']) && is_array($def['own'])) {
+                $declared = [$def['own']];
+            } elseif (! empty($manifest['access']['own_scope']) && is_array($manifest['access']['own_scope'])) {
+                $declared = $manifest['access']['own_scope'];
+            }
+            $clauses = self::normalizeOwnClauses($declared, $uid);
+            if ($clauses === []) {
+                try {
+                    $table = (new $modelClass)->getTable();
+                    foreach (['user_id', 'created_by'] as $column) {
+                        if (\Illuminate\Support\Facades\Schema::hasColumn($table, $column)) {
+                            $clauses = [['field' => $column, 'value' => $uid]];
+                            break;
+                        }
                     }
+                } catch (\Throwable) {
+                    $clauses = [];
                 }
-            } catch (\Throwable) {
-                $clauses = [];
+            }
+            if ($clauses === []) {
+                return null;
+            }
+
+            return self::applyClauses($query, $clauses, self::modelTable($modelClass));
+        }
+
+        // Slice view-scope narrowing: a user whose grant on
+        // this slice is owned / added / both sees widget
+        // numbers over exactly the records their list shows
+        // (the controllers' clause semantics, mirrored in
+        // viewScopeClauses()).
+        if ($user !== null) {
+            $scope = self::sliceViewScope($manifest, $user);
+            if (in_array($scope, ['owned', 'added', 'both'], true)) {
+                $clauses = self::viewScopeClauses($manifest, $scope, (int) $user->id);
+                if ($clauses !== []) {
+                    $query = self::applyClauses($query, $clauses, self::modelTable($modelClass));
+                }
             }
         }
-        if ($clauses === []) {
+
+        return $query;
+    }
+
+    protected static function currentUser(): ?object
+    {
+        try {
+            $user = auth()->user();
+        } catch (\Throwable) {
             return null;
         }
 
-        return $query->where(function ($q) use ($clauses, $uid) {
+        return is_object($user) && isset($user->id) ? $user : null;
+    }
+
+    /**
+     * The slice's permission base: the base of the first
+     * permission its Heart declares (the same Heart-first
+     * rule the slice controllers resolve theirs by). Null
+     * when the Heart declares none — such slices are not
+     * scope-enforced here, as before.
+     */
+    protected static function permissionBase(array $manifest): ?string
+    {
+        foreach ((array) ($manifest['permissions'] ?? []) as $perm) {
+            if (is_string($perm) && str_contains($perm, '.')) {
+                return substr($perm, 0, (int) strpos($perm, '.'));
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The signed-in user's view scope for the slice,
+     * resolved exactly like the controllers resolve theirs
+     * (widest grant across the base/plural view + wildcard
+     * slugs; the view-own slug form means 'owned'). Null
+     * when enforcement does not apply (no user, or the
+     * Heart declares no permissions).
+     */
+    protected static function sliceViewScope(array $manifest, ?object $user): ?string
+    {
+        if ($user === null || ! isset($user->id)) {
+            return null;
+        }
+        $base = self::permissionBase($manifest);
+        if ($base === null) {
+            return null;
+        }
+        $key = $user->id.'|'.$base;
+        if (isset(self::$scopeCache[$key])) {
+            return self::$scopeCache[$key];
+        }
+        try {
+            $plural = Str::plural($base);
+            $scope = 'none';
+            foreach (["{$base}.view", "{$plural}.view", "{$base}.*", "{$plural}.*"] as $slug) {
+                $scope = Access::widerScope($scope, Access::scopeFor($user, $slug));
+            }
+            if ($scope === 'none'
+                && Access::allows($user, ["{$base}.view-own", "{$plural}.view-own"])) {
+                $scope = 'owned';
+            }
+        } catch (\Throwable) {
+            // Fail closed: an unresolvable grant store hides
+            // the slice's widgets rather than leaking totals
+            // (the controllers 403 in the same situation).
+            $scope = 'none';
+        }
+
+        return self::$scopeCache[$key] = $scope;
+    }
+
+    /**
+     * Whether a widget's declared `roles:` audience admits
+     * the signed-in user. No declaration (or no user, e.g.
+     * CLI/unit contexts) admits everyone, as before; super
+     * roles always pass.
+     */
+    protected static function rolesAllow(array $def, ?object $user): bool
+    {
+        $declared = $def['roles'] ?? null;
+        if (! is_array($declared) || $declared === [] || $user === null) {
+            return true;
+        }
+        try {
+            if (Access::isSuperAdmin($user) || Access::isSuperDev($user)) {
+                return true;
+            }
+        } catch (\Throwable) {
+            // Fall through to the role-name match.
+        }
+        $mine = self::userRoleNames($user);
+        foreach ($declared as $role) {
+            if (in_array(self::normalizeRole((string) $role), $mine, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return array<int, string> Normalized role names of the user. */
+    protected static function userRoleNames(object $user): array
+    {
+        $id = (int) ($user->id ?? 0);
+        if (isset(self::$roleCache[$id])) {
+            return self::$roleCache[$id];
+        }
+        $names = [];
+        try {
+            if (method_exists($user, 'roles')) {
+                $names = $user->roles()->pluck('roles.name')->map(fn ($n) => (string) $n)->all();
+            }
+        } catch (\Throwable) {
+            $names = [];
+        }
+        if ($names === [] && $id > 0) {
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('role_user') && \Illuminate\Support\Facades\Schema::hasTable('roles')) {
+                    $names = \Illuminate\Support\Facades\DB::table('role_user')
+                        ->join('roles', 'roles.id', '=', 'role_user.role_id')
+                        ->where('role_user.user_id', $id)
+                        ->pluck('roles.name')
+                        ->map(fn ($n) => (string) $n)
+                        ->all();
+                }
+            } catch (\Throwable) {
+                $names = [];
+            }
+        }
+        $normalized = array_values(array_unique(array_map(fn ($n) => self::normalizeRole($n), $names)));
+
+        return self::$roleCache[$id] = $normalized;
+    }
+
+    protected static function normalizeRole(string $role): string
+    {
+        return str_replace([' ', '_'], '-', strtolower(trim($role)));
+    }
+
+    /**
+     * The clauses that narrow a widget query to the user's
+     * view scope, mirroring the controllers': owned → the
+     * slice's own-scope clauses (declared access.own_scope,
+     * else the user_id owner column); added → authorship
+     * (added_by), falling back to the own clauses, else a
+     * never-match clause; both → the union.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected static function viewScopeClauses(array $manifest, string $scope, int $uid): array
+    {
+        $own = self::ownScopeClauses($manifest, $uid);
+        $added = static function () use ($manifest, $own, $uid): array {
+            if (isset($manifest['fields']['added_by'])) {
+                return [['field' => 'added_by', 'value' => $uid]];
+            }
+            if ($own !== []) {
+                return $own;
+            }
+
+            return [['field' => 'id', 'value' => -1]];
+        };
+
+        return match ($scope) {
+            'owned' => $own,
+            'added' => $added(),
+            'both' => self::mergeClauses($own, $added()),
+            default => [],
+        };
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    protected static function ownScopeClauses(array $manifest, int $uid): array
+    {
+        $declared = $manifest['access']['own_scope'] ?? null;
+        if (is_array($declared) && $declared !== []) {
+            $clauses = self::normalizeOwnClauses($declared, $uid);
+            if ($clauses !== []) {
+                return $clauses;
+            }
+        }
+        $ownerField = isset($manifest['owner_field'])
+            ? (string) $manifest['owner_field']
+            : (isset($manifest['fields']['user_id']) ? 'user_id' : null);
+
+        return $ownerField !== null ? [['field' => $ownerField, 'value' => $uid]] : [];
+    }
+
+    /**
+     * Normalize declared own-scope entries to the
+     * controller clause shape ({field} | {relation, key} |
+     * {pivot, foreign_key, user_key}, value resolved to the
+     * user) — the same normalization the controllers apply.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected static function normalizeOwnClauses(array $declared, int $uid): array
+    {
+        $clauses = [];
+        foreach ($declared as $clause) {
+            if (! is_array($clause)) {
+                continue;
+            }
+            if (! empty($clause['field'])) {
+                $clauses[] = ['field' => (string) $clause['field'], 'value' => $uid];
+            } elseif (! empty($clause['relation'])) {
+                $clauses[] = ['relation' => (string) $clause['relation'], 'key' => (string) ($clause['key'] ?? 'id'), 'value' => $uid];
+            } elseif (! empty($clause['pivot'])) {
+                $clauses[] = [
+                    'pivot' => (string) $clause['pivot'],
+                    'foreign_key' => (string) ($clause['foreign_key'] ?? ''),
+                    'user_key' => (string) ($clause['user_key'] ?? 'user_id'),
+                    'value' => $uid,
+                ];
+            }
+        }
+
+        return $clauses;
+    }
+
+    /**
+     * Apply scope clauses to a query as a grouped OR — a
+     * record counts when ANY clause claims it, the same
+     * semantics the list narrowing uses. Pivot clauses ride
+     * an EXISTS subquery against the model's own table.
+     */
+    protected static function applyClauses(mixed $query, array $clauses, string $table): mixed
+    {
+        return $query->where(function ($q) use ($clauses, $table) {
             foreach ($clauses as $clause) {
                 if (! empty($clause['field'])) {
-                    $q->orWhere((string) $clause['field'], $uid);
+                    $q->orWhere((string) $clause['field'], $clause['value'] ?? null);
                 } elseif (! empty($clause['relation'])) {
                     $key = (string) ($clause['key'] ?? 'id');
-                    $q->orWhereHas((string) $clause['relation'], function ($rel) use ($key, $uid) {
+                    $value = $clause['value'] ?? null;
+                    $q->orWhereHas((string) $clause['relation'], function ($rel) use ($key, $value) {
                         // Qualify: an unqualified 'id' is ambiguous
                         // against pivot columns on BelongsToMany.
-                        $rel->where($rel->getModel()->getTable().'.'.$key, $uid);
+                        $rel->where($rel->getModel()->getTable().'.'.$key, $value);
+                    });
+                } elseif (! empty($clause['pivot']) && ($clause['foreign_key'] ?? '') !== '' && $table !== '') {
+                    $pivot = (string) $clause['pivot'];
+                    $foreignKey = (string) $clause['foreign_key'];
+                    $userKey = (string) ($clause['user_key'] ?? 'user_id');
+                    $value = $clause['value'] ?? null;
+                    $q->orWhereExists(function ($sub) use ($pivot, $foreignKey, $userKey, $value, $table) {
+                        $sub->select(\Illuminate\Support\Facades\DB::raw(1))
+                            ->from($pivot)
+                            ->whereColumn($pivot.'.'.$foreignKey, $table.'.id')
+                            ->where($pivot.'.'.$userKey, $value);
                     });
                 }
             }
         });
+    }
+
+    /** @param  array<int, array<string, mixed>>  $a  @param  array<int, array<string, mixed>>  $b  @return array<int, array<string, mixed>> */
+    protected static function mergeClauses(array $a, array $b): array
+    {
+        $seen = [];
+        $merged = [];
+        foreach (array_merge($a, $b) as $clause) {
+            $key = json_encode($clause);
+            if ($key === false || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $merged[] = $clause;
+        }
+
+        return $merged;
+    }
+
+    protected static function modelTable(string $modelClass): string
+    {
+        try {
+            return (new $modelClass)->getTable();
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    /**
+     * The slice's display label for widget titles: the
+     * Heart's declared title / name (e.g. "Tasks"), so a
+     * counter that declares only a handle + label still
+     * names WHAT it counts.
+     */
+    protected static function sliceLabel(array $manifest): ?string
+    {
+        foreach (['title', 'name'] as $key) {
+            if (! empty($manifest[$key]) && is_string($manifest[$key])) {
+                return $manifest[$key];
+            }
+        }
+
+        return null;
     }
 
     protected static function counter(array $def, string $modelClass, array $routes, array $manifest = []): ?array
@@ -184,7 +620,7 @@ class DashboardUi
 
         $widget = [
             'type' => 'counter',
-            'title' => (string) ($def['title'] ?? Str::headline((string) ($def['handle'] ?? 'Counter'))),
+            'title' => (string) ($def['title'] ?? self::sliceLabel($manifest) ?? Str::headline((string) ($def['handle'] ?? 'Counter'))),
             'icon' => $def['icon'] ?? null,
             'value' => ($aggregate === 'count' ? number_format($raw) : self::trimNumber((float) $raw)).(string) ($def['suffix'] ?? ''),
             'label' => isset($def['label']) ? (string) $def['label'] : null,
@@ -653,16 +1089,24 @@ class DashboardUi
             ];
         }
 
+        $showUrl = isset($routes['show']) && $routes['show']
+            ? str_replace('{id}', (string) data_get($row, 'id'), (string) $routes['show'])
+            : null;
+
         return [
             'type' => 'profile',
             'title' => (string) ($def['title'] ?? 'My Profile'),
             'name' => (string) (self::safeGet($row, (string) ($def['name_field'] ?? 'user.name')) ?? ''),
             'subtitle' => (string) (self::safeGet($row, (string) ($def['subtitle_field'] ?? 'designation.name')) ?? ''),
             'lines' => $lines,
-            'link' => $routes['index'] ?? null,
-            'url' => isset($routes['show']) && $routes['show']
-                ? str_replace('{id}', (string) data_get($row, 'id'), (string) $routes['show'])
-                : null,
+            // The card IS the viewer's own record: its link
+            // goes to that record, not the slice directory —
+            // the audience for a profile widget routinely holds
+            // no view grant on the directory (employees on the
+            // people slice), and a card link that 403s for the
+            // very user it profiles is a dead link.
+            'link' => $showUrl ?? ($routes['index'] ?? null),
+            'url' => $showUrl,
         ];
     }
 

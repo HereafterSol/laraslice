@@ -11,8 +11,10 @@ use LaraSlice\Core\Contracts\IBusinessObject;
 use LaraSlice\Core\Contracts\IFilterObject;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
+use LaraSlice\Core\Discovery\UpdateSemantics;
 use LaraSlice\Support\DocumentMath;
 use LaraSlice\Support\SchemaCache;
+use Symfony\Component\Yaml\Yaml;
 
 abstract class BaseSliceService implements IFormDataService, IListingDataService
 {
@@ -36,6 +38,11 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     public function save(IBusinessObject $form): string|int
     {
         return DB::transaction(function () use ($form) {
+            if (empty($form->id)) {
+                $this->applyDeclaredDefaults($form);
+            }
+            $this->applyDeclaredNumbering($form);
+            $this->applyDeclaredSlugs($form);
             $this->normalizeRepeaterPayloads($form);
             $this->validateRepeaterPayloads($form);
             $this->applyDocumentMath($form);
@@ -58,15 +65,47 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                 unset($data[$multiHandle]);
             }
 
-            // Updates only touch what the request sent, so partial API updates keep other values
+            // Update semantics are declared in the Heart
+            // (Proposal #6): 'patch' — the framework default and
+            // the behaviour updates have always had — writes
+            // only what the request sent, so partial updates
+            // keep other values. 'replace' makes the request
+            // body the record's new state: the completeness
+            // check runs first (a partial body is rejected,
+            // naming the missing fields), then every writable
+            // field is written.
             if (! $isNew && $form instanceof BaseFormBusinessObject && $form->providedFields() !== null) {
-                $data = array_intersect_key($data, array_flip($form->providedFields()));
+                if ($this->updateSemantics()['mode'] === 'replace') {
+                    $this->assertReplaceComplete($form);
+                } else {
+                    $data = array_intersect_key($data, array_flip($form->providedFields()));
+                }
+            }
+
+            // Server-computed document totals stay authoritative
+            // even though the client never submits them (the form
+            // renders no subtotal/total input to provide): without
+            // this, the intersection above keeps the stale stored
+            // totals while the line items change underneath them.
+            foreach ($this->repeaterDefinitions() as $def) {
+                $document = $def['document'] ?? null;
+                if (! is_array($document)) {
+                    continue;
+                }
+                foreach (['subtotal_field', 'total_field'] as $key) {
+                    $field = $document[$key] ?? null;
+                    if ($field && property_exists($form, (string) $field)) {
+                        $data[(string) $field] = $form->{(string) $field};
+                    }
+                }
             }
 
             // Populate model attributes
             $model->fill($data);
             $this->prepareModelForSave($form, $model, $isNew);
+            $this->applyComputedFields($model);
             $model->save();
+            $this->applyDeclaredExclusivity($model);
 
             $this->afterSave($form, $model, $isNew);
             $this->syncRepeaters($form, $model);
@@ -74,6 +113,389 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
 
             return $model->getKey();
         });
+    }
+
+    /**
+     * This slice's update semantics, resolved from its Heart
+     * through the one shared resolver (UpdateSemantics) so the
+     * enforced behaviour and the projected contract agree.
+     *
+     * @return array{mode: 'patch'|'replace', declared: bool}
+     */
+    protected function updateSemantics(): array
+    {
+        return UpdateSemantics::fromManifest($this->ownManifest());
+    }
+
+    /**
+     * Replace-semantics completeness (Proposal #6): under a
+     * declared `update: replace`, every writable declared
+     * field must be present in the update body. Missing fields
+     * reject the write with one issue each — the caller learns
+     * exactly what a complete body needs.
+     *
+     * Not counted as missing (the client does not own them):
+     * the id; repeater collections and relation-multi
+     * selections (synced through their own channels); document
+     * subtotal/total fields (server-computed); fields the
+     * Heart itself supplies semantics for (`default:` —
+     * declaration-supplied, `computed:` — server-derived).
+     * A Heart declaring no fields in either shape (the
+     * top-level `fields:` map or the root model's field
+     * list) gives the check nothing to judge against and
+     * it does not engage.
+     */
+    protected function assertReplaceComplete(BaseFormBusinessObject $form): void
+    {
+        $declared = $this->declaredFieldDefs();
+        if ($declared === []) {
+            return;
+        }
+
+        $serverOwned = ['id' => true];
+        foreach (array_keys($this->repeaterDefinitions()) as $handle) {
+            $serverOwned[(string) $handle] = true;
+        }
+        foreach (array_keys($this->relationMultiDefinitions()) as $handle) {
+            $serverOwned[(string) $handle] = true;
+        }
+        foreach ($this->repeaterDefinitions() as $def) {
+            $document = is_array($def) ? ($def['document'] ?? null) : null;
+            if (is_array($document)) {
+                foreach (['subtotal_field', 'total_field'] as $key) {
+                    if (! empty($document[$key])) {
+                        $serverOwned[(string) $document[$key]] = true;
+                    }
+                }
+            }
+        }
+
+        $provided = array_flip($form->providedFields() ?? []);
+        $issues = [];
+        foreach ($declared as $name => $def) {
+            $name = (string) $name;
+            if (isset($serverOwned[$name]) || ! property_exists($form, $name)) {
+                continue;
+            }
+            // A `default:` supplies the field's semantics only
+            // when it carries an actual value — generated
+            // Hearts emit `default: null` as a shape filler on
+            // every field, and applyDeclaredDefaults itself
+            // treats a null default as no default.
+            if (is_array($def) && ((array_key_exists('default', $def) && $def['default'] !== null) || array_key_exists('computed', $def))) {
+                continue;
+            }
+            if (! isset($provided[$name])) {
+                $issues[] = [
+                    'field' => $name,
+                    'problem' => "Field '{$name}' is missing from a replace update.",
+                    'expected' => "This slice declares 'update: replace' — send the complete record, including '{$name}'; or declare 'update: patch' in the slice's Heart for partial updates.",
+                ];
+            }
+        }
+
+        if ($issues !== []) {
+            throw new BindingIssuesException($issues);
+        }
+    }
+
+    /**
+     * The slice's declared fields across BOTH Heart shapes —
+     * the top-level `fields:` map and the root model's field
+     * list — merged the way the metadata projector merges
+     * them (the model list wins on conflict; the map fills).
+     * A Heart may declare its fields in either shape; the
+     * write path reads declarations exactly where the
+     * projection does.
+     *
+     * @return array<string, array<string, mixed>> field name => declaration
+     */
+    protected function declaredFieldDefs(): array
+    {
+        $manifest = $this->ownManifest();
+        $declared = [];
+        foreach ((array) ($manifest['fields'] ?? []) as $name => $def) {
+            $declared[(string) $name] = is_array($def) ? $def : [];
+        }
+
+        $root = null;
+        foreach ((array) ($manifest['models'] ?? []) as $model) {
+            if (! is_array($model)) {
+                continue;
+            }
+            if ($root === null) {
+                $root = $model;
+            }
+            if (! empty($model['root'])) {
+                $root = $model;
+                break;
+            }
+        }
+        foreach ((array) ($root['fields'] ?? []) as $fieldDef) {
+            if (! is_array($fieldDef)) {
+                continue;
+            }
+            $handle = (string) ($fieldDef['handle'] ?? $fieldDef['name'] ?? '');
+            if ($handle !== '') {
+                $declared[$handle] = array_merge($declared[$handle] ?? [], $fieldDef);
+            }
+        }
+
+        return $declared;
+    }
+
+    /**
+     * Declared create defaults: the manifest's per-field
+     * `default:` values, applied when a create leaves the
+     * field empty — omitted from the request entirely or
+     * submitted blank. Status fields above all: the source
+     * systems treat a new record's initial state as
+     * server-owned (a leave enters as pending, a ticket as
+     * open, an invoice as unpaid), and a NULL status silently
+     * drops the record out of every status-filtered list,
+     * board and report. Explicit values always win, and
+     * updates never see defaults — they are create semantics.
+     * Living in the service (not a controller) gives the web
+     * and API write paths the same behaviour, the same reason
+     * document math lives here. A default must never break a
+     * save: any failure to read the manifest skips silently.
+     */
+    protected function applyDeclaredDefaults(IBusinessObject $form): void
+    {
+        try {
+            $manifest = $this->ownManifest();
+            foreach ((array) ($manifest['fields'] ?? []) as $name => $def) {
+                if (! is_array($def) || ! array_key_exists('default', $def)) {
+                    continue;
+                }
+                $default = $def['default'];
+                if ($default === null || is_array($default) || ! property_exists($form, (string) $name)) {
+                    continue;
+                }
+                $current = $form->{$name};
+                if ($current !== null && $current !== '') {
+                    continue;
+                }
+                $prop = new \ReflectionProperty($form, (string) $name);
+                $type = $prop->getType();
+                $typeName = $type instanceof \ReflectionNamedType ? $type->getName() : null;
+                $form->{$name} = match ($typeName) {
+                    'int' => (int) $default,
+                    'float' => (float) $default,
+                    'bool' => filter_var($default, FILTER_VALIDATE_BOOLEAN),
+                    'string' => (string) $default,
+                    default => $default,
+                };
+            }
+        } catch (\Throwable $e) {
+            // A default must never break a save.
+        }
+    }
+
+    /**
+     * Declared document numbering (C1): a manifest field may
+     * carry `numbering: <kind>` (contract / invoice / estimate /
+     * credit_note / order) — on CREATE, the entered raw number
+     * is rewritten through the invoice_settings row the hub
+     * edits (prefix + separator + zero-padding), exactly as the
+     * source's store requests rewrite it through its
+     * NumberFormat helper. Updates keep the stored value (the
+     * source's update path takes the number as-is). When the
+     * form also carries the conventional `original_{field}`
+     * property, it receives the raw part — the source observer's
+     * derivation. A numbering failure must never break a save.
+     */
+    protected function applyDeclaredNumbering(IBusinessObject $form): void
+    {
+        if (! empty($form->id)) {
+            return;
+        }
+        try {
+            foreach ((array) ($this->ownManifest()['fields'] ?? []) as $name => $def) {
+                $kind = is_array($def) ? ($def['numbering'] ?? null) : null;
+                if (! is_string($kind) || $kind === '' || ! property_exists($form, (string) $name)) {
+                    continue;
+                }
+                $raw = $form->{$name};
+                if (! is_scalar($raw) || (string) $raw === '') {
+                    continue;
+                }
+                $formatted = \LaraSlice\Support\Numbering::format($kind, $raw);
+                $form->{$name} = $formatted;
+                $originalProp = 'original_'.(string) $name;
+                if (property_exists($form, $originalProp)) {
+                    $form->{$originalProp} = \LaraSlice\Support\Numbering::originalPart($kind, $formatted);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Numbering must never break a save.
+        }
+    }
+
+    /**
+     * Declared slug derivation: a manifest field may carry
+     * `slug_from: <field>` (with optional `slug_scope: <field>`)
+     * — the field's value is the slug of the source field, made
+     * unique within the scope against the model's own table
+     * with -1, -2, … suffixes. This is the source's
+     * generateUniqueSlug rule for its custom-field names: the
+     * admin names the label, never the slug. Regenerated on
+     * update when the source field participates in the save
+     * (the source regenerates on update too). A slug failure
+     * must never break a save.
+     */
+    protected function applyDeclaredSlugs(IBusinessObject $form): void
+    {
+        try {
+            foreach ((array) ($this->ownManifest()['fields'] ?? []) as $name => $def) {
+                if (! is_array($def)) {
+                    continue;
+                }
+                $from = $def['slug_from'] ?? null;
+                if (! is_string($from) || $from === ''
+                    || ! property_exists($form, (string) $name)
+                    || ! property_exists($form, $from)) {
+                    continue;
+                }
+                if (! empty($form->id)
+                    && $form instanceof BaseFormBusinessObject
+                    && $form->providedFields() !== null
+                    && ! $form->provided($from)) {
+                    continue;
+                }
+                $label = $form->{$from};
+                if (! is_scalar($label) || trim((string) $label) === '') {
+                    continue;
+                }
+                $slug = \Illuminate\Support\Str::slug((string) $label);
+                if ($slug === '') {
+                    $slug = 'field';
+                }
+                $modelClass = $this->getModelClass();
+                $table = (new $modelClass)->getTable();
+                $scope = $def['slug_scope'] ?? null;
+                $scopeValue = is_string($scope) && $scope !== '' && property_exists($form, $scope)
+                    ? $form->{$scope}
+                    : null;
+                $candidate = $slug;
+                $i = 1;
+                while (true) {
+                    $query = DB::table($table)->where((string) $name, $candidate);
+                    if (is_string($scope) && $scope !== '' && $scopeValue !== null) {
+                        $query->where($scope, $scopeValue);
+                    }
+                    if (! empty($form->id)) {
+                        $query->where('id', '<>', $form->id);
+                    }
+                    if (! $query->exists()) {
+                        break;
+                    }
+                    $candidate = $slug.'-'.$i;
+                    $i++;
+                }
+                $form->{$name} = $candidate;
+            }
+        } catch (\Throwable $e) {
+            // A slug must never break a save.
+        }
+    }
+
+    /**
+     * Declared flag exclusivity (C2): a manifest field may
+     * carry `exclusive: true` — when a record is saved with the
+     * flag ON, every sibling row's flag is cleared (scoped to
+     * the same company when the table is company-scoped). This
+     * is the source's set-default behaviour (its business
+     * address controller clears is_default on all rows before
+     * setting the chosen one): a default is a radio, not a
+     * checkbox. An exclusivity failure must never break a save.
+     */
+    protected function applyDeclaredExclusivity(Model $model): void
+    {
+        try {
+            foreach ((array) ($this->ownManifest()['fields'] ?? []) as $name => $def) {
+                if (! is_array($def) || empty($def['exclusive'])) {
+                    continue;
+                }
+                $name = (string) $name;
+                if (! $this->modelHasColumn($model, $name)) {
+                    continue;
+                }
+                $value = $model->{$name};
+                if (! ($value === 1 || $value === '1' || $value === true || $value === 'yes')) {
+                    continue;
+                }
+                $query = DB::table($model->getTable())->where('id', '<>', $model->getKey());
+                if ($this->modelHasColumn($model, 'company_id') && $model->company_id !== null) {
+                    $query->where('company_id', $model->company_id);
+                }
+                $query->update([$name => 0]);
+            }
+        } catch (\Throwable $e) {
+            // Exclusivity must never break a save.
+        }
+    }
+
+    /** This slice's own manifest (slice.yaml beside the slice's Services directory), or []. */
+    protected function ownManifest(): array
+    {
+        try {
+            $ref = new \ReflectionClass($this);
+            $sliceDir = dirname((string) $ref->getFileName(), 2);
+            foreach (['slice.yaml', 'slice.yml'] as $file) {
+                $path = $sliceDir.DIRECTORY_SEPARATOR.$file;
+                if (is_file($path)) {
+                    $data = Yaml::parseFile($path);
+
+                    return is_array($data) ? $data : [];
+                }
+            }
+        } catch (\Throwable $e) {
+            // A missing manifest means no declared defaults; never fail save().
+        }
+
+        return [];
+    }
+
+    /**
+     * Declared computed fields: a manifest field may carry a
+     * `computed:` spec naming the derivation the server owns —
+     * the value is never taken from the request (a hand-typed
+     * or blank value would silently corrupt every aggregate
+     * built on it; the comparative test found port-created
+     * timelogs storing total_hours NULL, vanishing from the
+     * hour totals reports rely on). Supported spec:
+     * `hours_between(start_field, end_field)` — decimal hours
+     * between two datetime attributes, rounded to 2dp, on both
+     * create and update (an edited end time recomputes). An
+     * unparseable endpoint leaves the stored value untouched.
+     */
+    protected function applyComputedFields(Model $model): void
+    {
+        try {
+            foreach ((array) ($this->ownManifest()['fields'] ?? []) as $name => $def) {
+                $spec = is_array($def) ? ($def['computed'] ?? null) : null;
+                if (! is_string($spec) || ! $this->modelHasColumn($model, (string) $name)) {
+                    continue;
+                }
+                if (preg_match('/^hours_between\(\s*([a-z0-9_]+)\s*,\s*([a-z0-9_]+)\s*\)$/', trim($spec), $m) !== 1) {
+                    continue;
+                }
+                $start = $model->getAttribute($m[1]);
+                $end = $model->getAttribute($m[2]);
+                if (empty($start) || empty($end)) {
+                    continue;
+                }
+                $startTs = is_numeric($start) ? (int) $start : strtotime((string) $start);
+                $endTs = is_numeric($end) ? (int) $end : strtotime((string) $end);
+                if ($startTs === false || $endTs === false) {
+                    continue;
+                }
+                $model->setAttribute((string) $name, round(($endTs - $startTs) / 3600, 2));
+            }
+        } catch (\Throwable $e) {
+            // A computed field must never break a save.
+        }
     }
 
     /**
@@ -174,6 +596,14 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                 $isEmpty = true;
                 foreach ($fields as $f) {
                     $v = $row[$f] ?? null;
+                    // A boolean's hidden companion submits '0' even
+                    // for the untouched starter row; on its own that
+                    // is not content (a kept starter row would make
+                    // every other field's required rule block a
+                    // create that never touched the repeater).
+                    if (($def['fields'][$f]['type'] ?? 'string') === 'boolean' && ($v === '0' || $v === 0 || $v === false)) {
+                        continue;
+                    }
                     if ($v !== null && $v !== '' && $v !== []) {
                         $isEmpty = false;
                         break;
@@ -325,6 +755,31 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                 continue;
             }
             $rows = is_array($form->{$handle} ?? null) ? $form->{$handle} : [];
+
+            // Header discount: resolved from the declared header
+            // fields into the pure helper's inputs.
+            $discountField = $document['discount_field'] ?? null;
+            if ($discountField && property_exists($form, (string) $discountField)) {
+                $document['discount'] = $form->{(string) $discountField};
+            }
+            $discountTypeField = $document['discount_type_field'] ?? null;
+            if ($discountTypeField && property_exists($form, (string) $discountTypeField)) {
+                $document['discount_type'] = $form->{(string) $discountTypeField};
+            }
+
+            // Per-row tax: the row field carries tax ids (the
+            // source systems store them as a JSON list); rates
+            // live in the declared tax table. Each row's tax
+            // amount is computed here (the service owns the DB)
+            // and handed to the pure helper through a virtual
+            // row key that the repeater sync never persists.
+            $taxField = $document['tax_field'] ?? null;
+            $taxTable = $document['tax_table'] ?? null;
+            if ($taxField && $taxTable) {
+                $rows = $this->resolveDocumentTaxes($rows, $document, $form);
+                $document['tax_amount'] = $document['tax_amount'] ?? '__tax_amount';
+            }
+
             $result = DocumentMath::apply($rows, $document);
             $form->{$handle} = $result['rows'];
             foreach (['subtotal_field' => 'subtotal', 'total_field' => 'total'] as $key => $value) {
@@ -333,7 +788,80 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                     $form->{(string) $field} = $result[$value];
                 }
             }
+            // A new document owes its full total (the source sets
+            // due = total at creation; payments reduce it later,
+            // so updates never re-derive it here).
+            $dueField = $document['due_field'] ?? null;
+            if ($dueField && empty($form->id) && property_exists($form, (string) $dueField)) {
+                $form->{(string) $dueField} = $result['total'];
+            }
         }
+    }
+
+    /**
+     * Compute each row's tax amount from the declared tax
+     * table's rates. Mode (from the declared header field,
+     * default 'after_discount', the source systems' norm):
+     * after_discount taxes the discounted share of each line,
+     * before_discount taxes the full line.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $document
+     * @return array<int, array<string, mixed>>
+     */
+    protected function resolveDocumentTaxes(array $rows, array $document, IBusinessObject $form): array
+    {
+        $taxField = (string) $document['tax_field'];
+        $rateColumn = (string) ($document['tax_rate'] ?? 'rate_percent');
+        try {
+            $rates = DB::table((string) $document['tax_table'])->pluck($rateColumn, 'id')->all();
+        } catch (\Throwable $e) {
+            return $rows;
+        }
+
+        $qty = (string) ($document['quantity'] ?? 'quantity');
+        $price = (string) ($document['unit_price'] ?? 'unit_price');
+        $subtotal = 0.0;
+        foreach ($rows as $row) {
+            $subtotal += round((is_numeric($row[$qty] ?? null) ? (float) $row[$qty] : 0.0)
+                * (is_numeric($row[$price] ?? null) ? (float) $row[$price] : 0.0), 2);
+        }
+        $discountAmount = 0.0;
+        $discount = is_numeric($document['discount'] ?? null) ? (float) $document['discount'] : 0.0;
+        if ($discount > 0 && $subtotal > 0) {
+            $discountAmount = ($document['discount_type'] ?? 'amount') === 'percent'
+                ? $subtotal * $discount / 100
+                : $discount;
+        }
+        $modeField = $document['tax_mode_field'] ?? null;
+        $mode = $modeField && property_exists($form, (string) $modeField)
+            ? (string) ($form->{(string) $modeField} ?? 'after_discount')
+            : 'after_discount';
+        $ratio = ($mode === 'after_discount' && $subtotal > 0)
+            ? max(0.0, ($subtotal - $discountAmount) / $subtotal)
+            : 1.0;
+
+        foreach ($rows as $i => $row) {
+            $raw = $row[$taxField] ?? null;
+            $ids = [];
+            if (is_string($raw) && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                $ids = is_array($decoded) ? $decoded : array_map('trim', explode(',', $raw));
+            } elseif (is_array($raw)) {
+                $ids = $raw;
+            }
+            $rateSum = 0.0;
+            foreach ($ids as $id) {
+                if (is_numeric($id) && isset($rates[(int) $id])) {
+                    $rateSum += (float) $rates[(int) $id];
+                }
+            }
+            $line = round((is_numeric($row[$qty] ?? null) ? (float) $row[$qty] : 0.0)
+                * (is_numeric($row[$price] ?? null) ? (float) $row[$price] : 0.0), 2);
+            $rows[$i]['__tax_amount'] = round($line * $ratio * $rateSum / 100, 2);
+        }
+
+        return $rows;
     }
 
     /** Load child rows into the form DTO so edit forms render existing line items. */
@@ -800,7 +1328,6 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     }
 
     /** Apply server-owned attributes after request data has been mass assigned. */
-    /** Apply server-owned attributes after request data has been mass assigned. */
     protected function prepareModelForSave(IBusinessObject $form, Model $model, bool $isNew): void
     {
         if (auth()->check()) {
@@ -810,6 +1337,24 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
             }
             if ($this->modelHasColumn($model, 'updated_by')) {
                 $model->updated_by = $userId;
+            }
+            // Declared auth stamps: a field whose Heart entry
+            // carries `stamp: auth` is server-owned on create —
+            // the acting user fills it whenever the client left
+            // it empty (a ticket reply's author, posted from a
+            // hub tab that submits only the body). An explicitly
+            // submitted value always wins.
+            if ($isNew) {
+                try {
+                    foreach (($this->ownManifest()['fields'] ?? []) as $fieldName => $fieldDef) {
+                        if (is_array($fieldDef) && ($fieldDef['stamp'] ?? null) === 'auth'
+                            && empty($model->{$fieldName}) && $this->modelHasColumn($model, (string) $fieldName)) {
+                            $model->{$fieldName} = $userId;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // A manifest that cannot be read never breaks a save.
+                }
             }
         }
     }

@@ -405,12 +405,120 @@ class DataTableRows
         // numeric resolved value is that person's id, and
         // the row's own name must not win the chain below.
         $declaredForeignPerson = ! empty($column['value_from'] ?? null) && is_numeric($val);
+
+        // A column that declares its relation (the generator
+        // tags assignee columns with it) names WHICH record the
+        // FK actually points at. When that record is not itself
+        // a user but a user-backed record (an employee detail),
+        // the person sits BEHIND it: resolve through the
+        // relation, or the FK value gets mistaken for a user id
+        // below and the cell renders a different person entirely
+        // (F10: employee_details #12 rendered users #12).
+        $relationUserId = null;
+        $relationUserEmail = null;
+        $relationPerson = null;
+        $relationName = $column['relation'] ?? null;
+        if (! is_string($relationName) || $relationName === '') {
+            // Not every Heart tags the column (the Studio-built
+            // directory does not): fall back to the conventional
+            // relation for the FK stem — the same derivation the
+            // FK label maps use (employee_id -> employee()).
+            $stem = str_ends_with($key, '_id') ? substr($key, 0, -3) : $key;
+            $relationName = \Illuminate\Support\Str::camel($stem);
+        }
+        if (! $declaredForeignPerson && is_string($relationName) && $relationName !== ''
+            && is_object($item) && method_exists($item, $relationName)) {
+            try {
+                $related = data_get($item, $relationName);
+                if ($related instanceof Model) {
+                    $user = null;
+                    if ($related->getTable() === 'users') {
+                        $user = $related;
+                    } elseif (is_numeric(data_get($related, 'user_id'))) {
+                        $candidate = data_get($related, 'user');
+                        if ($candidate instanceof Model && $candidate->getTable() === 'users') {
+                            $user = $candidate;
+                        } else {
+                            // The user-backed record declares
+                            // no user() relation: fall back to
+                            // the user_id join the framework's
+                            // person mechanism uses elsewhere
+                            // (userColumnFallback/personNameMap).
+                            $row = DB::table('users')->where('id', (int) data_get($related, 'user_id'))
+                                ->first(['id', 'name', 'email']);
+                            if ($row !== null) {
+                                $relationUserId = (int) $row->id;
+                                $relationUserEmail = $row->email ?? null;
+                                if (is_string($row->name ?? null) && trim((string) $row->name) !== '') {
+                                    $relationPerson = $row->name;
+                                }
+                            }
+                        }
+                    }
+                    if ($user !== null) {
+                        $relationUserId = (int) $user->getKey();
+                        $relationUserEmail = $user->email ?? null;
+                    }
+                    $candidateName = $relationPerson ?? $user?->name ?? data_get($related, 'name');
+                    if (is_string($candidateName) && trim($candidateName) !== '') {
+                        $relationPerson = $candidateName;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $relationUserId = null;
+                $relationUserEmail = null;
+                $relationPerson = null;
+            }
+        }
+
+        if (! $declaredForeignPerson && $relationPerson === null
+            && ! empty($column['label_table']) && is_numeric($val)) {
+            // Listing rows are usually BusinessObjects, not
+            // Eloquent models — no relation method exists to
+            // walk. The column's declared target table (label_table,
+            // written into the Heart from the field's own
+            // declaration) still names the record: resolve it
+            // directly, and through the person join when it is
+            // user-backed.
+            try {
+                $targetTable = (string) $column['label_table'];
+                $targetRow = DB::table($targetTable)->where('id', (int) $val)->first();
+                if ($targetRow !== null) {
+                    if (is_numeric($targetRow->user_id ?? null)) {
+                        $personMap = static::personNameMap($targetTable, [(int) $val]);
+                        $relationPerson = $personMap[(int) $val] ?? null;
+                        $userRow = DB::table('users')->where('id', (int) $targetRow->user_id)
+                            ->first(['id', 'email']);
+                        if ($userRow !== null) {
+                            $relationUserId = (int) $userRow->id;
+                            $relationUserEmail = $userRow->email ?? null;
+                        }
+                    } else {
+                        foreach (['name', 'full_name', 'title', 'label'] as $labelColumn) {
+                            if (isset($targetRow->{$labelColumn}) && trim((string) $targetRow->{$labelColumn}) !== '') {
+                                $relationPerson = (string) $targetRow->{$labelColumn};
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                $relationPerson = $relationPerson ?? null;
+            }
+        }
+
         $name = $declaredForeignPerson ? null : (
-            data_get($item, 'user.name')
+            $relationPerson
+            ?? data_get($item, 'user.name')
             ?? data_get($item, 'name')
             ?? (is_object($val) ? ($val->name ?? null) : null)
             ?? (is_string($val) && !empty($val) && !is_numeric($val) ? $val : null)
         );
+        if ($relationUserEmail !== null && is_object($item) && ! data_get($item, 'email')) {
+            try {
+                $item->email = $relationUserEmail;
+            } catch (\Throwable $e) {}
+        }
 
         // If name resolved to a raw foreign key number (e.g. user_id = 14)
         if (empty($name) || is_numeric($name)) {
@@ -465,8 +573,12 @@ class DataTableRows
                 // on the person's employee detail record. The
                 // FK column is not always named user_id (an
                 // appreciation's is award_to) — the cell's own
-                // value is the person id then.
-                $uid = is_numeric(data_get($item, 'user_id')) ? (int) data_get($item, 'user_id') : (is_numeric($val) ? (int) $val : null);
+                // value is the person id then. When the column's
+                // declared relation resolved the actual user
+                // (the FK pointed at a user-backed record, not
+                // at users), that user's id is the person id —
+                // the raw FK value is not.
+                $uid = is_numeric(data_get($item, 'user_id')) ? (int) data_get($item, 'user_id') : ($relationUserId ?? (is_numeric($val) ? (int) $val : null));
                 if ($uid) {
                     try {
                         $desigId = DB::table('employee_details')->where('user_id', $uid)->value('designation_id');
@@ -512,6 +624,61 @@ class DataTableRows
             }
 
             return DB::table('users')->where('id', $userId)->value($column);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Person labels for a user-backed table (employee_details and
+     * its kin): the record's own table carries no name column —
+     * the person's name lives on the linked user, reached through
+     * user_id. This is the framework's one person mechanism (the
+     * same users join resolveCompositeUser/userColumnFallback use
+     * per record), batched for option lists and FK maps.
+     *
+     * Returns id => user name for the given ids (or the first
+     * $limit rows when $ids is null), or null when the table is
+     * not person-shaped (no user_id column, or users has no name
+     * column) — callers then fall back to their other label
+     * sources. Rows whose linked user has an empty name are
+     * omitted, never labelled with the raw id.
+     *
+     * @param  list<int>|null  $ids
+     * @return array<int, string>|null
+     */
+    public static function personNameMap(string $table, ?array $ids = null, int $limit = 500): ?array
+    {
+        try {
+            if (! Schema::hasTable($table) || ! Schema::hasTable('users')) {
+                return null;
+            }
+            $columns = Schema::getColumnListing($table);
+            if (! in_array('id', $columns, true) || ! in_array('user_id', $columns, true)) {
+                return null;
+            }
+            if (! in_array('name', Schema::getColumnListing('users'), true)) {
+                return null;
+            }
+
+            $query = DB::table($table)
+                ->join('users', 'users.id', '=', $table.'.user_id')
+                ->orderBy($table.'.id');
+            if ($ids !== null) {
+                $query->whereIn($table.'.id', $ids);
+            } else {
+                $query->limit($limit);
+            }
+
+            $map = [];
+            foreach ($query->get([$table.'.id as person_id', 'users.name as person_name']) as $row) {
+                $name = trim((string) ($row->person_name ?? ''));
+                if ($name !== '') {
+                    $map[(int) $row->person_id] = $name;
+                }
+            }
+
+            return $map;
         } catch (\Throwable $e) {
             return null;
         }
@@ -1066,7 +1233,12 @@ class DataTableRows
             return DirectoryUi::emptyDash();
         }
 
-        return htmlspecialchars(static::moneyPrefix($item), ENT_QUOTES, 'UTF-8').number_format((float) $val, 2);
+        // The amount renders under the effective currency
+        // format (SettingsUi::money): the hub-bound format row
+        // when one exists, else the currency rows' own format
+        // fields — the store the source's currency_format()
+        // reads. The prefix stays the record's own symbol.
+        return SettingsUi::money($val, static::moneyPrefix($item), $item);
     }
 
     public static function moneyBreakdown(float|int|string|null $total, float|int|string|null $paid = null, float|int|string|null $currency = 'PKR', float|int|string|null $due = null): string
@@ -1091,11 +1263,11 @@ class DataTableRows
         if (is_numeric($currency)) {
             $currency = 'PKR'; // currency_id — display code fallback
         }
-        $curr = htmlspecialchars($currency ?: '', ENT_QUOTES, 'UTF-8');
+        $curr = is_string($currency) && $currency !== '' ? $currency : null;
 
-        $totalFormatted = $curr . number_format($numTotal, 2);
-        $paidFormatted = $curr . number_format($numPaid, 2);
-        $dueFormatted = $curr . number_format($numDue, 2);
+        $totalFormatted = SettingsUi::money($numTotal, $curr);
+        $paidFormatted = SettingsUi::money($numPaid, $curr);
+        $dueFormatted = SettingsUi::money($numDue, $curr);
 
         // The source's document-total stack: three labelled
         // lines, always all three (a settled invoice still
@@ -1236,6 +1408,7 @@ class DataTableRows
 
             $targetTable = null;
             $labelCol = null;
+            $firstExistingTable = null;
 
             foreach ($candidateTables as $tbl) {
                 if (array_key_exists($tbl, static::$labelColumnCache)) {
@@ -1244,12 +1417,16 @@ class DataTableRows
                         $targetTable = $tbl;
                         break;
                     }
+                    if (Schema::hasTable($tbl)) {
+                        $firstExistingTable ??= $tbl;
+                    }
                 } elseif (Schema::hasTable($tbl)) {
+                    $firstExistingTable ??= $tbl;
                     $cols = Schema::getColumnListing($tbl);
                     if (! empty($column['label_column']) && in_array((string) $column['label_column'], $cols, true)) {
                         $labelCol = (string) $column['label_column'];
                     }
-                    foreach ($labelCol === null ? ['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] : [] as $candidate) {
+                    foreach ($labelCol === null ? ['name', 'title', 'heading', 'subject', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] : [] as $candidate) {
                         if (in_array($candidate, $cols, true)) {
                             $labelCol = $candidate;
                             break;
@@ -1284,6 +1461,7 @@ class DataTableRows
             // learn it from the record's own relation method —
             // the generated model knows its belongsTo target even
             // when the table name is not guessable.
+            $relationTable = null;
             if ($targetTable === null) {
                 foreach ($items as $firstItem) {
                     if (! $firstItem instanceof Model) {
@@ -1297,8 +1475,9 @@ class DataTableRows
                         $relation = $firstItem->{$relName}();
                         if ($relation instanceof \Illuminate\Database\Eloquent\Relations\BelongsTo) {
                             $relTable = $relation->getRelated()->getTable();
+                            $relationTable = $relTable;
                             $cols = Schema::getColumnListing($relTable);
-                            foreach (['name', 'title', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
+                            foreach (['name', 'title', 'heading', 'subject', 'team_name', 'company_name', 'label', 'display_name', 'full_name', 'column_name', 'invoice_number', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
                                 if (in_array($candidate, $cols, true)) {
                                     $labelCol = $candidate;
                                     break;
@@ -1343,6 +1522,35 @@ class DataTableRows
                     } catch (\Throwable $e) {
                         // Safe fallback if table read fails
                         $fkMaps[$key] = [];
+                    }
+                }
+            }
+
+            // Person fallback: the target table resolved (by the
+            // declared relation, or as an existing convention
+            // candidate) but carries no label column of its own —
+            // the person-shaped case (employee_details and kin),
+            // whose name lives on the linked user. Without this,
+            // the cell fell back to the raw id even though the
+            // framework resolves the same join for composite_user
+            // cells (F10, Day-2 drill). A real label column always
+            // wins: this runs only when none was found.
+            if (($targetTable === null || $labelCol === null) && ! isset($fkMaps[$key])) {
+                $personTable = $relationTable ?? $firstExistingTable;
+                if ($personTable !== null) {
+                    $ids = [];
+                    foreach ($items as $item) {
+                        $v = data_get($item, $key);
+                        if (is_numeric($v) && $v > 0) {
+                            $ids[] = (int) $v;
+                        }
+                    }
+                    $ids = array_values(array_unique($ids));
+                    if (! empty($ids)) {
+                        $personMap = static::personNameMap($personTable, $ids);
+                        if (! empty($personMap)) {
+                            $fkMaps[$key] = $personMap;
+                        }
                     }
                 }
             }

@@ -620,7 +620,15 @@ class WizardController extends Controller
         foreach ((new \LaraSlice\Support\DeclarationHistory)->entries() as $entry) {
             $files = [];
             foreach ($entry['changes'] ?? [] as $change) {
-                $file = (string) ($change['file'] ?? '');
+                // The ledger's writer (DeclarationHistory::record)
+                // keys each change by 'path' — the same key the
+                // slice:history CLI reads. This endpoint used to
+                // read 'file', a key no entry has ever carried, so
+                // every slice's history filtered to zero and the
+                // Manage Activity tab always read "0 change(s)".
+                // 'file' remains as a fallback for hand-written or
+                // legacy index entries.
+                $file = (string) ($change['path'] ?? $change['file'] ?? '');
                 if ($file !== '' && str_contains($file, $needle)) {
                     $files[] = $file;
                 }
@@ -631,7 +639,12 @@ class WizardController extends Controller
                     'recorded_at' => (string) ($entry['recorded_at'] ?? ''),
                     'actor' => (string) ($entry['actor'] ?? ''),
                     'by' => isset($entry['by']) ? (string) $entry['by'] : null,
-                    'command' => (string) ($entry['command'] ?? ''),
+                    // Ledger entries record the actor, not a
+                    // command name; the panel renders
+                    // command || actor, so surface the actor as
+                    // the command when no command was recorded —
+                    // the same attribution the CLI prints.
+                    'command' => (string) ($entry['command'] ?? $entry['actor'] ?? ''),
                     'files' => $files,
                 ];
             }

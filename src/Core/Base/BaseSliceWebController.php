@@ -17,7 +17,9 @@ use Illuminate\Validation\ValidationException;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Core\Discovery\SliceManager;
+use LaraSlice\Core\Metadata\MetadataIssues;
 use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
+use LaraSlice\Support\DataTableRows;
 use LaraSlice\Support\DirectoryUi;
 use Symfony\Component\Yaml\Yaml;
 
@@ -778,6 +780,29 @@ abstract class BaseSliceWebController extends Controller
             ->values();
         }
 
+        // Flat mode: a thread exists only once a message does,
+        // yet starting a conversation with a fresh contact must
+        // still open a composer (the source lets you message
+        // anyone). Materialize an empty thread for the selected
+        // user so the pane + reply form render; the first reply
+        // inserts the first real row.
+        if (! empty($decl['flat'])) {
+            $wantedId = (int) $request->query('c', 0);
+            if ($wantedId > 0 && $wantedId !== $me && ! $conversations->contains('id', $wantedId)) {
+                $userClass = app(SliceManager::class)->modelClass('User');
+                $otherUser = $userClass === null ? null : $userClass::query()->whereKey($wantedId)->first(['id', 'name']);
+                if ($otherUser !== null) {
+                    $conversations = $conversations->push([
+                        'id' => $wantedId,
+                        'other' => ['id' => $wantedId, 'name' => (string) ($otherUser->name ?? 'User')],
+                        'preview' => '',
+                        'last_at' => null,
+                        'replies' => [],
+                    ]);
+                }
+            }
+        }
+
         // No implicit selection: with nothing chosen the surface
         // shows its empty state, exactly like the source page.
         $selectedId = (int) $request->query('c', 0);
@@ -892,6 +917,16 @@ abstract class BaseSliceWebController extends Controller
         $seenCol = (string) ($decl['seen'] ?? 'message_seen');
         if (Schema::hasColumn($table, $seenCol) && ! isset($attrs[$seenCol])) {
             $attrs[$seenCol] = 'no';
+        }
+        // The legacy table carries a NOT NULL notification flag
+        // whose default lives only in the source schema — on
+        // stricter engines (SQLite snapshots converted without
+        // defaults) omitting it hard-fails the insert, so a sent
+        // message never persists. The send itself dispatches the
+        // notification, which is what the flag records: set it
+        // explicitly whenever the column exists.
+        if (Schema::hasColumn($table, 'notification_sent') && ! isset($attrs['notification_sent'])) {
+            $attrs['notification_sent'] = 1;
         }
         (new $modelClass)->forceFill($attrs)->save();
     }
@@ -1013,7 +1048,7 @@ abstract class BaseSliceWebController extends Controller
                     $table = $related->getTable();
                     $columns = Schema::getColumnListing($table);
                     $labelCol = null;
-                    foreach (['name', 'title', 'label', Str::afterLast($base, '_').'_name'] as $candidate) {
+                    foreach (['name', 'title', 'heading', 'subject', 'label', Str::afterLast($base, '_').'_name'] as $candidate) {
                         if (in_array($candidate, $columns, true)) {
                             $labelCol = $candidate;
                             break;
@@ -1876,6 +1911,34 @@ abstract class BaseSliceWebController extends Controller
      * open row is clocked out; otherwise a new row is clocked
      * in. Field names come from the widget declaration itself.
      */
+    /**
+     * Punch authorization: clock-in/out is a SELF action — it
+     * only ever writes the caller's own row (the user field is
+     * the auth id by construction in punch()). The source
+     * systems treat it as a personal action outside the CRUD
+     * grants: their employee role holds add_attendance at type
+     * none, yet employees clock in daily. So: the CRUD grant
+     * authorizes as usual; failing that, a caller whose view
+     * scope on the slice is not 'none' — the same audience the
+     * clock widget renders for — may punch; anyone else keeps
+     * the denial.
+     */
+    private function authorizePunch(string $action): void
+    {
+        try {
+            $this->authorizeSlice($action);
+
+            return;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            if ($e->getStatusCode() !== 403) {
+                throw $e;
+            }
+        }
+        if ($this->sliceViewScope() === 'none') {
+            abort(403, 'Access Denied: you are not in this slice\'s audience for the punch action.');
+        }
+    }
+
     public function punch(Request $request)
     {
         $manifest = $this->ownManifest();
@@ -1902,7 +1965,7 @@ abstract class BaseSliceWebController extends Controller
             ->orderBy($inField)
             ->first();
         if ($open !== null) {
-            $this->authorizeSlice('update');
+            $this->authorizePunch('update');
             $open->{$outField} = now();
             $schema = $open->getConnection()->getSchemaBuilder();
             if ($schema->hasColumn($open->getTable(), 'clock_out_ip')) {
@@ -1913,7 +1976,7 @@ abstract class BaseSliceWebController extends Controller
             return back()->with('success', 'Clocked out at '.now()->format('H:i').'.');
         }
 
-        $this->authorizeSlice('create');
+        $this->authorizePunch('create');
         $record = new $modelClass;
         $record->{$userField} = $uid;
         $record->{$inField} = now();
@@ -1935,14 +1998,17 @@ abstract class BaseSliceWebController extends Controller
 
         $formClass = $this->getFormClass();
         $form = new $formClass;
+        $this->seedFormFromQuery($form, request()->query());
 
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
             $this->getFormViewData($form, true),
+            $this->customFieldViewData(true),
             $this->overlayLayoutData(request()),
             [
                 'form' => $form,
                 'isNew' => true,
+                'can' => $this->sliceAbilities(),
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(),
                 'parentId' => request()->route('parentId'),
@@ -1955,6 +2021,225 @@ abstract class BaseSliceWebController extends Controller
     protected function getFormViewData(mixed $form, bool $isNew): array
     {
         return [];
+    }
+
+    /**
+     * Custom fields bound to this slice's model (the carried
+     * custom_field_groups declaration): field definitions for
+     * the form partial, plus the record's stored values on
+     * edit. Empty for slices with no bound group — the partial
+     * renders nothing and the write path stays inert.
+     *
+     * @return array{customFields: array<int, array<string, mixed>>, customFieldValues: array<string, ?string>}
+     */
+    protected function customFieldViewData(bool $isNew, string|int|null $id = null): array
+    {
+        try {
+            $modelClass = $this->getService()->modelClass();
+            $fields = \LaraSlice\Support\CustomFields::fieldsForModel($modelClass);
+
+            return [
+                'customFields' => $fields,
+                'customFieldValues' => (! $isNew && $id !== null)
+                    ? \LaraSlice\Support\CustomFields::valuesFor($modelClass, (int) $id)
+                    : [],
+            ];
+        } catch (\Throwable) {
+            return ['customFields' => [], 'customFieldValues' => []];
+        }
+    }
+
+    /**
+     * Validate a save's custom-field submission (the source's
+     * CustomFieldsRequestTrait: a required field is required;
+     * uploads must be allowed file types). Throws the standard
+     * ValidationException — web flows redirect back with the
+     * errors, JSON flows get the 422 payload.
+     */
+    protected function validateCustomFields(Request $request): void
+    {
+        try {
+            $fields = \LaraSlice\Support\CustomFields::fieldsForModel($this->getService()->modelClass());
+        } catch (\Throwable) {
+            return;
+        }
+        if ($fields === [] || ! $request->has('custom_fields_data')) {
+            return;
+        }
+        \Illuminate\Support\Facades\Validator::make(
+            $request->all(),
+            \LaraSlice\Support\CustomFields::rules($fields),
+            [],
+            \LaraSlice\Support\CustomFields::ruleAttributes($fields)
+        )->validate();
+    }
+
+    /** Persist a save's custom-field values against the saved record. */
+    protected function persistCustomFields(Request $request, string|int $id): void
+    {
+        if (! $request->has('custom_fields_data')) {
+            return;
+        }
+        try {
+            \LaraSlice\Support\CustomFields::persist(
+                $this->getService()->modelClass(),
+                (int) $id,
+                (array) $request->input('custom_fields_data', []),
+                (array) ($request->file('custom_fields_data') ?? [])
+            );
+        } catch (\Throwable) {
+            // The record itself is saved; a custom-field write
+            // failure must not strand the user on an error page.
+        }
+    }
+
+    /**
+     * Append the Custom Fields tab to a show page when the
+     * record's model carries a field group with fields — the
+     * tab renders the source's label/value rows via the shared
+     * related-tab-custom-fields partial. A declared tab with
+     * the same handle wins (no duplicate is appended).
+     *
+     * @param  array<int, array<string, mixed>>  $tabs
+     * @return array<int, array<string, mixed>>
+     */
+    protected function appendCustomFieldsTab(array $tabs, mixed $record): array
+    {
+        try {
+            if (! is_object($record)) {
+                return $tabs;
+            }
+            foreach ($tabs as $tab) {
+                if (($tab['handle'] ?? null) === 'custom_fields') {
+                    return $tabs;
+                }
+            }
+            $modelClass = get_class($record);
+            $fields = \LaraSlice\Support\CustomFields::fieldsForModel($modelClass);
+            if ($fields === []) {
+                return $tabs;
+            }
+            $tabs[] = [
+                'handle' => 'custom_fields',
+                'label' => 'Custom Fields',
+                'type' => 'custom_fields',
+                'fields' => $fields,
+                'values' => \LaraSlice\Support\CustomFields::valuesFor($modelClass, (int) $record->getKey()),
+            ];
+        } catch (\Throwable) {
+            // A show page must never fail on custom fields.
+        }
+
+        return $tabs;
+    }
+
+    /**
+     * Seed a fresh create form from scoped-create query parameters.
+     * Hub tabs and other scoped "Add" actions link to the create
+     * page with the parent foreign key in the query string
+     * (…/create?ticket_id=1); without seeding, the picker renders
+     * empty and the record is stored orphaned (or against a parent
+     * the user picks by hand). Only existing public form
+     * properties are seeded, cast to their declared type — a
+     * query key that names no form field is ignored.
+     *
+     * @param  array<string, mixed>  $query
+     */
+    protected function seedFormFromQuery(object $form, array $query): void
+    {
+        try {
+            $ref = new \ReflectionObject($form);
+            foreach ($query as $key => $value) {
+                if (! is_scalar($value) || ! $ref->hasProperty((string) $key)) {
+                    continue;
+                }
+                $prop = $ref->getProperty((string) $key);
+                if (! $prop->isPublic() || $prop->isStatic()) {
+                    continue;
+                }
+                $type = $prop->getType();
+                $typeName = $type instanceof \ReflectionNamedType ? $type->getName() : null;
+                $prop->setValue($form, match ($typeName) {
+                    'int' => (int) $value,
+                    'float' => (float) $value,
+                    'bool' => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+                    default => (string) $value,
+                });
+            }
+        } catch (\Throwable) {
+            // Prefill is a convenience; never break the create page.
+        }
+    }
+
+    /**
+     * The target table of a field's DECLARED belongsTo relation,
+     * or null when the slice's Heart declares none for it.
+     *
+     * Resolution order inside the declaration: the field's own
+     * `references` (the table the blueprint/generator recorded),
+     * then a root-model relations entry matching this foreign
+     * key (or the relation name for the prop's stem) — its
+     * declared `table`, else its target model resolved through
+     * SliceManager to that model's table. This is what lets a
+     * picker follow the declaration (employee → employee_details)
+     * instead of table-name convention (employee → employees),
+     * which never resolves (F10, Day-2 drill).
+     */
+    protected function declaredRelationTable(string $propName, string $base): ?string
+    {
+        try {
+            $manifest = $this->ownManifest();
+            $fieldDef = (array) ($manifest['fields'][$propName] ?? []);
+            if (! empty($fieldDef['references']) && is_string($fieldDef['references'])) {
+                return $fieldDef['references'];
+            }
+            $fieldRelation = $fieldDef['relation'] ?? null;
+            if (is_array($fieldRelation) && ! empty($fieldRelation['model'])) {
+                $class = app(SliceManager::class)->modelClass(
+                    Str::studly(Str::singular((string) $fieldRelation['model']))
+                );
+                if ($class !== null && class_exists($class)) {
+                    return (new $class)->getTable();
+                }
+            }
+
+            $models = (array) ($manifest['models'] ?? []);
+            $rootModel = null;
+            foreach ($models as $model) {
+                if (is_array($model) && ($model['root'] ?? false) === true) {
+                    $rootModel = $model;
+                    break;
+                }
+            }
+            $rootModel ??= (isset($models[0]) && is_array($models[0])) ? $models[0] : null;
+            foreach ((array) ($rootModel['relations'] ?? []) as $relation) {
+                if (! is_array($relation) || ($relation['type'] ?? null) !== 'belongsTo') {
+                    continue;
+                }
+                $byKey = ($relation['foreign_key'] ?? null) === $propName;
+                $byName = isset($relation['name'])
+                    && Str::camel((string) $relation['name']) === Str::camel($base);
+                if (! $byKey && ! $byName) {
+                    continue;
+                }
+                if (! empty($relation['table']) && is_string($relation['table'])) {
+                    return $relation['table'];
+                }
+                $targetName = (string) ($relation['model'] ?? $relation['name'] ?? '');
+                if ($targetName === '') {
+                    continue;
+                }
+                $class = app(SliceManager::class)->modelClass(Str::studly(Str::singular($targetName)));
+                if ($class !== null && class_exists($class)) {
+                    return (new $class)->getTable();
+                }
+            }
+        } catch (\Throwable) {
+            // A manifest that cannot be read leaves the caller
+            // its convention tables, exactly as before.
+        }
+
+        return null;
     }
 
     protected function resolveRelationshipOptions(mixed $form): array
@@ -1989,16 +2274,58 @@ abstract class BaseSliceWebController extends Controller
                 }
 
                 $base = substr($propName, 0, -3);
-                $tablesToTry = match ($base) {
+                // A field may declare its options table explicitly
+                // (options_table:) when the conventional names do not
+                // resolve — e.g. knowledge_bases.category_id lives in
+                // knowledge_categories, not categories.
+                $declaredTable = $this->ownManifest()['fields'][$propName]['options_table'] ?? null;
+                // The DECLARED relation outranks table-name
+                // convention: a field whose Heart declares a
+                // belongsTo (field-level references:, or the root
+                // model's relations entry) resolves options from
+                // that relation's target table — conventions like
+                // employees/employee never guess employee_details,
+                // so an undeclared guess left the picker empty
+                // (F10, Day-2 drill). options_table stays the
+                // explicit override above both.
+                $relationTable = $declaredTable === null
+                    ? $this->declaredRelationTable($propName, $base)
+                    : null;
+                $tablesToTry = $declaredTable !== null
+                    ? [(string) $declaredTable]
+                    : ($relationTable !== null ? [$relationTable] : match ($base) {
                     'department' => ['teams', 'departments', 'department'],
+                    // Clients are users in the source schema (the
+                    // client() relation resolves to the User model) —
+                    // the same alias DirectoryUi::foreignKeyOptions
+                    // honours; without it every client picker renders
+                    // with zero options and stores NULL.
+                    'client' => ['users', 'client_details', 'clients'],
+                    // Agents are users too (the agent() relations
+                    // resolve to the User model); without the alias
+                    // the Deal/Ticket agent pickers render empty.
+                    'agent' => ['users', 'agents', 'agent'],
+                    // The board axis lives in the source's own table
+                    // name — the same alias the row pipeline
+                    // (DataTableRows) and DirectoryUi::foreignKeyOptions
+                    // already honour; without it the Tasks form's
+                    // Board Column picker resolves no table and
+                    // renders empty.
+                    'board_column' => ['taskboard_columns', 'board_columns'],
+                    // Support-desk stems live in the ticket-prefixed
+                    // tables — the same alias DirectoryUi honours;
+                    // without it the Ticket form's Channel/Type
+                    // pickers resolve no table and render empty.
+                    'channel' => ['ticket_channels', 'channels', 'channel'],
+                    'type' => ['ticket_types', 'types', 'type'],
                     default => [Str::plural($base), $base],
-                };
+                });
 
                 foreach ($tablesToTry as $tbl) {
                     if (Schema::hasTable($tbl)) {
                         $columns = Schema::getColumnListing($tbl);
                         $labelCol = 'id';
-                        foreach (['name', 'title', 'team_name', 'company_name', 'display_name', 'full_name', 'label', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
+                        foreach (['name', 'title', 'heading', 'subject', 'team_name', 'company_name', 'display_name', 'full_name', 'label', 'order_number', 'sku', 'reference', 'code'] as $candidate) {
                             if (in_array($candidate, $columns, true)) {
                                 $labelCol = $candidate;
                                 break;
@@ -2017,15 +2344,51 @@ abstract class BaseSliceWebController extends Controller
                         }
 
                         // Capped so a large related table can't blow up the form; the selected value always stays
-                        $data = DB::table($tbl)
-                            ->orderBy($labelCol)
-                            ->limit((int) config('laraslice.forms.relationship_options_limit', 500))
-                            ->pluck($labelCol, 'id')
-                            ->toArray();
-                        if (is_scalar($propVal) && $propVal !== '' && ! array_key_exists($propVal, $data)) {
-                            $selected = DB::table($tbl)->where('id', $propVal)->value($labelCol);
-                            if ($selected !== null) {
-                                $data[$propVal] = $selected;
+                        $query = DB::table($tbl);
+                        if ($tbl === 'users') {
+                            // Role-bound people pickers list only
+                            // the role's members (a client picker
+                            // shows clients, an agent picker agents)
+                            // — declared per field via options_role,
+                            // conventional for the client/agent
+                            // stems. An unresolvable role leaves
+                            // the picker unfiltered, never emptied
+                            // on a guess.
+                            $fieldDef = (array) ($this->ownManifest()['fields'][$propName] ?? []);
+                            $role = DirectoryUi::pickerRole($fieldDef, $base);
+                            $memberIds = $role !== null ? DirectoryUi::roleMemberIds($role) : null;
+                            if ($memberIds !== null) {
+                                $query->whereIn('id', $memberIds);
+                            }
+                        }
+                        // Person-shaped target (no label column of
+                        // its own — employee_details and kin): the
+                        // option labels are the linked users' names,
+                        // via the framework's one person mechanism
+                        // (F10). A real label column always wins:
+                        // this runs only when none was found.
+                        $personData = $labelCol === 'id'
+                            ? DataTableRows::personNameMap($tbl, null, (int) config('laraslice.forms.relationship_options_limit', 500))
+                            : null;
+                        if (! empty($personData)) {
+                            $data = $personData;
+                            if (is_scalar($propVal) && $propVal !== '' && ! array_key_exists($propVal, $data)) {
+                                $one = DataTableRows::personNameMap($tbl, [(int) $propVal]);
+                                if (! empty($one)) {
+                                    $data += $one;
+                                }
+                            }
+                        } else {
+                            $data = $query
+                                ->orderBy($labelCol)
+                                ->limit((int) config('laraslice.forms.relationship_options_limit', 500))
+                                ->pluck($labelCol, 'id')
+                                ->toArray();
+                            if (is_scalar($propVal) && $propVal !== '' && ! array_key_exists($propVal, $data)) {
+                                $selected = DB::table($tbl)->where('id', $propVal)->value($labelCol);
+                                if ($selected !== null) {
+                                    $data[$propVal] = $selected;
+                                }
                             }
                         }
 
@@ -2116,7 +2479,7 @@ abstract class BaseSliceWebController extends Controller
                     $table = $related->getTable();
                     $columns = Schema::getColumnListing($table);
                     $labelCol = 'id';
-                    foreach (['name', 'title', 'team_name', 'company_name', 'display_name', 'full_name', 'label', 'code'] as $candidate) {
+                    foreach (['name', 'title', 'heading', 'subject', 'team_name', 'company_name', 'display_name', 'full_name', 'label', 'code'] as $candidate) {
                         if (in_array($candidate, $columns, true)) {
                             $labelCol = $candidate;
                             break;
@@ -2264,7 +2627,12 @@ abstract class BaseSliceWebController extends Controller
                 // controller's own manifest (duplicate slice names make
                 // name-based lookup unreliable) so the show view can
                 // render related-record tabs with live counts.
-                'relatedTabs' => DirectoryUi::relatedTabsFromManifest($ownManifest, $record),
+                'relatedTabs' => $this->appendCustomFieldsTab(DirectoryUi::relatedTabsFromManifest($ownManifest, $record), $record),
+                // Declared landing tab (ui.show.default_tab):
+                // the show template opens on it when the URL
+                // carries no ?tab= (e.g. a ticket hub opens on
+                // its conversation thread).
+                'showDefaultTab' => DirectoryUi::showDefaultTabFromManifest($ownManifest),
                 // F3c: declared header stats (ui.show.stats) computed
                 // over the record's relations.
                 'showStats' => DirectoryUi::showStatsFromManifest($ownManifest, $record),
@@ -2355,6 +2723,26 @@ abstract class BaseSliceWebController extends Controller
                 return response()->json(['success' => true]);
             }
         }
+        // Proposal #6 gate (goldfish round): an inline edit is
+        // a write like any other. When the form object declares
+        // the field, the value must bind to its declared type —
+        // garbage is rejected with the binding issue instead of
+        // reaching the record raw — and the BOUND value, not
+        // the raw input, is what gets stored.
+        $formClass = $this->getFormClass();
+        if (class_exists($formClass) && property_exists($formClass, $field)) {
+            $probe = $formClass::fromArray([$field => $value]);
+            foreach ($probe->bindingIssues() as $issue) {
+                if (($issue['field'] ?? null) === $field) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $issue['problem'].' Expected: '.$issue['expected'],
+                        'issues' => [$issue],
+                    ], 422);
+                }
+            }
+            $value = $probe->{$field};
+        }
         $record->forceFill([$field => $value])->save();
 
         return response()->json(['success' => true]);
@@ -2402,10 +2790,12 @@ abstract class BaseSliceWebController extends Controller
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
             $this->getFormViewData($form, false),
+            $this->customFieldViewData(false, $id),
             $this->overlayLayoutData(request()),
             [
                 'form' => $form,
                 'isNew' => false,
+                'can' => $this->sliceAbilities(),
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(['id' => $id]),
                 'parentId' => request()->route('parentId'),
@@ -2433,17 +2823,29 @@ abstract class BaseSliceWebController extends Controller
                 return response()->json(['success' => true, 'id' => $prevId, 'message' => $msg], 200);
             }
 
-            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('success', $msg);
+            return $this->storeReturnRedirect($request, $msg);
         }
+
+        $this->validateCustomFields($request);
 
         $formClass = $this->getFormClass();
         // A create must never target an existing record through a smuggled id
         $form = $formClass::fromArray($request->except(['id']));
+        if ($rejection = $this->bindingRejection($request, $form)) {
+            return $rejection;
+        }
         $this->captureRepeaterMarkers($request, $form);
         $this->applyWorkflowInitialState($form);
+        $this->applyBoardAxisDefault($form);
         $this->applyOwnScopeOnCreate($form);
+        $this->applyCompanionAccount($request, $form);
 
-        $id = $this->getService()->save($form);
+        try {
+            $id = $this->getService()->save($form);
+        } catch (BindingIssuesException $e) {
+            return $this->bindingExceptionRejection($request, $e);
+        }
+        $this->persistCustomFields($request, $id);
         try {
             Cache::put($fingerprint, $id, now()->addSeconds(3));
         } catch (\Throwable $e) {
@@ -2468,6 +2870,25 @@ abstract class BaseSliceWebController extends Controller
             return redirect()->route($this->resolveRouteName('edit'), $this->routeParameters(['id' => $id]))->with('success', $msg);
         }
 
+        return $this->storeReturnRedirect($request, $msg);
+    }
+
+    /**
+     * Where a browser (non-JSON) store lands: a same-origin
+     * `_return` path the submitting form declared — hub tab
+     * composers post from a parent record's page (a ticket's
+     * reply box) and must land back on that page, the way the
+     * source systems keep the user on the record — else the
+     * slice's own index. Only root-relative paths are
+     * honoured; anything else falls back to the index.
+     */
+    protected function storeReturnRedirect(Request $request, string $msg): \Illuminate\Http\RedirectResponse
+    {
+        $return = $request->input('_return');
+        if (is_string($return) && str_starts_with($return, '/') && ! str_starts_with($return, '//')) {
+            return redirect()->to($return)->with('success', $msg);
+        }
+
         return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('success', $msg);
     }
 
@@ -2475,13 +2896,23 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('edit');
 
+        $this->validateCustomFields($request);
+
         $formClass = $this->getFormClass();
         $data = $request->all();
         $data['id'] = $id;
         $form = $formClass::fromArray($data);
+        if ($rejection = $this->bindingRejection($request, $form)) {
+            return $rejection;
+        }
         $this->captureRepeaterMarkers($request, $form);
 
-        $this->getService()->save($form);
+        try {
+            $this->getService()->save($form);
+        } catch (BindingIssuesException $e) {
+            return $this->bindingExceptionRejection($request, $e);
+        }
+        $this->persistCustomFields($request, $id);
         $msg = 'Record updated successfully.';
 
         if ($request->wantsJson() || $request->ajax() || $request->header('Accept') === 'application/json') {
@@ -2512,6 +2943,50 @@ abstract class BaseSliceWebController extends Controller
 
         return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
             ->with('success', 'Record deleted successfully');
+    }
+
+    /**
+     * Strict binding gate (Proposal #6): a provided value that
+     * does not fit its declared property type rejects the
+     * write instead of being silently dropped by fromArray().
+     * JSON-negotiated requests receive the shared per-issue
+     * envelope (MetadataIssues shape, HTTP 422); classic form
+     * posts receive the same issues as field-keyed validation
+     * errors, the form surface's native rendering. Returns
+     * null when the form bound cleanly.
+     */
+    protected function bindingRejection(Request $request, object $form)
+    {
+        if (! $form instanceof BaseFormBusinessObject || $form->bindingIssues() === []) {
+            return null;
+        }
+
+        if ($this->bindingWantsJson($request)) {
+            return response()->json(MetadataIssues::binding($form->bindingIssues()), 422);
+        }
+
+        throw ValidationException::withMessages(
+            (new BindingIssuesException($form->bindingIssues()))->validationMessages()
+        );
+    }
+
+    /**
+     * Render a service-side binding rejection (replace
+     * completeness, Proposal #6) in the same two shapes as
+     * bindingRejection().
+     */
+    protected function bindingExceptionRejection(Request $request, BindingIssuesException $e)
+    {
+        if ($this->bindingWantsJson($request)) {
+            return response()->json(MetadataIssues::binding($e->issues()), 422);
+        }
+
+        throw ValidationException::withMessages($e->validationMessages());
+    }
+
+    private function bindingWantsJson(Request $request): bool
+    {
+        return $request->wantsJson() || $request->ajax() || $request->header('Accept') === 'application/json';
     }
 
     /**
@@ -2778,6 +3253,100 @@ abstract class BaseSliceWebController extends Controller
     }
 
     /**
+     * Companion-account creation (declared account_creation:):
+     * when the create form's account section is filled, create
+     * the login user — with the declared role — in the same step
+     * and point the details record at it, matching the source's
+     * single Add Employee / Add Client form. An untouched account
+     * section leaves the picked existing user in place.
+     */
+    protected function applyCompanionAccount(Request $request, object $form): void
+    {
+        $decl = DirectoryUi::accountCreationFromManifest($this->ownManifest());
+        if ($decl === null) {
+            return;
+        }
+        $account = $request->input('account');
+        if (! is_array($account) || trim((string) ($account['email'] ?? '')) === '') {
+            // No account requested: the picked existing user must
+            // be there (the picker is not hard-required when the
+            // account section exists, so guard the neither-case).
+            $fk = $decl['foreign_key'];
+            if (property_exists($form, $fk) && empty($form->{$fk})) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    $fk => 'Pick an existing user or create the login account above.',
+                ]);
+            }
+
+            return;
+        }
+
+        $data = $request->validate([
+            'account.name' => ['required', 'string', 'max:255'],
+            'account.email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'account.password' => ['required', 'string', 'min:8'],
+        ])['account'];
+
+        $userClass = app(SliceManager::class)->modelClass('User') ?? 'App\\Models\\User';
+        if (! class_exists($userClass)) {
+            return;
+        }
+
+        $attrs = [
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => $data['password'],
+        ];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'status')) {
+            $attrs['status'] = 'active';
+        }
+        // The users table of a ported schema carries NOT NULL
+        // columns without defaults that the source's own user
+        // creation fills implicitly (dark_theme, rtl, ...). Give
+        // every such column a type-appropriate zero value so the
+        // companion insert is valid on any carried schema.
+        try {
+            foreach (\Illuminate\Support\Facades\Schema::getColumns('users') as $col) {
+                $cname = (string) ($col['name'] ?? '');
+                if ($cname === '' || array_key_exists($cname, $attrs) || ! empty($col['auto_increment'])) {
+                    continue;
+                }
+                if (($col['nullable'] ?? true) || ($col['default'] ?? null) !== null) {
+                    continue;
+                }
+                $ctype = strtolower((string) ($col['type'] ?? 'string'));
+                $attrs[$cname] = match (true) {
+                    str_contains($ctype, 'int'), str_contains($ctype, 'decimal'), str_contains($ctype, 'float'), str_contains($ctype, 'double'), str_contains($ctype, 'bool') => 0,
+                    str_contains($ctype, 'timestamp'), str_contains($ctype, 'datetime') => now(),
+                    str_contains($ctype, 'date') => now()->toDateString(),
+                    str_contains($ctype, 'json') => '{}',
+                    str_starts_with($ctype, 'enum') && preg_match("/enum\\('([^']+)'/", $ctype, $m) === 1 => $m[1],
+                    default => '',
+                };
+            }
+        } catch (\Throwable $e) {
+            // Column introspection unavailable: proceed with the
+            // base attributes rather than blocking the create.
+        }
+        $user = new $userClass;
+        $user->forceFill($attrs);
+        $user->save();
+
+        $roleId = \Illuminate\Support\Facades\DB::table('roles')->where('name', $decl['role'])->value('id');
+        if ($roleId !== null && \Illuminate\Support\Facades\Schema::hasTable('role_user')) {
+            \Illuminate\Support\Facades\DB::table('role_user')->insert([
+                'role_id' => (int) $roleId,
+                'user_id' => (int) $user->id,
+            ]);
+        }
+
+        $fk = $decl['foreign_key'];
+        if (property_exists($form, $fk)) {
+            $form->{$fk} = (int) $user->id;
+        }
+    }
+
+    /**
      * Workflow hygiene (Body v2): a created record enters its
      * workflow at the declared initial state when the request
      * left the state field empty — the state is server-set,
@@ -2793,6 +3362,50 @@ abstract class BaseSliceWebController extends Controller
         $initial = $workflow['initial_state'] ?? null;
         if ($initial !== null && property_exists($form, $field) && empty($form->{$field})) {
             $form->{$field} = $initial;
+        }
+    }
+
+    /**
+     * Board hygiene (the workflow-initial-state rule's sibling):
+     * a record created on a slice whose directory declares a
+     * board view enters the board at the axis' first value when
+     * the request left the axis empty — the source systems file
+     * a new task under the first board column, never under no
+     * column at all (an axis-less record renders on no board
+     * until somebody edits it). An explicitly chosen value —
+     * the form's picker or a scoped-create preset — always wins.
+     */
+    protected function applyBoardAxisDefault(object $form): void
+    {
+        try {
+            $manifest = $this->ownManifest();
+            $views = (array) ($manifest['ui']['directory']['views'] ?? []);
+            if (! in_array('board', $views, true)) {
+                return;
+            }
+            $axis = DirectoryUi::boardAxis($manifest);
+            if ($axis === null) {
+                return;
+            }
+            $field = $axis['key'];
+            if (! property_exists($form, $field) || ! empty($form->{$field})) {
+                return;
+            }
+            $value = $axis['options'][0]['value'] ?? null;
+            if ($value === null) {
+                return;
+            }
+            $prop = new \ReflectionProperty($form, $field);
+            $type = $prop->getType();
+            $typeName = $type instanceof \ReflectionNamedType ? $type->getName() : null;
+            $form->{$field} = match ($typeName) {
+                'int' => (int) $value,
+                'float' => (float) $value,
+                'bool' => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+                default => (string) $value,
+            };
+        } catch (\Throwable $e) {
+            // A default must never break a create.
         }
     }
 
