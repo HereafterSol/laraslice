@@ -14,7 +14,12 @@ class SliceListCommand extends Command
     public function handle(SliceManager $manager): int
     {
         $domainFilter = $this->option('domain');
-        $slices = $manager->getAllSlices();
+        // Discovery, not the name-keyed index: two slices may share
+        // a name across domains (Settings does), and the name-keyed
+        // map silently hides one of them. The Studio inventory and
+        // SliceManager::inventorySummary() count from discovery too —
+        // one source of truth for "how many slices are installed".
+        $slices = $manager->discoveredSlices();
 
         if (empty($slices)) {
             $this->warn("No slices found. Run 'php artisan slice:make {Name}' to create one.");

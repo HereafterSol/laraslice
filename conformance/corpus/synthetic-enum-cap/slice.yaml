@@ -1,0 +1,134 @@
+name: CorpusEnumCap
+title: Corpus Enum Cap
+version: 1.0.0
+active: true
+multitenant: true
+tenant_key: company_id
+description: "Synthetic corpus entry — the enum cap boundary (Phase A/B contract): a field at exactly 50 options is served whole; a field at 51 is truncated VISIBLY (enum_count + enum_truncated, no enum key). Tenant-scoped."
+models:
+  - handle: corpus_enum
+    table: corpus_enums
+    root: true
+    fields:
+      - handle: name
+        label: Name
+        type: string
+        required: true
+      - handle: company_id
+        label: Company
+        type: integer
+        required: true
+      - handle: at_cap
+        label: At Cap
+        type: string
+        required: false
+        options:
+          v01: Value 01
+          v02: Value 02
+          v03: Value 03
+          v04: Value 04
+          v05: Value 05
+          v06: Value 06
+          v07: Value 07
+          v08: Value 08
+          v09: Value 09
+          v10: Value 10
+          v11: Value 11
+          v12: Value 12
+          v13: Value 13
+          v14: Value 14
+          v15: Value 15
+          v16: Value 16
+          v17: Value 17
+          v18: Value 18
+          v19: Value 19
+          v20: Value 20
+          v21: Value 21
+          v22: Value 22
+          v23: Value 23
+          v24: Value 24
+          v25: Value 25
+          v26: Value 26
+          v27: Value 27
+          v28: Value 28
+          v29: Value 29
+          v30: Value 30
+          v31: Value 31
+          v32: Value 32
+          v33: Value 33
+          v34: Value 34
+          v35: Value 35
+          v36: Value 36
+          v37: Value 37
+          v38: Value 38
+          v39: Value 39
+          v40: Value 40
+          v41: Value 41
+          v42: Value 42
+          v43: Value 43
+          v44: Value 44
+          v45: Value 45
+          v46: Value 46
+          v47: Value 47
+          v48: Value 48
+          v49: Value 49
+          v50: Value 50
+      - handle: over_cap
+        label: Over Cap
+        type: string
+        required: false
+        options:
+          w01: Value 01
+          w02: Value 02
+          w03: Value 03
+          w04: Value 04
+          w05: Value 05
+          w06: Value 06
+          w07: Value 07
+          w08: Value 08
+          w09: Value 09
+          w10: Value 10
+          w11: Value 11
+          w12: Value 12
+          w13: Value 13
+          w14: Value 14
+          w15: Value 15
+          w16: Value 16
+          w17: Value 17
+          w18: Value 18
+          w19: Value 19
+          w20: Value 20
+          w21: Value 21
+          w22: Value 22
+          w23: Value 23
+          w24: Value 24
+          w25: Value 25
+          w26: Value 26
+          w27: Value 27
+          w28: Value 28
+          w29: Value 29
+          w30: Value 30
+          w31: Value 31
+          w32: Value 32
+          w33: Value 33
+          w34: Value 34
+          w35: Value 35
+          w36: Value 36
+          w37: Value 37
+          w38: Value 38
+          w39: Value 39
+          w40: Value 40
+          w41: Value 41
+          w42: Value 42
+          w43: Value 43
+          w44: Value 44
+          w45: Value 45
+          w46: Value 46
+          w47: Value 47
+          w48: Value 48
+          w49: Value 49
+          w50: Value 50
+          w51: Value 51
+permissions:
+  - corpus_enum.view
+  - corpus_enum.create

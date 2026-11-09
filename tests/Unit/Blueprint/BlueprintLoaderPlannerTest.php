@@ -56,7 +56,7 @@ class BlueprintLoaderPlannerTest extends TestCase
             $first['database_operations'],
             static fn (array $operation): bool => $operation['kind'] === 'create_table' && $operation['table'] === 'service_desks'
         ))[0];
-        $this->assertSame(['id', 'title', 'description', 'status', 'name', 'is_active', 'created_at', 'updated_at'], array_column($rootTable['columns'], 'column'));
+        $this->assertSame(['id', 'name', 'is_active', 'created_by', 'updated_by', 'created_at', 'updated_at'], array_column($rootTable['columns'], 'column'));
         $foreignKeys = array_values(array_filter(
             $first['database_operations'],
             static fn (array $operation): bool => $operation['kind'] === 'foreign_key'

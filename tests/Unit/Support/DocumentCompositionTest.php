@@ -56,6 +56,39 @@ class DocumentCompositionTest extends TestCase
         $record = new FakeDocumentRecord(['invoice_number' => 'INV-001']);
         $this->assertNull(DirectoryUi::documentFromManifest(['name' => 'Invoice', 'models' => []], $record));
     }
+
+    /**
+     * Regression pin (flagship fix programme, Phase 3 item R2):
+     * the ported Invoices manifest types its date columns
+     * 'timestamp', which documentValue's old substring check
+     * ('date' inside the type) missed — the /document surface
+     * printed '2024-01-12 00:00:00' raw while the hub showed the
+     * formatted date. Dates must come out in the hub's format.
+     */
+    public function test_document_formats_timestamp_typed_date_fields(): void
+    {
+        $manifest = [
+            'name' => 'Invoice',
+            'models' => [['fields' => [
+                ['handle' => 'invoice_number', 'type' => 'string', 'label' => 'Invoice Number'],
+                ['handle' => 'issue_date', 'type' => 'timestamp', 'label' => 'Issue Date'],
+                ['handle' => 'due_date', 'type' => 'timestamp', 'label' => 'Due Date'],
+            ]]],
+            'ui' => ['show' => ['document' => ['title' => 'Tax Invoice']]],
+        ];
+        $invoice = new FakeDocumentRecord([
+            'invoice_number' => 'INV-019',
+            'issue_date' => '2024-01-12 00:00:00',
+            'due_date' => '2024-01-26 00:00:00',
+        ]);
+
+        $doc = DirectoryUi::documentFromManifest($manifest, $invoice);
+
+        $this->assertNotNull($doc);
+        $byLabel = array_column($doc['header'], 'value', 'label');
+        $this->assertSame('12-01-2024', $byLabel['Issue Date']);
+        $this->assertSame('26-01-2024', $byLabel['Due Date']);
+    }
 }
 
 class FakeDocumentRecord

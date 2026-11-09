@@ -1,0 +1,73 @@
+name: CorpusRelations
+title: Corpus Relations
+version: 1.0.0
+active: true
+description: Synthetic corpus entry — every relation kind the projection contract carries, declared in one Heart. Single-tenant (no multitenant declaration).
+models:
+  - handle: corpus_widget
+    table: corpus_widgets
+    root: true
+    fields:
+      - handle: name
+        label: Name
+        type: string
+        required: true
+      - handle: owner_id
+        label: Owner
+        type: integer
+        required: false
+      - handle: profile_id
+        label: Profile
+        type: integer
+        required: false
+    relations:
+      - name: owner
+        type: belongsTo
+        model: corpus_owner
+        foreign_key: owner_id
+      - name: entries
+        type: hasMany
+        model: corpus_entry
+        foreign_key: corpus_widget_id
+      - name: profile
+        type: hasOne
+        model: corpus_profile
+        foreign_key: corpus_widget_id
+      - name: tags
+        type: belongsToMany
+        model: corpus_tag
+        pivot:
+          table: corpus_widget_tag
+          foreign_pivot_key: corpus_widget_id
+          related_pivot_key: corpus_tag_id
+      - name: attachments
+        type: morphMany
+        model: corpus_attachment
+        foreign_key: attachable_id
+      - name: ownerEntries
+        type: hasManyThrough
+        model: corpus_entry
+        foreign_key: corpus_owner_id
+        through: corpus_owner
+  - handle: corpus_entry
+    table: corpus_entries
+    root: false
+    fields:
+      - handle: note
+        label: Note
+        type: text
+        required: false
+      - handle: corpus_widget_id
+        label: Widget
+        type: integer
+        required: true
+    relations:
+      - name: widget
+        type: belongsTo
+        model: corpus_widget
+        foreign_key: corpus_widget_id
+permissions:
+  - corpus_widget.view
+  - corpus_widget.create
+  - corpus_widget.edit
+  - corpus_widget.delete

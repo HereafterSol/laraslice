@@ -1,0 +1,40 @@
+name: CorpusUpdateReplace
+title: Corpus Update Replace
+version: 1.0.0
+active: true
+update: replace
+description: "Synthetic corpus entry — declares update semantics (Proposal #6) and exercises the two-shape field merge: the top-level fields map adds one field the model list does not carry, and must not override the model list's own keys."
+fields:
+  legacy_code:
+    name: legacy_code
+    label: Legacy Code
+    type: string
+    nullable: true
+  name:
+    name: name
+    label: Name From Map (must lose to the model list)
+    type: string
+    nullable: true
+models:
+  - handle: corpus_replaceable
+    table: corpus_replaceables
+    root: true
+    fields:
+      - handle: name
+        label: Name
+        type: string
+        required: true
+      - handle: quantity
+        label: Quantity
+        type: integer
+        required: true
+      - handle: status
+        label: Status
+        type: string
+        required: false
+        default: draft
+permissions:
+  - corpus_replaceable.view
+  - corpus_replaceable.create
+  - corpus_replaceable.edit
+  - corpus_replaceable.delete

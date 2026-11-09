@@ -36,7 +36,19 @@
     <button type="button" onclick="window.print()">Print</button>
 </div>
 @endif
+<style>
+    .doc-company { margin-bottom: 18px; }
+    .doc-company-name { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: #111827; }
+    .doc-company-meta { color: #6b7280; font-size: 12px; margin-top: 2px; white-space: pre-line; }
+</style>
 <div class="sheet">
+    @if(!empty($document['company']['name']))
+    <div class="doc-company">
+        <div class="doc-company-name">{{ $document['company']['name'] }}</div>
+        @if(!empty($document['company']['address']))<div class="doc-company-meta">{{ $document['company']['address'] }}</div>@endif
+        @if(!empty($document['company']['email']) || !empty($document['company']['phone']))<div class="doc-company-meta">{{ collect([$document['company']['email'] ?? null, $document['company']['phone'] ?? null])->filter()->implode(' · ') }}</div>@endif
+    </div>
+    @endif
     <h1 class="doc-title">{{ $document['title'] }}</h1>
     <div class="doc-meta">#{{ $record->getKey() }}</div>
 

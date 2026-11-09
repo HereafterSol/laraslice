@@ -167,6 +167,18 @@ final class Access
                 return 'all';
             }
 
+            // Per-user permission types (the employee hub's
+            // Permissions tab): a customised value for this
+            // person wins over their roles' grants — the
+            // source systems' model, where the per-user row
+            // is the operative grant for that permission. The
+            // read degrades to "no customisation" when its
+            // store is unavailable (UserPermissionTypes).
+            $customised = UserPermissionTypes::typeForSlug((int) $user->id, $ability);
+            if ($customised !== null) {
+                return $customised;
+            }
+
             if (! Schema::hasTable('role_user') || ! Schema::hasTable('permission_role') || ! Schema::hasTable('permissions')) {
                 return self::allows($user, $ability) ? 'all' : 'none';
             }

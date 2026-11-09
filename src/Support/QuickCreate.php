@@ -72,6 +72,15 @@ final class QuickCreate
             }
             $label = $raw['ui']['directory']['create_label']
                 ?? ('Add '.Str::headline(Str::singular($manifest->name)));
+            // The create route may not be resolvable in THIS request —
+            // e.g. the Blueprint Studio apply response re-renders the
+            // host layout in the same request that generated the slice,
+            // before its routes were registered. A quick-create menu
+            // must skip such an item, never throw RouteNotFoundException
+            // and 500 the page it decorates.
+            if (! Route::has($prefix.'.create')) {
+                continue;
+            }
             $items[] = [
                 'label' => $label,
                 'url' => route($prefix.'.create'),

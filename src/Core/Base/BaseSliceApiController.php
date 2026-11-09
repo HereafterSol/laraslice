@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
+use LaraSlice\Core\Metadata\MetadataIssues;
 use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
 
 abstract class BaseSliceApiController extends Controller
@@ -55,6 +56,14 @@ abstract class BaseSliceApiController extends Controller
         $formClass = $this->getFormClass();
         $form = $formClass::fromArray($request->all());
 
+        // Strict binding (Proposal #6): a provided value that
+        // does not fit its declared type rejects the write with
+        // per-issue errors — it is never silently coerced or
+        // dropped on the way to the model.
+        if ($form instanceof BaseFormBusinessObject && $form->bindingIssues() !== []) {
+            return response()->json(MetadataIssues::binding($form->bindingIssues()), 422);
+        }
+
         try {
             $id = $this->getService()->save($form);
 
@@ -63,6 +72,10 @@ abstract class BaseSliceApiController extends Controller
                 'id' => $id,
                 'message' => 'Record saved successfully',
             ], $isUpdate ? 200 : 201);
+        } catch (BindingIssuesException $e) {
+            // Replace-semantics completeness (Proposal #6):
+            // same per-issue envelope as a binding rejection.
+            return response()->json(MetadataIssues::binding($e->issues()), 422);
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
