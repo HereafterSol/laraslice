@@ -1511,6 +1511,7 @@ BLADE;
     protected function registerDeclaredRoutes(SliceManifest $slice): void
     {
         $document = is_array($slice->raw['ui']['show']['document'] ?? null);
+        $lazyTabs = ! empty($slice->raw['ui']['show']['lazy_tabs']);
         $matrix = is_array($slice->raw['ui']['directory']['matrix'] ?? null);
         $report = is_array($slice->raw['ui']['directory']['report'] ?? null);
         $namedReports = [];
@@ -1564,6 +1565,11 @@ BLADE;
                 Route::middleware($middleware)
                     ->get($uriPrefix.'/{id}/document', [$controllerClass, 'document'])
                     ->name($namePrefix.'.document');
+            }
+            if ($lazyTabs && ! Route::has($namePrefix.'.tab')) {
+                Route::middleware($middleware)
+                    ->get($uriPrefix.'/{id}/tab/{handle}', [$controllerClass, 'tabFragment'])
+                    ->name($namePrefix.'.tab');
             }
             if ($matrix && ! Route::has($namePrefix.'.matrix')) {
                 Route::middleware($middleware)

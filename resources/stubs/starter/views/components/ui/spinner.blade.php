@@ -1,3 +1,4 @@
+@blaze(memo: true)
 @props([
     'icon' => 'loader-circle',    // any lucide icon name (e.g. loader-circle, rotate-cw, loader-pinwheel)
 ])

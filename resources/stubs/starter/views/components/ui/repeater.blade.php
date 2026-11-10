@@ -55,6 +55,13 @@
         <label class="text-xs font-semibold text-foreground tracking-tight flex items-center gap-2">
             <span>{{ $label }}</span>
             <span class="text-[10px] font-mono text-muted-foreground" x-text="'(' + items.length + ')'"></span>
+            @if ($minItems === 0)
+                {{-- An optional repeater always opens with one blank
+                     starter row for discoverability; say plainly that
+                     blank rows are ignored (the server drops them) so
+                     the row never reads as mandatory. --}}
+                <span class="text-[10px] font-normal text-muted-foreground">Optional — blank rows are ignored</span>
+            @endif
         </label>
         <button type="button"
                 @click="addItem()"

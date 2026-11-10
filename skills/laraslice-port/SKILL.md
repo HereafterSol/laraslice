@@ -45,8 +45,19 @@ exactly one home in the map at the bottom.
    rendered behaviour is the specification (fidelity
    mandate, §16.5.1). → `references/extraction-workflow.md`
    (§12 steps 2–7), `references/ui-contracts.md` (§17).
-3. **Port.** `php artisan slice:port` (dual-source
-   discovery: migrations + live database), then schema
+3. **Port.** On a FRESH target, first run
+   `php artisan slice:install` — it seeds the framework
+   infrastructure (roles, permissions, the super admin)
+   the porter expects to exist; porting into an empty
+   application without it fails on missing tables. Then
+   `php artisan slice:port` with the source database
+   named explicitly (`--source-database` + credentials,
+   or `--source-connection`): inspection reads the LIVE
+   database as the schema source of truth and only falls
+   back to migration files when no connection is given —
+   a migrations-only inspection can misread consolidated
+   migration files, so treat the live connection as part
+   of the command, not an option. Then schema
    closure (`slice:derive-schema-closure`), navigation
    derivation (`slice:derive-navigation`), and the
    slice-aware data import — referenced lookup/settings
@@ -56,6 +67,18 @@ exactly one home in the map at the bottom.
    own intake. → `references/enterprise-and-analysis.md`
    (§15.3, §16.11–16.13),
    `references/non-laravel-and-manifests.md`.
+   **Reconcile permissions before calling anything
+   converged:** run the matrix pass
+   (`slice:port --permissions --source-*`), review
+   `porting/permissions.yaml`, paste its club drafts
+   into the Mind (`porting/system.yaml`), then
+   `php artisan slice:drift --fix` to grant the roles
+   what their clubs promise. A fresh port's drift errors
+   are this unreconciled backlog, not noise — convergence
+   (step 4) requires `slice:drift` at zero errors AFTER
+   the reconciliation. Declared permission actions are
+   `view / create / edit / delete`; source verbs are
+   translated into that vocabulary by the matrix pass.
 4. **Prove with the five gates** (below), in the
    **diff loop**: port → diff (gate runs + matrix score +
    layout diff) → fix at the layer → re-diff, until the
@@ -76,6 +99,17 @@ exactly one home in the map at the bottom.
    (§22, full text + runbook),
    `references/verification-gates.md` (§18),
    `references/port-matrix.md`.
+
+   Two run-book facts the gates depend on: the port's
+   migration run is **preflighted** — every CREATE is
+   estimated against the InnoDB row-size limit before
+   anything migrates, and an over-limit table stops the
+   run up front with the remedy named (split the slice, or
+   convert the longest varchar columns to text); never
+   hand-run a partial migrate around it. And
+   `slice:portability` reports machine-readably with
+   `--format=json` — quote its findings from the JSON, not
+   the console table.
 
 ## The five gates (plain names first)
 

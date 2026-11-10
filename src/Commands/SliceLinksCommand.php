@@ -22,8 +22,11 @@ use LaraSlice\Core\Discovery\SliceManager;
  *    (the later registration wins the key) or names that differ only
  *    by spacing/case (normalized lookups can only pick one) are
  *    reported from SliceManager::nameCollisions().
- *  - no table is claimed by two distinctly-named active slices
- *    (cross-port table ownership — see Check 4).
+ *  - no table is claimed as the PRIMARY table by two
+ *    distinctly-named active slices (cross-port table
+ *    ownership — see Check 4). Tables merely shared as
+ *    non-primary models (parent/child composition) are
+ *    reported as information, not problems.
  *
  * Exits non-zero when problems are found (CI-friendly). Writes nothing.
  */
@@ -151,29 +154,33 @@ final class SliceLinksCommand extends Command
             ];
         }
 
-        // Check 4: table ownership. When two active slices claim the
-        // same table (the classic cross-port collision: two source
-        // apps ported into one install, both owning `invoices`),
-        // their models write through each other and the richer slice
-        // is shadowed by whichever registered its routes last. The
-        // remedy is a porter-level decision (prefix one port's
-        // tables); this check makes the collision impossible to miss.
-        // Scope: distinctly-named claimants that survived registration
-        // — same-name overwrites never reach this loop and are
-        // reported by Check 3 instead.
-        $owners = [];
-        foreach ($manager->getActiveSlices() as $slice) {
-            foreach ($manager->getSliceTables($slice) as $table) {
-                $owners[$table][$slice->name.' @ '.$slice->path] = true;
-            }
-        }
-        foreach ($owners as $table => $claimants) {
-            if (count($claimants) > 1) {
-                $problems[] = ['table:'.$table, 'claimed by '.count($claimants).' active slices — models write through each other: '.implode('; ', array_keys($claimants))];
-            }
-        }
+        // Check 4: table ownership — with precision about WHAT
+        // is claimed (precision pass, Cursor EVAL-B 10 Nov
+        // 2026). The collision that corrupts data is two slices
+        // each owning the same table as their PRIMARY table
+        // (the classic cross-port collision: two source apps
+        // ported into one install, both owning `invoices`) —
+        // their models write through each other and the richer
+        // slice is shadowed. A table that appears as a
+        // NON-primary model in other slices is the standard
+        // parent/child composition of this architecture (an
+        // Orders slice modelling order_items beside the
+        // OrderItems slice that owns them; a Roles slice
+        // reading permission_types beside the ReferenceData
+        // slice that owns them) — reporting those as failures
+        // buried the real collisions in noise, so they are
+        // printed as information only.
+        // Scope: distinctly-named claimants that survived
+        // registration — same-name overwrites never reach this
+        // loop and are reported by Check 3 instead.
+        $classified = self::classifyTableClaims($manager->getActiveSlices(), $manager);
+        $problems = array_merge($problems, $classified['problems']);
+        $shared = $classified['shared'];
 
         $this->info("Checked {$checked} navigable slices and ".count($claims).' page-route names.');
+        foreach ($shared as [$name, $note]) {
+            $this->line("  [{$name}] shared (composition, not a collision) — {$note}");
+        }
         if ($problems === []) {
             $this->info('✓ All slice links resolve inside their own slice.');
 
@@ -186,5 +193,44 @@ final class SliceLinksCommand extends Command
         }
 
         return self::FAILURE;
+    }
+
+    /**
+     * Check 4's classification, extracted for direct testing:
+     * a table claimed as PRIMARY by two or more slices is a
+     * problem; a table claimed by several slices with at most
+     * one primary owner is shared composition (information).
+     *
+     * @param  array<int, \LaraSlice\Core\Discovery\SliceManifest>  $slices
+     * @return array{problems: array<int, array{0: string, 1: string}>, shared: array<int, array{0: string, 1: string}>}
+     */
+    public static function classifyTableClaims(array $slices, SliceManager $manager): array
+    {
+        $owners = [];
+        $rootOwners = [];
+        foreach ($slices as $slice) {
+            $primary = $slice->primaryTable();
+            foreach ($manager->getSliceTables($slice) as $table) {
+                $owners[$table][$slice->name.' @ '.$slice->path] = true;
+                if ($primary !== null && $primary === $table) {
+                    $rootOwners[$table][$slice->name.' @ '.$slice->path] = true;
+                }
+            }
+        }
+        $problems = [];
+        $shared = [];
+        foreach ($owners as $table => $claimants) {
+            if (count($claimants) < 2) {
+                continue;
+            }
+            $roots = array_keys($rootOwners[$table] ?? []);
+            if (count($roots) > 1) {
+                $problems[] = ['table:'.$table, 'owned as primary table by '.count($roots).' active slices — models write through each other: '.implode('; ', $roots)];
+            } else {
+                $shared[] = ['table:'.$table, ($roots !== [] ? 'primary owner '.$roots[0] : 'no primary owner').'; also modelled by '.implode('; ', array_diff(array_keys($claimants), $roots))];
+            }
+        }
+
+        return ['problems' => $problems, 'shared' => $shared];
     }
 }

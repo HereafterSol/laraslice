@@ -1,3 +1,4 @@
+@blaze(memo: true)
 @props([
     'orientation' => 'horizontal',
     'decorative' => true,

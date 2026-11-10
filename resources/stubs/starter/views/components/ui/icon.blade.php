@@ -1,3 +1,4 @@
+@blaze(memo: true)
 @props([
     'name' => null,
 ])

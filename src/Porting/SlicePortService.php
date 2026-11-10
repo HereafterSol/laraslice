@@ -1325,6 +1325,37 @@ PHP;
         return $tables;
     }
 
+    /**
+     * End offset of the Schema::create closure that starts at
+     * $startPos: the position just past its matching closing
+     * brace. Brace-counts from the closure's opening brace so
+     * nested callbacks inside the closure stay inside the block.
+     * Falls back to $fallbackEnd when no balanced closure is
+     * found (malformed migration), preserving the old behaviour
+     * for that file rather than guessing.
+     */
+    private function createBlockEnd(string $content, int $startPos, int $fallbackEnd): int
+    {
+        $open = strpos($content, '{', $startPos);
+        if ($open === false) {
+            return $fallbackEnd;
+        }
+        $depth = 0;
+        $len = strlen($content);
+        for ($i = $open; $i < $len; $i++) {
+            if ($content[$i] === '{') {
+                $depth++;
+            } elseif ($content[$i] === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    return $i + 1;
+                }
+            }
+        }
+
+        return $fallbackEnd;
+    }
+
     private function extractTablesFromMigrations(string $migDir): array
     {
         $tables = [];
@@ -1356,7 +1387,16 @@ PHP;
                     continue;
                 }
                 $startPos = $createMatches[0][$i][1];
-                $endPos = ($i + 1 < $count) ? $createMatches[0][$i + 1][1] : strlen($content);
+                $nextPos = ($i + 1 < $count) ? $createMatches[0][$i + 1][1] : strlen($content);
+                // Bound the block at THIS create's closure end. The
+                // previous bound (next create, or strlen for the
+                // last one) swept every later statement in the file
+                // — including Schema::table alter column definitions
+                // — into the last created table: a cold port of a
+                // real application produced a 212-column table that
+                // MySQL refused (error 1118). Alters are replayed by
+                // the dedicated alter pass below, not here.
+                $endPos = $this->createBlockEnd($content, $startPos, $nextPos);
                 $blockContent = substr($content, $startPos, $endPos - $startPos);
 
                 $cols = [];
@@ -1463,7 +1503,16 @@ PHP;
                     continue;
                 }
                 $startPos = $alterMatches[0][$i][1];
-                $endPos = ($i + 1 < $count) ? $alterMatches[0][$i + 1][1] : strlen($content);
+                $nextPos = ($i + 1 < $count) ? $alterMatches[0][$i + 1][1] : strlen($content);
+                // Same bound as the create pass: this alter's own
+                // closure. The unbounded version swept following
+                // statements — including other tables' whole
+                // Schema::create closures — into the altered table
+                // (the same 100+ phantom-column failure, second
+                // door; a consolidated source migration carries a
+                // Schema::table('currencies') followed by dozens
+                // of unrelated creates in one file).
+                $endPos = $this->createBlockEnd($content, $startPos, $nextPos);
                 $block = substr($content, $startPos, $endPos - $startPos);
 
                 $existing = array_column($tables[$tableName]['columns'], 'name');
@@ -3558,18 +3607,7 @@ PHP;
         $outputs = [];
         $errors = [];
 
-        // 1. Run standard migrate (host + package + already-registered slice paths)
-        try {
-            Artisan::call('migrate', ['--force' => true]);
-            $out = trim((string) Artisan::output());
-            if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
-                $outputs[] = $out;
-            }
-        } catch (Throwable $e) {
-            $errors['default'] = $e->getMessage();
-        }
-
-        // 2. Discover every slice Migrations folder under the slices path
+        // Discover every slice Migrations folder under the slices path
         $paths = [];
         $slicesBasePath = (string) config('laraslice.slices_path', app_path('Slices'));
         if (is_dir($slicesBasePath)) {
@@ -3585,7 +3623,56 @@ PHP;
             }
         }
 
-        // 3. Explicitly migrate each discovered slice migration folder
+        // Preflight (Cursor EVAL-B, 10 Nov 2026): on MySQL-family
+        // drivers, a CREATE whose worst-case row exceeds InnoDB's
+        // 65535-byte limit kills the migrator mid-run (error
+        // 1118) and leaves a half-migrated schema. Scan every
+        // migration about to run and stop BEFORE anything
+        // migrates, naming each offending table and the remedy
+        // (split the slice, or convert the longest varchar
+        // columns to text) — see RowSizeGuard.
+        try {
+            if (in_array(\Illuminate\Support\Facades\DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+                $files = [];
+                $hostMigrations = database_path('migrations');
+                if (is_dir($hostMigrations)) {
+                    foreach (glob($hostMigrations.'/*.php') ?: [] as $f) {
+                        $files[] = $f;
+                    }
+                }
+                foreach ($paths as $mp) {
+                    foreach (glob($mp.'/*.php') ?: [] as $f) {
+                        $files[] = $f;
+                    }
+                }
+                $violations = RowSizeGuard::violations($files);
+                if ($violations !== []) {
+                    $lines = ['Row-size preflight: '.count($violations).' table(s) exceed the InnoDB '.RowSizeGuard::LIMIT.'-byte row limit — migrate would halt mid-run (error 1118). Nothing was migrated. Split the owning slice or convert the longest varchar columns to text, then re-run:'];
+                    foreach ($violations as $v) {
+                        $lines[] = "  - {$v['table']} (~{$v['bytes']} bytes) in ".basename($v['file']);
+                    }
+                    $errors['preflight'] = implode("\n", $lines);
+
+                    return ['paths' => $paths, 'outputs' => $outputs, 'errors' => $errors];
+                }
+            }
+        } catch (\Throwable $e) {
+            // A preflight failure must never block the run it
+            // guards; the migrator's own errors still surface.
+        }
+
+        // 1. Run standard migrate (host + package + already-registered slice paths)
+        try {
+            Artisan::call('migrate', ['--force' => true]);
+            $out = trim((string) Artisan::output());
+            if ($out !== '' && ! str_contains($out, 'Nothing to migrate')) {
+                $outputs[] = $out;
+            }
+        } catch (Throwable $e) {
+            $errors['default'] = $e->getMessage();
+        }
+
+        // 2. Explicitly migrate each discovered slice migration folder
         foreach ($paths as $mp) {
             $relative = str_replace([base_path().DIRECTORY_SEPARATOR, base_path().'/'], '', $mp);
             $relative = str_replace('\\', '/', $relative);
@@ -4477,7 +4564,23 @@ PHP;
                 if ($isAssignee) {
                     $col['relation'] = Str::camel(str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle);
                 }
-                $columns[] = $col;
+                // Internal/secret fields never become directory
+                // columns on a cold port: a raw schema walk used
+                // to surface slack_username, token and secret
+                // columns in list views (the independent v2.1.0
+                // evaluation's directory finding). The fields
+                // stay in forms and detail views — only the
+                // directory selection skips them.
+                $isInternal = in_array($lower, [
+                    'password', 'remember_token', 'two_factor_secret',
+                    'two_factor_recovery_codes', 'slack_username',
+                    'stripe_id', 'provider_id', 'session_id',
+                    'api_token', 'access_token', 'refresh_token',
+                    'verification_code', 'otp', 'secret', 'token',
+                ], true) || str_ends_with($lower, '_token') || str_ends_with($lower, '_secret');
+                if (! $isInternal) {
+                    $columns[] = $col;
+                }
             }
 
             // Quick filters: status / priority / enum-ish
@@ -4774,6 +4877,13 @@ PHP;
             ],
         ];
 
+        // Hub KPI stats: only when the slice is hub-shaped
+        // (2+ hasMany relations) — see the builder below.
+        $showStats = $this->buildShowStatsFromRelations($relations ?? []);
+        if ($showStats !== []) {
+            $ui['show']['stats'] = $showStats;
+        }
+
         // Phase 2: DataTable.php static extraction overrides Phase 1 name guesses
         if (is_string($sourcePath) && $sourcePath !== '') {
             try {
@@ -4788,6 +4898,86 @@ PHP;
         }
 
         return $ui;
+    }
+
+    /**
+     * Hub KPI stats from hasMany relations.
+     *
+     * A cold port used to generate NO ui.show.stats, so persona
+     * hubs rendered without the KPI strip the source shows
+     * (Open Tasks / Projects / Hours / Tickets on an employee
+     * hub — the independent v2.1.0 evaluation's J1 finding).
+     * The runtime already renders declared stats; the porter
+     * now declares them for hub-shaped slices (2+ hasMany
+     * relations): the work quartet first (tasks, projects,
+     * time logs, tickets), then any remaining relations in
+     * declared order, capped at 4. A time-log relation with a
+     * total_hours column becomes a sum; everything else is a
+     * count. Labels stay generic ('Tasks', not 'Open Tasks')
+     * because what counts as "open" is source semantics the
+     * porter cannot know.
+     *
+     * @param  list<array<string, mixed>>  $relations
+     * @return list<array<string, mixed>>
+     */
+    protected function buildShowStatsFromRelations(array $relations): array
+    {
+        $hasMany = [];
+        foreach ($relations as $rel) {
+            if (($rel['type'] ?? '') === 'hasMany' && ! empty($rel['name'])) {
+                $hasMany[] = $rel;
+            }
+        }
+        if (count($hasMany) < 2) {
+            return [];
+        }
+
+        $rank = static function (array $rel): int {
+            $name = strtolower((string) $rel['name']);
+            $table = strtolower((string) ($rel['table'] ?? ''));
+
+            // Classification order matters ('projectTimeLogs'
+            // contains both stems and is a time log), while the
+            // RANK values keep the source hub's presentation
+            // order: Tasks, Projects, Hours, Tickets.
+            return match (true) {
+                str_contains($name, 'task') || str_contains($table, 'task') => 0,
+                (str_contains($name, 'time') && str_contains($name, 'log')) || str_contains($table, 'time_log') => 2,
+                str_contains($name, 'project') || str_contains($table, 'project') => 1,
+                str_contains($name, 'ticket') || str_contains($table, 'ticket') => 3,
+                default => 4,
+            };
+        };
+        usort($hasMany, static fn ($a, $b) => $rank($a) <=> $rank($b));
+
+        $stats = [];
+        foreach (array_slice($hasMany, 0, 4) as $rel) {
+            $name = (string) $rel['name'];
+            if ($rank($rel) === 2) {
+                $childFields = array_map(
+                    static fn ($f) => (string) ($f['handle'] ?? $f['name'] ?? ''),
+                    (array) ($rel['fields'] ?? [])
+                );
+                if (in_array('total_hours', $childFields, true)) {
+                    $stats[] = [
+                        'handle' => 'hours_logged',
+                        'label' => 'Hours Logged',
+                        'relation' => $name,
+                        'aggregate' => 'sum',
+                        'column' => 'total_hours',
+                    ];
+                    continue;
+                }
+            }
+            $stats[] = [
+                'handle' => Str::snake($name),
+                'label' => Str::headline($name),
+                'relation' => $name,
+                'aggregate' => 'count',
+            ];
+        }
+
+        return $stats;
     }
 
     /**

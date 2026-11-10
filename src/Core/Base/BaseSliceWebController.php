@@ -61,9 +61,14 @@ abstract class BaseSliceWebController extends Controller
         // instead of always opening the table with the matrix
         // behind a button. An explicit ?view=… always wins,
         // which is how the matrix page's List-view link opts
-        // back out.
+        // back out. Fragment requests (ls_fragment) are the
+        // directory's own in-place round-trips — the redirect
+        // must never hijack them, or every quick-filter /
+        // drawer swap on a matrix-default slice falls back
+        // to a full navigation (found 10 Nov 2026).
         if (($uiConfig['directory']['default_view'] ?? 'table') === 'matrix'
             && ! $request->has('view')
+            && ! $request->has('ls_fragment')
             && ! empty($uiConfig['directory']['matrix'])
             && Route::has($this->resolveRouteName('matrix'))) {
             return redirect()->route(
@@ -105,7 +110,16 @@ abstract class BaseSliceWebController extends Controller
 
         $pagedList = $this->getService()->getList($filter);
         $summaryData = $this->computeSummaryData($summaryCards);
-        // Resolve quick filter options from distinct values
+        // Resolve quick filter options: a declared
+        // options_from source wins when present; declared
+        // options apply otherwise; a select whose field
+        // declares its own vocabulary (the common porter
+        // shape — handle + display only) falls back to the
+        // FIELD's declared options when the resolved set
+        // ends up empty, the same precedence the column
+        // pipeline uses. Without this the flagship's
+        // Projects status filter rendered only "All" while
+        // its Heart declared all five statuses (10 Nov 2026).
         foreach ($quickFilters as &$qf) {
             if (isset($qf['options']) && is_array($qf['options'])) {
                 $qf['options'] = DirectoryUi::optionsList($qf['options']);
@@ -115,6 +129,9 @@ abstract class BaseSliceWebController extends Controller
                 $qf['options'] = $this->getDistinctFilterOptions($field);
             } elseif (isset($qf['options_from']) && str_starts_with($qf['options_from'], 'lookup:')) {
                 $qf['options'] = $this->resolveLookupOptions($qf['options_from']);
+            }
+            if (empty($qf['options']) && ! empty($qf['handle'])) {
+                $qf['options'] = $this->fieldDeclaredOptions((string) $qf['handle']);
             }
         }
         unset($qf);
@@ -160,6 +177,9 @@ abstract class BaseSliceWebController extends Controller
                     }
                 }
                 $sf['options'] = $normalized;
+            }
+            if (empty($sf['options']) && ! empty($sf['handle'])) {
+                $sf['options'] = $this->fieldDeclaredOptions((string) $sf['handle']);
             }
         }
         unset($sf);
@@ -336,7 +356,43 @@ abstract class BaseSliceWebController extends Controller
             ]
         );
 
-        return view($this->ownViewName('index'), $viewData);
+        $view = view($this->ownViewName('index'), $viewData);
+
+        // AJAX directory (performance programme, 9 Nov 2026):
+        // ?ls_fragment=directory returns the directory region
+        // (data-table root + filter strip) as JSON so the
+        // data-table component can swap it in place for
+        // quick-filter navigation instead of a full page load.
+        // Any extraction miss returns the full page — the
+        // client falls back to ordinary navigation.
+        if ($request->query('ls_fragment') === 'directory') {
+            $html = $view->render();
+            $directory = $this->fragmentBetween($html, 'LS-DIR');
+            if ($directory !== null) {
+                return response()->json([
+                    'directory' => $directory,
+                    'strip' => $this->fragmentBetween($html, 'LS-STRIP'),
+                ]);
+            }
+
+            return response($html);
+        }
+
+        return $view;
+    }
+
+    /** Extract the HTML between two LS marker comments. */
+    private function fragmentBetween(string $html, string $marker): ?string
+    {
+        $start = '<!--'.$marker.':start-->';
+        $end = '<!--'.$marker.':end-->';
+        $from = strpos($html, $start);
+        $to = strpos($html, $end);
+        if ($from === false || $to === false || $to <= $from) {
+            return null;
+        }
+
+        return substr($html, $from + strlen($start), $to - $from - strlen($start));
     }
 
     /**
@@ -2617,6 +2673,21 @@ abstract class BaseSliceWebController extends Controller
             }
         }
 
+        $relatedTabs = $this->appendCustomFieldsTab(DirectoryUi::relatedTabsFromManifest($ownManifest, $record), $record);
+        // Lazy hub tabs: hand each lazy panel its fragment URL
+        // (the panel body loads on first activation instead of
+        // riding in the initial HTML).
+        if (! empty($ownManifest['ui']['show']['lazy_tabs'])) {
+            foreach ($relatedTabs as $ti => $tab) {
+                if (! empty($tab['lazy']) && Route::has($this->resolveRouteName('tab'))) {
+                    $relatedTabs[$ti]['fragment_url'] = route(
+                        $this->resolveRouteName('tab'),
+                        $this->routeParameters(['id' => $id, 'handle' => (string) ($tab['handle'] ?? '')])
+                    );
+                }
+            }
+        }
+
         if (view()->exists($showView)) {
             return view($showView, [
                 'record' => $record,
@@ -2627,7 +2698,7 @@ abstract class BaseSliceWebController extends Controller
                 // controller's own manifest (duplicate slice names make
                 // name-based lookup unreliable) so the show view can
                 // render related-record tabs with live counts.
-                'relatedTabs' => $this->appendCustomFieldsTab(DirectoryUi::relatedTabsFromManifest($ownManifest, $record), $record),
+                'relatedTabs' => $relatedTabs,
                 // Declared landing tab (ui.show.default_tab):
                 // the show template opens on it when the URL
                 // carries no ?tab= (e.g. a ticket hub opens on
@@ -2654,6 +2725,84 @@ abstract class BaseSliceWebController extends Controller
         }
 
         return $this->edit($id);
+    }
+
+    /**
+     * Lazy hub tab fragment: renders ONE relation tab's panel
+     * for a record, for slices declaring ui.show.lazy_tabs.
+     * The show page ships the strip + counts only; the panel
+     * body is fetched on first activation. Authorization and
+     * scope follow show() exactly — a fragment must never
+     * widen what the hub itself would show.
+     */
+    public function tabFragment(Request $request, string|int $id, string $handle)
+    {
+        $selfAccess = false;
+        try {
+            $this->authorizeSlice('view');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            if ($e->getStatusCode() !== 403) {
+                throw $e;
+            }
+            $selfAccess = true;
+        }
+
+        $service = $this->getService();
+        $record = method_exists($service, 'findModel') ? $service->findModel($id) : null;
+        if (! $record) {
+            $record = $service->getItemById($id);
+        }
+        if (! $record) {
+            abort(404);
+        }
+        if ($selfAccess && ! $this->recordIsViewerSelf($record)) {
+            abort(403);
+        }
+        if (in_array($this->sliceViewScope(), ['owned', 'added', 'both'], true)
+            && $this->viewScopeClauses() !== []
+            && ! $this->recordMatchesOwnScope($record)) {
+            abort(404);
+        }
+
+        $manifest = $this->ownManifest();
+        if (empty($manifest['ui']['show']['lazy_tabs'])) {
+            abort(404);
+        }
+
+        $tab = null;
+        foreach (DirectoryUi::relatedTabsFromManifest($manifest, $record, $handle) as $candidate) {
+            if (($candidate['handle'] ?? '') === $handle) {
+                $tab = $candidate;
+                break;
+            }
+        }
+        if ($tab === null) {
+            abort(404);
+        }
+
+        if (($tab['type'] ?? '') === 'permissions') {
+            $tab['lazy'] = false;
+
+            return response(view('laraslice::partials.related-tab-permissions', [
+                'rtab' => $tab,
+                'record' => $record,
+            ])->render());
+        }
+
+        if (($tab['type'] ?? '') !== 'relation') {
+            abort(404);
+        }
+
+        $render = (string) ($tab['render'] ?? 'table');
+        if (! in_array($render, ['table', 'board', 'gantt', 'calendar', 'stack'], true)) {
+            abort(404);
+        }
+        $tab['lazy'] = false;
+
+        return response(view('laraslice::partials.related-tab-'.$render, [
+            'rtab' => $tab,
+            'record' => $record,
+        ])->render());
     }
 
     /**
@@ -2723,17 +2872,47 @@ abstract class BaseSliceWebController extends Controller
                 return response()->json(['success' => true]);
             }
         }
+        // Handle → attribute resolution: directory and board UIs
+        // speak in relation handles (board_column), the record
+        // stores the foreign key (board_column_id). Declarations
+        // a cold port generates put the HANDLE in inline_edit;
+        // writing it verbatim crashed with SQL 1054 (unknown
+        // column). Resolve through the declaration: an exact
+        // column wins, then a declared relation's foreign key,
+        // then the _id convention.
+        $attribute = $field;
+        $schema = $record->getConnection()->getSchemaBuilder();
+        if (! $schema->hasColumn($record->getTable(), $field)) {
+            foreach ((array) ($manifest['models'] ?? []) as $model) {
+                foreach ((array) ($model['relations'] ?? []) as $rel) {
+                    if (($rel['name'] ?? null) === $field && ! empty($rel['foreign_key'])) {
+                        $attribute = (string) $rel['foreign_key'];
+                        break 2;
+                    }
+                }
+            }
+            if ($attribute === $field && $schema->hasColumn($record->getTable(), $field.'_id')) {
+                $attribute = $field.'_id';
+            }
+        }
         // Proposal #6 gate (goldfish round): an inline edit is
         // a write like any other. When the form object declares
         // the field, the value must bind to its declared type —
         // garbage is rejected with the binding issue instead of
         // reaching the record raw — and the BOUND value, not
-        // the raw input, is what gets stored.
+        // the raw input, is what gets stored. The gate keys on
+        // whichever name the form object declares: the UI handle
+        // or the resolved attribute.
         $formClass = $this->getFormClass();
-        if (class_exists($formClass) && property_exists($formClass, $field)) {
-            $probe = $formClass::fromArray([$field => $value]);
+        $boField = null;
+        if (class_exists($formClass)) {
+            $boField = property_exists($formClass, $field) ? $field
+                : (property_exists($formClass, $attribute) ? $attribute : null);
+        }
+        if ($boField !== null) {
+            $probe = $formClass::fromArray([$boField => $value]);
             foreach ($probe->bindingIssues() as $issue) {
-                if (($issue['field'] ?? null) === $field) {
+                if (($issue['field'] ?? null) === $boField) {
                     return response()->json([
                         'success' => false,
                         'message' => $issue['problem'].' Expected: '.$issue['expected'],
@@ -2741,9 +2920,9 @@ abstract class BaseSliceWebController extends Controller
                     ], 422);
                 }
             }
-            $value = $probe->{$field};
+            $value = $probe->{$boField};
         }
-        $record->forceFill([$field => $value])->save();
+        $record->forceFill([$attribute => $value])->save();
 
         return response()->json(['success' => true]);
     }
@@ -3668,6 +3847,24 @@ abstract class BaseSliceWebController extends Controller
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    /**
+     * A filter handle's field-declared vocabulary, normalized
+     * to the value/label list shape — the final fallback for
+     * select filters that declare neither options nor an
+     * options_from source (or whose source resolved empty).
+     *
+     * @return array<int, array{value: mixed, label: string}>
+     */
+    protected function fieldDeclaredOptions(string $handle): array
+    {
+        $options = $this->ownManifest()['fields'][$handle]['options'] ?? null;
+        if (! is_array($options) || $options === []) {
+            return [];
+        }
+
+        return DirectoryUi::optionsList($options);
     }
 
     protected function getDistinctFilterOptions(string $field): array
