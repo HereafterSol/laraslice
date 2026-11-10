@@ -1,3 +1,6 @@
+@if(!empty($rtab['lazy']))
+    @include('laraslice::partials.related-tab-lazy', ['rtab' => $rtab])
+@else
 {{--
     Related-tab BOARD render mode (Body v4 detail pattern):
     the tab's records grouped into columns by the declared
@@ -122,4 +125,6 @@
             </div>
         @endforeach
     </div>
+@endif
+
 @endif

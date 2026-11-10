@@ -673,7 +673,7 @@ final class DirectoryUi
      * @param  array<string, mixed>  $manifest
      * @return list<array{handle: string, label: string, type: string, relation: string, count?: int}>
      */
-    public static function relatedTabsFromManifest(array $manifest, mixed $record = null): array
+    public static function relatedTabsFromManifest(array $manifest, mixed $record = null, ?string $onlyHandle = null): array
     {
         $tabs = [];
         $seen = [];
@@ -847,7 +847,26 @@ final class DirectoryUi
         }
 
         if (is_object($record)) {
+            // Lazy hub tabs (performance programme, 9 Nov 2026):
+            // with ui.show.lazy_tabs declared, relation tabs
+            // other than the landing tab keep their strip +
+            // count but skip row enrichment — the panel body
+            // is fetched from the tab fragment endpoint on
+            // first activation. Hub pages otherwise render
+            // every tab's full table into the initial HTML
+            // (the flagship's employee hub weighed 3.07 MB).
+            // Thread-render tabs are exempt: the fragment
+            // endpoint does not serve them (their conversation
+            // partial is not fragment-safe), so they stay
+            // server-rendered like chart and audit tabs —
+            // a lazy flag there would strand the panel on
+            // its placeholder forever (goldfish finding F1).
+            $lazyTabs = ! empty($manifest['ui']['show']['lazy_tabs']);
+            $defaultHandle = self::showDefaultTabFromManifest($manifest) ?? 'overview';
             foreach ($tabs as $i => $tab) {
+                if ($onlyHandle !== null && ($tab['handle'] ?? '') !== $onlyHandle) {
+                    continue;
+                }
                 if (($tab['type'] ?? '') === 'audit') {
                     $entries = self::auditEntriesForRecord($record);
                     $tabs[$i]['entries'] = $entries;
@@ -861,6 +880,16 @@ final class DirectoryUi
                     continue;
                 }
                 if (($tab['type'] ?? '') === 'permissions') {
+                    // The permissions matrix is the heaviest
+                    // panel in the framework (one scope select
+                    // per permission — 1,100+ rows on the
+                    // flagship fleet); under lazy_tabs it loads
+                    // as a fragment like any relation tab.
+                    if ($onlyHandle === null && $lazyTabs && ($tab['handle'] ?? '') !== $defaultHandle) {
+                        $tabs[$i]['lazy'] = true;
+
+                        continue;
+                    }
                     $tabs[$i] = self::enrichPermissionsTab($tab, $record);
 
                     continue;
@@ -885,6 +914,11 @@ final class DirectoryUi
                 // never a generic ID/Summary/Status skeleton. Tabs that
                 // cannot be resolved are flagged 'unresolved' so the
                 // drift/presentation checks can catch them.
+                if ($onlyHandle === null && $lazyTabs && ($tab['handle'] ?? '') !== $defaultHandle && ($tab['render'] ?? 'table') !== 'thread') {
+                    $tabs[$i]['lazy'] = true;
+
+                    continue;
+                }
                 $tabs[$i] = self::enrichTabularTab($tabs[$i], $record);
             }
         }

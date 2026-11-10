@@ -70,9 +70,15 @@ final class SurfaceDerivationPipelineTest extends TestCase
         $this->assertSame('status', $columns[4]['handle']);
         $this->assertSame('status_pill', $columns[4]['formatter']);
 
-        // Probe-derived facets and actions
+        // Probe-derived facets and actions. The people
+        // facet derives to the target dialect (10 Nov
+        // 2026): handle user_id (the criterion column)
+        // and a users-table lookup — the old 'employee'
+        // handle + lookup:employees spec resolved to an
+        // empty, inert filter on every port.
         $this->assertNotEmpty($ui['directory']['quick_filters']);
-        $this->assertSame('employee', $ui['directory']['quick_filters'][0]['handle']);
+        $this->assertSame('user_id', $ui['directory']['quick_filters'][0]['handle']);
+        $this->assertSame('lookup:users:id:name', $ui['directory']['quick_filters'][0]['options_from']);
         $this->assertSame('designation', $ui['directory']['quick_filters'][1]['handle']);
         $this->assertNotEmpty($ui['directory']['actions']);
         $this->assertSame('invite_employee', $ui['directory']['actions'][0]['handle']);

@@ -2,7 +2,7 @@
              a Filters button in the strip opens the full declared set in a right
              drawer; filters apply server-side (G5). Mirrors the reference ERP. -->
         @if(!empty($sidebarFilters ?? []))
-        <div x-data="{ filtersOpen: false }" @keydown.escape.window="filtersOpen = false" @open-ls-filters.window="filtersOpen = true">
+        <div x-data="{ filtersOpen: false }" @keydown.escape.window="filtersOpen = false" @open-ls-filters.window="filtersOpen = true" @close-ls-filters.window="filtersOpen = false">
             <div class="flex items-center justify-end border-b border-border/60 pb-3" data-ls-filters-trigger>
                 <button type="button" @click="filtersOpen = true" class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-2xs transition-colors hover:bg-muted cursor-pointer">
                     <x-lucide-filter class="size-3.5" /> Filters
@@ -19,7 +19,7 @@
                         <x-lucide-x class="size-4" />
                     </button>
                 </div>
-                <form method="GET" class="flex flex-1 flex-col overflow-y-auto">
+                <form method="GET" data-ls-drawer-form class="flex flex-1 flex-col overflow-y-auto">
                     <div class="flex flex-1 flex-col gap-4 px-4 py-4">
                 @foreach($sidebarFilters as $sf)
                 @if(($sf['ui'] ?? true) === false) @continue @endif
@@ -77,4 +77,33 @@
             document.querySelectorAll('[data-ls-filters-trigger]').forEach(function (e) { e.remove(); });
         }
     });
+
+    // AJAX drawer Apply (owner-approved 10 Nov 2026): submitting
+    // the filters drawer swaps the directory in place through
+    // the data table's lsSwap (the same fragment round-trip the
+    // quick filters use) instead of reloading the whole page,
+    // then closes the drawer. The target URL starts from the
+    // current address (view state and other params survive,
+    // exactly like the quick-filter path); the form's own
+    // fields are then authoritative — stale values for its
+    // handles are removed before the chosen ones are set.
+    // When no live data table is present (or anything is
+    // missing), the listener steps aside and the form submits
+    // natively; a failed swap falls back to full navigation
+    // inside lsSwap.
+    document.addEventListener('submit', function (e) {
+        const form = e.target.closest('form[data-ls-drawer-form]');
+        if (!form) return;
+        const dirRoot = document.querySelector('[data-ls-dir-root]');
+        const data = (window.Alpine && dirRoot) ? Alpine.$data(dirRoot) : null;
+        if (!data || typeof data.lsSwap !== 'function') return;
+        e.preventDefault();
+        const fd = new FormData(form);
+        const u = new URL(window.location.href);
+        fd.forEach(function (v, k) { u.searchParams.delete(k); });
+        fd.forEach(function (v, k) { if (v !== '' && v !== null) u.searchParams.set(k, v); });
+        Promise.resolve(data.lsSwap(u)).then(function () {
+            window.dispatchEvent(new CustomEvent('close-ls-filters'));
+        });
+    }, true);
 </script>

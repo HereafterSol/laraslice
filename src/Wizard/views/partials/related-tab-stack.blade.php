@@ -1,3 +1,6 @@
+@if(!empty($rtab['lazy']))
+    @include('laraslice::partials.related-tab-lazy', ['rtab' => $rtab])
+@else
 {{--
     Stacked-relations tab panel (render: stack): several
     relation blocks composed in ONE tab, in declared order —
@@ -40,3 +43,5 @@
         @endif
     </div>
 @endforeach
+
+@endif

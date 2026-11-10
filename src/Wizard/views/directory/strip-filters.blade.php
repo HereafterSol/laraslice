@@ -31,7 +31,8 @@
 @if (!empty($stripFilters))
 @if ($inExternalBar)
 @push('filterbar-extra')
-<form method="GET" class="flex flex-wrap items-end gap-2">
+<!--LS-STRIP:start-->
+<form method="GET" data-ls-strip-root class="flex flex-wrap items-end gap-2">
     @foreach (($activeFilters ?? []) as $ak => $av)
         @if (!in_array($ak, $stripKeys, true) && !is_array($av) && $av !== null && $av !== '')
         <input type="hidden" name="{{ $ak }}" value="{{ $av }}" />
@@ -60,9 +61,11 @@
     @endforeach
     <x-ui.button type="submit" size="sm">Apply</x-ui.button>
 </form>
+<!--LS-STRIP:end-->
 @endpush
 @else
-<form method="GET" class="mb-4 flex flex-wrap items-end gap-2">
+<!--LS-STRIP:start-->
+<form method="GET" data-ls-strip-root class="mb-4 flex flex-wrap items-end gap-2">
     @foreach (($activeFilters ?? []) as $ak => $av)
         @if (!in_array($ak, $stripKeys, true) && !is_array($av) && $av !== null && $av !== '')
         <input type="hidden" name="{{ $ak }}" value="{{ $av }}" />
@@ -91,5 +94,6 @@
     @endforeach
     <x-ui.button type="submit" size="sm">Apply</x-ui.button>
 </form>
+<!--LS-STRIP:end-->
 @endif
 @endif

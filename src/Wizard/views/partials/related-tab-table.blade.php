@@ -1,3 +1,6 @@
+@if(!empty($rtab['lazy']))
+    @include('laraslice::partials.related-tab-lazy', ['rtab' => $rtab])
+@else
 {{--
     Tab content contract v2 — a resolved hub tab is a WORKING list,
     not a picture of one. Everything here is driven by the related
@@ -186,3 +189,5 @@ if (!window.__lsTabList) {
 }
 </script>
 @endonce
+
+@endif

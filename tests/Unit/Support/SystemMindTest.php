@@ -99,6 +99,35 @@ class SystemMindTest extends TestCase
         $this->assertStringContainsString('leave_date: {input: date}', $body);
     }
 
+    public function test_draft_body_v2_survives_array_shaped_relation_declarations(): void
+    {
+        // Cursor EVAL-B (10 Nov 2026): porter-shaped Hearts
+        // declare a field's relation as a MAP. The unguarded
+        // (string) cast crashed slice:plan:draft ("Array to
+        // string conversion") and the Mind was never written.
+        $manifest = [
+            'name' => 'Tickets',
+            'title' => 'Tickets',
+            'ui' => ['directory' => ['columns' => [['label' => ['nested' => 'array']], ['label' => 'Subject']]]],
+            'fields' => [
+                'agent_id' => ['type' => 'integer', 'relation' => ['slice' => 'Users', 'table' => 'users']],
+                'channel_id' => ['type' => 'integer', 'relation' => ['table' => 'ticket_channels']],
+                'team_id' => ['type' => 'integer', 'relation' => ['unexpected' => 'shape']],
+            ],
+            'workflow' => ['state_field' => ['array' => 'shape'], 'initial_state' => 'open'],
+        ];
+        $body = \LaraSlice\Support\SystemMind::draftBodyV2($manifest, 'Tickets');
+        $this->assertStringContainsString('agent_id: {input: picker, relation: Users}', $body);
+        $this->assertStringContainsString('channel_id: {input: picker, relation: ticket_channels}', $body);
+        // An unrecognised map shape falls back to the column stem.
+        $this->assertStringContainsString('team_id: {input: picker, relation: team}', $body);
+        // Array-shaped column labels are skipped, scalar ones kept;
+        // an array-shaped workflow state_field suppresses the
+        // workflow line instead of crashing its interpolation.
+        $this->assertStringContainsString("item: 'Subject'", $body);
+        $this->assertStringNotContainsString('workflow: {state_field:', $body);
+    }
+
     public function test_actors_round_trip_through_the_plan_form(): void
     {
         $mind = [

@@ -1,3 +1,6 @@
+@if(!empty($rtab['lazy']))
+    @include('laraslice::partials.related-tab-lazy', ['rtab' => $rtab])
+@else
 {{--
     Related-tab CALENDAR render mode (declared render:
     calendar on a relation tab): the tab's records on a
@@ -90,3 +93,5 @@
         <div class="px-4 py-2 text-[11px] text-muted-foreground border-t border-border/60">{{ $undated }} record(s) without a date are not shown on the calendar.</div>
     @endif
 </div>
+
+@endif
