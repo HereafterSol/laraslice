@@ -1,3 +1,13 @@
+## [2.1.2] - 2026-11-10
+
+**The complete-fleet patch. Framework unchanged from 2.1.1; the flagship demo package reaches fleet parity with the reference port. Full notes: CHANGES-v2.1.2.md.**
+
+### Changed
+- **Flagship demo fleet 164 → 174 slices** — the ten settings/lookup slices ported after the demo dataset froze (ticket types/channels, knowledge categories, lead sources/statuses, passport details, company addresses, Custom Fields groups/fields/link settings) now ship in the demo; their tables and rows were already in the bundled dataset. Metadata index total verified at 174 on a cold install.
+
+### Fixed
+- The demo INSTALL.md's version paragraph named v2.1.0; it now names the version the package actually carries.
+
 ## [2.1.1] - 2026-11-10
 
 **The evaluator patch. Driven by two independent cold evaluations of v2.1.0 (a shipped-demo install-and-drive, and a from-scratch port) and by the owner's own hands-on test of the flagship's speed and feel. Full suite: 981 tests, 3793 assertions. Full notes: CHANGES-v2.1.1.md.**

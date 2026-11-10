@@ -303,6 +303,12 @@ php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --dry
   3. *Data Mode (`system-base` clean slate vs `full-data` production migration)*
 
 
+## 🆕 What's new in v2.1.2 — The Complete Fleet
+
+Released 2026-11-10. Full notes: CHANGES-v2.1.2.md.
+
+- **The demo now carries the whole fleet.** Ten settings and lookup slices that were ported after the demo's dataset froze — ticket types and channels, knowledge categories, lead sources and statuses, passport details, company addresses, and the Custom Fields family — ship in the flagship demo: 164 → **174 slices**, the same total the reference port reports. Framework code is unchanged from v2.1.1.
+
 ## 🆕 What's new in v2.1.1 — The Evaluator Patch
 
 Released 2026-11-10. Full notes: CHANGES-v2.1.1.md and the CHANGELOG's 2.1.1 section.
