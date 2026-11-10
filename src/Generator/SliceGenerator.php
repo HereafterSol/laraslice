@@ -2033,7 +2033,7 @@ ACTIONS;
             @if((\$qf['display'] ?? 'tabs') === 'select')
             <label class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span class="font-medium">{{ \$qf['label'] ?? \$qf['handle'] }}</span>
-                <select onchange="const u = new window.URL(window.location.href); if (this.value) { u.searchParams.set('{{ \$qf['handle'] }}', this.value); } else { u.searchParams.delete('{{ \$qf['handle'] }}'); } window.location.href = u.toString();" class="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground cursor-pointer">
+                <select data-ls-qf="{{ \$qf['handle'] }}" onchange="const u = new window.URL(window.location.href); if (this.value) { u.searchParams.set('{{ \$qf['handle'] }}', this.value); } else { u.searchParams.delete('{{ \$qf['handle'] }}'); } window.location.href = u.toString();" class="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground cursor-pointer">
                     <option value="">All</option>
                     @foreach(\$qf['options'] ?? [] as \$opt)
                     <option value="{{ \$opt['value'] }}" @selected((string) (\$activeFilters[\$qf['handle']] ?? '') === (string) \$opt['value'])>{{ \$opt['label'] }}</option>
@@ -3046,7 +3046,9 @@ BLADE;
             <div class="flex items-center justify-between gap-2">
                 <h3 class="text-sm font-bold text-foreground">{{ \$rtab['label'] ?? \\Illuminate\\Support\\Str::headline(\$rtab['handle']) }}</h3>
             </div>
-            @if(in_array(\$rtab['render'] ?? 'table', ['board', 'gantt', 'calendar', 'thread', 'stack'], true) && isset(\$rtab['records']))
+            @if(!empty(\$rtab['lazy']))
+                @include('laraslice::partials.related-tab-lazy', ['rtab' => \$rtab])
+            @elseif(in_array(\$rtab['render'] ?? 'table', ['board', 'gantt', 'calendar', 'thread', 'stack'], true) && isset(\$rtab['records']))
                 @include('laraslice::partials.related-tab-' . (\$rtab['render'] ?? 'table'), ['rtab' => \$rtab])
             @elseif(!empty(\$rtab['columns']))
                 @if(count(\$rtab['rows'] ?? []) === 0)

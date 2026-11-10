@@ -85,4 +85,43 @@ final class FormRegeneratorTest extends TestCase
             $regenerator->discardStaging($staged['staging']);
         }
     }
+
+    public function test_stage_completes_fields_from_the_root_models_column_list(): void
+    {
+        // Column completion (10 Nov 2026): ported Hearts
+        // carry columns in models[root].fields (handle
+        // dialect) that the top-level fields map never
+        // gained — staging must derive them too, or every
+        // regen reports the lived BO's properties for
+        // those columns as losses.
+        $sliceDir = (new SliceGenerator($this->root, 'App\\Slices'))->generate('RegenGadget', [
+            ['name' => 'title', 'type' => 'string', 'nullable' => false],
+        ]);
+        $yamlPath = $sliceDir.'/slice.yaml';
+        $raw = \Symfony\Component\Yaml\Yaml::parseFile($yamlPath);
+        $raw['models'] = [[
+            'handle' => 'regen_gadget',
+            'table' => 'regen_gadgets',
+            'root' => true,
+            'fields' => [
+                ['handle' => 'title', 'label' => 'Title', 'type' => 'string', 'required' => true],
+                ['handle' => 'probation_end_date', 'label' => 'Probation End Date', 'type' => 'date', 'required' => false],
+                ['handle' => 'employment_type', 'label' => 'Employment Type', 'type' => 'string', 'required' => false],
+            ],
+        ]];
+        file_put_contents($yamlPath, \Symfony\Component\Yaml\Yaml::dump($raw, 6, 2));
+
+        $manifest = new SliceManifest($yamlPath);
+        $regenerator = new FormRegenerator;
+        $staged = $regenerator->stage($manifest);
+        try {
+            $bo = (string) file_get_contents($staged['sliceDir'].'/Contracts/RegenGadgetFormBusinessObject.php');
+            $this->assertStringContainsString('$probation_end_date', $bo);
+            $this->assertStringContainsString('$employment_type', $bo);
+            $listing = (string) file_get_contents($staged['sliceDir'].'/Contracts/RegenGadgetListingBusinessObject.php');
+            $this->assertStringContainsString('$probation_end_date', $listing);
+        } finally {
+            $regenerator->discardStaging($staged['staging']);
+        }
+    }
 }

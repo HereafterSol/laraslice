@@ -235,6 +235,20 @@ class SlicePortCommand extends Command
         }
 
         $this->line('');
+        // Register the legacy source DB connection BEFORE inspection:
+        // SlicePortService::inspect() reads
+        // config('laraslice.porting.source_connection') to decide
+        // whether the live database is the schema source of truth.
+        // This registration used to sit after the inspection (and
+        // after the proceed prompt), which left inspection blind to
+        // --source-* / --source-connection and silently degraded it
+        // to migration-file parsing — the exact failure an external
+        // cold-port evaluation hit on v2.1.0.
+        $sourceConnection = $this->registerSourceConnection();
+        if ($sourceConnection === self::FAILURE) {
+            return self::FAILURE;
+        }
+
         $this->comment("🔍 Introspecting legacy schema at: {$source}...");
 
         try {
@@ -287,50 +301,9 @@ class SlicePortCommand extends Command
         $this->line('');
         $this->comment("⚙️  Synthesizing domain blueprint & {$mode} seeders...");
 
-        // Build legacy source DB connection from --source-* options (or named connection).
-        $sourceConnectionName = $this->option('source-connection');
-        if ($sourceConnectionName) {
-            $connConfig = config("database.connections.{$sourceConnectionName}");
-            if (! $connConfig) {
-                $this->error("Source connection [{$sourceConnectionName}] is not defined in config/database.php.");
-
-                return self::FAILURE;
-            }
-            $sourceConnection = [
-                'host' => $connConfig['host'] ?? '127.0.0.1',
-                'port' => $connConfig['port'] ?? 3306,
-                'database' => $connConfig['database'] ?? '',
-                'username' => $connConfig['username'] ?? '',
-                'password' => $connConfig['password'] ?? '',
-            ];
-            config(['laraslice.porting.source_connection' => $sourceConnectionName]);
-        } else {
-            $sourceConnection = [
-                'host' => $this->option('source-host') ?: '127.0.0.1',
-                'port' => $this->option('source-port') ?: 3306,
-                'database' => $this->option('source-database') ?: '',
-                'username' => $this->option('source-username') ?: '',
-                'password' => $this->option('source-password') ?: '',
-            ];
-
-            // Register runtime connection if database provided (for live table discovery)
-            if (! empty($sourceConnection['database'])) {
-                config(['database.connections.laraslice_source' => [
-                    'driver' => 'mysql',
-                    'host' => $sourceConnection['host'],
-                    'port' => $sourceConnection['port'],
-                    'database' => $sourceConnection['database'],
-                    'username' => $sourceConnection['username'],
-                    'password' => $sourceConnection['password'],
-                    'charset' => 'utf8mb4',
-                    'collation' => 'utf8mb4_unicode_ci',
-                    'prefix' => '',
-                    'strict' => true,
-                ]]);
-                config(['laraslice.porting.source_connection' => 'laraslice_source']);
-                $this->info("✓ Source database connection registered: {$sourceConnection['database']}@{$sourceConnection['host']}");
-            }
-        }
+        // Source connection registration moved before inspection
+        // (registerSourceConnection(), called above): inspect() must
+        // already see it to use the live database as schema truth.
 
         // When --scaffold is part of this same invocation, defer the
         // data import until AFTER the slices are scaffolded and their
@@ -461,6 +434,64 @@ class SlicePortCommand extends Command
      * upgrades a gate verdict, and this line says so by
      * pointing at the artefact that carries the gate note.
      */
+    /**
+     * Build the legacy source DB connection from the --source-*
+     * options (or a named --source-connection) and register it in
+     * config so inspection, scaffolding and ETL all read the same
+     * connection. Returns the connection array, or self::FAILURE
+     * when a named connection is not defined.
+     *
+     * @return array<string, mixed>|int
+     */
+    private function registerSourceConnection(): array|int
+    {
+        $sourceConnectionName = $this->option('source-connection');
+        if ($sourceConnectionName) {
+            $connConfig = config("database.connections.{$sourceConnectionName}");
+            if (! $connConfig) {
+                $this->error("Source connection [{$sourceConnectionName}] is not defined in config/database.php.");
+
+                return self::FAILURE;
+            }
+            $sourceConnection = [
+                'host' => $connConfig['host'] ?? '127.0.0.1',
+                'port' => $connConfig['port'] ?? 3306,
+                'database' => $connConfig['database'] ?? '',
+                'username' => $connConfig['username'] ?? '',
+                'password' => $connConfig['password'] ?? '',
+            ];
+            config(['laraslice.porting.source_connection' => $sourceConnectionName]);
+        } else {
+            $sourceConnection = [
+                'host' => $this->option('source-host') ?: '127.0.0.1',
+                'port' => $this->option('source-port') ?: 3306,
+                'database' => $this->option('source-database') ?: '',
+                'username' => $this->option('source-username') ?: '',
+                'password' => $this->option('source-password') ?: '',
+            ];
+
+            // Register runtime connection if database provided (for live table discovery)
+            if (! empty($sourceConnection['database'])) {
+                config(['database.connections.laraslice_source' => [
+                    'driver' => 'mysql',
+                    'host' => $sourceConnection['host'],
+                    'port' => $sourceConnection['port'],
+                    'database' => $sourceConnection['database'],
+                    'username' => $sourceConnection['username'],
+                    'password' => $sourceConnection['password'],
+                    'charset' => 'utf8mb4',
+                    'collation' => 'utf8mb4_unicode_ci',
+                    'prefix' => '',
+                    'strict' => true,
+                ]]);
+                config(['laraslice.porting.source_connection' => 'laraslice_source']);
+                $this->info("✓ Source database connection registered: {$sourceConnection['database']}@{$sourceConnection['host']}");
+            }
+        }
+
+        return $sourceConnection;
+    }
+
     private function surfaceScorecard(?array $card): void
     {
         if ($card === null) {
@@ -515,14 +546,15 @@ class SlicePortCommand extends Command
      * @param  array<string, mixed>  $matrix
      * @return array<string, int>
      */
-    private function permissionResolution(array $matrix): array
+    private function permissionResolution(array &$matrix): array
     {
-        $stats = ['declared_permissions' => 0, 'proposed' => 0, 'resolved' => 0, 'resolved_via_alt' => 0];
+        $stats = ['declared_permissions' => 0, 'proposed' => 0, 'resolved' => 0, 'resolved_via_alt' => 0, 'resolved_via_root' => 0];
         try {
             if (! Schema::hasTable('permissions')) {
                 return $stats;
             }
-            $declared = array_flip(DB::table('permissions')->pluck('slug')->all());
+            $declaredList = DB::table('permissions')->pluck('slug')->map(fn ($s) => (string) $s)->all();
+            $declared = array_flip($declaredList);
             $stats['declared_permissions'] = count($declared);
             $resolves = static function (?string $slug) use ($declared): bool {
                 if ($slug === null || $slug === '*') {
@@ -534,10 +566,47 @@ class SlicePortCommand extends Command
 
                 return str_ends_with($slug, '.view-own') && isset($declared[substr($slug, 0, -9).'.view']);
             };
+            // Rooted candidates: flat proposals can never resolve
+            // against a hierarchical registry (declared slugs are
+            // rooted at dotted slice ids), which made the club
+            // drafts useless for exactly those ports. Root each
+            // proposal at its unique declared tail.
+            $proposed = [];
             foreach ($matrix['roles'] as $role) {
+                foreach ($role['grants'] as $grant) {
+                    foreach (['slug', 'alt_slug'] as $key) {
+                        if (! empty($grant[$key])) {
+                            $proposed[] = (string) $grant[$key];
+                        }
+                    }
+                }
+            }
+            $rooted = \LaraSlice\Porting\PermissionMatrixExtractor::rootedCandidates($proposed, $declaredList);
+            foreach ($matrix['roles'] as $ri => $role) {
                 $alts = [];
                 foreach ($role['grants'] as $grant) {
                     $alts[$grant['slug'] ?? ''] = $grant['alt_slug'] ?? null;
+                }
+                // Annotate grants with their rooted slug and
+                // rewrite the club draft into the target's own
+                // dialect wherever a rooted form resolves.
+                $best = [];
+                foreach ($role['grants'] as $gi => $grant) {
+                    $slug = $grant['slug'] ?? null;
+                    $root = null;
+                    if ($slug !== null && ! $resolves($slug) && ! $resolves($grant['alt_slug'] ?? null)) {
+                        $root = $rooted[$slug] ?? ($grant['alt_slug'] ? ($rooted[$grant['alt_slug']] ?? null) : null);
+                    }
+                    if ($root !== null) {
+                        $matrix['roles'][$ri]['grants'][$gi]['rooted_slug'] = $root;
+                        $best[(string) $slug] = $root;
+                    }
+                }
+                if ($best !== []) {
+                    $matrix['roles'][$ri]['club']['permissions'] = array_values(array_unique(array_map(
+                        static fn ($slug) => $best[(string) $slug] ?? $slug,
+                        $role['club']['permissions'] ?? []
+                    )));
                 }
                 foreach ($role['club']['permissions'] as $slug) {
                     if ($slug === '*') {
@@ -548,6 +617,8 @@ class SlicePortCommand extends Command
                         $stats['resolved']++;
                     } elseif ($resolves($alts[$slug] ?? null)) {
                         $stats['resolved_via_alt']++;
+                    } elseif (isset($best[(string) $slug])) {
+                        $stats['resolved_via_root']++;
                     }
                 }
             }

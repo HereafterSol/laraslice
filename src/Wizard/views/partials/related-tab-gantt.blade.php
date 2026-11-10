@@ -1,3 +1,6 @@
+@if(!empty($rtab['lazy']))
+    @include('laraslice::partials.related-tab-lazy', ['rtab' => $rtab])
+@else
 {{--
     Related-tab GANTT render mode (Body v4 detail pattern):
     the tab's records as horizontal bars over a shared date
@@ -72,4 +75,6 @@
     @if($undated > 0)
         <p class="text-[11px] text-muted-foreground">{{ $undated }} record(s) without both dates are not charted.</p>
     @endif
+@endif
+
 @endif

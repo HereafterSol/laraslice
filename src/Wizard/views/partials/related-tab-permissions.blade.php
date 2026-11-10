@@ -1,3 +1,6 @@
+@if(!empty($rtab['lazy']))
+    @include('laraslice::partials.related-tab-lazy', ['rtab' => $rtab])
+@else
 {{--
     Related-tab PERMISSIONS panel (declared type:
     permissions): the record's person's module permission
@@ -164,4 +167,6 @@
         }
     })();
     </script>
+@endif
+
 @endif

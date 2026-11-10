@@ -64,5 +64,13 @@ class FilterDrawerGenerationTest extends TestCase
         $this->assertStringContainsString('Apply Filters', $drawer);
         // Declared filter fields render as named controls.
         $this->assertStringContainsString('name="{{ $sfHandle }}"', $drawer);
+        // AJAX drawer Apply (10 Nov 2026): the form carries the
+        // hook the partial's submit interception binds to, the
+        // wrapper closes on the close-ls-filters window event,
+        // and the interception routes through the data table's
+        // lsSwap — the native GET submit stays as the fallback.
+        $this->assertStringContainsString('data-ls-drawer-form', $drawer);
+        $this->assertStringContainsString('@close-ls-filters.window', $drawer);
+        $this->assertStringContainsString('lsSwap', $drawer);
     }
 }

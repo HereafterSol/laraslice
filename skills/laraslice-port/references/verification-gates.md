@@ -117,6 +117,24 @@ not verified until its effect is observed (network or DB),
 never from its render; and `slice:drift --structure` flags
 the repeater defect statically — run it.
 
+**Conformance from a cold start.** `slice:conformance`
+compares anatomy specs against the ported Hearts; with no
+specs it reports NOT MEASURED (by design — it never invents
+a score). The specs are not hand-written: capture DOM
+probes from the RUNNING source first — one
+`porting/probes/<slug>.json` per list page and one
+`<slug>-detail.json` per detail page (the probe is the
+page's rendered structure: headings, columns, fields,
+actions, as the anatomy pass consumes them) — then run
+`php artisan slice:port --anatomy`, which turns the probes
+into `porting/ui-spec/*.anatomy.ui.yaml`. Only then does
+`slice:conformance` measure structure; deviations it finds
+are answered in `porting/deviations.yaml` (recorded =
+judged, unrecorded = exit 1). A port that skipped the
+probe capture has no structure-conformance claim — say
+NOT MEASURED and name the missing step, exactly as the
+command does.
+
 **Port completeness checklist (from the 24 Oct full re-audit).** CRUD
 parity is not port parity. For every source module, enumerate — from
 the live page, not the schema — and then declare in the three files

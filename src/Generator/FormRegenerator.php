@@ -81,6 +81,7 @@ class FormRegenerator
         // relation declared on the top-level field itself
         // always wins — this only fills the gap.
         $modelFieldRelations = [];
+        $rootModelFields = [];
         $rootModel = null;
         foreach ((array) ($raw['models'] ?? []) as $modelEntry) {
             if (is_array($modelEntry) && ! empty($modelEntry['root'])) {
@@ -92,9 +93,56 @@ class FormRegenerator
             $rootModel = $raw['models'][0];
         }
         foreach ((array) ($rootModel['fields'] ?? []) as $modelField) {
-            if (is_array($modelField) && ! empty($modelField['handle']) && is_array($modelField['relation'] ?? null)) {
-                $modelFieldRelations[(string) $modelField['handle']] = $modelField['relation'];
+            if (is_array($modelField) && ! empty($modelField['handle'])) {
+                $rootModelFields[] = $modelField;
+                if (is_array($modelField['relation'] ?? null)) {
+                    $modelFieldRelations[(string) $modelField['handle']] = $modelField['relation'];
+                }
             }
+        }
+
+        // Column completion (10 Nov 2026): the porter's
+        // models[].fields list is the fuller DB truth —
+        // columns can live there that the top-level fields
+        // map never gained (the flagship's EmployeeDetails
+        // carried 8: contract/probation/notice dates,
+        // employment_type, marital_status…; Projects 4:
+        // project_short_code, miroboard pair, client_access).
+        // The lived BOs carry properties for them (the Heart
+        // references them in show tabs), but staging derived
+        // fields from the top-level map alone, so every
+        // regen reported those properties as BO losses and
+        // the F12 detector held the contracts back forever.
+        // Stage the missing columns as fields in the porter
+        // dialect's own terms (handle/label/type/required);
+        // the relation inheritance below still applies.
+        $stagedNames = array_map(static fn (array $f): string => (string) $f['name'], $fields);
+        foreach ($rootModelFields as $modelField) {
+            $handle = (string) $modelField['handle'];
+            if (in_array($handle, $stagedNames, true)) {
+                continue;
+            }
+            $required = (bool) ($modelField['required'] ?? false);
+            $field = [
+                'name' => $handle,
+                'label' => (string) ($modelField['label'] ?? Str::headline($handle)),
+                'type' => (string) ($modelField['type'] ?? 'string'),
+                'required' => $required,
+                'nullable' => array_key_exists('nullable', $modelField) ? (bool) $modelField['nullable'] : ! $required,
+                'default' => $modelField['default'] ?? null,
+                'options' => $modelField['options'] ?? [],
+                'length' => $modelField['length'] ?? null,
+            ];
+            if (is_array($modelField['relation'] ?? null)) {
+                $field['relation'] = $modelField['relation'];
+            }
+            foreach (['references', 'hidden', 'show_in_form', 'show_in_list', 'encrypted', 'cast'] as $extra) {
+                if (array_key_exists($extra, $modelField)) {
+                    $field[$extra] = $modelField[$extra];
+                }
+            }
+            $fields[] = $field;
+            $stagedNames[] = $handle;
         }
         if ($modelFieldRelations !== []) {
             foreach ($fields as &$stagedField) {

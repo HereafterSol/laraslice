@@ -44,9 +44,15 @@ final class PermissionMatrixExtractor
         'add' => 'create',
         'create' => 'create',
         'view' => 'view',
-        'edit' => 'update',
-        'update' => 'update',
-        'change' => 'update',
+        // The framework's declared write action is 'edit'
+        // (every Heart declares view/create/edit/delete). This
+        // map used to emit 'update', so every update/edit
+        // proposal from a source matrix failed to resolve
+        // against the real registry — 8 of the 16 unresolved
+        // club slugs on the reference port were this one word.
+        'edit' => 'edit',
+        'update' => 'edit',
+        'change' => 'edit',
         'delete' => 'delete',
     ];
 
@@ -187,5 +193,49 @@ final class PermissionMatrixExtractor
         }
 
         return $proposal['base'].'.'.$proposal['action'];
+    }
+
+    /**
+     * Root flat proposals at the target's declared slugs.
+     *
+     * Proposals are source-shaped flat slugs (projects.view);
+     * a hierarchical port declares rooted ones
+     * (erp.adjudication.work.projects.view). A proposal roots
+     * when EXACTLY ONE declared slug ends with the proposal's
+     * last two segments — an ambiguous tail roots nothing
+     * rather than guessing. A view-own proposal roots at the
+     * declared view slug and re-attaches -own.
+     *
+     * @param  list<string>  $proposed
+     * @param  list<string>  $declared
+     * @return array<string, string> proposed slug => rooted slug
+     */
+    public static function rootedCandidates(array $proposed, array $declared): array
+    {
+        $byTail = [];
+        foreach ($declared as $slug) {
+            $parts = explode('.', (string) $slug);
+            if (count($parts) < 2) {
+                continue;
+            }
+            $tail = implode('.', array_slice($parts, -2));
+            $byTail[$tail][] = (string) $slug;
+        }
+
+        $rooted = [];
+        foreach ($proposed as $slug) {
+            $slug = (string) $slug;
+            if ($slug === '*') {
+                continue;
+            }
+            $own = str_ends_with($slug, '.view-own');
+            $probe = $own ? substr($slug, 0, -4) : $slug; // projects.view
+            $candidates = $byTail[$probe] ?? [];
+            if (count($candidates) === 1) {
+                $rooted[$slug] = $own ? $candidates[0].'-own' : $candidates[0];
+            }
+        }
+
+        return $rooted;
     }
 }

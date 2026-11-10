@@ -114,6 +114,21 @@ class LaraSliceServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Blaze safety net (performance programme, 9 Nov 2026):
+        // the starter stubs annotate slot-free leaf components
+        // (icon, spinner, separator) with @blaze(memo: true).
+        // When livewire/blaze is installed it registers the
+        // directive itself; when it is not, an unknown directive
+        // would leak into the rendered HTML as literal text —
+        // so register a no-op that simply drops the annotation.
+        // Directory-scope Blaze::optimize() is deliberately NOT
+        // enabled by the framework: in this stack it silently
+        // drops slotted/pushed content (measured spike, the
+        // directory filter strip vanished from the HTML).
+        if (! class_exists(\Livewire\Blaze\Blaze::class)) {
+            \Illuminate\Support\Facades\Blade::directive('blaze', static fn () => '');
+        }
+
         // Register the twMerge attribute macro used by the published BlatUI components,
         // unless the host app already provides one (e.g. via gehrisandro/tailwind-merge-laravel)
         // The binding is per application; macros are static and outlive it (tests, Octane), so bind every boot.

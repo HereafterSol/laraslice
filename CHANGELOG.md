@@ -1,3 +1,23 @@
+## [2.1.1] - 2026-11-10
+
+**The evaluator patch. Driven by two independent cold evaluations of v2.1.0 (a shipped-demo install-and-drive, and a from-scratch port) and by the owner's own hands-on test of the flagship's speed and feel. Full suite: 981 tests, 3793 assertions. Full notes: CHANGES-v2.1.1.md.**
+
+### Added
+- **Lazy hub tabs** — `ui.show.lazy_tabs: true` ships non-landing relation tabs as counts and loads their fragment on first view (`?tab=` deep links preserved). Flagship employee hub: 3,073,525 → 506,009 bytes initial payload (−84%).
+- **Migration row-size preflight** — before a port's migrations run, every CREATE is estimated (charset-weighted worst case); a table over the InnoDB 65,535-byte limit stops the run up front with the table, estimate, and remedy named, instead of a mid-run error 1118 and a half-migrated schema.
+- **Blaze leaf adoption** — slot-free leaf components (icon, spinner, separator) are memoized via `@blaze`; a no-op `blaze` directive is registered when livewire/blaze is absent, so the components render either way.
+
+### Changed — behaviour existing consumers will notice
+- **Directory updates are in place.** Inline edits, workflow transitions, quick filters, and the filters drawer's Apply swap the directory region via a fragment round-trip and close the drawer; failures fall back to ordinary navigation. Fragment requests are exempt from the default-view redirect that previously hijacked them on matrix-default slices.
+- **Quick-filter option precedence** is now `options_from` → declared `options` → the field's declared options, so unbound filter selects render their real vocabularies.
+- **`slice:links` classifies table claims by primary ownership** — two primary owners remain a failure; shared composition is reported as information naming the primary owner.
+
+### Fixed
+- **Regeneration staging completes fields from the root model's column list** — slices whose Contracts were held back indefinitely by the loss detector are unblocked (adoption remains deliberate per slice).
+- **Mind/Body drafting survives map-shaped relation declarations** — `slice:plan:draft` no longer dies with "array to string conversion" on porter-shaped Hearts; the Mind is written.
+- **Porter people facets** derive against the users table with the correct handle and lookup (`user_id`, `lookup:users:id:name`).
+- **Release-archive skeleton directories** (`bootstrap/cache`, storage framework dirs) are asserted by the packaging build; their absence in v2.1.0 halted cold installs.
+
 ## [2.1.0] - 2026-11-09
 
 **The AI-surface release. Driven by a full functional audit of the flagship demo, a screen-by-screen comparison against a production application running the original software, a day-2 operations drill, and a four-phase runtime programme. Full suite: 953 tests, 3709 assertions. Full notes: CHANGES-v2.1.0.md.**

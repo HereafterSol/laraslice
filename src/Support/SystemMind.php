@@ -270,8 +270,8 @@ class SystemMind
             // The full Heart lives in the manifest's raw array;
             // toArray() is only the identity summary.
             $manifest = is_array($slice->raw ?? null) && $slice->raw !== [] ? $slice->raw : $slice->toArray();
-            $name = (string) ($manifest['name'] ?? 'Slice');
-            $modules[] = (string) ($manifest['title'] ?? $name);
+            $name = is_scalar($manifest['name'] ?? null) ? (string) $manifest['name'] : 'Slice';
+            $modules[] = is_scalar($manifest['title'] ?? null) ? (string) $manifest['title'] : $name;
             $file = $dir.'/'.strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', (string) $name)).'.ui.yaml';
             if (is_file($file)) {
                 continue;
@@ -405,7 +405,7 @@ class SystemMind
      */
     public static function draftBodyV2(array $manifest, string $name): string
     {
-        $title = (string) ($manifest['title'] ?? $name);
+        $title = is_scalar($manifest['title'] ?? null) ? (string) $manifest['title'] : $name;
         $slug = strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', $name));
         $lines = [];
         $lines[] = "# Body v2 (draft) — {$name} · drafted by slice:plan:draft, awaiting review";
@@ -421,7 +421,7 @@ class SystemMind
         } else {
             $lines[] = '    columns:';
             foreach ($columns as $col) {
-                if (is_array($col) && ! empty($col['label'])) {
+                if (is_array($col) && ! empty($col['label']) && is_scalar($col['label'])) {
                     $lines[] = "      - {item: '".str_replace("'", '', (string) $col['label'])."', decision: undecided}";
                 }
             }
@@ -446,7 +446,18 @@ class SystemMind
             }
             $type = is_array($field) ? (string) ($field['type'] ?? 'string') : 'string';
             if (str_ends_with($fieldName, '_id')) {
-                $relation = (string) ($field['relation'] ?? $field['target'] ?? str_replace('_id', '', $fieldName));
+                // Porter-shaped Hearts declare the relation as a
+                // MAP (slice/model/table keys), not a string —
+                // casting that array to string crashed
+                // slice:plan:draft outright ("Array to string
+                // conversion", Cursor EVAL-B 10 Nov 2026) and the
+                // Mind was never written. Extract the reference
+                // the map carries; fall back to the column stem.
+                $relationRef = is_array($field) ? ($field['relation'] ?? $field['target'] ?? null) : null;
+                if (is_array($relationRef)) {
+                    $relationRef = $relationRef['slice'] ?? $relationRef['model'] ?? $relationRef['table'] ?? $relationRef['target'] ?? null;
+                }
+                $relation = is_string($relationRef) && $relationRef !== '' ? $relationRef : str_replace('_id', '', $fieldName);
                 $formFields[] = "      {$fieldName}: {input: picker, relation: {$relation}}";
             } elseif (in_array($type, ['date'], true)) {
                 $formFields[] = "      {$fieldName}: {input: date}";
@@ -473,7 +484,7 @@ class SystemMind
         $lines[] = 'access:';
         $lines[] = "  Super Admin: {actions: [view, create, edit, delete], scope: all}";
         $lines[] = "  Standard User: {actions: [view], scope: '[draft]'}  # [draft] confirm per club in Plan mode";
-        if (is_array($workflow) && ! empty($workflow['initial_state'])) {
+        if (is_array($workflow) && ! empty($workflow['initial_state']) && is_scalar($workflow['initial_state']) && is_scalar($stateField)) {
             $lines[] = "workflow: {state_field: {$stateField}, initial: {$workflow['initial_state']}, on_create: apply-initial}";
         }
 

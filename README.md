@@ -303,6 +303,15 @@ php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --dry
   3. *Data Mode (`system-base` clean slate vs `full-data` production migration)*
 
 
+## 🆕 What's new in v2.1.1 — The Evaluator Patch
+
+Released 2026-11-10. Full notes: CHANGES-v2.1.1.md and the CHANGELOG's 2.1.1 section.
+
+- **The flagship got fast, and feels like itself again.** Lazy hub tabs (the employee hub's initial payload fell 84%), in-place directory updates for edits, transitions, quick filters, and the filters drawer — no more full-page reloads for list work — and Blaze adopted exactly where it is provably byte-identical (and rejected, on evidence, where it was not).
+- **Regeneration unblocked.** Staging a slice's artefacts now completes the field set from the root model's column list, so Contracts the loss detector was holding back can finally be adopted.
+- **Cold ports fail early, not midway.** Mind drafting survives the declaration shapes the porter actually emits; a row-size preflight stops an over-limit migration run before it starts, naming the table and the remedy; `slice:links` separates real table collisions from ordinary composition.
+- **Two independent evaluations, fully dispositioned.** Every verified finding from a cold install-and-drive of the demo and a from-scratch port is fixed at the framework or packaging layer; what remains is named in the notes, not buried. Full suite: 981 tests, 3793 assertions.
+
 ## 🆕 What's new in v2.1.0 — The AI Surface, Completed
 
 Released 2026-11-09. Full notes: CHANGES-v2.1.0.md and the CHANGELOG's 2.1.0 section.

@@ -104,9 +104,24 @@ class SurfaceDerivationPipeline
                     'display' => 'select',
                 ];
 
-                // Check relation or lookup hint
-                if (in_array($handle, ['employee', 'employee_id', 'user'], true)) {
-                    $qf['options_from'] = 'lookup:employees:id:full_name';
+                // Check relation or lookup hint. People
+                // facets resolve against the users table —
+                // the target dialect has no `employees`
+                // table (people ARE users; the person
+                // column is user_id), so the lookup names
+                // users:id:name and a bare 'employee'/'user'
+                // facet handle is rewritten to the criterion
+                // column it actually filters (10 Nov 2026 —
+                // the old lookup:employees:id:full_name spec
+                // resolved to an empty option set on every
+                // port, and handle 'employee' narrowed
+                // nothing).
+                if (in_array($handle, ['employee', 'user'], true)) {
+                    $qf['handle'] = 'user_id';
+                    $qf['label'] = 'Employee';
+                    $qf['options_from'] = 'lookup:users:id:name';
+                } elseif ($handle === 'employee_id') {
+                    $qf['options_from'] = 'lookup:users:id:name';
                 } elseif (in_array($handle, ['designation', 'designation_id'], true)) {
                     $qf['type'] = 'relation_exists';
                     $qf['relation'] = 'employeeDetail';

@@ -25,7 +25,11 @@ final class PermissionMatrixExtractorTest extends TestCase
             PermissionMatrixExtractor::propose('view_projects')
         );
         $this->assertSame('create', PermissionMatrixExtractor::propose('add_tickets')['action']);
-        $this->assertSame('update', PermissionMatrixExtractor::propose('edit_task_comments')['action']);
+        // Declared slugs speak 'edit' — the proposal vocabulary
+        // must too, or no edit/update proposal can ever resolve
+        // against the registry (the cold-port drift finding).
+        $this->assertSame('edit', PermissionMatrixExtractor::propose('edit_task_comments')['action']);
+        $this->assertSame('edit', PermissionMatrixExtractor::propose('update_tasks')['action']);
         $this->assertSame('leaf', PermissionMatrixExtractor::propose('view_leaves')['base']);
         $this->assertTrue(PermissionMatrixExtractor::propose('approve_invoices')['custom']);
         $this->assertNull(PermissionMatrixExtractor::propose('frobnicate_widgets'));

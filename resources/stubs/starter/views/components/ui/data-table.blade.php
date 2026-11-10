@@ -78,8 +78,10 @@
         ->values()->all();
 @endphp
 
+<!--LS-DIR:start-->
 <div
     data-slot="data-table"
+    data-ls-dir-root
     x-data="blatDataTable({
         pageSize: @js((int) $pageSize),
         rows: @js(array_values($rows)),
@@ -426,6 +428,7 @@
     </div>
     </div><!-- /table viewMode -->
 </div>
+<!--LS-DIR:end-->
 
 <script>
 if (typeof window.blatDataTable === 'undefined') {
@@ -435,6 +438,65 @@ if (typeof window.blatDataTable === 'undefined') {
             sortKey: null,
             sortDir: 'asc',
             page: 1,
+            // AJAX directory (performance programme, 9 Nov
+            // 2026): quick-filter navigation swaps the
+            // directory region in place via the web index's
+            // ?ls_fragment=directory JSON (same server-rendered
+            // HTML, no full page cycle). Any failure falls
+            // back to the ordinary full navigation — the
+            // behaviour is an enhancement, never a dependency.
+            init() {
+                const root = this.$el;
+                root.addEventListener('change', (e) => {
+                    const sel = e.target.closest('select[data-ls-qf]');
+                    if (!sel) return;
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const u = new URL(window.location.href);
+                    if (sel.value) { u.searchParams.set(sel.dataset.lsQf, sel.value); } else { u.searchParams.delete(sel.dataset.lsQf); }
+                    this.lsSwap(u);
+                }, true);
+                root.addEventListener('click', (e) => {
+                    const a = e.target.closest('a[href]');
+                    if (!a) return;
+                    let u;
+                    try { u = new URL(a.href, window.location.href); } catch (err) { return; }
+                    // Same-path + query anchors inside the
+                    // directory are filter-tab navigation;
+                    // everything else (row actions, export,
+                    // create) keeps its ordinary behaviour.
+                    if (u.pathname !== window.location.pathname || !u.searchParams.toString()) return;
+                    e.preventDefault();
+                    this.lsSwap(u);
+                }, true);
+            },
+            async lsSwap(u) {
+                const fu = new URL(u.toString());
+                fu.searchParams.set('ls_fragment', 'directory');
+                try {
+                    const res = await fetch(fu.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+                    const data = await res.json();
+                    if (!data || !data.directory) { window.location.href = u.toString(); return; }
+                    const tpl = document.createElement('template');
+                    tpl.innerHTML = data.directory.trim();
+                    const fresh = tpl.content.querySelector('[data-ls-dir-root]');
+                    if (!fresh) { window.location.href = u.toString(); return; }
+                    this.$el.replaceWith(fresh);
+                    if (window.Alpine) Alpine.initTree(fresh);
+                    if (data.strip) {
+                        const stripOld = document.querySelector('[data-ls-strip-root]');
+                        if (stripOld) {
+                            const t2 = document.createElement('template');
+                            t2.innerHTML = data.strip.trim();
+                            const sf = t2.content.querySelector('[data-ls-strip-root]');
+                            if (sf) { stripOld.replaceWith(sf); if (window.Alpine) Alpine.initTree(sf); }
+                        }
+                    }
+                    history.pushState(null, '', u.toString());
+                } catch (err) {
+                    window.location.href = u.toString();
+                }
+            },
             pageSize: cfg.pageSize || 10,
             rows: cfg.rows || [],
             cols: cfg.cols || [],
@@ -674,7 +736,8 @@ if (typeof window.blatDataTable === 'undefined') {
                     if (wt && this.statusKey) {
                         row[this.statusKey + '__raw'] = wt.label || transitionSlug;
                     }
-                    window.location.reload();
+                    // Confirmed in place — no page reload
+                    // (the optimistic row state above stands).
                 } catch (e) {
                     alert(e.message || String(e));
                 }
@@ -722,7 +785,13 @@ if (typeof window.blatDataTable === 'undefined') {
                         window.location.reload();
                         return;
                     }
-                    window.location.reload();
+                    // Inline update confirmed: apply the value
+                    // to the reactive row in place — the cell
+                    // re-renders from row state. (This used to
+                    // reload the whole page, a full directory
+                    // cycle for one field change.)
+                    row[field + '__raw'] = value;
+                    row[field] = value;
                 } catch (e) {
                     alert(e.message || String(e));
                 }
@@ -882,7 +951,19 @@ if (typeof window.blatDataTable === 'undefined') {
                         alert(data.message || 'Bulk workflow transition failed');
                         return;
                     }
-                    window.location.reload();
+                    // Confirmed: apply the transition label to
+                    // every affected row in place, like the
+                    // single-row transition — no page reload.
+                    if (this.statusKey) {
+                        const idSet = new Set(ids.map(String));
+                        for (const r of this.rows) {
+                            const rid = r[this.rowKey] ?? r.__id ?? r.id;
+                            if (rid !== undefined && idSet.has(String(rid))) {
+                                r[this.statusKey + '__raw'] = meta.label || meta.slug;
+                            }
+                        }
+                    }
+                    this.selected = [];
                 } catch (e) {
                     alert(e.message || 'Network error');
                 }
