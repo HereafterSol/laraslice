@@ -37,7 +37,7 @@
         @stack('filterbar-extra')
 
         @if ($searchable)
-            <div class="relative w-full max-w-xs">
+            <div class="relative min-w-[9rem] flex-1 sm:max-w-xs">
                 <x-lucide-search class="size-3.5 pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
                 <input type="text" x-model="qv" @input="$dispatch('table-search', qv)"
                     placeholder="{{ $searchPlaceholder }}"

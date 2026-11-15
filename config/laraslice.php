@@ -40,6 +40,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Scheduled Effects (declared in slice Hearts)
+    |--------------------------------------------------------------------------
+    */
+    'effects' => [
+        // true schedules `slice:run-effects` daily (requires the Laravel scheduler);
+        // the command also runs on demand. Effects are declared per slice under
+        // the Heart's top-level `effects` key — settings sweeps and recomputes.
+        'schedule' => (bool) env('LARASLICE_EFFECTS_SCHEDULE', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Slices Namespace
     |--------------------------------------------------------------------------
     */

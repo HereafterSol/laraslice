@@ -7,6 +7,16 @@ import { computePosition, autoUpdate, flip, shift, offset as flOffset, size } fr
 // Theme store — dark mode + color preset + radius, persisted to localStorage.
 // Mirrors the data-attributes that resources/css/app.css keys off of.
 // ---------------------------------------------------------------------------
+// Server-saved brand theme (Settings → Theme, Stage C-3): the
+// shell seeds window.__lsTheme from the Setting store; brand
+// dimensions prefer it over this browser's localStorage, so
+// an admin's saved theme reaches every user and browser.
+// Mode (light/dark) is NOT seeded — it stays personal.
+const __lsServerTheme = (typeof window !== 'undefined' && window.__lsTheme) || {};
+const __lsSeed = (key, fallback) => (__lsServerTheme[key] !== undefined && __lsServerTheme[key] !== null && __lsServerTheme[key] !== '')
+    ? __lsServerTheme[key]
+    : (localStorage.getItem('theme:' + key) || fallback);
+
 const themeStore = {
     // Dark-mode policy — set via registerBlatUI(Alpine, { darkMode }).
     //   'class'  (default) light until an explicit toggle; NEVER auto-applies the OS
@@ -16,16 +26,16 @@ const themeStore = {
     darkMode: 'class',
     // Every dimension shadcn exposes, each persisted independently.
     mode: localStorage.getItem('theme:mode') || 'light',
-    base: localStorage.getItem('theme:base') || 'neutral',
-    preset: localStorage.getItem('theme:preset') || 'default',
-    radius: localStorage.getItem('theme:radius') || '0.625',
-    font: localStorage.getItem('theme:font') || 'sans',
-    shadow: localStorage.getItem('theme:shadow') || 'default',
-    spacing: localStorage.getItem('theme:spacing') || 'default',
-    tracking: localStorage.getItem('theme:tracking') || 'normal',
-    inputStyle: localStorage.getItem('theme:inputStyle') || 'outline',
-    fontHeading: localStorage.getItem('theme:fontHeading') || 'sans',
-    soul: localStorage.getItem('theme:soul') || 'default',
+    base: __lsSeed('base', 'neutral'),
+    preset: __lsSeed('preset', 'default'),
+    radius: __lsSeed('radius', '0.625'),
+    font: __lsSeed('font', 'sans'),
+    shadow: __lsSeed('shadow', 'default'),
+    spacing: __lsSeed('spacing', 'default'),
+    tracking: __lsSeed('tracking', 'normal'),
+    inputStyle: __lsSeed('inputStyle', 'fill'),
+    fontHeading: __lsSeed('fontHeading', 'sans'),
+    soul: __lsSeed('soul', 'enterprise'),
 
     init() {
         // No stored choice → fall back per the darkMode policy: 'system' follows the OS,
@@ -39,7 +49,7 @@ const themeStore = {
         });
         // Keep every same-origin document in sync (e.g. block-preview iframes):
         // localStorage writes in one document fire a `storage` event in the others.
-        const defaults = { mode: this.darkMode === 'system' ? 'system' : 'light', base: 'neutral', preset: 'default', radius: '0.625', font: 'sans', shadow: 'default', spacing: 'default', tracking: 'normal', inputStyle: 'outline', fontHeading: 'sans', soul: 'default' };
+        const defaults = { mode: this.darkMode === 'system' ? 'system' : 'light', base: 'neutral', preset: 'default', radius: '0.625', font: 'sans', shadow: 'default', spacing: 'default', tracking: 'normal', inputStyle: 'fill', fontHeading: 'sans', soul: 'enterprise' };
         window.addEventListener('storage', (e) => {
             if (!e.key || !e.key.startsWith('theme:')) return;
             const key = e.key.slice('theme:'.length);
@@ -116,9 +126,9 @@ const themeStore = {
         this.shadow = 'default';
         this.spacing = 'default';
         this.tracking = 'normal';
-        this.inputStyle = 'outline';
+        this.inputStyle = 'fill';
         this.fontHeading = 'sans';
-        this.soul = 'default';
+        this.soul = 'enterprise';
         this.apply();
     },
 
@@ -1874,3 +1884,241 @@ export function registerBlatUI(Alpine, options = {}) {
     Alpine.magic('blatNav', blatNavMagic);
     Alpine.magic('blatType', blatTypeMagic);
 }
+
+// Dynamic link fields (Stage C-5): a select carrying
+// data-ls-dynamic-from="<via field id>" holds the records
+// of the slice the via field names. When the via field
+// changes, refill every dependent select from the options
+// endpoint. The server renders initial options for the
+// via field's current value (edit forms); this handler
+// covers create forms and via changes.
+document.addEventListener('change', async (event) => {
+    const via = event.target;
+    if (!via || !via.id || !via.closest || !via.closest('form')) return;
+    const dependents = via.closest('form').querySelectorAll('select[data-ls-dynamic-from="' + via.id + '"]');
+    if (!dependents.length) return;
+    const slice = via.value;
+    for (const select of dependents) {
+        const placeholder = select.querySelector('option[value=""]');
+        select.innerHTML = '';
+        select.appendChild(placeholder || new Option('Select...', ''));
+        if (!slice) continue;
+        try {
+            const response = await fetch('/laraslice/options/slice-records?slice=' + encodeURIComponent(slice), {
+                headers: { 'Accept': 'application/json' },
+            });
+            if (!response.ok) continue;
+            const data = await response.json();
+            for (const option of (data.options || [])) {
+                select.appendChild(new Option(option.label, option.value));
+            }
+        } catch (e) { /* the field simply stays empty */ }
+    }
+});
+
+// Field behaviour (Seat 1, Stage D): wrappers carrying
+// data-ls-field hold declarative conditions as JSON.
+// This evaluator mirrors Support\FieldCondition clause
+// for clause; the server enforces the same conditions
+// on save — this layer only keeps the form honest
+// while the user is typing.
+function lsFieldValues(form) {
+    const values = {};
+    form.querySelectorAll('input[name], select[name], textarea[name]').forEach((el) => {
+        if (el.type === 'checkbox') {
+            values[el.name] = el.checked ? (el.value || '1') : '';
+        } else if (el.type === 'radio') {
+            if (el.checked) values[el.name] = el.value;
+        } else {
+            values[el.name] = el.value;
+        }
+    });
+    return values;
+}
+
+function lsLooseEquals(actual, expected) {
+    if (typeof expected === 'boolean') {
+        return (actual !== '' && actual !== '0' && actual !== null && actual !== undefined) === expected;
+    }
+    if (actual === null || actual === undefined || expected === null || expected === undefined) {
+        return (actual ?? null) === (expected ?? null);
+    }
+    return String(actual) === String(expected);
+}
+
+function lsClauseHolds(clause, values) {
+    const actual = values[clause.field];
+    const expected = clause.value;
+    switch (clause.op) {
+        case 'is': return lsLooseEquals(actual, expected);
+        case 'is_not': return !lsLooseEquals(actual, expected);
+        case 'in': return Array.isArray(expected) && expected.some((v) => lsLooseEquals(actual, v));
+        case 'not_in': return !(Array.isArray(expected) && expected.some((v) => lsLooseEquals(actual, v)));
+        case 'empty': return actual === null || actual === undefined || actual === '' || actual === false || actual === 0 || (Array.isArray(actual) && actual.length === 0);
+        case 'not_empty': return !(actual === null || actual === undefined || actual === '' || actual === false || actual === 0 || (Array.isArray(actual) && actual.length === 0));
+        case 'gt': return !Number.isNaN(parseFloat(actual)) && !Number.isNaN(parseFloat(expected)) && parseFloat(actual) > parseFloat(expected);
+        case 'gte': return !Number.isNaN(parseFloat(actual)) && !Number.isNaN(parseFloat(expected)) && parseFloat(actual) >= parseFloat(expected);
+        case 'lt': return !Number.isNaN(parseFloat(actual)) && !Number.isNaN(parseFloat(expected)) && parseFloat(actual) < parseFloat(expected);
+        case 'lte': return !Number.isNaN(parseFloat(actual)) && !Number.isNaN(parseFloat(expected)) && parseFloat(actual) <= parseFloat(expected);
+        default: return false;
+    }
+}
+
+function lsEvaluateClauses(clauses, values) {
+    if (!clauses) return true;
+    // OR-of-groups shape: {any: [[clause, ...], ...]} —
+    // the condition holds when any group fully holds.
+    if (!Array.isArray(clauses) && Array.isArray(clauses.any)) {
+        return clauses.any.some((group) => {
+            const list = Array.isArray(group) ? group : [group];
+            return list.every((clause) => lsClauseHolds(clause, values));
+        });
+    }
+    return clauses.every((clause) => lsClauseHolds(clause, values));
+}
+
+function lsApplyBehaviour(form) {
+    const wrappers = form.querySelectorAll('[data-ls-field]');
+    if (!wrappers.length) return;
+    const values = lsFieldValues(form);
+    wrappers.forEach((wrap) => {
+        const inputs = wrap.querySelectorAll('input, select, textarea');
+        let visible = true;
+        const depends = wrap.getAttribute('data-ls-depends-on');
+        if (depends) {
+            try { visible = lsEvaluateClauses(JSON.parse(depends), values); } catch (e) { visible = true; }
+            wrap.style.display = visible ? '' : 'none';
+        }
+        const readonlyAttr = wrap.getAttribute('data-ls-readonly-on');
+        let readOnly = false;
+        if (readonlyAttr && visible) {
+            try { readOnly = lsEvaluateClauses(JSON.parse(readonlyAttr), values); } catch (e) { readOnly = false; }
+        }
+        inputs.forEach((el) => {
+            // Display-hidden inputs stay ENABLED so their
+            // values still submit (source parity: the source
+            // form carries depends_on-hidden values in the
+            // doc — conversions prefill them). Only the
+            // read-only axis disables.
+            el.disabled = readOnly;
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.readOnly = readOnly && visible;
+        });
+        if (!visible) return;
+        const mandatory = wrap.getAttribute('data-ls-mandatory-on');
+        if (mandatory) {
+            let required = false;
+            try { required = lsEvaluateClauses(JSON.parse(mandatory), values); } catch (e) { required = false; }
+            inputs.forEach((el) => { el.required = required; });
+        }
+    });
+    // A section whose fields are ALL behaviour-hidden
+    // hides as a whole (the source gates whole sections —
+    // e.g. Signee Details appears only once Signed is on).
+    // Visibility is judged over ALL the grid's children:
+    // plain fields carry no [data-ls-field] wrapper and are
+    // always visible — counting only wrapped fields hid
+    // whole sections whose wrapped fields happened to be
+    // hidden while plain fields sat visible beside them
+    // (D-051: a Customer's identity section vanished for
+    // Company records because Gender + Represents Company
+    // were behaviour-hidden).
+    form.querySelectorAll('[data-ls-section-grid]').forEach((grid) => {
+        const section = grid.closest('section');
+        if (!section) return;
+        const anyVisible = Array.from(grid.children).some((el) => el.style.display !== 'none');
+        section.style.display = anyVisible ? '' : 'none';
+    });
+}
+
+// Dynamic labels (D-019): a label carrying data-ls-label-for
+// follows its via field's value through the declared map
+// (an Opportunity's Party reads "Lead" / "Customer" per
+// Opportunity From). Unmapped values keep the declared label.
+function lsApplyDynamicLabels(form) {
+    form.querySelectorAll('[data-ls-label-for]').forEach((label) => {
+        const via = form.querySelector('[name="' + label.getAttribute('data-ls-label-for') + '"]');
+        if (!via) return;
+        let map = {};
+        try { map = JSON.parse(label.getAttribute('data-ls-label-map') || '{}'); } catch (e) { map = {}; }
+        if (label.dataset.lsLabelBase === undefined) {
+            label.dataset.lsLabelBase = label.textContent.replace(/ \*$/, '');
+        }
+        const star = / \*$/.test(label.textContent) ? ' *' : '';
+        const mapped = Object.prototype.hasOwnProperty.call(map, via.value) ? map[via.value] : label.dataset.lsLabelBase;
+        label.textContent = mapped + star;
+    });
+}
+
+document.addEventListener('change', (event) => {
+    const form = event.target && event.target.closest ? event.target.closest('form') : null;
+    if (form) { lsApplyBehaviour(form); lsApplyDynamicLabels(form); }
+});
+document.addEventListener('input', (event) => {
+    const form = event.target && event.target.closest ? event.target.closest('form') : null;
+    if (form) lsApplyBehaviour(form);
+});
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('form').forEach((form) => { lsApplyBehaviour(form); lsApplyDynamicLabels(form); });
+});
+
+// fetch_from (Seat 1): when a link field changes, fill
+// every field whose wrapper declares
+// data-ls-fetch-from="<via>.<target field>" for it.
+document.addEventListener('change', async (event) => {
+    const via = event.target;
+    if (!via || !via.name || !via.closest) return;
+    const form = via.closest('form');
+    if (!form) return;
+    const targets = form.querySelectorAll('[data-ls-fetch-from^="' + via.name + '."]');
+    if (!targets.length || !via.value) return;
+    for (const wrap of targets) {
+        const targetField = (wrap.getAttribute('data-ls-fetch-from') || '').split('.')[1];
+        if (!targetField) continue;
+        try {
+            const response = await fetch('/laraslice/options/fetch?via=' + encodeURIComponent(via.name) + '&field=' + encodeURIComponent(targetField) + '&id=' + encodeURIComponent(via.value), {
+                headers: { 'Accept': 'application/json' },
+            });
+            if (!response.ok) continue;
+            const data = await response.json();
+            if (data.value === null || data.value === undefined) continue;
+            const input = wrap.querySelector('input[name], select[name], textarea[name]');
+            if (input) {
+                input.value = data.value;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        } catch (e) { /* the field simply stays as the user left it */ }
+    }
+});
+
+// Rich text (D-054): the dependency-free editor behind the
+// framework's richtext field type. The contenteditable surface
+// is the visible editor; a hidden textarea carries its HTML
+// under the field's name, synced on every input and again on
+// submit (a submit can follow toolbar-only edits).
+function lsInitRichtext(root) {
+    const editor = root.querySelector('[data-ls-richtext-editor]');
+    const input = root.querySelector('[data-ls-richtext-input]');
+    if (!editor || !input) return;
+    const sync = () => { input.value = editor.innerHTML; };
+    editor.addEventListener('input', sync);
+    const form = root.closest('form');
+    if (form) form.addEventListener('submit', sync);
+    root.querySelectorAll('[data-ls-rt]').forEach((button) => {
+        button.addEventListener('mousedown', (event) => event.preventDefault());
+        button.addEventListener('click', () => {
+            const command = button.getAttribute('data-ls-rt');
+            editor.focus();
+            if (command === 'createLink') {
+                const url = window.prompt('Link URL', 'https://');
+                if (url) document.execCommand('createLink', false, url);
+            } else {
+                document.execCommand(command, false, null);
+            }
+            sync();
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-ls-richtext]').forEach(lsInitRichtext);
+});

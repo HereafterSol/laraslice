@@ -8,7 +8,7 @@
     $description ??= __('Search for a command to run...');
 @endphp
 
-<div data-slot="command-dialog" x-data="{ open: false }" x-id="['blat-command-dialog']" {{ $attributes }}>
+<div data-slot="command-dialog" x-data="{ open: false }" x-modelable="open" x-id="['blat-command-dialog']" {{ $attributes }}>
     @isset($trigger)
         <div @click="open = true" x-blat-trigger="{ haspopup: 'dialog', controls: $id('blat-command-dialog') }">{{ $trigger }}</div>
     @endisset

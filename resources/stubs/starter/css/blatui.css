@@ -122,6 +122,10 @@
     --radius: 0.625rem;
     --spacing: 0.25rem;
     --tracking-normal: 0em;
+    /* Enterprise register (Stage E): a working sidebar is
+       ~248px, not the 288px dev-tool default the component
+       falls back to. */
+    --sidebar-width: 15.5rem;
 
     /* Fonts */
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
@@ -143,7 +147,12 @@
     --shadow-2xl: 0 1px 3px 0px oklch(0 0 0 / 0.25);
 
     /* Colors */
-    --background: oklch(1 0 0);
+    /* Canvas is a faint grey (design correction, 13 Nov 2026):
+       page and cards were both pure white, so every card
+       vanished into the page and directories read as floating
+       scaffolds. The chrome (canvas + sidebar) now shares the
+       faint tone; cards stay pure white and lift off it. */
+    --background: oklch(0.985 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
@@ -1450,6 +1459,32 @@
     }
     .blat-label {
         @apply flex items-center gap-2 text-sm font-medium leading-none select-none;
+    }
+    /* Sidebar navigation (Stage C-1): NavHtml emits these
+       component classes instead of repeating the full utility
+       strings on every item — the strings were ~700B per item
+       of pure repetition in every page's HTML. The utilities
+       are exactly the ones the markup used to carry inline. */
+    .ls-nav-btn {
+        @apply flex w-full items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-start text-[13px] outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pe-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 h-8 group-data-[collapsible=icon]:p-2!;
+    }
+    .ls-nav-sub-btn {
+        @apply text-sidebar-foreground ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 group-data-[collapsible=icon]:hidden text-[13px];
+    }
+    .ls-nav-group {
+        @apply relative flex w-full min-w-0 flex-col px-2 py-1.5;
+    }
+    .ls-nav-group-head {
+        @apply text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ring-sidebar-ring flex h-7 w-full shrink-0 items-center justify-between rounded-md px-2 text-[13px] font-medium outline-none transition-[margin,opacity] duration-200 ease-linear;
+    }
+    .ls-nav-group-content {
+        @apply w-full text-[13px] relative;
+    }
+    .ls-nav-menu {
+        @apply flex w-full min-w-0 flex-col gap-0.5;
+    }
+    .ls-nav-sub {
+        @apply border-sidebar-border mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-s px-2.5 py-0.5 group-data-[collapsible=icon]:hidden;
     }
 }
 

@@ -11,7 +11,37 @@
     // 'type_field' => .., 'tax_amount' => ..] — mirrors Support\DocumentMath live;
     // the server recomputes authoritatively on save.
     'document' => null,
+    // Declared grid actions (D-020): [['kind' => 'clear', 'label' => ..],
+    // ['kind' => 'fill_weekday_dates', 'label' => .., 'from' => .., 'to' => ..,
+    // 'weekday' => .., 'date_field' => .., 'label_field' => ..], ...]
+    'actions' => [],
 ])
+
+@php
+    // Link picker seat (D-030): a sub-field declaring a `target`
+    // slice renders as a record picker instead of a raw-id number
+    // input. Options resolve ONCE here, server-side, through the
+    // same SliceRecordOptions semantics the full-form pickers use;
+    // the rendered <option>s live inside the Alpine <template>
+    // below, so rows added after page load clone a working picker
+    // with no per-row fetch.
+    $linkOptions = [];
+    foreach ($fields as $linkField) {
+        $linkTarget = is_array($linkField) ? ($linkField['target'] ?? null) : null;
+        $linkName = is_array($linkField) ? ($linkField['name'] ?? null) : null;
+        if (is_string($linkTarget) && $linkTarget !== '' && is_string($linkName) && $linkName !== '') {
+            try {
+                $pairs = [];
+                foreach (\LaraSlice\Support\SliceRecordOptions::forSlice($linkTarget) as $optId => $optLabel) {
+                    $pairs[] = ['value' => (string) $optId, 'label' => (string) $optLabel];
+                }
+                $linkOptions[$linkName] = $pairs;
+            } catch (\Throwable) {
+                $linkOptions[$linkName] = [];
+            }
+        }
+    }
+@endphp
 
 <div x-data="{
     items: {{ json_encode(!empty($initialItems) ? $initialItems : [[]]) }},
@@ -24,6 +54,44 @@
     removeItem(idx) {
         if (this.items.length > {{ $minItems }}) {
             this.items.splice(idx, 1);
+        }
+    },
+    clearItems() {
+        this.items = [];
+    },
+    fillWeekdayDates(cfg) {
+        // Declared grid action (D-020): fill rows for every
+        // occurrence of the form's weekday field between its
+        // from/to date fields — the source's Get Weekly Off
+        // Dates behaviour. Existing rows for a date are kept,
+        // not duplicated; other rows are untouched.
+        // NOTE: this script lives inside the double-quoted
+        // x-data attribute — it must never contain a double
+        // quote character (there is no escaping in HTML
+        // attributes; one stray quote kills the component).
+        const form = this.$el.closest('form');
+        if (!form || !cfg) return;
+        const read = (n) => { const el = [...form.querySelectorAll('input, select, textarea')].find(e => e.name === n); return el ? el.value : ''; };
+        const fromRaw = read(cfg.from), toRaw = read(cfg.to), weekday = read(cfg.weekday);
+        if (!fromRaw || !toRaw || !weekday) return;
+        const parse = (s) => { const p = s.split('-').map(Number); return new Date(p[0], (p[1] || 1) - 1, p[2] || 1); };
+        const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const have = new Set(this.items.map((it) => String(it[cfg.date_field] || '')));
+        const cursor = parse(fromRaw), end = parse(toRaw);
+        let guard = 0;
+        while (cursor <= end && guard++ < 1100) {
+            const dayName = cursor.toLocaleDateString('en-US', { weekday: 'long' });
+            if (dayName.toLowerCase() === String(weekday).toLowerCase()) {
+                const key = iso(cursor);
+                if (!have.has(key)) {
+                    const row = {};
+                    row[cfg.date_field] = key;
+                    if (cfg.label_field) row[cfg.label_field] = dayName;
+                    this.items.push(row);
+                    have.add(key);
+                }
+            }
+            cursor.setDate(cursor.getDate() + 1);
         }
     },
     lineAmount(item) {
@@ -63,12 +131,29 @@
                 <span class="text-[10px] font-normal text-muted-foreground">Optional — blank rows are ignored</span>
             @endif
         </label>
-        <button type="button"
-                @click="addItem()"
-                class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition shadow-2xs cursor-pointer">
-            <span>+</span>
-            <span>{{ $addButtonText }}</span>
-        </button>
+        <div class="flex items-center gap-1.5">
+            @foreach (($actions ?? []) as $repAction)
+                @if (($repAction['kind'] ?? '') === 'clear')
+                    <button type="button"
+                            @click="clearItems()"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition shadow-2xs cursor-pointer">
+                        <span>{{ $repAction['label'] ?? 'Clear' }}</span>
+                    </button>
+                @elseif (($repAction['kind'] ?? '') === 'fill_weekday_dates')
+                    <button type="button"
+                            @click="fillWeekdayDates({{ json_encode($repAction) }})"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition shadow-2xs cursor-pointer">
+                        <span>{{ $repAction['label'] ?? 'Fill Dates' }}</span>
+                    </button>
+                @endif
+            @endforeach
+            <button type="button"
+                    @click="addItem()"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition shadow-2xs cursor-pointer">
+                <span>+</span>
+                <span>{{ $addButtonText }}</span>
+            </button>
+        </div>
     </div>
 
     {{-- Marker: tells the server this collection was submitted even when every row was removed --}}
@@ -87,7 +172,19 @@
                         @php $fType = $f['type'] ?? 'string'; @endphp
                         <div class="space-y-1">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{{ $f['label'] ?? ucfirst($f['name']) }}@if (!empty($f['required'])) <span class="text-destructive">*</span>@endif</label>
-                            @if (in_array($fType, ['select', 'enum'], true))
+                            @if (!empty($f['target']))
+                                {{-- Link picker (D-030): record labels from the target slice, value = record id; x-model binds the row's value exactly like the number input it replaces --}}
+                                <select :name="'{{ $name }}[' + index + '][{{ $f['name'] }}]'"
+                                        x-model="item.{{ $f['name'] }}"
+                                        data-ls-link-picker="{{ $f['name'] }}"
+                                        data-ls-link-target="{{ $f['target'] }}"
+                                        class="w-full px-2.5 py-1.5 text-xs bg-background border border-input rounded-lg focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs">
+                                    <option value="">—</option>
+                                    @foreach (($linkOptions[$f['name']] ?? []) as $linkOpt)
+                                        <option value="{{ $linkOpt['value'] }}">{{ $linkOpt['label'] }}</option>
+                                    @endforeach
+                                </select>
+                            @elseif (in_array($fType, ['select', 'enum'], true))
                                 <select :name="'{{ $name }}[' + index + '][{{ $f['name'] }}]'"
                                         x-model="item.{{ $f['name'] }}"
                                         class="w-full px-2.5 py-1.5 text-xs bg-background border border-input rounded-lg focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs">
