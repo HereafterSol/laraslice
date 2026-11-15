@@ -174,7 +174,12 @@ class SliceGeneratorTest extends TestCase
         $this->assertStringContainsString("Route::prefix('e-commerce/orders')->name('e_commerce_orders.')", $webRoutes);
         $this->assertStringNotContainsString("->name('e_commerce.orders.')", $webRoutes);
         $this->assertStringContainsString("Route::redirect('orders', '/e-commerce/orders');", $webRoutes);
-        $this->assertStringContainsString("Route::redirect('orders/{any}', '/e-commerce/orders/{any}')", $webRoutes);
+        // Legacy aliases are numeric record shapes only — a '{any}'
+        // wildcard would swallow any other module's namespace that
+        // shares the bare prefix (see AliasRedirectGuardTest).
+        $this->assertStringContainsString("Route::redirect('orders/{id}', '/e-commerce/orders/{id}')->where('id', '[0-9]+');", $webRoutes);
+        $this->assertStringContainsString("Route::redirect('orders/{id}/edit', '/e-commerce/orders/{id}/edit')->where('id', '[0-9]+');", $webRoutes);
+        $this->assertStringNotContainsString('{any}', $webRoutes);
 
         // API routes: domain prefix and flat alias fallback
         $this->assertStringContainsString("Route::prefix('e-commerce/orders')", $apiRoutes);

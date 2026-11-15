@@ -78,4 +78,26 @@ class RelationGenerationTest extends TestCase
         $migration = file_get_contents(glob($path.'/Migrations/*.php')[0]);
         $this->assertStringContainsString("\$table->foreignId('customer_id')->constrained('customers')->restrictOnDelete()", $migration);
     }
+
+    public function test_string_typed_id_fields_and_polymorphic_parents_get_no_relation(): void
+    {
+        // Gate T A2d for models: string *_id fields are
+        // human/external codes (email_id, tax_id), and a
+        // parent_id beside parent_type is a polymorphic
+        // link — neither may emit a stem-guessed BelongsTo
+        // that throws the first time a surface touches it.
+        $path = (new SliceGenerator($this->slicesPath, 'App\\Slices'))->generate('LeadNote', [
+            ['name' => 'email_id', 'type' => 'string', 'nullable' => true],
+            ['name' => 'tax_id', 'type' => 'string', 'nullable' => true],
+            ['name' => 'parent_id', 'type' => 'integer', 'nullable' => true],
+            ['name' => 'parent_type', 'type' => 'string', 'nullable' => true],
+            ['name' => 'owner_id', 'type' => 'foreign_id', 'nullable' => true],
+        ]);
+
+        $model = file_get_contents($path.'/Models/LeadNote.php');
+        $this->assertStringNotContainsString('function email(', $model);
+        $this->assertStringNotContainsString('function tax(', $model);
+        $this->assertStringNotContainsString('function parent(', $model);
+        $this->assertStringContainsString('public function owner(): BelongsTo', $model, 'real foreign keys still get a relation');
+    }
 }

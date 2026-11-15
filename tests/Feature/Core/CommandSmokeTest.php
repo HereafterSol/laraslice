@@ -49,6 +49,14 @@ class CommandSmokeTest extends TestCase
         $this->artisan('laraslice:audit:prune', ['--days' => 30, '--force' => true])->assertSuccessful();
     }
 
+    public function test_scheduled_effects_command_runs_clean_with_no_declared_effects(): void
+    {
+        // D-079 seat: the runner exists and no-ops cleanly when no
+        // slice Heart declares an `effects` entry.
+        $this->artisan('slice:run-effects', ['--dry-run' => true])->assertSuccessful();
+        $this->artisan('slice:run-effects')->assertSuccessful();
+    }
+
     public function test_slice_make_then_toggle_a_whole_domain(): void
     {
         $this->artisan('slice:make', ['name' => ['Ticket', 'Queue'], '--domain' => 'Helpdesk'])->assertSuccessful();
