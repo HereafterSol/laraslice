@@ -213,7 +213,7 @@
         @endif
 
         <!-- Actions -->
-        <div class="flex items-center justify-end gap-3 pt-3">
+        <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3 pt-3">
             <x-ui.button href="{{ route('users.index') }}" as="a" variant="outline">
                 Cancel
             </x-ui.button>

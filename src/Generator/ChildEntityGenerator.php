@@ -437,7 +437,7 @@ BLADE;
                         $optionsHtml .= "                    <option value=\"{$safeValue}\" @selected(old('{$fName}', \$form->{$fName} ?? ".var_export($f['default'] ?? '', true).") === {$expression})>{$safeLabel}</option>\n";
                     }
                     $formInputs[] = <<<HTML
-                <div class="space-y-1.5">
+                <div class="space-y-1">
                     <x-ui.label for="{$fName}">{$fLabel}{$reqStar}</x-ui.label>
                     <select id="{$fName}" name="{$fName}" {$required} class="flex h-9 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20">
 {$optionsHtml}                    </select>
@@ -448,7 +448,7 @@ BLADE;
 HTML;
                 } elseif (in_array($fType, ['text', 'mediumtext', 'longtext'], true)) {
                     $formInputs[] = <<<HTML
-                <div class="space-y-1.5">
+                <div class="space-y-1">
                     <x-ui.label for="{$fName}">{$fLabel}{$reqStar}</x-ui.label>
                     <x-ui.textarea id="{$fName}" name="{$fName}" rows="3" placeholder="Enter {$fLabel}..." {$required}>{{ old('{$fName}', \$form->{$fName} ?? '') }}</x-ui.textarea>
                     @error('{$fName}')
@@ -473,7 +473,7 @@ HTML;
                     $storeVar = '$'.$relModel.'QuickStoreUrl';
                     $reqBool = $required ? 'true' : 'false';
                     $formInputs[] = <<<HTML
-                <div class="space-y-1.5">
+                <div class="space-y-1">
                     <x-ui.combobox-relationship
                         name="{$fName}"
                         label="{$fLabel}"
@@ -502,7 +502,7 @@ HTML;
                     $stepAttribute = in_array($fType, ['decimal', 'float', 'double'], true) ? ' step="any"' : '';
 
                     $formInputs[] = <<<HTML
-                <div class="space-y-1.5">
+                <div class="space-y-1">
                     <x-ui.label for="{$fName}">{$fLabel}{$reqStar}</x-ui.label>
                     <x-ui.input id="{$fName}" type="{$htmlInputType}" name="{$fName}" value="{{ old('{$fName}', \$form->{$fName} ?? '') }}" placeholder="Enter {$fLabel}..."{$stepAttribute} {$required} />
                     @error('{$fName}')
@@ -514,7 +514,7 @@ HTML;
             }
         } else {
             $formInputs[] = <<<'HTML'
-                <div class="space-y-1.5">
+                <div class="space-y-1">
                     <x-ui.label for="name">Name *</x-ui.label>
                     <x-ui.input id="name" name="name" value="{{ old('name', $form->name ?? '') }}" required autofocus />
                 </div>
@@ -557,7 +557,7 @@ HTML;
                     </div>
                 @else
                     @php \$parentOptions = \${$optParentVar} ?? []; @endphp
-                    <div class="space-y-1.5">
+                    <div class="space-y-1">
                         <x-ui.combobox-relationship
                             name="{$foreignKey}"
                             label="{$parentStudly} *"

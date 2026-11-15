@@ -49,10 +49,27 @@ final class SliceName
     }
 
     /**
+     * snake_case a Studly name without shredding acronyms
+     * (F2): Str::snake('CRM') yields "c_r_m" and
+     * Str::snake('CRMNotes') "c_r_m_notes" in this Laravel
+     * version — a leading acronym run is split letter by
+     * letter. Collapse the run first (CRMNotes -> CrmNotes)
+     * so generated table/route names read crm_notes.
+     * Already-snake input passes through unchanged.
+     */
+    public static function snake(string $name, string $delimiter = '_'): string
+    {
+        if (preg_match('/^([A-Z]{2,})(?=[A-Z][a-z]|$)/', $name, $m)) {
+            $name = ucfirst(strtolower($m[1])).substr($name, strlen($m[1]));
+        }
+
+        return Str::snake($name, $delimiter);
+    }
+
+    /**
      * Return the namespace segment for a domain name (e.g. "Human Resources" -> "HumanResources").
      */
-    public static function domainSegment(string $domain): string
-    {
+    public static function domainSegment(string $domain): string    {
         $domain = trim($domain);
         if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $domain)) {
             $segment = ucfirst($domain);

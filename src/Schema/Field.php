@@ -272,7 +272,7 @@ class Field
 
         if ($this->type === 'textarea') {
             return <<<HTML
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 <x-ui.label for="{$name}">{$label}{$reqStar}</x-ui.label>
                 <x-ui.textarea id="{$name}" name="{$name}" rows="{$this->rows}" placeholder="{$placeholder}"{$req}>{{ old('{$name}', \$form->{$name} ?? {$defaultExpression}) }}</x-ui.textarea>
                 @error('{$name}')
@@ -292,7 +292,7 @@ HTML;
             }
 
             return <<<HTML
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 <x-ui.label for="{$name}">{$label}{$reqStar}</x-ui.label>
                 <select id="{$name}" name="{$name}"{$req} class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                     {$optionsHtml}
@@ -332,7 +332,7 @@ HTML;
             : '';
 
         return <<<HTML
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 <x-ui.label for="{$name}">{$label}{$reqStar}</x-ui.label>
                 <x-ui.input id="{$name}" type="{$htmlType}" name="{$name}" value="{{ old('{$name}', \$form->{$name} ?? {$defaultExpression}) }}" placeholder="{$placeholder}"{$stepAttribute}{$autofocus}{$req} />
                 @error('{$name}')

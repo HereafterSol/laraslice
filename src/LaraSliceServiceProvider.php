@@ -20,6 +20,7 @@ use LaraSlice\Commands\BlueprintPlanCommand;
 use LaraSlice\Commands\BlueprintValidateCommand;
 use LaraSlice\Commands\LaraSliceMcpCommand;
 use LaraSlice\Commands\SkillPublishCommand;
+use LaraSlice\Commands\SliceScheduledEffectsCommand;
 use LaraSlice\Commands\SliceAiCommand;
 use LaraSlice\Commands\SliceCacheCommand;
 use LaraSlice\Commands\SliceClearCommand;
@@ -34,6 +35,7 @@ use LaraSlice\Commands\SliceIndexCommand;
 use LaraSlice\Commands\SliceOperateCommand;
 use LaraSlice\Commands\SlicePortabilityCommand;
 use LaraSlice\Commands\SliceDiffCommand;
+use LaraSlice\Commands\BenchmarkGateCommand;
 use LaraSlice\Commands\SliceDriftCommand;
 use LaraSlice\Commands\SliceExportFlutterCommand;
 use LaraSlice\Commands\SliceFieldCommand;
@@ -75,6 +77,7 @@ use LaraSlice\Core\Workflow\Listeners\NotifyWorkflowTransition;
 use LaraSlice\Http\Controllers\BulkActionController;
 use LaraSlice\Http\Controllers\PublicRecordController;
 use LaraSlice\Http\Controllers\RecordActionController;
+use LaraSlice\Http\Controllers\RecordPrintController;
 use LaraSlice\Support\DashboardUi;
 use LaraSlice\Support\SchemaCache;
 use LaraSlice\Wizard\Middleware\AuthorizeStudio;
@@ -220,12 +223,14 @@ class LaraSliceServiceProvider extends ServiceProvider
                 SlicePortabilityCommand::class,
                 SliceIndexCommand::class,
                 SliceDriftCommand::class,
+                BenchmarkGateCommand::class,
                 SliceConformanceCommand::class,
                 SliceCorpusCommand::class,
                 SliceValidateCommand::class,
                 SliceClearCommand::class,
                 SlicePublishCommand::class,
                 AuditPruneCommand::class,
+                SliceScheduledEffectsCommand::class,
                 LaraSliceMcpCommand::class,
                 SkillPublishCommand::class,
                 WorkflowTransitionCommand::class,
@@ -236,6 +241,15 @@ class LaraSliceServiceProvider extends ServiceProvider
             if (config('laraslice.audit.auto_prune')) {
                 $this->callAfterResolving(Schedule::class, function ($schedule) {
                     $schedule->command('laraslice:audit:prune', ['--force' => true])->daily()->withoutOverlapping();
+                });
+            }
+
+            // Declared scheduled effects (D-079): slice Hearts declare
+            // settings sweeps + derivation recomputes under `effects`;
+            // one daily tick runs them all.
+            if (config('laraslice.effects.schedule', true)) {
+                $this->callAfterResolving(Schedule::class, function ($schedule) {
+                    $schedule->command('slice:run-effects')->daily()->withoutOverlapping();
                 });
             }
         }
@@ -264,6 +278,10 @@ class LaraSliceServiceProvider extends ServiceProvider
         Route::prefix('laraslice')->middleware(['web', 'auth'])->group(function () {
             Route::post('/record-actions/{prefix}/{id}/{action}', RecordActionController::class)
                 ->name('laraslice.record_action');
+            // Built-in Print record action (D-083): one printable
+            // record view for every slice.
+            Route::get('/record-print/{prefix}/{id}', RecordPrintController::class)
+                ->name('laraslice.record_print');
             Route::post('/bulk-actions/{prefix}/{action}', BulkActionController::class)
                 ->name('laraslice.bulk_action');
             // Per-user permission types: the employee hub
@@ -275,6 +293,49 @@ class LaraSliceServiceProvider extends ServiceProvider
             Route::post('/user-permissions/{userId}/reset', [\LaraSlice\Core\Security\UserPermissionTypeController::class, 'reset'])
                 ->whereNumber('userId')
                 ->name('laraslice.user_permissions.reset');
+            // Lazy navigation (Stage C-1): the palette index
+            // and per-group sidebar items the shell no longer
+            // renders into every page.
+            Route::get('/nav-index', [\LaraSlice\Http\Controllers\NavController::class, 'index'])
+                ->name('laraslice.nav_index');
+            Route::get('/nav-group', [\LaraSlice\Http\Controllers\NavController::class, 'group'])
+                ->name('laraslice.nav_group');
+            // Dynamic field options (Stage C-5): records of
+            // the slice a dynamic-link field currently targets.
+            Route::get('/options/slice-records', [\LaraSlice\Http\Controllers\OptionsController::class, 'sliceRecords'])
+                ->name('laraslice.options.slice_records');
+            // fetch_from reads (Seat 1): declared fetches only.
+            Route::get('/options/fetch', [\LaraSlice\Http\Controllers\OptionsController::class, 'fetch'])
+                ->name('laraslice.options.fetch');
+            // Record workplace (Seat 2): notes, attachments,
+            // tags, shares and assignment for any slice's
+            // records — the rail + Notes tab write endpoints.
+            Route::post('/records/{slice}/{id}/notes', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'noteStore'])
+                ->name('laraslice.records.notes.store');
+            Route::delete('/records/{slice}/{id}/notes/{note}', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'noteDestroy'])
+                ->name('laraslice.records.notes.destroy');
+            Route::post('/records/{slice}/{id}/attachments', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'attachmentStore'])
+                ->name('laraslice.records.attachments.store');
+            Route::delete('/records/{slice}/{id}/attachments/{attachment}', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'attachmentDestroy'])
+                ->name('laraslice.records.attachments.destroy');
+            Route::post('/records/{slice}/{id}/tags', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'tagStore'])
+                ->name('laraslice.records.tags.store');
+            Route::delete('/records/{slice}/{id}/tags/{tag}', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'tagDestroy'])
+                ->name('laraslice.records.tags.destroy');
+            Route::post('/records/{slice}/{id}/shares', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'shareStore'])
+                ->name('laraslice.records.shares.store');
+            Route::delete('/records/{slice}/{id}/shares/{share}', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'shareDestroy'])
+                ->name('laraslice.records.shares.destroy');
+            Route::post('/records/{slice}/{id}/assign', [\LaraSlice\Http\Controllers\RecordExtrasController::class, 'assign'])
+                ->name('laraslice.records.assign');
+            // Saved list views (Seat 3): the List View
+            // switcher's store / apply / remove endpoints.
+            Route::post('/list-views', [\LaraSlice\Http\Controllers\ListViewController::class, 'store'])
+                ->name('laraslice.list_views.store');
+            Route::get('/list-views/{view}/apply', [\LaraSlice\Http\Controllers\ListViewController::class, 'apply'])
+                ->name('laraslice.list_views.apply');
+            Route::delete('/list-views/{view}', [\LaraSlice\Http\Controllers\ListViewController::class, 'destroy'])
+                ->name('laraslice.list_views.destroy');
         });
 
         // Public record links (ui.public_link): unauthenticated,

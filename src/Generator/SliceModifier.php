@@ -845,9 +845,15 @@ PHP;
             return $this->targetSliceDir;
         }
 
-        // 1. Direct flat path
+        // 1. Direct flat path — only when it is a SLICE dir.
+        // F3: a slice whose plural name equals its domain
+        // name lives at Slices/<Domain>/<Slice>; the bare
+        // domain directory matched here first (it is a dir,
+        // but holds no slice.yaml) and child generation was
+        // sent into the domain folder. A slice dir is known
+        // by its Heart file.
         $appPath = rtrim($this->slicesPath, '/\\').DIRECTORY_SEPARATOR.$pluralName;
-        if (is_dir($appPath)) {
+        if (is_dir($appPath) && is_file($appPath.DIRECTORY_SEPARATOR.'slice.yaml')) {
             return $appPath;
         }
 
@@ -855,7 +861,7 @@ PHP;
         $domainDirs = glob(rtrim($this->slicesPath, '/\\').'/*', GLOB_ONLYDIR) ?: [];
         foreach ($domainDirs as $domainDir) {
             $candidate = $domainDir.DIRECTORY_SEPARATOR.$pluralName;
-            if (is_dir($candidate)) {
+            if (is_dir($candidate) && is_file($candidate.DIRECTORY_SEPARATOR.'slice.yaml')) {
                 return $candidate;
             }
         }
