@@ -542,6 +542,50 @@ class SettingsUi
     }
 
     /**
+     * The shell customizer's dimensions (Stage C-3). `mode`
+     * (light/dark) is deliberately absent: it stays a personal
+     * per-browser choice via the topbar toggle; everything
+     * else is brand, and brand is the organisation's — saved
+     * server-side from Settings → Theme.
+     */
+    public const THEME_DIMENSIONS = ['base', 'preset', 'radius', 'font', 'shadow', 'spacing', 'tracking', 'inputStyle', 'fontHeading', 'soul'];
+
+    /**
+     * The server-saved customizer theme (Settings → Theme,
+     * Stage C-3): dimension => value for every dimension the
+     * admin has saved. The starter head seeds these into
+     * `window.__lsTheme`; the theme store and the pre-paint
+     * restorer both prefer them over localStorage, so a saved
+     * brand reaches every user and browser — before this, the
+     * customizer wrote localStorage only and an admin could
+     * not set a company-wide theme at all.
+     *
+     * @return array<string, string>
+     */
+    public static function savedTheme(): array
+    {
+        try {
+            if (! Schema::hasTable('settings')) {
+                return [];
+            }
+            $rows = DB::table('settings')
+                ->whereIn('key', array_map(fn ($d) => 'theme.'.$d, self::THEME_DIMENSIONS))
+                ->pluck('value', 'key');
+            $out = [];
+            foreach (self::THEME_DIMENSIONS as $dimension) {
+                $value = $rows['theme.'.$dimension] ?? null;
+                if (is_string($value) && $value !== '') {
+                    $out[$dimension] = $value;
+                }
+            }
+
+            return $out;
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
      * The theme row for a panel (the source keeps one row per
      * panel: admin / project_admin / employee / client and
      * resolves it from the signed-in user's role family);
