@@ -43,7 +43,7 @@ final class BladeFieldInjector
                 if ($type === 'text' || $type === 'mediumtext' || $type === 'longtext') {
                     $snippet = <<<HTML
 
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 <x-ui.label for="{$snakeField}">{$label}</x-ui.label>
                 <x-ui.textarea id="{$snakeField}" name="{$snakeField}" rows="3" placeholder="Enter {$label}...">{{ old('{$snakeField}', \$form->{$snakeField} ?? '') }}</x-ui.textarea>
             </div>
@@ -71,7 +71,7 @@ HTML;
                     }
                     $snippet = <<<HTML
 
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 <x-ui.label for="{$snakeField}">{$label}</x-ui.label>
                 <select id="{$snakeField}" name="{$snakeField}" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                     {$optionHtml}
@@ -88,7 +88,7 @@ HTML;
                     $relatedTable = Str::plural(str_replace('_id', '', $snakeField));
                     $snippet = <<<HTML
 
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 @php
                     \$relatedTableStr = '{$relatedTable}';
                     \$rawOpts = \Illuminate\Support\Facades\Schema::hasTable(\$relatedTableStr) ? \Illuminate\Support\Facades\DB::table(\$relatedTableStr)->get() : collect();
@@ -144,7 +144,7 @@ HTML;
 
                     $snippet = <<<HTML
 
-            <div class="space-y-1.5">
+            <div class="space-y-1">
                 <x-ui.label for="{$snakeField}">{$label}</x-ui.label>
                 <x-ui.input id="{$snakeField}" type="{$htmlType}" name="{$snakeField}" value="{$valueExpr}" placeholder="Enter {$label}..." />
             </div>
@@ -156,7 +156,7 @@ HTML;
                 // older generations used a justify-end actions div.
                 // Insert before the FIRST anchor only — a field must
                 // land exactly once in the form.
-                foreach (['<!-- Sticky Bottom Form Actions Bar -->', '<div class="flex items-center justify-end'] as $target) {
+                foreach (['<!-- Sticky Bottom Form Actions Bar', '<div class="flex items-center justify-end'] as $target) {
                     $pos = strpos($content, $target);
                     if ($pos !== false) {
                         $content = substr_replace($content, $snippet."\n\n            ", $pos, 0);

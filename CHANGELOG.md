@@ -1,3 +1,26 @@
+## [2.2.0] - 2026-11-15
+
+**The Parity Release. The framework was driven through a 39-slice production CRM reference port and graded on live end-to-end flows — create, convert, declare-lost, reopen, delete, export, bulk — with database read-backs on both systems. Every divergence was fixed at the standard layer. Suite: 1,142 tests, 4,340 assertions. Full notes: CHANGES-v2.2.0.md.**
+
+### Added
+- **Conditional derivations** — computed fields as ordered `cases` over dates, sibling fields and child-table aggregates, plus `date_add` over a linked record's child rows; an unjudgeable case is skipped, never guessed.
+- **Scheduled effects** — a Heart-level `effects:` declaration (settings-aged status sweeps, recompute hooks) executed by the new `slice:run-effects` command, registered with the scheduler.
+- **Built-in Duplicate + Print record actions** on every record form (copy-style seeding incl. child rows; a printable view that never prints hidden fields), suppressible per slice.
+- **Stepped conversions** — declared pre-steps (prospect/contact creation dialogs), conversion child rows, and source-status flips on target save.
+- **Dialog save semantics** — `stamp_when` / `clear_when` behaviour keys and mandatory collections with source-exact refusal messages (`mandatory_message`).
+
+### Changed
+- **Field behaviour is one implementation** — a single trait enforces the clause vocabulary for web and API saves alike (validation, fetch_from, autoname).
+- **Directory export** respects the active filter and writes option labels instead of slugs.
+- **Benchmark gate rebuilt** on a parser-based visible-text extractor; it grades control types as well as text.
+
+### Fixed
+- **Bulk actions posted zero record ids** — the data table's selection resolver never read the row payload's id, silently breaking bulk delete/export/transitions on every directory.
+- **Deleting a linked record orphaned its referrers** — the service layer now refuses with the inbound-link count named (bulk delete reports skipped records).
+- **Filter builder emitted option labels as values** for map-shaped declarations, so equality filters on select fields never matched.
+- **The child-table (repeater) component was dead on every form** (a stray quote killed its script); quick-entry companions could be silently dropped — now refused by name, with the error visible on the directory.
+- **Derived values were dropped for unsubmitted fields** on partial (API) updates; the behaviour pass now marks what it changes as provided.
+
 ## [2.1.2] - 2026-11-10
 
 **The complete-fleet patch. Framework unchanged from 2.1.1; the flagship demo package reaches fleet parity with the reference port. Full notes: CHANGES-v2.1.2.md.**

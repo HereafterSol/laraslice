@@ -3,6 +3,7 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
@@ -20,6 +21,7 @@ use Symfony\Component\Yaml\Yaml;
  */
 class SlicePortCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:port
                             {source? : Path to source project root (Laravel or other PHP e.g. Dolibarr) or leave empty and use --source-database}
                             {--plan= : Path to JSON architecture plan (e.g. docs/porting-architecture-plan.json)}
@@ -118,7 +120,7 @@ class SlicePortCommand extends Command
                 return self::SUCCESS;
             }
 
-            if (! $this->option('no-interaction') && ! $this->confirm('Execute slice generation and migrations from this plan?', true)) {
+            if (! $this->option('no-interaction') && ! $this->safeConfirm('Execute slice generation and migrations from this plan?', true)) {
                 $this->warn('Porting aborted by user.');
 
                 return self::SUCCESS;
@@ -127,7 +129,7 @@ class SlicePortCommand extends Command
             $importData = (bool) $this->option('import-data');
             $dataSource = $this->option('data-source');
             if (! $importData && ! $this->option('no-interaction')) {
-                $importData = $this->confirm('Stream and import operational database records via ETL?', true);
+                $importData = $this->safeConfirm('Stream and import operational database records via ETL?', true);
             }
 
             // Ask which data source if importing and not specified
@@ -231,7 +233,7 @@ class SlicePortCommand extends Command
 
         $withFiles = (bool) $this->option('with-files');
         if ($mode === 'full-data' && ! $this->option('with-files') && $this->input->isInteractive() && ! $this->option('dry-run')) {
-            $withFiles = $this->confirm('Do you want to copy physical file attachments from legacy storage/app/public?', true);
+            $withFiles = $this->safeConfirm('Do you want to copy physical file attachments from legacy storage/app/public?', true);
         }
 
         $this->line('');
@@ -292,7 +294,7 @@ class SlicePortCommand extends Command
             return self::SUCCESS;
         }
 
-        if (! $this->confirm('Proceed with porting and blueprint generation?', true)) {
+        if (! $this->safeConfirm('Proceed with porting and blueprint generation?', true)) {
             $this->info('Porting aborted by user.');
 
             return self::SUCCESS;
@@ -349,7 +351,7 @@ class SlicePortCommand extends Command
             $this->info("✓ File assets migrated: {$result['files_migrated']} file(s) ({$result['bytes_migrated']} bytes)");
         }
 
-        if ($this->option('scaffold') || (! $this->input->isInteractive() && $this->option('scaffold')) || ($this->input->isInteractive() && $this->confirm('Do you want to scaffold physical vertical slices into app/Slices now?', true))) {
+        if ($this->option('scaffold') || (! $this->input->isInteractive() && $this->option('scaffold')) || ($this->input->isInteractive() && $this->safeConfirm('Do you want to scaffold physical vertical slices into app/Slices now?', true))) {
             $this->line('');
             $targetPath = $superDomain ? "app/Slices/{$superDomain}/{$domain}/" : "app/Slices/{$domain}/";
             $this->comment("⚙️  Scaffolding physical vertical slices into {$targetPath}...");

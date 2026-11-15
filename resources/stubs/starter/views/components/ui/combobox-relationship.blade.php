@@ -172,7 +172,7 @@ if (!window.LaraSliceDrawer) {
     <!-- Label & Quick-Add Action Trigger -->
     <div class="flex items-center justify-between">
         @if ($label)
-            <label for="{{ $name }}" class="flex items-center gap-2 text-sm leading-none font-medium select-none">
+            <label for="{{ $name }}" class="flex items-center gap-2 text-xs leading-none font-medium text-foreground/80 select-none">
                 <span>{{ $label }}</span>
                 @if ($required)
                     <span class="text-destructive">*</span>
@@ -185,11 +185,12 @@ if (!window.LaraSliceDrawer) {
         @if ($quickAddUrl)
             <button type="button"
                     @click="openDrawer()"
-                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors cursor-pointer group">
+                    title="New {{ $cleanTitle }}"
+                    aria-label="New {{ $cleanTitle }}"
+                    class="inline-flex shrink-0 items-center justify-center size-5 rounded-md text-primary hover:bg-primary/10 transition-colors cursor-pointer group">
                 <svg class="w-3.5 h-3.5 transition-transform duration-150 group-hover:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
-                <span>New {{ $cleanTitle }}</span>
             </button>
         @endif
     </div>
@@ -197,7 +198,7 @@ if (!window.LaraSliceDrawer) {
     <!-- Clean Native Select Input -->
     <select id="{{ $name }}"
             name="{{ $name }}"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            class="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             {{ $required ? 'required' : '' }}>
         <option value="">{{ $placeholder }}</option>
         @foreach ($optionsArray as $optId => $optLabel)

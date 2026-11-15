@@ -35,6 +35,39 @@
             this.copied = true;
             setTimeout(() => this.copied = false, 2000);
         });
+    },
+    saveState: '',
+    async saveTheme() {
+        this.saveState = 'Saving…';
+        const t = $store.theme;
+        const payload = { base: t.base, preset: t.preset, radius: String(t.radius), font: t.font, shadow: t.shadow, spacing: t.spacing, tracking: t.tracking, inputStyle: t.inputStyle, fontHeading: t.fontHeading, soul: t.soul };
+        try {
+            const res = await fetch('{{ route('settings.theme.save') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error(res.status);
+            window.__lsTheme = payload;
+            this.saveState = '✓ Saved — this theme now applies to every user and browser.';
+        } catch (e) {
+            this.saveState = 'Save failed — you may not have permission to manage settings.';
+        }
+    },
+    async clearSavedTheme() {
+        if (!confirm('Clear the saved company theme? Every user returns to the default look. Personal light/dark choices are unaffected.')) return;
+        try {
+            const res = await fetch('{{ route('settings.theme.save') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+                body: JSON.stringify({ reset: true })
+            });
+            if (!res.ok) throw new Error(res.status);
+            window.__lsTheme = {};
+            this.saveState = 'Saved theme cleared — reload any page to see the default look.';
+        } catch (e) {
+            this.saveState = 'Clear failed — you may not have permission to manage settings.';
+        }
     }
 }">
     <!-- Header Banner -->
@@ -69,7 +102,19 @@
                 <span x-show="!copied">📋 Copy CSS</span>
                 <span x-show="copied">✓ Copied!</span>
             </button>
+            <button type="button" @click="saveTheme()" class="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:opacity-90 transition shadow-md flex items-center gap-1.5 cursor-pointer">
+                <span>💾 Save for everyone</span>
+            </button>
         </div>
+    </div>
+
+    {{-- Server-save status (Stage C-3): edits above preview
+         instantly in this browser; saving persists the brand
+         for every user. Mode (light/dark) stays personal. --}}
+    <div class="flex flex-wrap items-center gap-3 -mt-2">
+        <p class="text-[11px] text-muted-foreground">Changes preview instantly here. <strong class="text-foreground">Save for everyone</strong> stores the brand on the server — it then applies to every user and browser. Light/dark stays a personal choice.</p>
+        <button type="button" @click="clearSavedTheme()" class="text-[11px] font-semibold text-muted-foreground hover:text-destructive underline underline-offset-2 cursor-pointer">Clear saved theme</button>
+        <span x-show="saveState" x-text="saveState" class="text-[11px] font-semibold text-emerald-600"></span>
     </div>
 
     <!-- Main Grid: Controls on Left, Live Component Preview on Right -->

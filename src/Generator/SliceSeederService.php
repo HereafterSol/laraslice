@@ -369,6 +369,49 @@ class SliceSeederService
             return 1;
         }
 
+        // 1b. Numeric semantics + the F4 type gate. The
+        // name-based branches in section 2 invent STRINGS;
+        // written into a numeric or boolean column they
+        // poison the row (SQLite accepts the text, then the
+        // strictly-typed listing BO TypeErrors on read —
+        // Stage A's integer `industry` held "Technology"
+        // and the directory 500'd). Money-named columns
+        // keep their realistic values in any type; every
+        // other non-text column is answered from its type.
+        if ($colLower === 'annual_revenue' || $colLower === 'revenue') {
+            $amounts = [750000.00, 1250000.00, 3400000.00, 8500000.00, 500000.00, 12000000.00];
+            $amount = $amounts[$index % count($amounts)];
+
+            return $type === 'integer' ? (int) $amount : $amount;
+        }
+
+        if (in_array($colLower, ['amount', 'price', 'total', 'subtotal', 'cost'], true)) {
+            $prices = [29.99, 49.00, 99.50, 149.00, 299.99, 450.00, 1200.00];
+            $price = $prices[$index % count($prices)];
+
+            return $type === 'integer' ? (int) round($price) : $price;
+        }
+
+        if ($type === 'integer') {
+            return ($index + 1) * 10;
+        }
+
+        if ($type === 'decimal') {
+            return round((float) (($index + 1) * 19.99), 2);
+        }
+
+        if ($type === 'boolean') {
+            return 1;
+        }
+
+        if ($type === 'date') {
+            return now()->subDays(rand(1, 60))->toDateString();
+        }
+
+        if ($type === 'datetime') {
+            return now()->subDays(rand(1, 60))->toDateTimeString();
+        }
+
         // 2. Realistic domain values based on column name & context
         $companyNames = [
             'Acme Corporation', 'Globex International', 'Initech Software', 'Pied Piper Tech',
@@ -442,18 +485,6 @@ class SliceSeederService
             $generalChoices = ['active', 'draft', 'active', 'published'];
 
             return $generalChoices[$index % count($generalChoices)];
-        }
-
-        if ($colLower === 'annual_revenue' || $colLower === 'revenue') {
-            $amounts = [750000.00, 1250000.00, 3400000.00, 8500000.00, 500000.00, 12000000.00];
-
-            return $amounts[$index % count($amounts)];
-        }
-
-        if (in_array($colLower, ['amount', 'price', 'total', 'subtotal', 'cost'])) {
-            $prices = [29.99, 49.00, 99.50, 149.00, 299.99, 450.00, 1200.00];
-
-            return $prices[$index % count($prices)];
         }
 
         if ($colLower === 'tier') {

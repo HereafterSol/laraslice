@@ -303,6 +303,15 @@ php artisan slice:port e:/laragon/www/legacy-project --domain=Adjudication --dry
   3. *Data Mode (`system-base` clean slate vs `full-data` production migration)*
 
 
+## 🆕 What's new in v2.2.0 — The Parity Release
+
+Released 2026-11-15. Full notes: CHANGES-v2.2.0.md.
+
+- **Graded on flows, not just screens.** A 39-slice production CRM was ported and then *run* — create, convert, declare-lost, reopen, delete, export, bulk — on the reference system and the port alike, with the database read back after every step. Every divergence was fixed in the framework's standard layer.
+- **Behaviour travels with the declaration.** Conditional derivations (statuses computed from dates, fields and child-table aggregates), dialog effects that persist and clear in one save, and scheduled effects declared in the Heart (`slice:run-effects`) — a settings value like "close replied opportunities after N days" now has a real consumer.
+- **Record actions completed.** Built-in Duplicate (child rows included) and Print on every record form; stepped conversions with pre-step dialogs; linked deletes refused with the count named; export that respects the active filter and writes labels; bulk actions repaired end to end.
+- **Suite: 1,142 tests, 4,340 assertions** (v2.1.2: 981 / 3,793).
+
 ## 🆕 What's new in v2.1.2 — The Complete Fleet
 
 Released 2026-11-10. Full notes: CHANGES-v2.1.2.md.

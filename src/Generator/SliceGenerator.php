@@ -132,8 +132,8 @@ class SliceGenerator
     {
         $studlyName = SliceName::canonical($name);
         $pluralName = Str::plural($studlyName);
-        $snakeName = Str::snake($studlyName);
-        $pluralSnake = Str::snake($pluralName);
+        $snakeName = SliceName::snake($studlyName);
+        $pluralSnake = SliceName::snake($pluralName);
 
         $tablePrefix = isset($options['table_prefix']) ? (string) $options['table_prefix'] : '';
         $tableName = isset($options['table']) && is_string($options['table']) && trim($options['table']) !== ''
@@ -254,7 +254,13 @@ class SliceGenerator
         $statusField = $fieldsByName['status'] ?? null;
 
         $extraFields = array_values(array_filter($fields, fn (array $f) => ! in_array($f['name'], ['title', 'description', 'status'], true)));
-        $customColumns = array_column($fields, 'name');
+        // Repeater and multiselect fields are child
+        // collections, not columns: they never enter the
+        // fillable/search/sort sets.
+        $customColumns = array_values(array_map(
+            static fn (array $f): string => (string) $f['name'],
+            array_filter($fields, static fn (array $f): bool => ! in_array($f['type'] ?? '', ['repeater', 'multiselect'], true))
+        ));
 
         $manifestFields = array_map(function (array $field) {
             $manifestField = [
@@ -274,10 +280,66 @@ class SliceGenerator
             // the form runtime resolves FK pickers from the
             // declaration, and a Heart that drops it leaves the
             // picker to table-name guessing (F10, Day-2 drill).
-            if (! empty($field['relation']) && is_array($field['relation'])) {
+            if (! empty($field['relation']) && (is_array($field['relation']) || is_string($field['relation']))) {
                 $manifestField['relation'] = $field['relation'];
                 if (($field['references'] ?? null) !== null) {
                     $manifestField['references'] = $field['references'];
+                }
+            }
+            // A dynamic option source (Stage C-5) survives
+            // into the Heart for the same reason: the runtime
+            // form resolver reads it from the declaration, and
+            // a Heart that drops it silently reverts the field
+            // to a free input on the next regen.
+            if (! empty($field['options_from']) && is_string($field['options_from'])) {
+                $manifestField['options_from'] = $field['options_from'];
+            }
+            // Field behaviour (Seat 1) survives into the
+            // Heart for the same reason: the runtime reads
+            // conditions, fetch sources and directory
+            // flags from the declaration.
+            foreach (['depends_on', 'mandatory_depends_on', 'read_only_depends_on'] as $behaviourKey) {
+                if (! empty($field[$behaviourKey]) && is_array($field[$behaviourKey])) {
+                    $manifestField[$behaviourKey] = $field[$behaviourKey];
+                }
+            }
+            if (! empty($field['fetch_from']) && is_string($field['fetch_from'])) {
+                $manifestField['fetch_from'] = $field['fetch_from'];
+            }
+            if (! empty($field['computed']) && is_array($field['computed'])) {
+                $manifestField['computed'] = $field['computed'];
+            }
+            if (! empty($field['fallback_from']) && is_string($field['fallback_from'])) {
+                $manifestField['fallback_from'] = $field['fallback_from'];
+            }
+            if (! empty($field['in_list_view'])) {
+                $manifestField['in_list_view'] = true;
+            }
+            if (! empty($field['in_standard_filter'])) {
+                $manifestField['in_standard_filter'] = true;
+            }
+            if (! empty($field['section']) && is_string($field['section'])) {
+                $manifestField['section'] = $field['section'];
+            }
+            // Repeater declarations survive into the Heart so
+            // a regen from the manifest keeps the collection.
+            if (($field['type'] ?? '') === 'repeater') {
+                if (! empty($field['table'])) {
+                    $manifestField['table'] = $field['table'];
+                }
+                if (! empty($field['foreign_key'])) {
+                    $manifestField['foreign_key'] = $field['foreign_key'];
+                }
+                $manifestField['repeater_fields'] = $field['repeater_fields'] ?? [];
+            }
+            // Multiselect declarations survive the same way:
+            // the seat keys are the declaration, and a Heart
+            // that drops them leaves a plain input behind.
+            if (($field['type'] ?? '') === 'multiselect') {
+                foreach (['table', 'foreign_key', 'target_field', 'target', 'parent_type'] as $seatKey) {
+                    if (! empty($field[$seatKey]) && is_string($field[$seatKey])) {
+                        $manifestField[$seatKey] = $field[$seatKey];
+                    }
                 }
             }
             $manifestField += [
@@ -330,8 +392,12 @@ class SliceGenerator
         // F2: repeater (line-item) collections declared in the UI config
         $repeaterDefinitions = $this->extractRepeaterDefinitions(
             is_array($options['ui'] ?? null) ? $options['ui'] : [],
-            $tableName
+            $tableName,
+            $fields
         );
+        // Multiselect (Table MultiSelect) picker selections
+        // declared in the fields map.
+        $multiselectDefinitions = $this->extractMultiselectDefinitions($fields);
         // Relation-multi (BelongsToMany) selections declared in the UI config
         $relationMultiDefinitions = $this->extractRelationMultiDefinitions(
             is_array($options['ui'] ?? null) ? $options['ui'] : []
@@ -340,6 +406,9 @@ class SliceGenerator
         $dtoFormList = [];
         $dtoListingList = [];
         foreach ($fields as $f) {
+            if (in_array($f['type'] ?? '', ['repeater', 'multiselect'], true)) {
+                continue; // the array property is added from the definitions below
+            }
             $dtoFormList[] = '    '.$this->fieldNormalizer->dtoProperty($f['name'], $f);
             if (empty($f['hidden']) && ($f['show_in_list'] ?? true)) {
                 $dtoListingList[] = '    '.$this->fieldNormalizer->dtoProperty($f['name'], $f);
@@ -347,6 +416,9 @@ class SliceGenerator
         }
         foreach (array_keys($repeaterDefinitions) as $repeaterHandle) {
             $dtoFormList[] = "    public array \${$repeaterHandle} = [];";
+        }
+        foreach (array_keys($multiselectDefinitions) as $multiselectHandle) {
+            $dtoFormList[] = "    public array \${$multiselectHandle} = [];";
         }
         foreach (array_keys($relationMultiDefinitions) as $multiHandle) {
             $dtoFormList[] = "    public array \${$multiHandle} = [];";
@@ -361,6 +433,9 @@ class SliceGenerator
             $customColumns[] = $tenantKey;
         }
         foreach ($fields as $f) {
+            if (in_array($f['type'] ?? '', ['repeater', 'multiselect'], true)) {
+                continue; // child rows live in the child table, not a column here
+            }
             $migrationCols[] = '                '.$f['migration'];
         }
         if ($includeWorkflow) {
@@ -443,6 +518,44 @@ class SliceGenerator
 
         // Check if declarative UI configuration is passed
         $uiConfig = $options['ui'] ?? [];
+
+        // Declared record dialogs (D-015): a Heart may seat
+        // fields in a modal flow gated by a trigger field —
+        // Desk's "Set as Lost" pattern: picking the trigger
+        // value opens the dialog holding the dialog's fields;
+        // confirming submits the form; cancelling reverts the
+        // trigger. Shape: ui.dialogs: [{name, label, trigger:
+        // {field, value}, fields: [...], confirm_label}].
+        // Dialog fields leave the section flow entirely (the
+        // dialog IS their gate, so their depends_on clauses
+        // are stripped from the dialog copies).
+        $dialogDecls = [];
+        $dialogFieldMap = [];
+        foreach (($uiConfig['dialogs'] ?? []) as $dialogDecl) {
+            if (! is_array($dialogDecl) || ! is_string($dialogDecl['name'] ?? null) || $dialogDecl['name'] === ''
+                || ! is_array($dialogDecl['fields'] ?? null) || $dialogDecl['fields'] === []
+                || ! is_array($dialogDecl['trigger'] ?? null)
+                || ! is_string($dialogDecl['trigger']['field'] ?? null)
+                || ! array_key_exists('value', $dialogDecl['trigger'])) {
+                continue;
+            }
+            $dialogIndex = count($dialogDecls);
+            $dialogDecls[] = [
+                'name' => $dialogDecl['name'],
+                'label' => is_string($dialogDecl['label'] ?? null) ? $dialogDecl['label'] : Str::headline($dialogDecl['name']),
+                'confirm_label' => is_string($dialogDecl['confirm_label'] ?? null) ? $dialogDecl['confirm_label'] : 'Confirm',
+                'trigger_field' => $dialogDecl['trigger']['field'],
+                'trigger_value' => (string) $dialogDecl['trigger']['value'],
+                'state_var' => 'lsDlg'.Str::studly($dialogDecl['name']),
+            ];
+            foreach ($dialogDecl['fields'] as $dialogField) {
+                if (is_string($dialogField)) {
+                    $dialogFieldMap[$dialogField] = $dialogIndex;
+                }
+            }
+        }
+        $dialogMarkups = array_fill(0, max(1, count($dialogDecls)), []);
+
         if (! empty($uiConfig['directory']['columns']) && is_array($uiConfig['directory']['columns'])) {
             $dtCols = [];
             foreach ($uiConfig['directory']['columns'] as $c) {
@@ -464,7 +577,18 @@ class SliceGenerator
         ];
 
         $formInputs = [];
+        $formInputSections = [];
         $wideFieldKeywords = ['address', 'description', 'notes', 'memo', 'summary', 'about', 'instructions', 'content', 'body', 'remarks'];
+
+        // Audit stamps (D-013): Heart-declared *_by user stamps
+        // never become inputs (hygiene above), but the source
+        // forms SHOW them — e.g. a CRM Note's "Added By". They
+        // are collected here and emitted after the input
+        // sections as read-only display rows on EDIT forms
+        // only (see the audit-stamp section below): no input,
+        // no name attribute, no part in submission or the BO.
+        $auditStampFields = ['added_by', 'created_by', 'updated_by', 'modified_by', 'last_updated_by', 'deleted_by', 'approved_by'];
+        $auditStampRows = [];
 
         foreach ($fields as $f) {
             $fName = $f['name'] ?? '';
@@ -474,38 +598,117 @@ class SliceGenerator
             // even on pre-hygiene manifests whose field defs
             // carry a stamped show_in_form: true.
             if (in_array($fName, $formAuditBlacklist, true) || FieldDefinitionNormalizer::isSystemField($fName)) {
+                if (in_array($fName, $auditStampFields, true) && empty($f['hidden'])) {
+                    $safeStampLabel = htmlspecialchars((string) ($f['label'] ?? Str::headline($fName)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $auditStampRows[] = <<<HTML
+                <div class="space-y-1" data-ls-audit-stamp="{$fName}">
+                    <span class="block text-xs font-medium text-foreground/80">{$safeStampLabel}</span>
+                    <p class="flex h-8 items-center text-sm text-foreground">{{ \\LaraSlice\\Support\\RecordWorkplace::userLabel(\$form->{$fName} ?? null) ?? (\$form->{$fName} ?? '—') }}</p>
+                </div>
+HTML;
+                }
                 continue;
             }
             if (empty($f['hidden']) && ($f['show_in_form'] ?? true)) {
-                $markup = $f['form'];
+                // Repeater fields render the child-collection
+                // component instead of a scalar input (their
+                // normalized 'form' markup is intentionally
+                // empty — see FieldDefinitionNormalizer). A
+                // declared depends_on wraps the component in
+                // the same field wrapper the scalar inputs
+                // carry, so the shell's behaviour evaluator
+                // shows/hides the whole grid as one field.
+                $markup = match ($f['type'] ?? '') {
+                    'repeater' => $this->repeaterComponent($f, $fName),
+                    'multiselect' => $this->multiselectComponent($f, $fName),
+                    default => $f['form'],
+                };
+                if (in_array($f['type'] ?? '', ['repeater', 'multiselect'], true) && ! empty($f['depends_on']) && is_array($f['depends_on'])) {
+                    $markup = '<div class="md:col-span-2 lg:col-span-3" data-ls-field="'.$fName.'" data-ls-depends-on="'
+                        .htmlspecialchars(json_encode($f['depends_on']), ENT_QUOTES, 'UTF-8').'">'.$markup.'</div>';
+                }
                 $isWide = ($f['type'] ?? '') === 'text' || ($f['type'] ?? '') === 'json' || in_array($fName, $wideFieldKeywords, true);
                 if ($isWide) {
-                    $markup = preg_replace('/<div class="space-y-1\.5"/', '<div class="space-y-1.5 md:col-span-2 lg:col-span-3"', $markup, 1);
+                    $markup = preg_replace('/<div class="space-y-1"/', '<div class="space-y-1 md:col-span-2 lg:col-span-3"', $markup, 1);
+                }
+                if (isset($dialogFieldMap[$fName])) {
+                    // Dialog-seated field (D-015): rendered
+                    // inside its dialog instead of the section
+                    // flow; the dialog gates it, so behaviour
+                    // clauses come off the dialog copy.
+                    $dialogMarkups[$dialogFieldMap[$fName]][] = (string) preg_replace('/\s+data-ls-(?:depends-on|mandatory-on)="[^"]*"/', '', $markup);
+                    continue;
                 }
                 $formInputs[] = $markup;
+                $formInputSections[] = $f['section'] ?? null;
             }
         }
 
-        if (count($formInputs) <= 6) {
+        // Declared form sections (Seat 1, Stage D): when any
+        // field declares a `section`, fields group under
+        // section cards — a field's section runs until the
+        // next field declares a different one (the source
+        // systems' Section Break semantics). Declared
+        // sections replace the count-based split below.
+        $hasDeclaredSections = array_filter($formInputSections, static fn ($s) => is_string($s) && $s !== '') !== [];
+        if ($hasDeclaredSections) {
+            $groups = [];
+            $currentSection = 'General Information';
+            foreach ($formInputs as $i => $markup) {
+                $section = $formInputSections[$i] ?? null;
+                if (is_string($section) && $section !== '') {
+                    $currentSection = $section;
+                }
+                $groups[$currentSection][] = $markup;
+            }
+            $cards = [];
+            foreach ($groups as $sectionTitle => $inputs) {
+                $inputsStr = implode("\n\n", $inputs);
+                $safeTitle = htmlspecialchars($sectionTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                // Section meta (D-066 / D-049): a Heart may declare
+                // per-section presentation in ui.form_sections —
+                // a description printed under the heading (the
+                // source's Section Break description) and a
+                // collapsed resting state (the source's collapsible
+                // sections start closed behind a chevron header).
+                $sectionMeta = is_array($uiConfig['form_sections'][$sectionTitle] ?? null) ? $uiConfig['form_sections'][$sectionTitle] : [];
+                $sectionDescHtml = ! empty($sectionMeta['description'])
+                    ? "\n            <p class=\"text-xs leading-relaxed text-muted-foreground mt-1 mb-4\">".htmlspecialchars((string) $sectionMeta['description'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</p>'
+                    : '';
+                if (! empty($sectionMeta['collapsed'])) {
+                    $cards[] = <<<HTML
+        <section class="border-t border-border/60 px-6 py-5" x-data="{ lsSectionOpen: false }">
+            <button type="button" @click="lsSectionOpen = !lsSectionOpen" :aria-expanded="lsSectionOpen" class="flex w-full items-center justify-between gap-2 text-left">
+                <h3 class="text-sm font-semibold text-foreground">{$safeTitle}</h3>
+                <x-lucide-chevron-right class="size-4 shrink-0 text-muted-foreground transition-transform duration-150" x-bind:class="lsSectionOpen ? 'rotate-90' : ''" />
+            </button>{$sectionDescHtml}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" data-ls-section-grid x-show="lsSectionOpen" x-cloak>
+{$inputsStr}
+            </div>
+        </section>
+HTML;
+                } else {
+                    $cards[] = <<<HTML
+        <section class="border-t border-border/60 px-6 py-5">
+            <h3 class="text-sm font-semibold text-foreground mb-4">{$safeTitle}</h3>{$sectionDescHtml}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-ls-section-grid>
+{$inputsStr}
+            </div>
+        </section>
+HTML;
+                }
+            }
+            $cardsByTitle = array_combine(array_keys($groups), $cards);
+            $formSectionsHtml = implode("\n\n", $cards);
+        } elseif (count($formInputs) <= 6) {
             $inputsStr = implode("\n\n", $formInputs);
             $formSectionsHtml = <<<HTML
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
-                <div class="flex items-center gap-2">
-                    <x-lucide-info class="size-4 text-primary" />
-                    <x-ui.card-title class="text-base font-bold text-foreground">General Information</x-ui.card-title>
-                </div>
-                <x-ui.card-description class="text-xs">Configure {$studlyName} operational parameters</x-ui.card-description>
-                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
-                    <x-lucide-chevron-down class="size-4 transition-transform" />
-                </button>
-            </x-ui.card-header>
-            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
+        <section class="border-t border-border/60 px-6 py-5">
+            <h3 class="text-sm font-semibold text-foreground mb-4">General Information</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-ls-section-grid>
 {$inputsStr}
-                </div>
-            </x-ui.card-content>
-        </x-ui.card>
+            </div>
+        </section>
 HTML;
         } else {
             $primaryInputs = array_slice($formInputs, 0, 6);
@@ -514,41 +717,19 @@ HTML;
             $secondaryStr = implode("\n\n", $secondaryInputs);
 
             $formSectionsHtml = <<<HTML
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
-                <div class="flex items-center gap-2">
-                    <x-lucide-layers class="size-4 text-primary" />
-                    <x-ui.card-title class="text-base font-bold text-foreground">Core Parameters</x-ui.card-title>
-                </div>
-                <x-ui.card-description class="text-xs">Primary identification and record attributes</x-ui.card-description>
-                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
-                    <x-lucide-chevron-down class="size-4 transition-transform" />
-                </button>
-            </x-ui.card-header>
-            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
+        <section class="border-t border-border/60 px-6 py-5">
+            <h3 class="text-sm font-semibold text-foreground mb-4">Core Parameters</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-ls-section-grid>
 {$primaryStr}
-                </div>
-            </x-ui.card-content>
-        </x-ui.card>
+            </div>
+        </section>
 
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
-                <div class="flex items-center gap-2">
-                    <x-lucide-sliders class="size-4 text-primary" />
-                    <x-ui.card-title class="text-base font-bold text-foreground">Additional Details</x-ui.card-title>
-                </div>
-                <x-ui.card-description class="text-xs">Extended parameters and operational terms</x-ui.card-description>
-                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
-                    <x-lucide-chevron-down class="size-4 transition-transform" />
-                </button>
-            </x-ui.card-header>
-            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
+        <section class="border-t border-border/60 px-6 py-5">
+            <h3 class="text-sm font-semibold text-foreground mb-4">Additional Details</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-ls-section-grid>
 {$secondaryStr}
-                </div>
-            </x-ui.card-content>
-        </x-ui.card>
+            </div>
+        </section>
 HTML;
         }
 
@@ -557,13 +738,16 @@ HTML;
             foreach ($uiConfig['forms']['sections'] as $sIdx => $sec) {
                 $sTitle = $sec['title'] ?? ('Section '.($sIdx + 1));
                 $sDesc = $sec['description'] ?? 'Configure record attributes';
+                $sDescHtml = ! empty($sec['description'])
+                    ? '<p class="text-xs text-muted-foreground mt-0.5 mb-4">'.htmlspecialchars((string) $sec['description'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</p>'
+                    : '';
                 $sIcon = $sec['icon'] ?? 'layers';
                 $sCols = (int) ($sec['columns'] ?? 3);
                 $gridClass = match ($sCols) {
-                    1 => 'grid grid-cols-1 gap-5',
-                    2 => 'grid grid-cols-1 md:grid-cols-2 gap-5',
-                    4 => 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5',
-                    default => 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5',
+                    1 => 'grid grid-cols-1 gap-4',
+                    2 => 'grid grid-cols-1 md:grid-cols-2 gap-4',
+                    4 => 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4',
+                    default => 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4',
                 };
 
                 $cardInputs = [];
@@ -575,31 +759,7 @@ HTML;
 
                     // Repeater field (e.g., invoice line items) — render x-ui.repeater
                     if ($fType === 'repeater') {
-                        $repLabel = $fld['label'] ?? Str::headline($fHandle);
-                        $addBtn = $fld['add_button_text'] ?? ('Add '.Str::singular($repLabel));
-                        $repFields = $fld['repeater_fields'] ?? [];
-                        // Build sub-field definitions for the repeater
-                        $subFieldDefs = [];
-                        foreach ($repFields as $rf) {
-                            $rfName = $rf['handle'] ?? $rf['name'] ?? '';
-                            if ($rfName === '') {
-                                continue;
-                            }
-                            $subFieldDefs[] = preg_replace('/\s+/', ' ', var_export([
-                                'name' => $rfName,
-                                'label' => $rf['label'] ?? Str::headline($rfName),
-                                'type' => $rf['type'] ?? 'string',
-                                'required' => (bool) ($rf['required'] ?? false),
-                                'options' => $rf['options'] ?? [],
-                            ], true));
-                        }
-                        $subFieldsStr = '['.implode(', ', $subFieldDefs).']';
-                        $docProp = '';
-                        if (is_array($fld['document'] ?? null) && $fld['document'] !== []) {
-                            $docStr = preg_replace('/\s+/', ' ', var_export($fld['document'], true));
-                            $docProp = " :document=\"{$docStr}\"";
-                        }
-                        $cardInputs[] = "<x-ui.repeater name=\"{$fHandle}\" label=\"{$repLabel}\" :fields=\"{$subFieldsStr}\" :initial-items=\"old('{$fHandle}', \$form->{$fHandle} ?? [])\" addButtonText=\"{$addBtn}\"{$docProp} class=\"md:col-span-2 lg:col-span-3\" />";
+                        $cardInputs[] = $this->repeaterComponent(is_array($fld) ? $fld : [], $fHandle);
 
                         continue;
                     }
@@ -612,7 +772,7 @@ HTML;
                         $multiLabel = $fld['label'] ?? Str::headline($fHandle);
                         $optionsVar = Str::camel($fHandle).'Options';
                         $spanClass = ($fSpan >= 3 || $fSpan >= $sCols) ? ' md:col-span-2 lg:col-span-3' : ($fSpan === 2 ? ' md:col-span-2' : '');
-                        $cardInputs[] = "<div class=\"space-y-1.5{$spanClass}\">\n"
+                        $cardInputs[] = "<div class=\"space-y-1{$spanClass}\">\n"
                             ."                    <x-ui.label for=\"{$fHandle}\">{$multiLabel}</x-ui.label>\n"
                             ."                    <select id=\"{$fHandle}\" name=\"{$fHandle}[]\" multiple size=\"5\" class=\"flex w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring\">\n"
                             ."                        @foreach((\${$optionsVar} ?? []) as \$optValue => \$optLabel)\n"
@@ -621,6 +781,16 @@ HTML;
                             ."                    </select>\n"
                             ."                    @error('{$fHandle}') <p class=\"text-xs text-destructive font-medium\">{{ \$message }}</p> @enderror\n"
                             .'                </div>';
+
+                        continue;
+                    }
+
+                    // Multiselect field (Table MultiSelect picker) —
+                    // the chip combobox fed by the controller-resolved
+                    // {handle}Options; the service diffs the child
+                    // rows on save.
+                    if ($fType === 'multiselect') {
+                        $cardInputs[] = $this->multiselectComponent(is_array($fld) ? $fld : [], $fHandle);
 
                         continue;
                     }
@@ -643,9 +813,9 @@ HTML;
                     if ($fieldObj && ! empty($fieldObj['form'])) {
                         $markup = $fieldObj['form'];
                         if ($fSpan >= 3 || $fSpan >= $sCols) {
-                            $markup = preg_replace('/<div class="space-y-1\.5"/', '<div class="space-y-1.5 md:col-span-2 lg:col-span-3"', $markup, 1);
+                            $markup = preg_replace('/<div class="space-y-1"/', '<div class="space-y-1 md:col-span-2 lg:col-span-3"', $markup, 1);
                         } elseif ($fSpan === 2) {
-                            $markup = preg_replace('/<div class="space-y-1\.5"/', '<div class="space-y-1.5 md:col-span-2"', $markup, 1);
+                            $markup = preg_replace('/<div class="space-y-1"/', '<div class="space-y-1 md:col-span-2"', $markup, 1);
                         }
                         if ($isSearchable && str_contains($markup, '<select')) {
                             // Replace <select> with <x-ui.searchable-select>
@@ -659,23 +829,13 @@ HTML;
 
 ', $cardInputs);
                 $customCards[] = <<<CARD
-        <x-ui.card class="bg-card border border-border shadow-xs overflow-hidden" x-data="{ lsSectionOpen: true }">
-            <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4 relative">
-                <div class="flex items-center gap-2">
-                    <x-lucide-{$sIcon} class="size-4 text-primary" />
-                    <x-ui.card-title class="text-base font-bold text-foreground">{$sTitle}</x-ui.card-title>
-                </div>
-                <x-ui.card-description class="text-xs">{$sDesc}</x-ui.card-description>
-                <button type="button" @click="lsSectionOpen = !lsSectionOpen" class="absolute right-4 top-4 inline-flex items-center justify-center size-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer" :class="lsSectionOpen ? '' : '-rotate-90'" aria-label="Toggle section">
-                    <x-lucide-chevron-down class="size-4 transition-transform" />
-                </button>
-            </x-ui.card-header>
-            <x-ui.card-content class="p-6" x-show="lsSectionOpen">
-                <div class="{$gridClass}" data-ls-section-grid>
+        <section class="border-t border-border/60 px-6 py-5">
+            <h3 class="text-sm font-semibold text-foreground">{$sTitle}</h3>
+            {$sDescHtml}
+            <div class="{$gridClass}" data-ls-section-grid>
 {$inputsCombined}
-                </div>
-            </x-ui.card-content>
-        </x-ui.card>
+            </div>
+        </section>
 CARD;
             }
             if (! empty($customCards)) {
@@ -684,6 +844,159 @@ CARD;
 ', $customCards);
             }
         }
+
+        // Form tabs (D-046): ui.form_tabs groups the declared
+        // section cards under Desk-style tab panels —
+        // [{label, sections: [section titles]}]. Sections no
+        // tab claims join the first tab, so nothing becomes
+        // unreachable; a declaration claiming no known section
+        // leaves the flat layout untouched.
+        if (is_array($uiConfig['form_tabs'] ?? null) && ($cardsByTitle ?? []) !== []
+            && empty($uiConfig['forms']['sections'])) {
+            $tabPanels = [];
+            $claimedSections = [];
+            foreach ($uiConfig['form_tabs'] as $tabDecl) {
+                if (! is_array($tabDecl) || ! is_string($tabDecl['label'] ?? null)) {
+                    continue;
+                }
+                $panelCards = [];
+                foreach ((array) ($tabDecl['sections'] ?? []) as $tabSection) {
+                    if (is_string($tabSection) && isset($cardsByTitle[$tabSection]) && ! isset($claimedSections[$tabSection])) {
+                        $panelCards[] = $cardsByTitle[$tabSection];
+                        $claimedSections[$tabSection] = true;
+                    }
+                }
+                $tabPanels[] = ['label' => $tabDecl['label'], 'cards' => $panelCards];
+            }
+            if ($tabPanels !== [] && $claimedSections !== []) {
+                foreach ($cardsByTitle as $sectionTitle => $cardHtml) {
+                    if (! isset($claimedSections[$sectionTitle])) {
+                        $tabPanels[0]['cards'][] = $cardHtml;
+                    }
+                }
+                $tabButtons = '';
+                $tabBodies = '';
+                foreach ($tabPanels as $tabIndex => $tabPanel) {
+                    $safeTabLabel = htmlspecialchars($tabPanel['label'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $tabButtons .= "\n                <button type=\"button\" role=\"tab\" @click=\"lsFormTab = {$tabIndex}\" :class=\"lsFormTab === {$tabIndex} ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'\" class=\"inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors\">{$safeTabLabel}</button>";
+                    $tabBodies .= "\n        <div x-show=\"lsFormTab === {$tabIndex}\"".($tabIndex > 0 ? ' x-cloak' : '').">\n".implode("\n\n", $tabPanel['cards'])."\n        </div>";
+                }
+                $formSectionsHtml = <<<HTML
+        <div x-data="{ lsFormTab: 0 }">
+            <div class="flex flex-wrap items-center gap-1 border-b border-border px-3" role="tablist">{$tabButtons}
+            </div>{$tabBodies}
+        </div>
+HTML;
+            }
+        }
+
+        // Record dialogs (D-015): modal markup + header
+        // buttons for the declared dialogs, and the form's
+        // Alpine state. The dialog lives INSIDE the form so
+        // its fields submit with the record; confirming
+        // submits with the confirm button's _dialog marker,
+        // which the web controller turns into the dialog's
+        // declared effects (trigger value forced + the
+        // declaration's `set` map applied — D-071) and a
+        // save-in-place redirect (Desk's Declare Lost
+        // persists in place). The header button also ARMS
+        // the trigger field (the wiring script), so the
+        // user sees the gated state; cancelling reverts the
+        // trigger field to its last non-trigger value.
+        $dialogsHtml = '';
+        $dialogButtonsHtml = '';
+        $formXDataAttr = '';
+        if ($dialogDecls !== []) {
+            $statePairs = [];
+            foreach ($dialogDecls as $dialogIndex => $dialogDecl) {
+                $statePairs[] = $dialogDecl['state_var'].': false';
+                $safeDialogLabel = htmlspecialchars($dialogDecl['label'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $safeConfirmLabel = htmlspecialchars($dialogDecl['confirm_label'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $dialogButtonsHtml .= "\n                @if(!\$isNew)\n                    <button type=\"button\" data-ls-dialog-arm=\"{$dialogDecl['name']}\" @click=\"{$dialogDecl['state_var']} = true\" class=\"inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md border border-input bg-background px-3 text-xs font-semibold shadow-2xs transition-colors hover:bg-muted\">{$safeDialogLabel}</button>\n                @endif";
+                $dialogFieldsStr = implode("\n\n", $dialogMarkups[$dialogIndex] ?? []);
+                $dialogsHtml .= <<<HTML
+
+        <div x-show="{$dialogDecl['state_var']}" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="{$dialogDecl['state_var']} = false">
+            <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg">
+                <h3 class="text-base font-semibold text-foreground">{$safeDialogLabel}</h3>
+                <div class="mt-4 space-y-4">
+{$dialogFieldsStr}
+                </div>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" @click="{$dialogDecl['state_var']} = false; \$el.closest('form').dispatchEvent(new CustomEvent('ls-dialog-cancel-{$dialogDecl['name']}'))" class="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-semibold shadow-2xs transition-colors hover:bg-muted">Cancel</button>
+                    <button type="submit" name="_dialog" value="{$dialogDecl['name']}" class="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90">{$safeConfirmLabel}</button>
+                </div>
+            </div>
+        </div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.querySelector('form.ls-form-sheet');
+            var trigger = form ? form.querySelector('[name="{$dialogDecl['trigger_field']}"]') : null;
+            if (!trigger || !window.Alpine) { return; }
+            var prev = trigger.value;
+            trigger.addEventListener('change', function () {
+                if (trigger.value === '{$dialogDecl['trigger_value']}') {
+                    try { Alpine.\$data(form).{$dialogDecl['state_var']} = true; } catch (e) {}
+                } else {
+                    prev = trigger.value;
+                }
+            });
+            form.addEventListener('ls-dialog-cancel-{$dialogDecl['name']}', function () {
+                trigger.value = prev;
+                trigger.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            var arm = form.querySelector('[data-ls-dialog-arm="{$dialogDecl['name']}"]');
+            if (arm) {
+                arm.addEventListener('click', function () {
+                    if (trigger.value !== '{$dialogDecl['trigger_value']}') {
+                        trigger.value = '{$dialogDecl['trigger_value']}';
+                        trigger.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+            }
+        });
+        </script>
+HTML;
+            }
+            $formXDataAttr = ' x-data="{ '.implode(', ', $statePairs).' }"';
+        }
+
+        // Conversion pre-steps (D-073): a conversion declaring
+        // pre_steps renders its Create▾ item as a dialog (the
+        // Blade menu branches on the declaration at runtime);
+        // confirming navigates to the convert URL carrying the
+        // chosen steps — this helper builds that URL from the
+        // dialog's checkboxes and name inputs.
+        $conversionStepsHtml = '';
+        foreach ((array) ($options['conversions'] ?? []) as $conversionDecl) {
+            if (is_array($conversionDecl) && ! empty($conversionDecl['pre_steps'])) {
+                $conversionStepsHtml = <<<'HTML'
+
+        <script>
+        window.lsRunConversion = function (btn) {
+            var root = btn.closest('[data-ls-convert-url]');
+            if (!root) { return; }
+            var url = new URL(root.getAttribute('data-ls-convert-url'), window.location.origin);
+            root.querySelectorAll('[data-ls-step-check]').forEach(function (check) {
+                var name = check.getAttribute('data-ls-step-check');
+                url.searchParams.set('steps[' + name + ']', check.checked ? '1' : '0');
+                var input = root.querySelector('[data-ls-step-name="' + name + '"]');
+                if (input) { url.searchParams.set('step_names[' + name + ']', input.value); }
+            });
+            window.location = url.toString();
+        };
+        </script>
+HTML;
+                break;
+            }
+        }
+
+        // Settings anatomy (D-027): ui.single slices render
+        // the Desk settings shape — no card chrome around the
+        // form, sections flat on the page.
+        $formSheetClass = ! empty($uiConfig['single'])
+            ? 'ls-form-sheet w-full'
+            : 'ls-form-sheet bg-card border border-border rounded-xl shadow-xs overflow-hidden';
 
         // Companion-account creation (declared account_creation:):
         // the create form opens with a Login Account card whose
@@ -698,23 +1011,23 @@ CARD;
             <x-ui.card-header class="border-b border-border/60 bg-muted/20 px-6 py-4">
                 <div class="flex items-center gap-2">
                     <x-lucide-key-round class="size-4 text-primary" />
-                    <x-ui.card-title class="text-base font-bold text-foreground">Login Account</x-ui.card-title>
+                    <x-ui.card-title class="text-[13px] font-semibold text-foreground">Login Account</x-ui.card-title>
                 </div>
                 <x-ui.card-description class="text-xs">Create the {$accountRole} login account in the same step — or leave blank and pick an existing user below.</x-ui.card-description>
             </x-ui.card-header>
-            <x-ui.card-content class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-ls-section-grid>
-                    <div class="space-y-1.5">
+            <x-ui.card-content class="p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-ls-section-grid>
+                    <div class="space-y-1">
                         <x-ui.label for="account_name">Full Name</x-ui.label>
                         <x-ui.input id="account_name" type="text" name="account[name]" value="{{ old('account.name') }}" autocomplete="off" />
                         @error('account.name') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
                     </div>
-                    <div class="space-y-1.5">
+                    <div class="space-y-1">
                         <x-ui.label for="account_email">Email</x-ui.label>
                         <x-ui.input id="account_email" type="email" name="account[email]" value="{{ old('account.email') }}" autocomplete="off" />
                         @error('account.email') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
                     </div>
-                    <div class="space-y-1.5">
+                    <div class="space-y-1">
                         <x-ui.label for="account_password">Password</x-ui.label>
                         <x-ui.input id="account_password" type="password" name="account[password]" autocomplete="new-password" />
                         @error('account.password') <p class="text-xs text-destructive">{{ \$message }}</p> @enderror
@@ -726,6 +1039,51 @@ CARD;
 
 HTML;
             $formSectionsHtml = $accountCard.$formSectionsHtml;
+        }
+
+        // Audit-stamp display (D-013): the collected *_by rows
+        // ride as a trailing read-only section, gated at
+        // runtime to edit forms (@if !$isNew) — create forms
+        // never show a stamp for a record that does not exist
+        // yet. One @if/@endif pair wraps the whole section.
+        if ($auditStampRows !== []) {
+            $stampRowsStr = implode("\n\n", $auditStampRows);
+            $auditStampSection = <<<HTML
+        @if(!\$isNew)
+        <section class="border-t border-border/60 px-6 py-5" data-ls-audit-stamps>
+            <h3 class="text-sm font-semibold text-foreground mb-4">Audit</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-ls-section-grid>
+{$stampRowsStr}
+            </div>
+        </section>
+        @endif
+HTML;
+            $formSectionsHtml .= "\n\n".$auditStampSection;
+        }
+
+        // Record-state banner (D-069): a Heart may declare
+        // ui.state_banner {field, equals, message, pill?} — when
+        // the edited record's field loosely equals the declared
+        // value, a banner prints above the first section (the
+        // source's "This Currency is disabled" strip). Emitted
+        // as a runtime @if so create forms and non-matching
+        // records stay byte-identical.
+        $stateBanner = is_array($uiConfig['state_banner'] ?? null) ? $uiConfig['state_banner'] : [];
+        if (! empty($stateBanner['field']) && array_key_exists('equals', $stateBanner) && ! empty($stateBanner['message'])) {
+            $bannerField = (string) $stateBanner['field'];
+            $bannerEquals = var_export($stateBanner['equals'], true);
+            $bannerMessage = htmlspecialchars((string) $stateBanner['message'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $bannerPill = ! empty($stateBanner['pill'])
+                ? "\n            <span class=\"inline-flex shrink-0 items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600\">".htmlspecialchars((string) $stateBanner['pill'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</span>'
+                : '';
+            $stateBannerHtml = <<<HTML
+        @if(!\$isNew && (\$form->{$bannerField} ?? null) !== null && (\$form->{$bannerField} ?? null) == {$bannerEquals})
+        <div class="flex items-center justify-between gap-3 border-t border-sky-200 bg-sky-50 px-6 py-3">
+            <p class="text-xs font-medium text-sky-900">{$bannerMessage}</p>{$bannerPill}
+        </div>
+        @endif
+HTML;
+            $formSectionsHtml = $stateBannerHtml."\n\n".$formSectionsHtml;
         }
 
         $includeApi = (bool) ($options['api'] ?? true);
@@ -866,7 +1224,7 @@ HTML;
 
             $manifestData = [
                 'name' => $pluralName,
-                'title' => Str::title(Str::snake($pluralName, ' ')),
+                'title' => Str::title(SliceName::snake($pluralName, ' ')),
                 'version' => '1.0.0',
                 'description' => $description,
                 'author' => $author,
@@ -907,7 +1265,7 @@ HTML;
                 'namespace' => $sliceNamespace,
                 'ui' => $uiOption ?? [],
                 'navigation' => [
-                    'label' => Str::title(Str::snake($pluralName, ' ')),
+                    'label' => Str::title(SliceName::snake($pluralName, ' ')),
                     'url' => $navUrl,
                     'icon' => 'package',
                     'order' => 50,
@@ -1133,12 +1491,42 @@ REL;
 REL;
                 $emittedRelationMethods[$declMethod] = true;
             }
+            $fieldNames = [];
+            foreach ($fields as $def) {
+                if (! empty($def['name'])) {
+                    $fieldNames[(string) $def['name']] = true;
+                }
+            }
             foreach ($fields as $def) {
                 $isForeignKey = ($def['type'] ?? '') === 'foreign_id' || str_ends_with($def['name'] ?? '', '_id');
                 if (! $isForeignKey) {
                     continue;
                 }
                 $relation = $def['relation'] ?? [];
+                $hasDeclaredRelation = (is_array($relation) && $relation !== [])
+                    || (is_string($relation) && $relation !== '');
+                // Gate T A2d, applied to models: a string-typed
+                // *_id is a human/external code (email_id,
+                // tax_id, POS ids), not a foreign key — emit no
+                // relation for it unless one is declared. The
+                // stem-guessed relation (Email, Tax, CustomerPo)
+                // can never resolve and throws the first time
+                // any surface touches it (record detail 500s).
+                if (! $hasDeclaredRelation && ($def['type'] ?? '') !== 'foreign_id'
+                    && in_array($def['type'] ?? '', ['string', 'text', 'textarea'], true)) {
+                    continue;
+                }
+                // A polymorphic link (parent_id beside a
+                // parent_type column) names its target per row;
+                // a plain BelongsTo to the stem guess ("Parent")
+                // can never resolve either.
+                if (! $hasDeclaredRelation && ! isset($relation['model'])) {
+                    $stem = Str::replaceLast('_id', '', (string) ($def['name'] ?? ''));
+                    if ($stem !== '' && isset($fieldNames[$stem.'_type'])
+                        && $this->resolveForeignTargetModel((string) $def['name'], (string) ($tableName ?? '')) === null) {
+                        continue;
+                    }
+                }
                 $relName = Str::camel($relation['name'] ?? Str::replaceLast('_id', '', $def['name']));
                 if (isset($emittedRelationMethods[$relName])) {
                     continue;
@@ -1241,6 +1629,9 @@ PHP;
             $relationMultiServiceMethod = $relationMultiDefinitions === []
                 ? ''
                 : "\n    public function relationMultiDefinitions(): array\n    {\n        return ".var_export($relationMultiDefinitions, true).";\n    }\n";
+            $multiselectServiceMethod = $multiselectDefinitions === []
+                ? ''
+                : "\n    public function multiselectDefinitions(): array\n    {\n        return ".var_export($multiselectDefinitions, true).";\n    }\n";
             $mapToFormBody = "        return {$studlyName}FormBusinessObject::fromArray(\$model->toArray());";
             if ($relationMultiDefinitions !== []) {
                 $mapToFormBody = "        \$bo = {$studlyName}FormBusinessObject::fromArray(\$model->toArray());";
@@ -1271,7 +1662,7 @@ class {$studlyName}SliceService extends BaseSliceService
         return {$studlyName}::class;
     }
 
-{$repeaterServiceMethod}{$relationMultiServiceMethod}
+{$repeaterServiceMethod}{$relationMultiServiceMethod}{$multiselectServiceMethod}
     protected function mapToForm(Model \$model): IBusinessObject
     {
 {$mapToFormBody}
@@ -1400,7 +1791,18 @@ PHP;
 
             if ($domainSlug) {
                 $aliasRedirects[] = "Route::redirect('{$pluralSnake}', '/{$targetRedirect}');";
-                $aliasRedirects[] = "Route::redirect('{$pluralSnake}/{any}', '/{$targetRedirect}/{any}')->where('any', '.*');";
+                // Legacy record URLs only: NEVER a '.*' wildcard here.
+                // A wildcard alias swallows the whole bare-prefix
+                // namespace — which may be ANOTHER module's live
+                // route prefix (gate-caught defect, ERPNext port
+                // 13 Nov 2026: the CRM Contacts slice's
+                // 'contacts/{any}' alias made the Contacts
+                // module's Addresses/Genders/Salutations slices
+                // unreachable — lists redirected away, edits 404'd).
+                // Record ids in this framework are numeric, so the
+                // two legacy shapes below cover every real old URL.
+                $aliasRedirects[] = "Route::redirect('{$pluralSnake}/{id}', '/{$targetRedirect}/{id}')->where('id', '[0-9]+');";
+                $aliasRedirects[] = "Route::redirect('{$pluralSnake}/{id}/edit', '/{$targetRedirect}/{id}/edit')->where('id', '[0-9]+');";
             }
 
             foreach (array_unique([$snakeName, $kebabPlural, $lowerPlural, $kebabSingular, $lowerSingular]) as $altSlug) {
@@ -1428,6 +1830,7 @@ Route::prefix('{$routePrefix}')->name('{$routeNamePrefix}.')->middleware(config(
     Route::post('/', [{$studlyName}WebController::class, 'store'])->name('store');
     Route::get('/{id}', [{$studlyName}WebController::class, 'show'])->name('show');
     Route::get('/{id}/edit', [{$studlyName}WebController::class, 'edit'])->name('edit');
+    Route::get('/{id}/convert/{target}', [{$studlyName}WebController::class, 'convert'])->name('convert');
     Route::put('/{id}', [{$studlyName}WebController::class, 'update'])->name('update');
     Route::delete('/{id}', [{$studlyName}WebController::class, 'destroy'])->name('destroy');
 });
@@ -1479,6 +1882,16 @@ PHP;
                 $auditCols .= "\n                \$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();";
             }
 
+            // D-014: declared child tables (repeaters and
+            // multiselects) are created by this same migration —
+            // before this fix the builder emitted only the parent
+            // table and every child table needed a hand-written
+            // slice migration. Empty for childless slices, so a
+            // slice with no declared children produces a
+            // byte-identical migration to before.
+            $childMigrationUp = $this->childMigrationUp($repeaterDefinitions, $multiselectDefinitions, $tableName);
+            $childMigrationDown = $this->childMigrationDown($repeaterDefinitions, $multiselectDefinitions);
+
             $migration = <<<PHP
 <?php
 
@@ -1497,12 +1910,12 @@ return new class extends Migration {
                 \$table->id();
 {$migrationBody}{$auditCols}
                 \$table->timestamps();{$migrationSoftDeletes}
-        });
+        });{$childMigrationUp}
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('{$tableName}');
+{$childMigrationDown}        Schema::dropIfExists('{$tableName}');
     }
 };
 PHP;
@@ -1595,6 +2008,42 @@ ACTIONS;
             </x-slot:actions>
 ACTIONS;
             }
+            // Quick-entry dialog seat (D-011): a slice declaring
+            // ui.quick_entry.fields gets the framework's
+            // quick-entry partial included in its directory —
+            // the modal markup itself lives in the framework
+            // partial (laraslice::directory.quick-entry), so the
+            // fleet receives pattern changes centrally. Handles
+            // that are not quick-entry material (repeater /
+            // multiselect / relation_multi / computed / unknown)
+            // are ignored here exactly as DirectoryUi::
+            // quickEntryFields() ignores them at runtime
+            // (ignore-with-warning policy). Undeclared slices
+            // emit NO quick-entry markup at all.
+            $quickEntryInclude = '';
+            $declaredQuickEntry = $options['ui']['quick_entry']['fields'] ?? null;
+            if (is_array($declaredQuickEntry) && $declaredQuickEntry !== []) {
+                $fieldsByHandle = [];
+                foreach ($fields as $qf) {
+                    if (is_array($qf) && ! empty($qf['name'])) {
+                        $fieldsByHandle[(string) $qf['name']] = $qf;
+                    }
+                }
+                $hasQuickEntryField = false;
+                foreach ($declaredQuickEntry as $qeEntry) {
+                    $qeHandle = is_array($qeEntry) ? (string) ($qeEntry['handle'] ?? '') : (string) $qeEntry;
+                    $qeDef = $fieldsByHandle[$qeHandle] ?? null;
+                    if ($qeDef !== null
+                        && ! in_array((string) ($qeDef['type'] ?? ''), ['repeater', 'multiselect', 'relation_multi'], true)
+                        && empty($qeDef['computed'])) {
+                        $hasQuickEntryField = true;
+                        break;
+                    }
+                }
+                if ($hasQuickEntryField) {
+                    $quickEntryInclude = "\n@include('laraslice::directory.quick-entry')\n";
+                }
+            }
             $sliceJsonAbs = str_replace(["'"], ["\\'"], str_replace('\\', '/', rtrim($sliceDir, '/\\').'/slice.yaml'));
             $sliceYamlAbs = str_replace('slice.yaml', 'slice.yaml', $sliceJsonAbs);
 
@@ -1608,27 +2057,41 @@ ACTIONS;
      space above the actions row. --}}
 @php \$hasKpiCards = !empty(\$summaryCards) || !empty(\$dashWidgets); @endphp
 <div class="{{ \$hasKpiCards ? 'space-y-2' : '' }}">
+    {{-- Validation errors land here too (D-076): actions posted
+         FROM the directory (the quick entry dialog above all)
+         redirect back with an error bag the directory must
+         render — the record form has its own block; without
+         this one a rejected quick entry save was invisible. --}}
+    @if(\$errors->any())
+        <div class="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm shadow-xs" role="alert">
+            <div class="font-semibold flex items-center gap-2">
+                <x-lucide-alert-circle class="size-4 shrink-0" />
+                <span>Please fix the following:</span>
+            </div>
+            <ul class="list-disc pl-9 mt-1 space-y-0.5">
+                @foreach (\$errors->all() as \$error)
+                    <li>{{ \$error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     {{-- Bulk workflow forward (shows when table rows checked) --}}
     <x-workflows::bulk-bar slice="{$studlyName}" />
 
-    <!-- Page title row (list contract v3 composition): title +
-         breadcrumb only. Page actions render in the data table's
-         below-toolbar band, matching the source systems' page-top
-         structure (title / filter bar / actions / table). -->
+    {{-- Page-top composition (owner rule, 13 Nov 2026): page
+         identity — title + breadcrumb — lives ONLY in the shell
+         topbar; an in-page title/breadcrumb row duplicates it.
+         This row therefore survives solely as the actions host
+         when placement is header-right. --}}
+    @if((\$placement ?? 'below-facets-left') === 'header-right')
     <div class="flex items-center gap-3 pb-2 border-b border-border/40">
-        <h1 class="text-base font-medium text-foreground">{$pluralName}</h1>
-        <div class="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-            <a href="{{ Route::has('dashboard') ? route('dashboard') : url('/') }}" class="hover:text-primary transition-colors">Home</a>
-            <span>•</span>
-            <span class="text-foreground">{$pluralName}</span>
-        </div>
-        @if((\$placement ?? 'below-facets-left') === 'header-right')
+        <h1 class="text-base font-semibold text-foreground">{{ \$directoryTitle ?? '' }}</h1>
         {{-- Page Structure Contract (Body v4): placement header-right
-             renders the page actions in the title row; the
-             below-toolbar band is suppressed by the same
-             declaration (and the data-table renders no empty
-             band). Seed Demo stays band-only by contract and
-             does not render here. --}}
+             renders the page actions in this row; the below-toolbar
+             band is suppressed by the same declaration (and the
+             data-table renders no empty band). Seed Demo stays
+             band-only by contract and does not render here. --}}
         <div class="ml-auto flex flex-wrap items-center gap-2">
             @if(\$can['create'] ?? true)
             @if((\$presentation['create'] ?? 'page') !== 'page')
@@ -1681,13 +2144,13 @@ ACTIONS;
             @endisset
             @endif
         </div>
-        @endif
     </div>
+    @endif
 
     @if((\$placement ?? 'below-facets-left') === 'command-bar')
     {{-- Page Structure Contract (Body v4): placement command-bar
          renders the page actions as a full-width command strip
-         directly under the title row (sequenced-commands style). --}}
+         at the page top (sequenced-commands style). --}}
     <div class="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
         @if(\$can['create'] ?? true)
         @if((\$presentation['create'] ?? 'page') !== 'page')
@@ -1755,7 +2218,7 @@ ACTIONS;
             'show_url'   => \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.show') ? route('{$routeNamePrefix}.show', \$item->id) : null,
             'edit_url'   => \$canEdit && \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.edit') ? route('{$routeNamePrefix}.edit', \$item->id) : null,
             'delete_url' => \$canDelete && \Illuminate\Support\Facades\Route::has('{$routeNamePrefix}.destroy') ? route('{$routeNamePrefix}.destroy', \$item->id) : null,
-            'actions'    => \\LaraSlice\\Support\\RecordActions::urlsFor('{$routeNamePrefix}', \$item->id),
+            'actions'    => \\LaraSlice\\Support\\RecordActions::urlsFor('{$routeNamePrefix}', \$item->id, 'directory'),
         ], '{$tableName}');
     @endphp
 
@@ -1841,6 +2304,8 @@ ACTIONS;
         @endif
 
         @include('laraslice::directory.strip-filters')
+
+        @include('laraslice::directory.list-controls')
 
         @include('laraslice::directory.filters-drawer')
 
@@ -2031,9 +2496,13 @@ ACTIONS;
             <x-slot:quick-filters>
             @foreach(\$quickFilters as \$qf)
             @if((\$qf['display'] ?? 'tabs') === 'select')
-            <label class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span class="font-medium">{{ \$qf['label'] ?? \$qf['handle'] }}</span>
-                <select data-ls-qf="{{ \$qf['handle'] }}" onchange="const u = new window.URL(window.location.href); if (this.value) { u.searchParams.set('{{ \$qf['handle'] }}', this.value); } else { u.searchParams.delete('{{ \$qf['handle'] }}'); } window.location.href = u.toString();" class="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground cursor-pointer">
+            {{-- Facet anatomy (D-023): one attached grey field —
+                 label, operator segment, value control fused —
+                 the source's filter-row composition. --}}
+            <label class="inline-flex h-8 items-stretch overflow-hidden rounded-lg border border-border bg-muted/60 text-xs text-foreground">
+                <span class="flex items-center px-2 font-medium">{{ \$qf['label'] ?? \$qf['handle'] }}</span>
+                <span class="flex items-center border-x border-border/70 px-1.5 text-muted-foreground">=</span>
+                <select data-ls-qf="{{ \$qf['handle'] }}" onchange="const u = new window.URL(window.location.href); if (this.value) { u.searchParams.set('{{ \$qf['handle'] }}', this.value); } else { u.searchParams.delete('{{ \$qf['handle'] }}'); } window.location.href = u.toString();" class="h-full cursor-pointer bg-transparent px-2 text-xs text-foreground focus:outline-none">
                     <option value="">All</option>
                     @foreach(\$qf['options'] ?? [] as \$opt)
                     <option value="{{ \$opt['value'] }}" @selected((string) (\$activeFilters[\$qf['handle']] ?? '') === (string) \$opt['value'])>{{ \$opt['label'] }}</option>
@@ -2049,15 +2518,9 @@ ACTIONS;
             />
             @endif
             @endforeach
-            @if(!empty(\$sidebarFilters ?? []))
-            <button type="button" data-ls-filters-btn @click="\$dispatch('open-ls-filters')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-foreground hover:bg-muted text-xs font-medium shadow-2xs transition-colors cursor-pointer">
-                <x-lucide-filter class="size-3.5" />
-                <span>Filters</span>
-                @if(!empty(\$activeFilters ?? []))
-                <span class="inline-flex items-center justify-center size-4 rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{{ count(array_filter(\$activeFilters)) }}</span>
-                @endif
-            </button>
-            @endif
+            {{-- The Filter button lives in the list-controls
+                 row now (Seat 3): one universal opener beside
+                 Sort and List View, on every directory. --}}
             </x-slot:quick-filters>
         @endif
         <x-slot:below-toolbar>
@@ -2118,6 +2581,9 @@ ACTIONS;
             @endif
 @endif
         </x-slot:below-toolbar>
+        <x-slot:toolbar-tools>
+            @include('laraslice::directory.list-tools')
+        </x-slot:toolbar-tools>
 {$rowActionsSlot}
         </x-ui.data-table>
     @endif
@@ -2216,31 +2682,44 @@ document.addEventListener('submit', function (e) {
 });
 </script>
 @endif
-@endsection
+{$quickEntryInclude}@endsection
 BLADE;
+            // Tree directory (D-064): a slice declaring
+            // ui.directory.tree lands on the server-rendered
+            // tree partial instead of the data-table (which
+            // stays one toggle away). Injected around the
+            // data-table block so the rest of the directory
+            // (header, toolbar, overlays) is untouched.
+            if (is_array($options['ui']['directory']['tree'] ?? null)) {
+                $treeToggle = <<<'BLADE'
+    <div class="mb-3 flex items-center justify-end gap-1">
+        <a href="{{ request()->fullUrlWithQuery(['view' => 'tree']) }}" class="inline-flex h-8 items-center rounded-md px-3 text-xs font-semibold {{ ($directoryViewMode ?? 'table') === 'tree' ? 'bg-primary text-primary-foreground' : 'border border-input bg-background hover:bg-muted' }}">Tree</a>
+        <a href="{{ request()->fullUrlWithQuery(['view' => 'list']) }}" class="inline-flex h-8 items-center rounded-md px-3 text-xs font-semibold {{ ($directoryViewMode ?? 'table') === 'tree' ? 'border border-input bg-background hover:bg-muted' : 'bg-primary text-primary-foreground' }}">Table</a>
+    </div>
+    @if(($directoryViewMode ?? 'table') === 'tree')
+        @include('laraslice::partials.directory-tree')
+    @else
+BLADE;
+                $tablePos = strpos($bladeIndex, '        <x-ui.data-table');
+                if ($tablePos !== false) {
+                    $bladeIndex = substr_replace($bladeIndex, $treeToggle."\n", $tablePos, 0);
+                    $tableEnd = strpos($bladeIndex, '        </x-ui.data-table>');
+                    if ($tableEnd !== false) {
+                        $bladeIndex = substr_replace($bladeIndex, "\n    @endif", $tableEnd + strlen('        </x-ui.data-table>'), 0);
+                    }
+                }
+            }
             $this->writeFile($sliceDir.'/Resources/views/index.blade.php', $bladeIndex);
 
             $bladeForm = <<<BLADE
 @extends(\$overlayLayout ?? 'layouts.app')
 
 @section('content')
-<div class="w-full max-w-5xl mx-auto space-y-6" data-ls-form-root>
-    <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <a href="{{ route('{$routeNamePrefix}.index') }}" class="hover:text-primary transition-colors">{$pluralName}</a>
-            <span>/</span>
-            <span class="text-foreground font-medium">{{ \$isNew ? 'Create {$studlyName}' : 'Edit {$studlyName} #' . \$form->id }}</span>
-        </div>
-        @if(!\$isNew && (\$can['delete'] ?? false))
-        <form action="{{ route('{$routeNamePrefix}.destroy', \$form->id) }}" method="POST" class="inline" onsubmit="return confirm('Delete this record?')">
-            @csrf
-            @method('DELETE')
-            <x-ui.button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive gap-1.5">
-                <x-lucide-trash-2 class="size-3.5" /><span>Delete</span>
-            </x-ui.button>
-        </form>
-        @endif
-    </div>
+<div class="w-full max-w-[1400px] space-y-4" data-ls-form-root>
+    {{-- Single-breadcrumb rule: the topbar owns the trail.
+         The record header inside the form sheet carries
+         identity, state and the primary actions (Stage E
+         UX pass); Delete lives there too. --}}
 
     @if (session('success'))
         <div class="p-4 rounded-xl border border-success/30 bg-success/10 text-success text-sm font-medium flex items-center gap-2 shadow-xs">
@@ -2270,32 +2749,173 @@ BLADE;
         </div>
     @endif
 
-    <form action="{{ \$isNew ? route('{$routeNamePrefix}.store') : route('{$routeNamePrefix}.update', \$form->id) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
+    @if(!\$isNew && (\$can['delete'] ?? false))
+    {{-- Standalone delete form: the header's Delete button
+         submits it by id (nested forms are invalid HTML). --}}
+    <form id="ls-delete-form" action="{{ route('{$routeNamePrefix}.destroy', \$form->id) }}" method="POST" class="hidden" onsubmit="return confirm('Delete this record?')">
+        @csrf
+        @method('DELETE')
+    </form>
+    @endif
+
+    @if(!\$isNew && !empty(\$workplace))
+        @include('laraslice::partials.record-workplace-open')
+    @endif
+
+    <form action="{{ \$isNew ? route('{$routeNamePrefix}.store') : route('{$routeNamePrefix}.update', \$form->id) }}" method="POST" enctype="multipart/form-data" class="{$formSheetClass}{{ !\$isNew && !empty(\$workplace) ? ' min-w-0 flex-1' : '' }}"{$formXDataAttr}>
         @csrf
         @if(!\$isNew) @method('PUT') @endif
 
+        {{-- Record header: whose record this is, what state
+             it is in, and the primary actions — the first
+             thing the eye meets, as on the source record
+             pages. The flat bottom bar below mirrors the
+             save actions for long forms. --}}
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-6 py-4">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                <h1 class="truncate text-lg font-semibold tracking-tight text-foreground">{{ \$isNew ? 'New '.(\$formEntityLabel ?? '{$studlyName}') : (\LaraSlice\Support\DirectoryUi::recordLabel(\$form) ?? (\$formEntityLabel ?? '{$studlyName}')) }}</h1>
+                @if(!\$isNew && (\$form->status ?? \$form->state ?? \$form->stage ?? null))
+                    <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground"><span class="size-1.5 rounded-full bg-current"></span>{{ ucwords(str_replace('_', ' ', (string) (\$form->status ?? \$form->state ?? \$form->stage))) }}</span>
+                @endif
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                @if(!\$isNew && !empty(\$workplace) && (!empty(\$workplace['prev']) || !empty(\$workplace['next'])))
+                    <div class="flex items-center gap-1">
+                        @if(!empty(\$workplace['prev']))
+                            <a href="{{ route('{$routeNamePrefix}.edit', \$workplace['prev']) }}" title="Previous record" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background shadow-2xs transition-colors hover:bg-muted"><x-lucide-chevron-left class="size-4" /></a>
+                        @endif
+                        @if(!empty(\$workplace['next']))
+                            <a href="{{ route('{$routeNamePrefix}.edit', \$workplace['next']) }}" title="Next record" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background shadow-2xs transition-colors hover:bg-muted"><x-lucide-chevron-right class="size-4" /></a>
+                        @endif
+                    </div>
+                @endif
+                @if(!\$isNew)
+                    @php(\$lsConversions = \LaraSlice\Support\RecordConverter::forSlice('{$studlyName}'))
+                    @if(\$lsConversions !== [])
+                        <div class="relative" x-data="{ lsConvOpen: false }">
+                            <button type="button" @click="lsConvOpen = !lsConvOpen" class="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-input bg-background px-3 text-xs font-semibold shadow-2xs transition-colors hover:bg-muted">
+                                Create <x-lucide-chevron-down class="size-3.5" />
+                            </button>
+                            <div x-show="lsConvOpen" @click.outside="lsConvOpen = false" x-cloak class="absolute right-0 z-30 mt-1.5 w-52 rounded-lg border border-border bg-popover p-1 shadow-md">
+                                @foreach(\$lsConversions as \$lsConversion)
+                                    @if(empty(\$lsConversion['pre_steps']))
+                                        <a href="{{ route('{$routeNamePrefix}.convert', [\$form->id, \$lsConversion['target']]) }}" class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted">{{ \$lsConversion['label'] }}</a>
+                                    @else
+                                        <span x-data="{ lsConvStep{{ \$lsConversion['target'] }}: false }" class="block">
+                                            <button type="button" @click="lsConvOpen = false; lsConvStep{{ \$lsConversion['target'] }} = true" class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted">{{ \$lsConversion['label'] }}</button>
+                                            <template x-teleport="body">
+                                                <div x-show="lsConvStep{{ \$lsConversion['target'] }}" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-ls-convert-url="{{ route('{$routeNamePrefix}.convert', [\$form->id, \$lsConversion['target']]) }}">
+                                                    <div class="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-lg">
+                                                        <h3 class="text-base font-semibold text-foreground">Create {{ \$lsConversion['label'] }}</h3>
+                                                        <div class="mt-4 space-y-3">
+                                                            @foreach(\$lsConversion['pre_steps'] as \$lsStep)
+                                                                <div>
+                                                                    <label class="flex items-center gap-2 text-sm font-medium text-foreground">
+                                                                        <input type="checkbox" data-ls-step-check="{{ \$lsStep['name'] }}" @if(\$lsStep['default']) checked @endif class="size-4 shrink-0">
+                                                                        {{ \$lsStep['label'] }}
+                                                                    </label>
+                                                                    @if(\$lsStep['name_field'])
+                                                                        <label class="mt-2 block text-xs font-medium text-muted-foreground">{{ \$lsStep['name_label'] }}</label>
+                                                                        <input type="text" data-ls-step-name="{{ \$lsStep['name'] }}" value="{{ \$lsStep['name_from'] ? (\$form->{\$lsStep['name_from']} ?? '') : '' }}" class="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-2xs">
+                                                                    @endif
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                        <div class="mt-5 flex justify-end gap-2">
+                                                            <button type="button" @click="lsConvStep{{ \$lsConversion['target'] }} = false" class="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-semibold shadow-2xs transition-colors hover:bg-muted">Cancel</button>
+                                                            <button type="button" onclick="window.lsRunConversion && window.lsRunConversion(this)" class="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90">Create</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </span>
+                                    @endif
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                @endif
+                @if(!\$isNew && !empty(\$workplace['connections']))
+                    {{-- Links menu (D-057): the record's linked
+                         records, grouped by slice, in the header —
+                         the source's Links dropdown. --}}
+                    <div class="relative" x-data="{ lsLinksOpen: false }">
+                        <button type="button" @click="lsLinksOpen = !lsLinksOpen" class="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-input bg-background px-3 text-xs font-semibold shadow-2xs transition-colors hover:bg-muted">
+                            Links <x-lucide-chevron-down class="size-3.5" />
+                        </button>
+                        <div x-show="lsLinksOpen" @click.outside="lsLinksOpen = false" x-cloak class="absolute right-0 z-30 mt-1.5 w-56 rounded-lg border border-border bg-popover p-1 shadow-md">
+                            @foreach(\$workplace['connections'] as \$lsLinkGroup)
+                                <p class="px-2.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{{ \$lsLinkGroup['title'] }}</p>
+                                @foreach(\$lsLinkGroup['records'] as \$lsLinkRecord)
+                                    @if(\$lsLinkRecord['url'])
+                                        <a href="{{ \$lsLinkRecord['url'] }}" class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted">{{ \$lsLinkRecord['label'] }}</a>
+                                    @endif
+                                @endforeach
+                            @endforeach
+                        </div>
+                    </div>
+                @endif{$dialogButtonsHtml}
+                @if(!\$isNew)
+                    {{-- Desk header pattern (D-022): secondary record
+                         actions live in an Actions menu — Delete plus
+                         the slice's declared ui.actions — beside one
+                         primary Save. --}}
+                    @php(\$lsActions = \LaraSlice\Support\RecordActions::urlsFor('{$routeNamePrefix}', \$form->id, 'form'))
+                    @if((\$can['delete'] ?? false) || \$lsActions !== [])
+                        <div class="relative" x-data="{ lsActionsOpen: false }">
+                            <button type="button" @click="lsActionsOpen = !lsActionsOpen" class="inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-input bg-background px-3 text-xs font-semibold shadow-2xs transition-colors hover:bg-muted">
+                                Actions <x-lucide-chevron-down class="size-3.5" />
+                            </button>
+                            <div x-show="lsActionsOpen" @click.outside="lsActionsOpen = false" x-cloak class="absolute right-0 z-30 mt-1.5 w-52 rounded-lg border border-border bg-popover p-1 shadow-md">
+                                @foreach(\$lsActions as \$lsAction)
+                                    @if((\$lsAction['mode'] ?? 'post') === 'link')
+                                        <a href="{{ \$lsAction['url'] }}" @if(!empty(\$lsAction['target'])) target="{{ \$lsAction['target'] }}" @endif class="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted">{{ \$lsAction['label'] }}</a>
+                                    @else
+                                        <form method="POST" action="{{ \$lsAction['url'] }}" @if(!empty(\$lsAction['confirm'])) onsubmit="return confirm('{{ \$lsAction['confirm'] }}')" @endif>
+                                            @csrf
+                                            <button type="submit" class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted">{{ \$lsAction['label'] }}</button>
+                                        </form>
+                                    @endif
+                                @endforeach
+                                @if(\$can['delete'] ?? false)
+                                    <button type="submit" form="ls-delete-form" class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-destructive transition-colors hover:bg-muted">
+                                        <x-lucide-trash-2 class="size-3.5" /><span>Delete</span>
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+                @endif
+                <x-ui.button type="submit" name="action" value="save_continue" size="sm" class="gap-1.5 text-xs font-semibold shadow-xs">
+                    <x-lucide-check class="size-3.5" />
+                    <span>Save</span>
+                </x-ui.button>
+            </div>
+        </div>
+
 {$formSectionsHtml}
+{$dialogsHtml}{$conversionStepsHtml}
 
         @include('laraslice::partials.custom-fields-form')
 
-        <!-- Sticky Bottom Form Actions Bar -->
-        <div class="sticky bottom-4 z-10 p-4 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-lg flex items-center justify-between">
-            <x-ui.button href="{{ route('{$routeNamePrefix}.index') }}" as="a" variant="ghost" class="text-xs font-semibold text-muted-foreground hover:text-foreground">
+        <!-- Sticky Bottom Form Actions Bar (Stage E: a flat
+             enterprise action bar, not a floating pill) -->
+        <div class="sticky bottom-0 z-10 px-6 py-3 border-t border-border bg-card flex flex-wrap items-center justify-between gap-2">
+            <x-ui.button href="{{ route('{$routeNamePrefix}.index') }}" as="a" variant="ghost" class="shrink-0 text-xs font-semibold text-muted-foreground hover:text-foreground">
                 Cancel
             </x-ui.button>
 
-            <div class="flex items-center gap-3">
-                <x-ui.button type="submit" name="action" value="save_continue" variant="outline" class="gap-1.5 text-xs font-semibold shadow-2xs">
-                    <x-lucide-save class="size-3.5" />
-                    <span>Save & Continue</span>
-                </x-ui.button>
-                <x-ui.button type="submit" name="action" value="save_close" class="gap-1.5 text-xs font-bold shadow-xs">
+            <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                <x-ui.button type="submit" name="action" value="save_continue" class="gap-1.5 text-xs font-semibold shadow-xs">
                     <x-lucide-check class="size-3.5" />
-                    <span>{{ \$isNew ? 'Create {$studlyName}' : 'Save Changes' }}</span>
+                    <span>Save</span>
                 </x-ui.button>
             </div>
         </div>
     </form>
+    @if(!\$isNew && !empty(\$workplace))
+        @include('laraslice::partials.record-workplace-close')
+    @endif
 </div>
 @endsection
 BLADE;
@@ -2814,7 +3434,7 @@ BLADE;
                         </x-ui.card-title>
                     </x-ui.card-header>
 
-                    <x-ui.card-content class="p-6">
+                    <x-ui.card-content class="p-4">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-6">
                             @php \$detailRows = \LaraSlice\Support\DirectoryUi::detailRows('{$studlyName}', \$record); \$detailStyle = \LaraSlice\Support\DirectoryUi::detailStyle('{$studlyName}'); \$detailCardTitle = \LaraSlice\Support\DirectoryUi::detailTitle('{$studlyName}'); if (\$isOverview && \$detailCardTitle === 'Attribute Parameters') { \$detailCardTitle = 'Details'; } @endphp
                             @if(! empty(\$detailRows))
@@ -3340,7 +3960,267 @@ BLADE;
         return $defs;
     }
 
-    protected function extractRepeaterDefinitions(array $uiConfig, string $rootTable): array
+    /**
+     * The x-ui.repeater component markup for one declared
+     * child collection — shared by the ui.forms.sections
+     * form path and the fields-map form path so both
+     * dialects render the identical component.
+     */
+    private function repeaterComponent(array $field, string $handle): string
+    {
+        $repLabel = $field['label'] ?? Str::headline($handle);
+        $addBtn = $field['add_button_text'] ?? ('Add '.Str::singular($repLabel));
+        $subFieldDefs = [];
+        foreach (($field['repeater_fields'] ?? []) as $rf) {
+            if (! is_array($rf)) {
+                continue;
+            }
+            $rfName = $rf['handle'] ?? $rf['name'] ?? '';
+            if ($rfName === '') {
+                continue;
+            }
+            $subField = [
+                'name' => $rfName,
+                'label' => $rf['label'] ?? Str::headline($rfName),
+                'type' => $rf['type'] ?? 'string',
+                'required' => (bool) ($rf['required'] ?? false),
+                'options' => $rf['options'] ?? [],
+            ];
+            // Link picker seat (D-030): a declared target
+            // slice rides into the component per sub-field;
+            // undeclared sub-fields keep the exact historical
+            // markup (no key emitted at all).
+            if (is_string($rf['target'] ?? null) && $rf['target'] !== '') {
+                $subField['target'] = $rf['target'];
+            }
+            $subFieldDefs[] = preg_replace('/\s+/', ' ', var_export($subField, true));
+        }
+        $subFieldsStr = '['.implode(', ', $subFieldDefs).']';
+        $docProp = '';
+        if (is_array($field['document'] ?? null) && $field['document'] !== []) {
+            $docStr = preg_replace('/\s+/', ' ', var_export($field['document'], true));
+            $docProp = " :document=\"{$docStr}\"";
+        }
+        // Repeater actions (D-020): declared grid buttons ride
+        // into the component like the document block.
+        $actionsProp = '';
+        if (is_array($field['actions'] ?? null) && $field['actions'] !== []) {
+            $actionsStr = preg_replace('/\s+/', ' ', var_export($field['actions'], true));
+            $actionsProp = " :actions=\"{$actionsStr}\"";
+        }
+
+        return "<x-ui.repeater name=\"{$handle}\" label=\"{$repLabel}\" :fields=\"{$subFieldsStr}\" :initial-items=\"old('{$handle}', \$form->{$handle} ?? [])\" addButtonText=\"{$addBtn}\"{$docProp}{$actionsProp} class=\"md:col-span-2 lg:col-span-3\" />";
+    }
+
+    /**
+     * The Table MultiSelect picker for one multiselect field:
+     * the kit's combobox in multiple mode (selected targets
+     * render as removable chips and submit as {handle}[]),
+     * fed by the controller-resolved {handle}Options for the
+     * declaration's target slice. The hidden _multiselects[]
+     * marker rides along so a picker whose chips were ALL
+     * removed still counts as provided (the service then
+     * clears the child rows) — the repeater marker trick.
+     */
+    private function multiselectComponent(array $field, string $handle): string
+    {
+        $label = $field['label'] ?? Str::headline($handle);
+        $optionsVar = Str::camel($handle).'Options';
+
+        return '<div class="space-y-1">'
+            .'<input type="hidden" name="_multiselects[]" value="'.$handle.'">'
+            .'<x-ui.label for="'.$handle.'" class="text-xs font-medium text-foreground/80">'.$label.'</x-ui.label>'
+            .'<x-ui.combobox name="'.$handle.'" :options="$'.$optionsVar.' ?? []" :value="old(\''.$handle.'\', $form->'.$handle.' ?? [])" multiple width="w-full" placeholder="Select..." />'
+            .'@error(\''.$handle.'\') <p class="text-xs text-destructive font-medium">{{ $message }}</p> @enderror'
+            .'</div>';
+    }
+
+    /**
+     * D-014: the up() child-table blocks for declared
+     * repeaters and multiselects, in declaration order
+     * (repeaters first, then multiselects; a table declared
+     * twice is emitted once). Each block is individually
+     * guarded with `if (! Schema::hasTable(...))` — the
+     * generated parent create uses an early-return guard,
+     * which cannot be reused per child without skipping the
+     * remaining children, and the hand-written child
+     * migrations this matches guard per table the same way.
+     * Returns '' when nothing is declared, keeping a
+     * childless slice's migration byte-identical.
+     *
+     * Repeater child shape (matches the hand-written child
+     * migrations, e.g. item_defaults / party_accounts):
+     * id; foreignId(foreign_key) constrained to the parent
+     * table with cascadeOnDelete; one typed column per
+     * repeater field; timestamps (no audit columns — the
+     * hand-written repeater children carry none).
+     *
+     * Multiselect child shape (matches e.g.
+     * item_allowed_companies): id; unsignedBigInteger
+     * foreign_key indexed; string parent_type nullable when
+     * declared; unsignedBigInteger target_field; audit
+     * columns created_by / updated_by as plain nullable
+     * unsignedBigInteger; timestamps.
+     */
+    protected function childMigrationUp(array $repeaterDefinitions, array $multiselectDefinitions, string $parentTable): string
+    {
+        $isIdentifier = static fn (string $value): bool => preg_match('/^[a-z][a-z0-9_]{0,62}$/', $value) === 1;
+        $blocks = [];
+        $seenTables = [];
+        foreach ($repeaterDefinitions as $def) {
+            $childTable = (string) ($def['table'] ?? '');
+            if (! $isIdentifier($childTable) || isset($seenTables[$childTable])) {
+                continue;
+            }
+            $seenTables[$childTable] = true;
+            $foreignKey = (string) ($def['foreign_key'] ?? '');
+            if (! $isIdentifier($foreignKey)) {
+                $foreignKey = Str::singular($parentTable).'_id';
+            }
+            $cols = [];
+            $cols[] = '                $table->id();';
+            $cols[] = "                \$table->foreignId('{$foreignKey}')->constrained('{$parentTable}')->cascadeOnDelete();";
+            foreach (($def['fields'] ?? []) as $subName => $sub) {
+                $subName = (string) $subName;
+                if ($subName === $foreignKey || ! $isIdentifier($subName)) {
+                    continue;
+                }
+                $cols[] = '                '.$this->childRepeaterColumn($subName, is_array($sub) ? $sub : []);
+            }
+            $cols[] = '                $table->timestamps();';
+            $blocks[] = "\n\n        if (! Schema::hasTable('{$childTable}')) {\n            Schema::create('{$childTable}', function (Blueprint \$table) {\n".implode("\n", $cols)."\n            });\n        }";
+        }
+        foreach ($multiselectDefinitions as $def) {
+            $childTable = (string) ($def['table'] ?? '');
+            if (! $isIdentifier($childTable) || isset($seenTables[$childTable])) {
+                continue;
+            }
+            $seenTables[$childTable] = true;
+            $foreignKey = (string) ($def['foreign_key'] ?? '');
+            if (! $isIdentifier($foreignKey)) {
+                continue;
+            }
+            $targetField = (string) ($def['target_field'] ?? '');
+            if (! $isIdentifier($targetField)) {
+                continue;
+            }
+            $cols = [];
+            $cols[] = '                $table->id();';
+            $cols[] = "                \$table->unsignedBigInteger('{$foreignKey}')->index();";
+            if (! empty($def['parent_type'])) {
+                $cols[] = "                \$table->string('parent_type')->nullable();";
+            }
+            $cols[] = "                \$table->unsignedBigInteger('{$targetField}');";
+            $cols[] = "                \$table->unsignedBigInteger('created_by')->nullable();";
+            $cols[] = "                \$table->unsignedBigInteger('updated_by')->nullable();";
+            $cols[] = '                $table->timestamps();';
+            $blocks[] = "\n\n        if (! Schema::hasTable('{$childTable}')) {\n            Schema::create('{$childTable}', function (Blueprint \$table) {\n".implode("\n", $cols)."\n            });\n        }";
+        }
+
+        return implode('', $blocks);
+    }
+
+    /**
+     * D-014: the down() drops for the child tables emitted
+     * by childMigrationUp(), in reverse declaration order
+     * (children before the parent drop the template adds).
+     * Returns '' when nothing is declared.
+     */
+    protected function childMigrationDown(array $repeaterDefinitions, array $multiselectDefinitions): string
+    {
+        $tables = [];
+        foreach ([$repeaterDefinitions, $multiselectDefinitions] as $definitions) {
+            foreach ($definitions as $def) {
+                $childTable = (string) ($def['table'] ?? '');
+                if (preg_match('/^[a-z][a-z0-9_]{0,62}$/', $childTable) === 1 && ! in_array($childTable, $tables, true)) {
+                    $tables[] = $childTable;
+                }
+            }
+        }
+        $down = '';
+        foreach (array_reverse($tables) as $childTable) {
+            $down .= "        Schema::dropIfExists('{$childTable}');\n";
+        }
+
+        return $down;
+    }
+
+    /**
+     * One repeater sub-field column, typed from the
+     * FieldDefinitionNormalizer type-to-migration map the
+     * parent columns use (string->string, text->text,
+     * decimal->decimal(12, 2), boolean->boolean, date->date,
+     * datetime->dateTime, select/email/url->string,
+     * json->json, float->float, bigInteger->bigInteger,
+     * timestamp->timestamp), with one documented deviation:
+     * integer (and foreign_id) sub-fields are Link-shaped
+     * row references in the source systems, so they emit
+     * unsignedBigInteger — the shape the hand-written
+     * repeater child migrations (item_defaults,
+     * brand_defaults, item_taxes) and the porter's own
+     * scaffoldChildTable() use for integer columns.
+     * A required sub-field is not nullable; an optional
+     * one is.
+     */
+    protected function childRepeaterColumn(string $name, array $sub): string
+    {
+        $type = (string) ($sub['type'] ?? 'string');
+        $nullable = ! empty($sub['required']) ? '' : '->nullable()';
+        if ($type === 'decimal') {
+            return "\$table->decimal('{$name}', 12, 2){$nullable};";
+        }
+        $method = match ($type) {
+            'integer', 'foreign_id' => 'unsignedBigInteger',
+            'text' => 'text',
+            'boolean' => 'boolean',
+            'date' => 'date',
+            'datetime' => 'dateTime',
+            'json' => 'json',
+            'float' => 'float',
+            'bigInteger' => 'bigInteger',
+            'timestamp' => 'timestamp',
+            default => 'string',
+        };
+
+        return "\$table->{$method}('{$name}'){$nullable};";
+    }
+
+    /**
+     * Multiselect (Table MultiSelect) definitions from the
+     * fields map: a field of type multiselect declares its
+     * child table, the child table's parent key, the child
+     * row's single link column, the target slice the picker
+     * resolves options from, and — for polymorphic child
+     * tables — the parent type written onto new rows.
+     * Shape per handle: ['table', 'foreign_key',
+     * 'target_field', 'target', 'parent_type' => ?string].
+     */
+    protected function extractMultiselectDefinitions(array $fields = []): array
+    {
+        $defs = [];
+        foreach ($fields as $field) {
+            if (! is_array($field) || ($field['type'] ?? '') !== 'multiselect') {
+                continue;
+            }
+            $handle = (string) ($field['name'] ?? '');
+            if ($handle === '') {
+                continue;
+            }
+            $defs[$handle] = [
+                'table' => (string) ($field['table'] ?? ''),
+                'foreign_key' => (string) ($field['foreign_key'] ?? ''),
+                'target_field' => (string) ($field['target_field'] ?? ''),
+                'target' => (string) ($field['target'] ?? ''),
+                'parent_type' => is_string($field['parent_type'] ?? null) && $field['parent_type'] !== ''
+                    ? $field['parent_type']
+                    : null,
+            ];
+        }
+
+        return $defs;
+    }
+
+    protected function extractRepeaterDefinitions(array $uiConfig, string $rootTable, array $fields = []): array
     {
         $defs = [];
         foreach (($uiConfig['forms']['sections'] ?? []) as $section) {
@@ -3370,6 +4250,9 @@ BLADE;
                         'required' => (bool) ($rf['required'] ?? false),
                         'options' => is_array($rf['options'] ?? null) ? $rf['options'] : [],
                     ];
+                    if (is_string($rf['target'] ?? null) && $rf['target'] !== '') {
+                        $fields[$rfName]['target'] = $rf['target'];
+                    }
                 }
                 $defs[$handle] = [
                     'table' => $table,
@@ -3387,6 +4270,69 @@ BLADE;
                 if (is_array($field['document'] ?? null) && $field['document'] !== []) {
                     $defs[$handle]['document'] = $field['document'];
                 }
+                // Shared child tables (D-036): see the field-map
+                // dialect below — parent_type scopes the rows.
+                if (is_string($field['parent_type'] ?? null) && $field['parent_type'] !== '') {
+                    $defs[$handle]['parent_type'] = $field['parent_type'];
+                }
+            }
+        }
+
+        // Field-map dialect (Seat: child Tables carried as
+        // fields, e.g. a settings page's slot grid): a field
+        // of type repeater in the top-level fields map is the
+        // same declaration seated on the field instead of in
+        // ui.forms.sections. Both dialects feed the one
+        // machinery; a ui.forms declaration wins on collision.
+        foreach ($fields as $field) {
+            if (! is_array($field) || ($field['type'] ?? '') !== 'repeater') {
+                continue;
+            }
+            $handle = (string) ($field['name'] ?? '');
+            if ($handle === '' || isset($defs[$handle])) {
+                continue;
+            }
+            $table = is_string($field['table'] ?? null) && $field['table'] !== ''
+                ? $field['table']
+                : Str::snake($handle);
+            $subFields = [];
+            foreach (($field['repeater_fields'] ?? []) as $rf) {
+                if (! is_array($rf)) {
+                    continue;
+                }
+                $rfName = $rf['handle'] ?? $rf['name'] ?? '';
+                if (! is_string($rfName) || $rfName === '' || $rfName === 'id') {
+                    continue;
+                }
+                $subFields[$rfName] = [
+                    'label' => $rf['label'] ?? Str::headline($rfName),
+                    'type' => $rf['type'] ?? 'string',
+                    'required' => (bool) ($rf['required'] ?? false),
+                    'options' => is_array($rf['options'] ?? null) ? $rf['options'] : [],
+                ];
+                if (is_string($rf['target'] ?? null) && $rf['target'] !== '') {
+                    $subFields[$rfName]['target'] = $rf['target'];
+                }
+            }
+            if ($subFields === []) {
+                continue;
+            }
+            $defs[$handle] = [
+                'table' => $table,
+                'foreign_key' => is_string($field['foreign_key'] ?? null) && $field['foreign_key'] !== ''
+                    ? $field['foreign_key']
+                    : Str::singular($rootTable).'_id',
+                'model' => is_string($field['model'] ?? null) && $field['model'] !== ''
+                    ? $field['model']
+                    : Str::snake(Str::singular($table)),
+                'fields' => $subFields,
+            ];
+            // Shared child tables (D-036): a repeater may declare
+            // parent_type — the service then scopes load / sync /
+            // delete by it, so one child table can serve several
+            // parents without rows bleeding across.
+            if (is_string($field['parent_type'] ?? null) && $field['parent_type'] !== '') {
+                $defs[$handle]['parent_type'] = $field['parent_type'];
             }
         }
 

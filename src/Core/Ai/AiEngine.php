@@ -1189,6 +1189,298 @@ class AiEngine
         return $reply."\n_Source: database (live counts)".($healthAsked ? ' + slice registry (live)' : '').'._';
     }
 
+    /**
+     * Slice data questions (Stage C-2): a count, a filtered
+     * count, a sum, or a "where do I …" navigation answer for
+     * ONE named slice, computed live. The Stage B AI audit
+     * (13 Nov 2026) scored the copilot 1/5 because the
+     * advertised "How many … are there?" phrasing had no
+     * handler at all: plain counts fell to the help fallback,
+     * a total was answered with registry facts, and a
+     * navigation question went unanswered. Resolution here is
+     * by SLICE (title/name, singular-tolerant) — the older
+     * table-name resolution could never match "employees" to
+     * the `employee_details` table.
+     *
+     * Deferrals (returning null keeps the existing owners):
+     * inventory questions (slices/modules as the counted
+     * noun), health questions, fact-sheet phrasings, and
+     * messages that name two slices with equal claim
+     * (multi-part territory).
+     */
+    protected function sliceDataAnswer(string $msg, SliceManager $manager): ?string
+    {
+        if (preg_match('/\b(list|show|what|which|how many|count)\b[^.?!]*\b(slices?|modules?|apps?|features?)\b/', $msg)) {
+            return null;
+        }
+        if (preg_match('/\b(health|healthy|tell me about|describe)\b/', $msg)) {
+            return null;
+        }
+
+        $isCount = (bool) preg_match('/\b(how many|count|number of)\b/', $msg);
+        $isAggregate = ! $isCount && (bool) preg_match('/\b(total|sum)\b/', $msg);
+        $isNav = (bool) preg_match('/\b(where|how)\b/', $msg)
+            && (bool) preg_match('/\b(apply|add|create|book|request|raise|submit|open|find|get)\b/', $msg);
+        if (! $isCount && ! $isAggregate && ! $isNav) {
+            return null;
+        }
+
+        $manifest = $this->resolveSliceForDataQuestion($msg, $manager);
+        if (! $manifest) {
+            return null;
+        }
+        $title = (string) ($manifest->title ?? $manifest->name);
+        // Sentences read in the menu's words: the flagship's
+        // EmployeeDetails slice is titled "Employee Details"
+        // but labelled "Employees" — counts speak of Employees.
+        $display = (string) ($manifest->navigation['label'] ?? '') ?: $title;
+
+        if ($isNav) {
+            $url = null;
+            try {
+                foreach ($manager->getNavigableSlices() as $entry) {
+                    if ((string) ($entry['name'] ?? '') === (string) $manifest->name
+                        || (string) ($entry['label'] ?? '') === $title) {
+                        $url = (string) ($entry['url'] ?? '');
+                        break;
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+            if ($url === null || $url === '') {
+                return null;
+            }
+
+            return "**{$display}** is here: {$url}\n\nOpen it and use the **Add** button for a new record.".
+                   "\n\n_Source: slice registry (live navigation)._";
+        }
+
+        $table = null;
+        try {
+            foreach ($manager->getSliceTables($manifest) as $candidate) {
+                if (Schema::hasTable($candidate)) {
+                    $table = $candidate;
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        if ($table === null) {
+            return null;
+        }
+        if (! $this->canAccessTable($table, 'count')) {
+            return "### 🔒 Access restricted\n\nYou don't have permission to count records in `{$table}` ({$title}).";
+        }
+
+        $fields = $this->declaredFieldsWithOptions($manifest);
+
+        if ($isAggregate) {
+            $numeric = [];
+            foreach ($fields as $fname => $f) {
+                if (in_array($f['type'], ['decimal', 'integer', 'int', 'float', 'double', 'money', 'number', 'currency'], true)) {
+                    $numeric[$fname] = $f;
+                }
+            }
+            if ($numeric === []) {
+                return null;
+            }
+            $pick = null;
+            foreach ($numeric as $fname => $f) {
+                $forms = array_unique([$fname, str_replace('_', ' ', $fname), strtolower((string) $f['label'])]);
+                foreach ($forms as $form) {
+                    if ($form !== '' && preg_match('/\b'.preg_quote($form, '/').'\b/', $msg)) {
+                        $pick = $fname;
+                        break 2;
+                    }
+                }
+            }
+            if ($pick === null) {
+                foreach (['value', 'amount', 'total', 'price', 'cost', 'fee', 'balance'] as $conventional) {
+                    if (isset($numeric[$conventional])) {
+                        $pick = $conventional;
+                        break;
+                    }
+                }
+            }
+            $pick ??= array_key_first($numeric);
+            try {
+                $sum = DB::table($table)->sum($pick);
+                $rowCount = DB::table($table)->count();
+            } catch (\Throwable $e) {
+                return null;
+            }
+            $formatted = rtrim(rtrim(number_format((float) $sum, 2, '.', ','), '0'), '.');
+            if ($formatted === '' || $formatted === '-0') {
+                $formatted = '0';
+            }
+            $label = (string) ($numeric[$pick]['label'] ?? $pick);
+
+            return "**{$display}** — total **{$label}**: **{$formatted}** across **{$rowCount}** records.".
+                   "\n\n_Source: database (live sum of `{$pick}` on the `{$table}` table)._";
+        }
+
+        try {
+            $total = DB::table($table)->count();
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        // A declared option value named in the message filters
+        // the count ("unpaid invoices" → status = unpaid). The
+        // `status` field wins when several fields match.
+        $filter = null;
+        foreach ($fields as $fname => $f) {
+            foreach ($f['options'] as $key => $label) {
+                $forms = array_unique([
+                    strtolower((string) $key),
+                    strtolower(str_replace('_', ' ', (string) $key)),
+                    strtolower((string) $label),
+                ]);
+                foreach ($forms as $form) {
+                    if (strlen($form) >= 3 && preg_match('/\b'.preg_quote($form, '/').'\b/', $msg)) {
+                        if ($filter === null || $fname === 'status') {
+                            $filter = [$fname, (string) $key, (string) $label];
+                        }
+                    }
+                }
+            }
+        }
+        if ($filter !== null) {
+            [$filterField, $filterKey, $filterLabel] = $filter;
+            try {
+                $filtered = DB::table($table)->where($filterField, $filterKey)->count();
+            } catch (\Throwable $e) {
+                return null;
+            }
+
+            return "**{$filtered}** of **{$total}** {$display} are **{$filterLabel}**.".
+                   "\n\n_Source: database (live counts on the `{$table}` table, `{$filterField}` = `{$filterKey}`)._";
+        }
+
+        return "There are **{$total}** {$display}.".
+               "\n\n_Source: database (live count on the `{$table}` table)._";
+    }
+
+    /**
+     * Resolve the slice a data question names. Forms per slice:
+     * name, title, spaced snake, and their singulars — the
+     * longest matching form wins; an exact tie between two
+     * slices is ambiguous and resolves to null (the multi-part
+     * handler owns those questions).
+     */
+    protected function resolveSliceForDataQuestion(string $msg, SliceManager $manager): ?SliceManifest
+    {
+        $winner = null;
+        $winnerLen = 0;
+        $tied = false;
+        foreach ($manager->getSlices() as $name => $slice) {
+            $forms = [];
+            // The navigation label is a name source too: the
+            // flagship's EmployeeDetails slice is TITLED
+            // "Employee Details" but labelled "Employees" in
+            // the menu — and "employees" is what people type.
+            foreach ([(string) $name, (string) ($slice->title ?? ''), (string) ($slice->navigation['label'] ?? '')] as $base) {
+                if ($base === '') {
+                    continue;
+                }
+                $bases = [
+                    strtolower($base),
+                    strtolower(str_replace('_', ' ', Str::snake($base))),
+                ];
+                foreach ($bases as $form) {
+                    $forms[] = $form;
+                    $forms[] = strtolower(Str::singular($form));
+                    // The inflector singularizes "leaves" to
+                    // "leaf"; the workplace word is "leave". A
+                    // naive trailing-s strip covers the forms
+                    // the inflector's irregulars miss.
+                    if (str_ends_with($form, 's')) {
+                        $forms[] = substr($form, 0, -1);
+                    }
+                }
+            }
+            $best = 0;
+            foreach (array_unique($forms) as $form) {
+                if (strlen($form) >= 3 && preg_match('/\b'.preg_quote($form, '/').'\b/', $msg)) {
+                    $best = max($best, strlen($form));
+                }
+            }
+            if ($best > $winnerLen) {
+                $winner = $slice;
+                $winnerLen = $best;
+                $tied = false;
+            } elseif ($best > 0 && $best === $winnerLen) {
+                $tied = true;
+            }
+        }
+
+        return $tied ? null : $winner;
+    }
+
+    /**
+     * Declared fields with types AND option maps, from the
+     * slice's Heart: models[].fields and the top-level fields
+     * map are merged (ported slices declare in both; the
+     * top-level map carries the option lists the filtered
+     * counts need).
+     *
+     * @return array<string, array{type: string, label: string, options: array<string, string>}>
+     */
+    protected function declaredFieldsWithOptions(SliceManifest $manifest): array
+    {
+        $out = [];
+        $absorb = function ($fname, $fdef) use (&$out) {
+            if (! is_string($fname) || $fname === '' || isset($out[$fname])) {
+                return;
+            }
+            $fdef = is_array($fdef) ? $fdef : [];
+            $options = [];
+            foreach ((array) ($fdef['options'] ?? []) as $k => $v) {
+                if (is_string($k)) {
+                    $options[$k] = is_scalar($v) ? (string) $v : $k;
+                }
+            }
+            $out[$fname] = [
+                'type' => strtolower((string) ($fdef['type'] ?? 'string')),
+                'label' => (string) ($fdef['label'] ?? Str::headline($fname)),
+                'options' => $options,
+            ];
+        };
+        $raw = (array) ($manifest->raw ?? []);
+        foreach ((array) ($raw['models'] ?? []) as $model) {
+            foreach ((array) ($model['fields'] ?? []) as $key => $fdef) {
+                if (is_array($fdef) && isset($fdef['handle'])) {
+                    $absorb((string) $fdef['handle'], $fdef);
+                } elseif (is_array($fdef) && isset($fdef['name'])) {
+                    $absorb((string) $fdef['name'], $fdef);
+                } else {
+                    $absorb(is_string($key) ? $key : '', $fdef);
+                }
+            }
+        }
+        // Ported slices declare fields in BOTH places: models
+        // (list shape, often without option maps) and a
+        // top-level fields map (which carries the options).
+        // Absorb the top level too, then enrich any field that
+        // still lacks options from its top-level twin.
+        if (isset($raw['fields']) && is_array($raw['fields'])) {
+            foreach ($raw['fields'] as $fname => $fdef) {
+                $absorb(is_string($fname) ? $fname : '', $fdef);
+            }
+            foreach ($raw['fields'] as $fname => $fdef) {
+                if (is_string($fname) && isset($out[$fname]) && $out[$fname]['options'] === [] && is_array($fdef)) {
+                    foreach ((array) ($fdef['options'] ?? []) as $k => $v) {
+                        if (is_string($k)) {
+                            $out[$fname]['options'][$k] = is_scalar($v) ? (string) $v : $k;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
     protected function handleDirectDatabaseQueries(string $message, array $context, array $pageContext): mixed
     {
         $raw = trim($message);
@@ -1251,6 +1543,16 @@ class AiEngine
         // a spurious "access restricted"), and a three-count
         // question collapsed into a single table's telemetry.
         // -------------------------------------------------------------
+        // Slice data questions (Stage C-2): counts, filtered
+        // counts, sums and "where do I …" navigation for one
+        // named slice. These outrank the fact sheet — a data
+        // question answered with registry facts was the Stage B
+        // AI audit's core failure — while inventory and
+        // multi-entity shapes defer inside the handler.
+        if ($dataReply = $this->sliceDataAnswer($msg, $manager)) {
+            return $dataReply;
+        }
+
         if ($factSheet = $this->sliceFactSheetAnswer($msg, $manager)) {
             return $factSheet;
         }

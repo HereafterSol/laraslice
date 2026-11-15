@@ -2,6 +2,7 @@
 
 namespace LaraSlice\Generator;
 
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use LaraSlice\Core\Discovery\SliceManifest;
 
@@ -237,6 +238,106 @@ class ArtefactRegenerator
         }
 
         return array_values($byName);
+    }
+
+    /**
+     * D-014 (regen half): the child tables a slice's Heart
+     * declares — every repeater and multiselect field, in
+     * both declaration dialects (the fields map, and a
+     * repeater seated in ui.forms.sections). Creation of
+     * these tables belongs to migrations (SliceGenerator
+     * now emits them at generation time); a slice generated
+     * before that fix, or one whose child declaration was
+     * added to the Heart afterwards, can declare a child
+     * table that was never migrated. Regen must say so
+     * loudly instead of silently re-syncing artefacts that
+     * point at a missing table.
+     *
+     * @return array<int, array{field: string, kind: string, table: string}>
+     */
+    public function declaredChildTables(SliceManifest $manifest): array
+    {
+        $declared = [];
+        $seen = [];
+        $add = static function (string $field, string $kind, string $table) use (&$declared, &$seen): void {
+            if ($field === '' || $table === '' || isset($seen[$field.'|'.$table])) {
+                return;
+            }
+            $seen[$field.'|'.$table] = true;
+            $declared[] = ['field' => $field, 'kind' => $kind, 'table' => $table];
+        };
+        foreach ((array) ($manifest->raw['fields'] ?? []) as $key => $field) {
+            if (! is_array($field)) {
+                continue;
+            }
+            $kind = (string) ($field['type'] ?? '');
+            if (! in_array($kind, ['repeater', 'multiselect'], true)) {
+                continue;
+            }
+            $handle = (string) ($field['name'] ?? (is_string($key) ? $key : ''));
+            $table = is_string($field['table'] ?? null) && $field['table'] !== ''
+                ? $field['table']
+                : Str::snake($handle);
+            $add($handle, $kind, $table);
+        }
+        foreach ((array) ($manifest->raw['ui']['forms']['sections'] ?? []) as $section) {
+            foreach ((array) ($section['fields'] ?? []) as $field) {
+                if (! is_array($field) || ($field['type'] ?? '') !== 'repeater') {
+                    continue;
+                }
+                $handle = (string) ($field['handle'] ?? $field['name'] ?? '');
+                $table = is_string($field['table'] ?? null) && $field['table'] !== ''
+                    ? $field['table']
+                    : Str::snake($handle);
+                $add($handle, 'repeater', $table);
+            }
+        }
+
+        return $declared;
+    }
+
+    /**
+     * The declared child tables that do NOT exist in the
+     * target app's database. The existence check defaults
+     * to the booted app's Schema facade (the command layer
+     * is where the app DB is booted, so that is where this
+     * fires); a check that cannot run at all (no DB
+     * connection) suppresses the entry rather than warning
+     * falsely. Callers may inject a checker for tests.
+     * Warn only — this never creates a table.
+     *
+     * @return array<int, array{field: string, kind: string, table: string}>
+     */
+    public function missingChildTables(SliceManifest $manifest, ?callable $tableExists = null): array
+    {
+        $tableExists ??= static function (string $table): bool {
+            try {
+                return Schema::hasTable($table);
+            } catch (\Throwable) {
+                return true;
+            }
+        };
+        $missing = [];
+        foreach ($this->declaredChildTables($manifest) as $declared) {
+            if (! $tableExists($declared['table'])) {
+                $missing[] = $declared;
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * The one canonical warning line for a missing child
+     * table: it names the slice, the field handle, the
+     * missing table, and the remedy (a migration — regen
+     * itself never creates tables).
+     *
+     * @param  array{field: string, kind: string, table: string}  $missing
+     */
+    public static function missingChildTableWarning(string $sliceName, array $missing): string
+    {
+        return "Missing child table: slice '{$sliceName}' declares {$missing['kind']} field '{$missing['field']}' whose child table '{$missing['table']}' does not exist in the database. Regen does not create tables — run the migration that creates '{$missing['table']}' (generated slice migrations now emit declared child tables) before relying on this field.";
     }
 
     /**
@@ -592,8 +693,23 @@ class ArtefactRegenerator
         foreach (array_diff($this->validationFields($current), $this->validationFields($staged)) as $field) {
             $lost[] = 'validation:'.$field;
         }
-        foreach (array_diff($this->exportedTopKeys($this->methodBody($current, 'repeaterDefinitions')), $this->exportedTopKeys($this->methodBody($staged, 'repeaterDefinitions'))) as $handle) {
-            $lost[] = 'repeater:'.$handle;
+        // A handle that changes KIND by Heart declaration
+        // (repeater ↔ multiselect, D-038) is not a loss: the
+        // child-table seat moved to the other definitions
+        // method on the staged side, so the declaration still
+        // derives it. Only a handle that vanishes from BOTH
+        // staged definition sets is hand knowledge at risk.
+        $stagedRepeaterHandles = $this->exportedTopKeys($this->methodBody($staged, 'repeaterDefinitions'));
+        $stagedMultiselectHandles = $this->exportedTopKeys($this->methodBody($staged, 'multiselectDefinitions'));
+        foreach (array_diff($this->exportedTopKeys($this->methodBody($current, 'repeaterDefinitions')), $stagedRepeaterHandles) as $handle) {
+            if (! in_array($handle, $stagedMultiselectHandles, true)) {
+                $lost[] = 'repeater:'.$handle;
+            }
+        }
+        foreach (array_diff($this->exportedTopKeys($this->methodBody($current, 'multiselectDefinitions')), $stagedMultiselectHandles) as $handle) {
+            if (! in_array($handle, $stagedRepeaterHandles, true)) {
+                $lost[] = 'multiselect:'.$handle;
+            }
         }
         foreach (array_diff($this->exportedTopKeys($this->methodBody($current, 'relationMultiDefinitions')), $this->exportedTopKeys($this->methodBody($staged, 'relationMultiDefinitions'))) as $handle) {
             $lost[] = 'relation-multi:'.$handle;

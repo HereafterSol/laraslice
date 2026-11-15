@@ -50,17 +50,32 @@ class FilterDrawerGenerationTest extends TestCase
         ]]]);
 
         $index = file_get_contents($path.'/Resources/views/index.blade.php');
-        // The Filters button is generated inline, gated on the
-        // declared set being non-empty; the drawer itself is the
-        // package partial every directory composes.
-        $this->assertStringContainsString('data-ls-filters-btn', $index);
+        // Seat 3 (13 Nov 2026): the Filter button moved OUT of
+        // the generated index into the package list-controls
+        // partial every directory composes — it is universal
+        // now (the any-field builder works with zero declared
+        // filters), so the index carries the include instead of
+        // the button, and the declared filterbar stays gated on
+        // the declared set.
+        $this->assertStringContainsString("@include('laraslice::directory.list-controls')", $index);
         $this->assertStringContainsString("!empty(\$sidebarFilters", $index);
         $this->assertStringContainsString("@include('laraslice::directory.filters-drawer')", $index);
 
+        $controls = file_get_contents(dirname(__DIR__, 3).'/src/Wizard/views/directory/list-tools.blade.php');
+        $this->assertStringContainsString('data-ls-filters-btn', $controls);
+        $this->assertStringContainsString('List View', $controls);
+        // The tools render inside the table's one action row
+        // via the toolbar-tools slot (design correction,
+        // 13 Nov 2026) — never as a separate floating row.
+        $this->assertStringContainsString('<x-slot:toolbar-tools>', $index);
+        $this->assertStringContainsString("@include('laraslice::directory.list-tools')", $index);
+
         $drawer = file_get_contents(dirname(__DIR__, 3).'/src/Wizard/views/directory/filters-drawer.blade.php');
-        // The drawer is gated on the declared set being non-empty:
-        // slices without sidebar_filters never render it.
-        $this->assertStringContainsString("!empty(\$sidebarFilters", $drawer);
+        // The drawer renders when the builder OR the declared
+        // set exists — with filter fields supplied by the
+        // controller the builder is always available.
+        $this->assertStringContainsString('$lsHasBuilder || $lsHasDeclared', $drawer);
+        $this->assertStringContainsString('data-ls-ff-row', $drawer);
         $this->assertStringContainsString('Apply Filters', $drawer);
         // Declared filter fields render as named controls.
         $this->assertStringContainsString('name="{{ $sfHandle }}"', $drawer);

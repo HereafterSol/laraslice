@@ -18,6 +18,7 @@ use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Core\Metadata\MetadataIssues;
+use LaraSlice\Core\Base\Traits\AppliesFieldBehaviour;
 use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
 use LaraSlice\Support\DataTableRows;
 use LaraSlice\Support\DirectoryUi;
@@ -25,7 +26,10 @@ use Symfony\Component\Yaml\Yaml;
 
 abstract class BaseSliceWebController extends Controller
 {
-    use AuthorizesSliceActions;
+    use AppliesFieldBehaviour;
+    use AuthorizesSliceActions {
+        sliceAbilities as sliceAbilitiesByPermission;
+    }
 
     abstract protected function getService(): IFormDataService&IListingDataService;
 
@@ -54,6 +58,17 @@ abstract class BaseSliceWebController extends Controller
 
         // Load UI config from slice.yaml for summary cards, quick filters, etc.
         $uiConfig = $this->getSliceUiConfig();
+
+        // Single-record slices (ui.single): the directory is
+        // one record — a full navigation lands on its form.
+        // Fragment requests are the directory's own in-place
+        // round-trips and are never diverted.
+        if (! empty($uiConfig['single']) && ! $request->has('ls_fragment')) {
+            return redirect()->route(
+                $this->resolveRouteName('edit'),
+                $this->routeParameters(['id' => $this->soleRecordId()])
+            );
+        }
 
         // Default-view enforcement (backlog D4): a slice whose
         // Heart declares default_view: matrix LANDS on its
@@ -89,6 +104,15 @@ abstract class BaseSliceWebController extends Controller
         // rendered (or didn't) but never narrowed a single row.
         $relationshipOptions = $this->resolveRelationshipOptions($createForm);
         $filterDefaults = $this->applyDirectoryCriteria($request, $filter, $uiConfig);
+
+        // Free-form filter conditions (Seat 3): the Filter
+        // builder's rows, validated against the Heart —
+        // they narrow the list beside the declared facets
+        // and render as operator chips above the table.
+        $filterConditions = \LaraSlice\Support\DirectoryConditions::parse($request->query('ff'), $this->ownManifest());
+        if ($filter instanceof BaseFilter && $filterConditions !== []) {
+            $filter->setConditions($filterConditions);
+        }
 
         // Directory landing order. An explicit request sort always
         // wins; otherwise the declared ui.directory.default_sort;
@@ -325,6 +349,10 @@ abstract class BaseSliceWebController extends Controller
                     : null,
                 'quickFilters' => $quickFilters,
                 'sidebarFilters' => $sidebarFilters,
+                'filterConditions' => $filterConditions,
+                'sliceName' => (string) ($this->ownManifest()['name'] ?? ''),
+                'listViews' => $this->savedListViews(),
+                'filterFields' => \LaraSlice\Support\DirectoryConditions::fieldOptions($this->ownManifest()),
                 'filterDefaults' => $filterDefaults,
                 'directoryActions' => $directoryActions,
                 // Declared create-button label (ui.directory.create_label):
@@ -351,6 +379,46 @@ abstract class BaseSliceWebController extends Controller
                 // button; undeclared slices keep it.
                 'directoryExport' => (bool) ($uiConfig['directory']['export'] ?? true),
                 'placement' => DirectoryUi::listPlacement($uiConfig),
+                // Page identity for the header-right title row
+                // (structure correction, 13 Nov 2026): the
+                // source's list header carries the page title
+                // at the left of the actions row; the port's
+                // row rendered actions only.
+                'directoryTitle' => (string) ($this->ownManifest()['title'] ?? ''),
+                // Tree directory (D-064): ui.directory.tree
+                // {parent_field, title_field, group_field?}
+                // lands the directory on a nested tree (the
+                // source's tree DocTypes open in Tree View);
+                // ?view=list keeps the data-table one toggle
+                // away. Null for undeclared slices.
+                'directoryTree' => $this->directoryTreeData($uiConfig),
+                'directoryViewMode' => $this->directoryViewMode($uiConfig, $request),
+                // Quick-entry dialog seat (D-011): the declared
+                // ui.quick_entry.fields subset, resolved against
+                // the Heart + the create form's relationship
+                // options. Empty for undeclared slices — their
+                // directories render exactly as before.
+                'quickEntryFields' => array_merge(
+                    DirectoryUi::quickEntryFields($this->ownManifest(), $relationshipOptions),
+                    // Quick-entry companion section (D-040):
+                    // fields of a companion record created in
+                    // the same dialog (a new Customer's Primary
+                    // Address), submitted as companion[...].
+                    DirectoryUi::quickEntryCompanionFields($this->ownManifest())
+                ),
+                'quickEntryStoreUrl' => Route::has($this->resolveRouteName('store'))
+                    ? route($this->resolveRouteName('store'), $this->routeParameters())
+                    : null,
+                'quickEntryCreateUrl' => Route::has($this->resolveRouteName('create'))
+                    ? route($this->resolveRouteName('create'), $this->routeParameters())
+                    : null,
+                'quickEntryTitle' => 'New '.$this->entityLabel(),
+                // Create-button label from the manifest title
+                // ("Add Lead", "Add Email Campaign") — the
+                // generated template's fallback is the studly
+                // slice name, which concatenates multi-word
+                // names ("Add CrmSetting").
+                'directoryCreateLabel' => 'Add '.$this->entityLabel(),
                 'tableViews' => $dirViews,
                 'defaultView' => $componentDefaultView,
             ]
@@ -1721,6 +1789,13 @@ abstract class BaseSliceWebController extends Controller
         // defaults and the scope clauses narrow the export
         // exactly like the on-screen list.
         $this->applyDirectoryCriteria($request, $filter, $this->getSliceUiConfig());
+        // The Filter builder's rows (ff[...]) narrow the export
+        // too — an export that ignores the user's active filter
+        // silently ships the whole table (Phase 7, D-082).
+        $exportConditions = \LaraSlice\Support\DirectoryConditions::parse($request->query('ff'), $manifest);
+        if ($filter instanceof BaseFilter && $exportConditions !== []) {
+            $filter->setConditions($exportConditions);
+        }
         $records = $this->getService()->getList($filter)->items;
         if (! is_array($records)) {
             $records = iterator_to_array($records);
@@ -1729,6 +1804,14 @@ abstract class BaseSliceWebController extends Controller
         $formClass = $this->getFormClass();
         $options = $this->resolveRelationshipOptions(new $formClass);
         $labelMaps = [];
+        // Declared option vocabularies export as their LABELS (the
+        // source's exports read "Lead", not the stored slug "lead").
+        foreach (\LaraSlice\Support\DirectoryConditions::fieldOptions($manifest) as $fieldSpec) {
+            if (! empty($fieldSpec['options'])) {
+                $labelMaps[(string) $fieldSpec['name']] = collect($fieldSpec['options'])
+                    ->mapWithKeys(fn ($o) => [(string) $o['value'] => (string) $o['label']])->all();
+            }
+        }
         foreach ($columns as $column) {
             $key = (string) ($column['key'] ?? '');
             if (! str_ends_with($key, '_id')) {
@@ -2052,18 +2135,43 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('create');
 
+        // Declared abilities (D-070): the source offers no Add
+        // for this slice at all — the create screen does not
+        // exist, so land back on the directory.
+        if ($this->declaredAbilityDenied('create')) {
+            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
+                ->with('error', 'New records cannot be added here.');
+        }
+
+        // Single-record slices never gain a second record:
+        // create lands on the one record's form.
+        if ($this->isSingleSlice()) {
+            return redirect()->route(
+                $this->resolveRouteName('edit'),
+                $this->routeParameters(['id' => $this->soleRecordId()])
+            );
+        }
+
         $formClass = $this->getFormClass();
         $form = new $formClass;
         $this->seedFormFromQuery($form, request()->query());
+        // Built-in Duplicate action (D-083): ?duplicate_from={id}
+        // seeds the create form from the source record.
+        if (request()->query('duplicate_from') !== null) {
+            $this->seedFormFromDuplicate($form, request()->query('duplicate_from'));
+        }
 
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
+            $this->resolveDynamicOptions($form),
+            $this->resolveMultiselectOptions(),
             $this->getFormViewData($form, true),
             $this->customFieldViewData(true),
             $this->overlayLayoutData(request()),
             [
                 'form' => $form,
                 'isNew' => true,
+                'formEntityLabel' => $this->entityLabel(),
                 'can' => $this->sliceAbilities(),
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(),
@@ -2228,6 +2336,60 @@ abstract class BaseSliceWebController extends Controller
     }
 
     /**
+     * Seed a create form from an existing record — the
+     * built-in Duplicate action (D-083), following Frappe's
+     * copy_doc semantics: every field carries over EXCEPT
+     * the record's identity (id + the autoname field), the
+     * audit stamps, fields declared no_copy, and passwords;
+     * child rows copy without their own ids (they belong to
+     * the new record on save); multiselect selections copy
+     * as the same target set. The copy is UNSAVED — it lands
+     * only when the user saves the prefilled form.
+     */
+    protected function seedFormFromDuplicate(object $form, mixed $sourceId): void
+    {
+        try {
+            if (! is_numeric($sourceId)) {
+                return;
+            }
+            $source = $this->getService()->getItemById((int) $sourceId);
+            if ($source === null) {
+                return;
+            }
+            $manifest = $this->ownManifest();
+            $fields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($manifest);
+            $autonameField = $manifest['autoname']['field'] ?? null;
+            $skip = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'owner'];
+            if (is_string($autonameField) && $autonameField !== '') {
+                $skip[] = $autonameField;
+            }
+            foreach ($fields as $name => $definition) {
+                if (! is_array($definition) || in_array($name, $skip, true)) {
+                    continue;
+                }
+                if (! empty($definition['no_copy']) || (string) ($definition['type'] ?? '') === 'password') {
+                    continue;
+                }
+                if (! property_exists($form, $name) || ! property_exists($source, $name)) {
+                    continue;
+                }
+                $value = $source->{$name};
+                if ((string) ($definition['type'] ?? '') === 'repeater' && is_array($value)) {
+                    $value = array_map(static function ($row) {
+                        $row = is_object($row) ? get_object_vars($row) : (array) $row;
+                        unset($row['id']);
+
+                        return $row;
+                    }, $value);
+                }
+                $form->{$name} = $value;
+            }
+        } catch (\Throwable) {
+            // Prefill is a convenience; never break the create page.
+        }
+    }
+
+    /**
      * The target table of a field's DECLARED belongsTo relation,
      * or null when the slice's Heart declares none for it.
      *
@@ -2296,6 +2458,89 @@ abstract class BaseSliceWebController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Options for fields declaring a dynamic source
+     * (Stage C-5): `options_from: slices` resolves the slice
+     * registry; `options_from: slice_records:<via>` resolves
+     * the records of the slice the via field currently names
+     * (on create the via is usually empty, so the list starts
+     * empty and the browser refills it from the options
+     * endpoint when the via field changes). Keys follow the
+     * form markup's convention: {handle}Options.
+     *
+     * @return array<string, array<array-key, string>>
+     */
+    protected function resolveDynamicOptions(mixed $form): array
+    {
+        $out = [];
+        try {
+            foreach (($this->ownManifest()['fields'] ?? []) as $handle => $fieldDef) {
+                $from = is_array($fieldDef) ? ($fieldDef['options_from'] ?? null) : null;
+                if (! is_string($from) || $from === '') {
+                    continue;
+                }
+                $key = Str::camel((string) $handle).'Options';
+                if ($from === 'slices') {
+                    $out[$key] = \LaraSlice\Support\SliceRecordOptions::registryOptions();
+                } elseif (str_starts_with($from, 'slice_records:')) {
+                    $via = substr($from, strlen('slice_records:'));
+                    $target = is_object($form) ? ($form->{$via} ?? null) : (is_array($form) ? ($form[$via] ?? null) : null);
+                    if (! is_string($target) || $target === '') {
+                        // Old input carries the via on create
+                        // forms reached by a redirect — record
+                        // conversions and validation bounces
+                        // pre-fill this way, and their dependent
+                        // selects must resolve against it.
+                        $old = old($via);
+                        $target = is_string($old) && $old !== '' ? $old : $target;
+                    }
+                    $out[$key] = is_string($target) && $target !== ''
+                        ? \LaraSlice\Support\SliceRecordOptions::forSlice($target)
+                        : [];
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        return $out;
+    }
+
+    /**
+     * Multiselect (Table MultiSelect) picker options: for
+     * each of the service's multiselect definitions, the
+     * target slice's records as {value, label} pairs under
+     * the {handle}Options key the generated form reads.
+     * Resolution never breaks the form — an unknown target
+     * yields an empty picker.
+     *
+     * @return array<string, array<int, array{value: string, label: string}>>
+     */
+    protected function resolveMultiselectOptions(): array
+    {
+        $service = $this->getService();
+        if (! $service instanceof BaseSliceService) {
+            return [];
+        }
+        $out = [];
+        foreach ($service->multiselectDefinitions() as $handle => $def) {
+            $target = is_array($def) ? (string) ($def['target'] ?? '') : '';
+            if ($target === '') {
+                continue;
+            }
+            try {
+                $pairs = [];
+                foreach (\LaraSlice\Support\SliceRecordOptions::forSlice($target) as $id => $label) {
+                    $pairs[] = ['value' => (string) $id, 'label' => (string) $label];
+                }
+                $out[\Illuminate\Support\Str::camel((string) $handle).'Options'] = $pairs;
+            } catch (\Throwable) {
+                $out[\Illuminate\Support\Str::camel((string) $handle).'Options'] = [];
+            }
+        }
+
+        return $out;
     }
 
     protected function resolveRelationshipOptions(mixed $form): array
@@ -2640,6 +2885,17 @@ abstract class BaseSliceWebController extends Controller
             abort(404);
         }
 
+        // Record target (D-016): a slice may declare
+        // ui.record_target = 'form' when its source system has
+        // no separate read surface — opening a record IS the
+        // form there, so the show route hands over to edit
+        // (after the not-found and scope checks above, so
+        // deep links keep their semantics).
+        if (($this->ownManifest()['ui']['record_target'] ?? null) === 'form'
+            && Route::has($this->resolveRouteName('edit'))) {
+            return redirect()->route($this->resolveRouteName('edit'), $id);
+        }
+
         $showView = $this->ownViewName('show');
         $ownManifest = $this->ownManifest();
 
@@ -2968,13 +3224,17 @@ abstract class BaseSliceWebController extends Controller
 
         $viewData = array_merge(
             $this->resolveRelationshipOptions($form),
+            $this->resolveDynamicOptions($form),
+            $this->resolveMultiselectOptions(),
             $this->getFormViewData($form, false),
             $this->customFieldViewData(false, $id),
             $this->overlayLayoutData(request()),
             [
                 'form' => $form,
                 'isNew' => false,
+                'formEntityLabel' => $this->entityLabel(),
                 'can' => $this->sliceAbilities(),
+                'workplace' => $this->workplaceData($form),
                 'routePrefix' => $this->getRoutePrefix(),
                 'routeParameters' => $this->routeParameters(['id' => $id]),
                 'parentId' => request()->route('parentId'),
@@ -2984,9 +3244,61 @@ abstract class BaseSliceWebController extends Controller
         return view($this->ownViewName('form'), $viewData);
     }
 
+    /**
+     * Seat 3: the current user's saved list views for
+     * this slice (List View switcher). Never breaks the
+     * directory — any failure yields no views.
+     *
+     * @return array<int, array{id: int, name: string}>
+     */
+    protected function savedListViews(): array
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('laraslice_list_views') || auth()->id() === null) {
+                return [];
+            }
+
+            return \Illuminate\Support\Facades\DB::table('laraslice_list_views')
+                ->where('user_id', auth()->id())
+                ->where('slice', (string) ($this->ownManifest()['name'] ?? ''))
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn ($row) => ['id' => (int) $row->id, 'name' => (string) $row->name])
+                ->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * Seat 2 (record workplace): tabs, rail and prev/next
+     * data for the record page. Composition never breaks
+     * the edit screen — any failure yields no workplace.
+     */
+    protected function workplaceData(object $form): ?array
+    {
+        try {
+            $manifest = $this->ownManifest();
+            $sliceName = (string) ($manifest['name'] ?? '');
+            if ($sliceName === '') {
+                return null;
+            }
+            $workplace = \LaraSlice\Support\RecordWorkplace::compose($sliceName, $manifest, $form);
+
+            return ($workplace['id'] ?? null) !== null ? $workplace : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function store(Request $request)
     {
         $this->authorizeSlice('create');
+
+        if ($this->declaredAbilityDenied('create')) {
+            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
+                ->with('error', 'New records cannot be added here.');
+        }
 
         // Prevent accidental rapid duplicate submissions (within 3 seconds)
         $fingerprint = 'slice_sub_'.sha1(
@@ -3014,10 +3326,15 @@ abstract class BaseSliceWebController extends Controller
             return $rejection;
         }
         $this->captureRepeaterMarkers($request, $form);
+        $this->captureMultiselectMarkers($request, $form);
         $this->applyWorkflowInitialState($form);
+        $this->applyDialogEffects($request, $form);
+        $this->applyFieldBehaviour($request, $form, null, true);
+        $this->applyAutoname($form, $request);
         $this->applyBoardAxisDefault($form);
         $this->applyOwnScopeOnCreate($form);
         $this->applyCompanionAccount($request, $form);
+        $this->applyQuickEntryCompanion($request, $form);
 
         try {
             $id = $this->getService()->save($form);
@@ -3025,6 +3342,7 @@ abstract class BaseSliceWebController extends Controller
             return $this->bindingExceptionRejection($request, $e);
         }
         $this->persistCustomFields($request, $id);
+        $this->applyConversionSourceStatus($form);
         try {
             Cache::put($fingerprint, $id, now()->addSeconds(3));
         } catch (\Throwable $e) {
@@ -3075,6 +3393,11 @@ abstract class BaseSliceWebController extends Controller
     {
         $this->authorizeSlice('edit');
 
+        if ($this->declaredAbilityDenied('update')) {
+            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
+                ->with('error', 'Records cannot be changed here.');
+        }
+
         $this->validateCustomFields($request);
 
         $formClass = $this->getFormClass();
@@ -3085,6 +3408,9 @@ abstract class BaseSliceWebController extends Controller
             return $rejection;
         }
         $this->captureRepeaterMarkers($request, $form);
+        $this->captureMultiselectMarkers($request, $form);
+        $this->applyDialogEffects($request, $form);
+        $this->applyFieldBehaviour($request, $form, $this->getService()->getItemById($id), false);
 
         try {
             $this->getService()->save($form);
@@ -3107,18 +3433,88 @@ abstract class BaseSliceWebController extends Controller
             ], 200);
         }
 
-        if ($request->input('action') === 'save_continue') {
+        if ($request->input('action') === 'save_continue' || $request->filled('_dialog')) {
             return back()->with('success', $msg);
         }
 
         return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())->with('success', $msg);
     }
 
+    /**
+     * Declared record-dialog effects (D-071): a dialog's
+     * confirm submit carries the dialog's declared outcome
+     * with it — the trigger field is forced to the trigger
+     * value and the dialog's `set` map is applied (values
+     * are literals or the @today / @now tokens) — no matter
+     * which control opened the dialog. The header-button
+     * path never arms the trigger select in the browser, so
+     * the guarantee lives here, server-side, where the save
+     * is judged; the browser wiring only mirrors it so the
+     * user sees the armed state. The dialog's name arrives
+     * as the confirm button's _dialog value; an undeclared
+     * name applies nothing.
+     */
+    protected function applyDialogEffects(Request $request, object $form): void
+    {
+        $dialogName = $request->input('_dialog');
+        if (! is_string($dialogName) || $dialogName === '') {
+            return;
+        }
+        foreach (($this->ownManifest()['ui']['dialogs'] ?? []) as $decl) {
+            if (! is_array($decl) || ($decl['name'] ?? null) !== $dialogName) {
+                continue;
+            }
+            $trigger = is_array($decl['trigger'] ?? null) ? $decl['trigger'] : [];
+            $triggerField = $trigger['field'] ?? null;
+            if (is_string($triggerField) && $triggerField !== '' && property_exists($form, $triggerField)) {
+                try {
+                    $form->{$triggerField} = $trigger['value'] ?? null;
+                } catch (\TypeError) {
+                }
+            }
+            foreach ((array) ($decl['set'] ?? []) as $field => $value) {
+                if (! is_string($field) || $field === '' || ! property_exists($form, $field)) {
+                    continue;
+                }
+                $resolved = match ($value) {
+                    '@today' => now()->toDateString(),
+                    '@now' => now()->toDateTimeString(),
+                    default => $value,
+                };
+                try {
+                    $form->{$field} = $resolved;
+                } catch (\TypeError) {
+                }
+            }
+        }
+    }
+
     public function destroy(string|int $id)
     {
         $this->authorizeSlice('delete');
 
-        $this->getService()->delete($id);
+        // Declared abilities (D-070): the source never offers
+        // Delete for this slice.
+        if ($this->declaredAbilityDenied('delete')) {
+            return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
+                ->with('error', 'Records cannot be deleted here.');
+        }
+
+        // Single-record slices: the one record always
+        // exists — there is nothing to delete.
+        if ($this->isSingleSlice()) {
+            return redirect()->route($this->resolveRouteName('edit'), $this->routeParameters(['id' => $id]))
+                ->with('error', 'This settings record cannot be deleted.');
+        }
+
+        try {
+            $this->getService()->delete($id);
+        } catch (LinkedRecordException $e) {
+            // Linked records cannot be deleted (D-081) — the
+            // source refuses and says why; stay on the record.
+            return redirect()->route($this->resolveRouteName('edit'), $this->routeParameters(['id' => $id]))
+                ->with('error', $e->getMessage());
+        }
 
         return redirect()->route($this->resolveRouteName('index'), $this->routeParameters())
             ->with('success', 'Record deleted successfully');
@@ -3186,6 +3582,31 @@ abstract class BaseSliceWebController extends Controller
                 if (property_exists($form, $handle)) {
                     $value = $request->input($handle);
                     $form->{$handle} = is_array($value) ? $value : [];
+                }
+                $form->markProvided($handle);
+            }
+        }
+    }
+
+    /**
+     * Multiselect pickers submit a hidden _multiselects[] marker per
+     * field so a selection whose chips were ALL removed still counts
+     * as provided (it submits no {handle}[] inputs at all). Mark
+     * those DTO properties provided and normalize their values for
+     * the service's child-row diff sync.
+     */
+    protected function captureMultiselectMarkers(Request $request, object $form): void
+    {
+        $service = $this->getService();
+        if (! $service instanceof BaseSliceService || ! $form instanceof BaseFormBusinessObject) {
+            return;
+        }
+        $marked = (array) $request->input('_multiselects', []);
+        foreach (array_keys($service->multiselectDefinitions()) as $handle) {
+            if (in_array($handle, $marked, true) || $request->has($handle)) {
+                if (property_exists($form, $handle)) {
+                    $value = $request->input($handle);
+                    $form->{$handle} = is_array($value) ? array_values($value) : [];
                 }
                 $form->markProvided($handle);
             }
@@ -3545,6 +3966,228 @@ abstract class BaseSliceWebController extends Controller
     }
 
     /**
+     * Record conversion (declared `conversions:` in the
+     * Heart): pre-fill the target slice's create form
+     * from this record, following the source systems'
+     * mapped-doc semantics. Nothing is saved here — the
+     * user reviews the pre-filled form and saves through
+     * the target's normal store, so all of the target's
+     * behaviours apply. Only declared targets convert.
+     */
+    public function convert(Request $request, $id, string $target)
+    {
+        $manifest = $this->ownManifest();
+        $conversion = \LaraSlice\Support\RecordConverter::find($manifest, $target);
+        if ($conversion === null) {
+            abort(404);
+        }
+        $record = $this->getService()->getItemById($id);
+        if ($record === null) {
+            abort(404);
+        }
+        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+        $targetSlice = $manager->getSlice($conversion['target']);
+        if ($targetSlice === null) {
+            abort(404);
+        }
+        $targetFields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($targetSlice->raw);
+        $values = [];
+        foreach (array_keys(\LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($manifest)) as $field) {
+            $values[$field] = $record->{$field} ?? null;
+        }
+        // Pseudo-fields: `id` is the record's registry
+        // identity (what link/select targets store);
+        // `name` is its display identity (the minted
+        // series name when it has one, else the id) —
+        // the source systems' mapped docs use `name`
+        // for both, a declaration picks per target.
+        $values['id'] = $record->id ?? $id;
+        if (($values['name'] ?? null) === null) {
+            $values['name'] = $values['id'];
+        }
+        // Declared pre-steps (D-073): intermediate records the
+        // convert dialog offered (a Prospect/Contact from a Lead)
+        // are created BEFORE the target form opens, as the
+        // source's dialog does.
+        $this->runConversionPreSteps($request, $conversion, $values);
+        $payload = \LaraSlice\Support\RecordConverter::payload($conversion, $values, $targetFields);
+        $prefix = \LaraSlice\Support\RecordConverter::targetRoutePrefix($conversion['target']);
+        if ($prefix === null || ! \Illuminate\Support\Facades\Route::has($prefix.'create')) {
+            abort(404);
+        }
+        $label = \LaraSlice\Support\DirectoryUi::recordLabel($record) ?? ('#'.$id);
+
+        return redirect()->route($prefix.'create')
+            ->withInput($payload)
+            ->with('success', "Pre-filled from {$label} — review and save to create the {$conversion['label']}.");
+
+    }
+
+    /**
+     * Conversion pre-steps (D-073): the convert dialog's declared
+     * intermediate creates (Desk's "Create Prospect" / "Create
+     * Contact" checkboxes on the Lead → Opportunity dialog). Each
+     * chosen step is created through its own slice's service from
+     * the same mapped-doc payload machinery BEFORE the target
+     * form opens; a step whose link row already ties this source
+     * record to an intermediate is skipped (the source stops
+     * offering it). A failed step never blocks the conversion.
+     */
+    protected function runConversionPreSteps(Request $request, array $conversion, array $sourceValues): void
+    {
+        $steps = $conversion['pre_steps'] ?? [];
+        if ($steps === []) {
+            return;
+        }
+        $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+        $explicit = $request->has('steps');
+        foreach ($steps as $step) {
+            $chosen = $explicit ? $request->boolean('steps.'.$step['name']) : (bool) $step['default'];
+            if (! $chosen) {
+                continue;
+            }
+            try {
+                $slice = $manager->getSlice($step['slice']);
+                if ($slice === null || $this->conversionStepExists($step, $slice->raw, $sourceValues)) {
+                    continue;
+                }
+                $targetFields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($slice->raw);
+                $payload = \LaraSlice\Support\RecordConverter::payload([
+                    'target' => $step['slice'],
+                    'label' => $step['label'],
+                    'field_map' => $step['field_map'],
+                    'field_no_map' => [],
+                    'set' => $step['set'],
+                    'children' => $step['children'],
+                    'pre_steps' => [],
+                    'source_status' => null,
+                ], $sourceValues, $targetFields);
+                $nameOverride = $request->input('step_names.'.$step['name']);
+                if ($step['name_field'] !== null && is_string($nameOverride) && trim($nameOverride) !== '') {
+                    $payload[$step['name_field']] = trim($nameOverride);
+                }
+                if ($payload !== []) {
+                    $this->createSliceRecord($slice, $payload);
+                }
+            } catch (\Throwable $e) {
+                // A pre-step failure must not block the conversion,
+                // but it is logged, never silent.
+                \Illuminate\Support\Facades\Log::warning('Conversion pre-step failed', [
+                    'step' => $step['name'] ?? null,
+                    'slice' => $step['slice'] ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /** True when a step's child link row already ties this source record to an intermediate record. */
+    protected function conversionStepExists(array $step, array $stepManifest, array $sourceValues): bool
+    {
+        $fields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($stepManifest);
+        foreach ($step['children'] as $handle => $childDecl) {
+            $def = $fields[$handle] ?? null;
+            if (! is_array($def) || empty($def['table'])) {
+                continue;
+            }
+            foreach ($childDecl['rows'] as $rowDecl) {
+                foreach ($rowDecl['field_map'] as $sourceField => $childField) {
+                    if (($sourceField === 'id' || $sourceField === 'name') && ! empty($sourceValues['id'])) {
+                        return \Illuminate\Support\Facades\DB::table((string) $def['table'])
+                            ->where((string) $childField, (string) $sourceValues['id'])
+                            ->exists();
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** Create a record on another slice through its own service (the quick-entry companion precedent, generalized). */
+    protected function createSliceRecord(\LaraSlice\Core\Discovery\SliceManifest $slice, array $payload): string|int|null
+    {
+        $namespace = $slice->namespace ?? ($slice->raw['namespace'] ?? null);
+        if (! is_string($namespace) || $namespace === '') {
+            return null;
+        }
+        $studly = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($slice->name));
+        $serviceClass = rtrim($namespace, '\\').'\\Services\\'.$studly.'SliceService';
+        $formClass = rtrim($namespace, '\\').'\\Contracts\\'.$studly.'FormBusinessObject';
+        if (! class_exists($serviceClass) || ! class_exists($formClass)) {
+            return null;
+        }
+        $service = app($serviceClass);
+        $form = $formClass::fromArray($payload);
+
+        return $service->save($form);
+    }
+
+    /**
+     * Conversion source-status effect (D-073): when a record is
+     * SAVED on a slice that another slice's conversion targets
+     * with a declared `source_status`, the SOURCE record's status
+     * flips — Desk marks the Lead "Opportunity" once an
+     * Opportunity born from it saves, and "Converted" once a
+     * Customer born from it saves. The back-link is the
+     * conversion's id/name field_map entry; the conversion's
+     * literal `set` discriminators must match the saved record,
+     * so only conversion-born records flip their source.
+     */
+    protected function applyConversionSourceStatus(object $form): void
+    {
+        try {
+            $targetName = (string) ($this->ownManifest()['name'] ?? '');
+            if ($targetName === '') {
+                return;
+            }
+            $manager = app(\LaraSlice\Core\Discovery\SliceManager::class);
+            foreach ($manager->getAllSlices() as $sourceSlice) {
+                foreach (\LaraSlice\Support\RecordConverter::conversionsOf($sourceSlice->raw) as $conversion) {
+                    if ($conversion['target'] !== $targetName || empty($conversion['source_status'])) {
+                        continue;
+                    }
+                    $backlink = $conversion['field_map']['id'] ?? $conversion['field_map']['name'] ?? null;
+                    if ($backlink === null || ! property_exists($form, $backlink)) {
+                        continue;
+                    }
+                    $sourceId = $form->{$backlink};
+                    if ($sourceId === null || $sourceId === '') {
+                        continue;
+                    }
+                    $matches = true;
+                    foreach ($conversion['set'] as $field => $rule) {
+                        if (is_scalar($rule) && property_exists($form, $field)
+                            && (string) ($form->{$field} ?? '') !== (string) $rule) {
+                            $matches = false;
+                            break;
+                        }
+                    }
+                    if (! $matches) {
+                        continue;
+                    }
+                    $sourceFields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($sourceSlice->raw);
+                    $options = $sourceFields['status']['options'] ?? null;
+                    if (is_array($options) && $options !== [] && ! array_key_exists($conversion['source_status'], $options)) {
+                        continue;
+                    }
+                    $table = \LaraSlice\Support\SliceRecordOptions::tableForSlice($sourceSlice->name);
+                    if ($table === null) {
+                        continue;
+                    }
+                    $update = ['status' => $conversion['source_status']];
+                    if (\LaraSlice\Support\SchemaCache::hasColumn($table, 'updated_at')) {
+                        $update['updated_at'] = now();
+                    }
+                    \Illuminate\Support\Facades\DB::table($table)->where('id', $sourceId)->update($update);
+                }
+            }
+        } catch (\Throwable) {
+            // The flip is a declared effect; it never fails the save.
+        }
+    }
+
+    /**
      * Board hygiene (the workflow-initial-state rule's sibling):
      * a record created on a slice whose directory declares a
      * board view enters the board at the axis' first value when
@@ -3701,6 +4344,319 @@ abstract class BaseSliceWebController extends Controller
             : [];
     }
 
+    /**
+     * Seat 1 (Stage D): when a slice declares NO directory
+     * filters, fields flagged in_standard_filter become
+     * quick filters automatically — the flag is the
+     * declaration (Frappe's standard filters work exactly
+     * this way). Option lists come from the field's own
+     * declared options, or from the related slice's
+     * records for link fields.
+     */
+    protected function withStandardFilterFallback(array $manifest): array
+    {
+        $ui = $manifest['ui'] ?? [];
+        $directory = $ui['directory'] ?? [];
+        if (! empty($directory['quick_filters']) || ! empty($directory['sidebar_filters'])) {
+            return $ui;
+        }
+        $fields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($manifest);
+        $filters = [];
+        foreach ($fields as $name => $definition) {
+            if (! is_array($definition) || empty($definition['in_standard_filter'])) {
+                continue;
+            }
+            $filter = [
+                'handle' => $name,
+                'label' => (string) ($definition['label'] ?? \Illuminate\Support\Str::headline($name)),
+                'display' => 'select',
+            ];
+            if (! empty($definition['options']) && is_array($definition['options'])) {
+                $filter['options'] = $definition['options'];
+            } else {
+                $target = \LaraSlice\Support\SliceRecordOptions::viaTargetSlice($fields, $name);
+                if ($target !== null) {
+                    $options = [];
+                    foreach (\LaraSlice\Support\SliceRecordOptions::forSlice($target) as $value => $label) {
+                        $options[] = ['value' => $value, 'label' => $label];
+                    }
+                    if ($options !== []) {
+                        $filter['options'] = $options;
+                    }
+                }
+            }
+            $filters[] = $filter;
+        }
+        if ($filters !== []) {
+            $ui['directory'] = array_merge($directory, ['quick_filters' => $filters]);
+        }
+
+        return $ui;
+    }
+
+    private ?bool $singleSliceMemo = null;
+
+    /**
+     * Single-record slices (ui.single in the Heart — the
+     * source's issingle settings types, e.g. CRM Settings):
+     * the directory IS one record. It always exists, opens
+     * straight into its form, and has no create/delete
+     * lifecycle.
+     */
+    protected function isSingleSlice(): bool
+    {
+        return $this->singleSliceMemo ??= ! empty($this->getSliceUiConfig()['single']);
+    }
+
+    /** The declared tree config, or null when the slice declares no tree directory. */
+    protected function directoryTreeConfig(array $uiConfig): ?array
+    {
+        $tree = $uiConfig['directory']['tree'] ?? null;
+        if (! is_array($tree) || ! is_string($tree['parent_field'] ?? null) || ! is_string($tree['title_field'] ?? null)) {
+            return null;
+        }
+
+        return [
+            'parent_field' => $tree['parent_field'],
+            'title_field' => $tree['title_field'],
+            'group_field' => is_string($tree['group_field'] ?? null) ? $tree['group_field'] : null,
+        ];
+    }
+
+    /** Tree is the landing view for declared slices; ?view=list opts back to the table. */
+    protected function directoryViewMode(array $uiConfig, Request $request): string
+    {
+        if ($this->directoryTreeConfig($uiConfig) === null) {
+            return 'table';
+        }
+
+        return $request->query('view') === 'list' ? 'table' : 'tree';
+    }
+
+    /**
+     * Nested tree payload for the directory-tree partial:
+     * every record of the slice's table, nested by its
+     * declared parent field, roots and children ordered by
+     * title. Null when the slice declares no tree.
+     *
+     * @return array{config: array, nodes: array, store_url: ?string, create_url: ?string, entity: string, title_label: string}|null
+     */
+    protected function directoryTreeData(array $uiConfig): ?array
+    {
+        $config = $this->directoryTreeConfig($uiConfig);
+        if ($config === null) {
+            return null;
+        }
+        $manifest = $this->ownManifest();
+        $table = $manifest['table'] ?? ($manifest['tables'][0] ?? null);
+        if (! is_string($table) || ! \Illuminate\Support\Facades\Schema::hasTable($table)
+            || ! \Illuminate\Support\Facades\Schema::hasColumn($table, $config['parent_field'])
+            || ! \Illuminate\Support\Facades\Schema::hasColumn($table, $config['title_field'])) {
+            return null;
+        }
+        try {
+            $columns = ['id', $config['parent_field'], $config['title_field']];
+            if ($config['group_field'] !== null && \Illuminate\Support\Facades\Schema::hasColumn($table, $config['group_field'])) {
+                $columns[] = $config['group_field'];
+            } else {
+                $config['group_field'] = null;
+            }
+            $rows = DB::table($table)->orderBy($config['title_field'])->get($columns);
+        } catch (\Throwable) {
+            return null;
+        }
+        $nodes = [];
+        foreach ($rows as $row) {
+            $nodes[(string) $row->id] = [
+                'id' => $row->id,
+                'title' => (string) ($row->{$config['title_field']} ?? ('#'.$row->id)),
+                'is_group' => $config['group_field'] !== null ? (bool) ($row->{$config['group_field']} ?? false) : false,
+                'edit_url' => Route::has($this->resolveRouteName('edit')) ? route($this->resolveRouteName('edit'), $row->id) : null,
+                'children' => [],
+            ];
+        }
+        $roots = [];
+        foreach ($rows as $row) {
+            $parent = $row->{$config['parent_field']} ?? null;
+            $key = (string) $row->id;
+            if ($parent !== null && (string) $parent !== '' && (string) $parent !== '0' && isset($nodes[(string) $parent]) && (string) $parent !== $key) {
+                $nodes[(string) $parent]['children'][] = &$nodes[$key];
+            } else {
+                $roots[] = &$nodes[$key];
+            }
+        }
+        unset($nodes);
+        $fields = $this->ownManifest()['fields'] ?? [];
+        $titleLabel = is_array($fields[$config['title_field']] ?? null)
+            ? (string) ($fields[$config['title_field']]['label'] ?? \Illuminate\Support\Str::headline($config['title_field']))
+            : \Illuminate\Support\Str::headline($config['title_field']);
+
+        return [
+            'config' => $config,
+            'nodes' => $roots,
+            'store_url' => Route::has($this->resolveRouteName('store')) ? route($this->resolveRouteName('store'), $this->routeParameters()) : null,
+            'create_url' => Route::has($this->resolveRouteName('create')) ? route($this->resolveRouteName('create'), $this->routeParameters()) : null,
+            'entity' => $this->entityLabel(),
+            'title_label' => $titleLabel,
+        ];
+    }
+
+    /**
+     * Quick-entry companion (D-040): when the request carries
+     * companion[...] values and the Heart declares
+     * ui.quick_entry.companion, create the companion record
+     * first (declared fields + declared defaults + a title
+     * copied from the main form's title_from field) and point
+     * the main form's link_field at it — Desk's New Customer
+     * dialog creates the Primary Address in the same step.
+     * An all-empty companion section creates nothing; a touched
+     * but incomplete one (a required companion field uncovered)
+     * rejects the save with the missing fields named, and a
+     * failed companion insert surfaces as a form error — the
+     * companion is never silently dropped (D-075).
+     */
+    protected function applyQuickEntryCompanion(Request $request, object $form): void
+    {
+        $decl = DirectoryUi::quickEntryCompanionDecl($this->ownManifest());
+        if ($decl === null || $decl['link_field'] === null) {
+            return;
+        }
+        $input = $request->input('companion');
+        if (! is_array($input)) {
+            return;
+        }
+        $values = [];
+        foreach ($decl['fields'] as $field) {
+            if (array_key_exists($field, $input) && $input[$field] !== null && $input[$field] !== '') {
+                $values[$field] = $input[$field];
+            }
+        }
+        if ($values === []) {
+            return;
+        }
+        $slice = app(\LaraSlice\Core\Discovery\SliceManager::class)->getSlice($decl['slice']);
+        $modelClass = $slice?->getModelClass();
+        if ($modelClass === null || ! class_exists($modelClass)) {
+            return;
+        }
+        // The section is optional, but a companion is only
+        // created whole: every required field of the companion
+        // slice must be covered by the submitted values or the
+        // declared defaults. A TOUCHED-but-incomplete section is
+        // a user error the source reports ("Missing Values
+        // Required: Country" blocks the Desk quick-entry save) —
+        // it is never silently dropped (D-075).
+        $companionFields = \LaraSlice\Support\SliceRecordOptions::manifestFieldsOf($slice->raw);
+        $missing = [];
+        foreach ($companionFields as $fieldName => $fieldDef) {
+            if (! is_array($fieldDef)) {
+                continue;
+            }
+            $required = (bool) ($fieldDef['required'] ?? (($fieldDef['nullable'] ?? true) === false));
+            if ($required && ! array_key_exists($fieldName, $values) && ! array_key_exists($fieldName, $decl['defaults'])) {
+                $missing[] = (string) ($fieldDef['label'] ?? $fieldName);
+            }
+        }
+        if ($missing !== []) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'companion' => 'Missing values required for the '.($decl['title'] ?? 'companion').' section: '.implode(', ', $missing).'.',
+            ]);
+        }
+        try {
+            $record = new $modelClass;
+            foreach ($decl['defaults'] as $key => $value) {
+                $record->setAttribute((string) $key, $value);
+            }
+            foreach ($values as $key => $value) {
+                $record->setAttribute($key, $value);
+            }
+            if ($decl['title_field'] !== null && $decl['title_from'] !== null
+                && empty($record->getAttribute($decl['title_field']))) {
+                $record->setAttribute($decl['title_field'], $form->{$decl['title_from']} ?? null);
+            }
+            $record->save();
+            if (property_exists($form, $decl['link_field'])) {
+                $form->{$decl['link_field']} = $record->getKey();
+            }
+        } catch (\Throwable $e) {
+            // A companion the user filled in is never silently
+            // dropped (D-075): the failure is logged AND surfaced
+            // as a form error, so the main record does not save
+            // pretending the companion exists.
+            \Illuminate\Support\Facades\Log::warning('Quick-entry companion creation failed', [
+                'slice' => $decl['slice'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'companion' => 'The '.($decl['title'] ?? 'companion').' could not be saved: '.$e->getMessage(),
+            ]);
+        }
+    }
+
+    /** The sole record's id, materializing the row on first access (source semantics). */
+    protected function soleRecordId(): string|int
+    {
+        $modelClass = $this->getService()->modelClass();
+        $first = $modelClass::query()->orderBy('id')->first(['id']);
+        if ($first !== null) {
+            return $first->id;
+        }
+        $model = new $modelClass;
+        $model->save();
+
+        return $model->id;
+    }
+
+    /**
+     * The slice's human entity label from its manifest
+     * title: singularized for regular slices ("Leads" →
+     * "Lead"), the full title for single-record slices
+     * ("CRM Settings" names one settings page, not a
+     * countable noun).
+     */
+    protected function entityLabel(): string
+    {
+        $title = (string) ($this->ownManifest()['title'] ?? '');
+
+        return $this->isSingleSlice() ? $title : Str::singular($title);
+    }
+
+    protected function sliceAbilities(): array
+    {
+        $can = $this->sliceAbilitiesByPermission();
+        if ($this->isSingleSlice()) {
+            $can['create'] = false;
+            $can['delete'] = false;
+        }
+        // Declared abilities (D-070): a Heart may narrow what
+        // the surface offers — ui.abilities {create|update|
+        // delete: false} — for system-seeded slices the source
+        // never lets a user add to or delete from (Languages).
+        $declared = $this->getSliceUiConfig()['abilities'] ?? [];
+        if (is_array($declared)) {
+            foreach (['create', 'update', 'delete'] as $verb) {
+                if (($declared[$verb] ?? null) === false) {
+                    $can[$verb] = false;
+                }
+            }
+        }
+
+        return $can;
+    }
+
+    /**
+     * Whether the Heart's ui.abilities declaration forbids a
+     * verb outright (D-070) — the route-level twin of the
+     * sliceAbilities() narrowing, so a hidden button is not
+     * the only thing standing between a URL and the action.
+     */
+    protected function declaredAbilityDenied(string $verb): bool
+    {
+        $declared = $this->getSliceUiConfig()['abilities'] ?? [];
+
+        return is_array($declared) && ($declared[$verb] ?? null) === false;
+    }
+
     protected function getSliceUiConfig(): array
     {
         // The controller's OWN manifest wins (G5): route-prefix lookup
@@ -3717,7 +4673,7 @@ abstract class BaseSliceWebController extends Controller
             if (file_exists($yamlPath)) {
                 $data = Yaml::parseFile($yamlPath);
 
-                return $data['ui'] ?? [];
+                return $this->withStandardFilterFallback(is_array($data) ? $data : []);
             }
             // Core framework slices declare ui in slice.yaml
             $jsonPath = $sliceDir.'/slice.yaml';

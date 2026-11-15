@@ -3,11 +3,13 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use LaraSlice\Core\Discovery\SliceManager;
 use LaraSlice\Generator\SliceSeederService;
 
 class SliceWipeCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:wipe 
                             {slice? : The name of the slice to wipe} 
                             {--domain= : Wipe all slices within a domain} 
@@ -30,7 +32,7 @@ class SliceWipeCommand extends Command
 
         $target = $domainName ? "all slices in domain [{$domainName}]" : "slice [{$sliceName}]";
 
-        if (! $force && ! $this->confirm("⚠️ Are you sure you want to WIPE all records from {$target}? This cannot be undone!", false)) {
+        if (! $force && ! $this->safeConfirm("⚠️ Are you sure you want to WIPE all records from {$target}? This cannot be undone!", false)) {
             $this->info('Operation cancelled.');
 
             return Command::SUCCESS;

@@ -18,6 +18,29 @@ class BaseFilter implements IFilterObject
      */
     protected array $criteria = [];
 
+    /**
+     * Free-form conditions (Seat 3): validated
+     * field/operator/value rows from the directory's
+     * Filter builder — Support\DirectoryConditions
+     * parses them against the Heart, the service
+     * applies them next to the declared criteria.
+     *
+     * @var array<int, array{field: string, op: string, value: mixed}>
+     */
+    protected array $conditions = [];
+
+    /** @param array<int, array{field: string, op: string, value: mixed}> $conditions */
+    public function setConditions(array $conditions): void
+    {
+        $this->conditions = $conditions;
+    }
+
+    /** @return array<int, array{field: string, op: string, value: mixed}> */
+    public function getConditions(): array
+    {
+        return $this->conditions;
+    }
+
     /** @param array<string, mixed> $criteria */
     public function setCriteria(array $criteria): void
     {

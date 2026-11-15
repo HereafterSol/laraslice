@@ -3,10 +3,12 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use Illuminate\Support\Facades\File;
 
 class SliceUiPruneCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:ui:prune 
                             {--force : Automatically remove unused BlatUI components without confirmation}
                             {--dry-run : Only list unused components without deleting}';
@@ -98,7 +100,7 @@ class SliceUiPruneCommand extends Command
             return Command::SUCCESS;
         }
 
-        if ($this->option('force') || $this->confirm('Would you like to prune these '.count($unused).' unused components?', false)) {
+        if ($this->option('force') || $this->safeConfirm('Would you like to prune these '.count($unused).' unused components?', false)) {
             $deleted = 0;
             foreach ($unused as $file) {
                 if (File::delete($file)) {

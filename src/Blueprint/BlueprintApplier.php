@@ -110,7 +110,7 @@ final class BlueprintApplier
                     if ($field['handle'] === $childHandles[$model['handle']]) {
                         continue;
                     }
-                    if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'json', 'email', 'url', 'foreign_id'], true)) {
+                    if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'json', 'email', 'url', 'foreign_id', 'select'], true)) {
                         throw new RuntimeException("Blueprint apply does not support child field type [{$field['type']}].");
                     }
                     if (($field['encrypted'] ?? false) === true) {
@@ -121,7 +121,7 @@ final class BlueprintApplier
         }
 
         foreach ($root['fields'] ?? [] as $field) {
-            if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'email', 'url', 'json', 'foreign_id'], true)) {
+            if (! in_array($field['type'], ['string', 'text', 'integer', 'bigInteger', 'decimal', 'float', 'boolean', 'date', 'datetime', 'timestamp', 'enum', 'email', 'url', 'json', 'foreign_id', 'select'], true)) {
                 throw new RuntimeException("Blueprint apply does not support root field type [{$field['type']}].");
             }
         }
@@ -195,9 +195,25 @@ final class BlueprintApplier
                 'nullable' => $field['nullable'] ?? ! $required,
                 'default' => $field['default'] ?? ($type === 'boolean' ? false : null),
                 'options' => $field['options'] ?? [],
+                'options_from' => $field['options_from'] ?? null,
                 'length' => $field['length'] ?? null,
                 'encrypted' => $field['encrypted'] ?? false,
-                'relation' => $belongsTo[$field['handle']]['relation'] ?? null,
+                // A field-level relation declaration (the
+                // string dialect: a target entity name) wins
+                // over the model-relations derivation (D3).
+                'relation' => (isset($field['relation']) && is_string($field['relation']) && $field['relation'] !== '')
+                    ? $field['relation']
+                    : ($belongsTo[$field['handle']]['relation'] ?? null),
+                // Field behaviour (Seat 1) rides through.
+                'depends_on' => $field['depends_on'] ?? null,
+                'mandatory_depends_on' => $field['mandatory_depends_on'] ?? null,
+                'read_only_depends_on' => $field['read_only_depends_on'] ?? null,
+                'fetch_from' => $field['fetch_from'] ?? null,
+                'computed' => $field['computed'] ?? null,
+                'fallback_from' => $field['fallback_from'] ?? null,
+                'in_list_view' => $field['in_list_view'] ?? null,
+                'in_standard_filter' => $field['in_standard_filter'] ?? null,
+                'section' => $field['section'] ?? null,
                 'references' => $belongsTo[$field['handle']]['references'] ?? null,
             ];
         }
@@ -236,6 +252,17 @@ final class BlueprintApplier
                         'nullable' => $field['nullable'] ?? ! $required,
                         'default' => $field['default'] ?? null,
                         'options' => $field['options'] ?? [],
+                        'options_from' => $field['options_from'] ?? null,
+                        'relation' => $field['relation'] ?? null,
+                        'depends_on' => $field['depends_on'] ?? null,
+                        'mandatory_depends_on' => $field['mandatory_depends_on'] ?? null,
+                        'read_only_depends_on' => $field['read_only_depends_on'] ?? null,
+                        'fetch_from' => $field['fetch_from'] ?? null,
+                        'computed' => $field['computed'] ?? null,
+                        'fallback_from' => $field['fallback_from'] ?? null,
+                        'in_list_view' => $field['in_list_view'] ?? null,
+                        'in_standard_filter' => $field['in_standard_filter'] ?? null,
+                        'section' => $field['section'] ?? null,
                     ];
                 }
                 (new SliceModifier($stagingSlices, $namespace))->addChildTable(
@@ -333,6 +360,16 @@ final class BlueprintApplier
         if (! empty($blueprint['workflow'])) {
             $manifest['workflow'] = $blueprint['workflow'];
         }
+        // Naming series (Seat 1): the blueprint's autoname
+        // declaration becomes the slice's, verbatim.
+        if (! empty($blueprint['autoname']) && is_array($blueprint['autoname'])) {
+            $manifest['autoname'] = $blueprint['autoname'];
+        }
+        // Record conversions: declared mapped-doc targets
+        // (Create menu on the record header), verbatim.
+        if (! empty($blueprint['conversions']) && is_array($blueprint['conversions'])) {
+            $manifest['conversions'] = $blueprint['conversions'];
+        }
         if (! empty($blueprint['roles'])) {
             $manifest['roles'] = $blueprint['roles'];
         }
@@ -376,6 +413,18 @@ final class BlueprintApplier
                 'default' => $field['default'] ?? null,
                 'options' => $field['options'] ?? [],
             ];
+            if (! empty($field['options_from']) && is_string($field['options_from'])) {
+                $entry['options_from'] = $field['options_from'];
+            }
+            if (! isset($fieldBelongsTo[$field['handle']])
+                && isset($field['relation']) && is_string($field['relation']) && $field['relation'] !== '') {
+                $entry['relation'] = $field['relation'];
+            }
+            foreach (['depends_on', 'mandatory_depends_on', 'read_only_depends_on', 'fetch_from', 'computed', 'fallback_from', 'in_list_view', 'in_standard_filter', 'section'] as $behaviourKey) {
+                if (isset($field[$behaviourKey]) && $field[$behaviourKey] !== null && $field[$behaviourKey] !== false) {
+                    $entry[$behaviourKey] = $field[$behaviourKey];
+                }
+            }
             if (isset($fieldBelongsTo[$field['handle']])) {
                 $entry['relation'] = $fieldBelongsTo[$field['handle']]['relation'];
                 $entry['references'] = $fieldBelongsTo[$field['handle']]['references'];

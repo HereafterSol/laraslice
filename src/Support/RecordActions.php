@@ -142,9 +142,20 @@ final class RecordActions
      * Row payload for the directory: the declared actions the
      * current user may run, with execution URLs.
      *
+     * On a record FORM ($context = 'form', the default) two
+     * BUILT-IN actions join the declared ones (D-083): every
+     * Desk form's menu carries Duplicate and Print, so every
+     * ported form does too — Duplicate as a link to the
+     * create form seeded from this record (see the
+     * controller's duplicate seeding, Frappe copy_doc
+     * semantics), Print as a new-tab link to the framework's
+     * printable record view. A slice opts out per action via
+     * ui.record_actions {duplicate: false} / {print: false},
+     * and a same-named DECLARED action replaces the built-in.
+     *
      * @return list<array<string, mixed>>
      */
-    public static function urlsFor(string $routePrefix, string|int $id): array
+    public static function urlsFor(string $routePrefix, string|int $id, string $context = 'form'): array
     {
         if (! Route::has('laraslice.record_action')) {
             return [];
@@ -154,9 +165,6 @@ final class RecordActions
             return [];
         }
         $declared = self::declaredActions($resolved['raw']);
-        if ($declared === []) {
-            return [];
-        }
         $user = auth()->user();
         if ($user === null) {
             return [];
@@ -214,6 +222,41 @@ final class RecordActions
                 'target' => null,
                 'url' => route('laraslice.record_action', ['prefix' => $routePrefix, 'id' => $id, 'action' => $action['name']]),
             ];
+        }
+
+        if ($context === 'form') {
+            $names = array_column($out, 'name');
+            $toggles = is_array($resolved['raw']['ui']['record_actions'] ?? null)
+                ? $resolved['raw']['ui']['record_actions']
+                : [];
+            if (! in_array('duplicate', $names, true)
+                && ($toggles['duplicate'] ?? true) !== false
+                && Route::has($routePrefix.'.create')
+                && Access::allows($user, ["{$base}.create", "{$plural}.create", "{$base}.*", "{$plural}.*"])) {
+                $out[] = [
+                    'name' => 'duplicate',
+                    'label' => 'Duplicate',
+                    'icon' => 'copy',
+                    'confirm' => null,
+                    'mode' => 'link',
+                    'target' => null,
+                    'url' => route($routePrefix.'.create', ['duplicate_from' => $id]),
+                ];
+            }
+            if (! in_array('print', $names, true)
+                && ($toggles['print'] ?? true) !== false
+                && Route::has('laraslice.record_print')
+                && Access::allows($user, ["{$base}.view", "{$plural}.view", "{$base}.*", "{$plural}.*"])) {
+                $out[] = [
+                    'name' => 'print',
+                    'label' => 'Print',
+                    'icon' => 'printer',
+                    'confirm' => null,
+                    'mode' => 'link',
+                    'target' => '_blank',
+                    'url' => route('laraslice.record_print', ['prefix' => $routePrefix, 'id' => $id]),
+                ];
+            }
         }
 
         return $out;
@@ -472,8 +515,13 @@ final class RecordActions
         if ($service === null) {
             return [500, 'The slice service could not be resolved.', 0];
         }
-        $deleted = $service->bulkDelete($ids);
+        $result = $service->bulkDeleteDetailed($ids);
+        $deleted = $result['deleted'];
+        $message = "Deleted {$deleted} record(s).";
+        if ($result['skipped_linked'] > 0) {
+            $message .= " {$result['skipped_linked']} linked record(s) skipped — records linked from other records cannot be deleted.";
+        }
 
-        return [200, "Deleted {$deleted} record(s).", $deleted];
+        return [200, $message, $deleted];
     }
 }

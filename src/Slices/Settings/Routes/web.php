@@ -11,6 +11,7 @@ Route::middleware(['web', 'auth'])->prefix('admin/settings')->name('settings.')-
     // catch-all: POST /admin/settings/smtp would otherwise
     // match {section}='smtp' first and 404 in saveHubSection.
     Route::post('/smtp', [SettingWebController::class, 'saveSmtp'])->name('smtp.save');
+    Route::post('/theme', [ThemeWebController::class, 'save'])->name('theme.save');
     Route::post('/smtp/test', [SettingWebController::class, 'testSmtp'])->name('smtp.test');
     Route::get('/ai', [SettingWebController::class, 'ai'])->name('ai');
     Route::post('/ai', [SettingWebController::class, 'saveAi'])->name('ai.save');

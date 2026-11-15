@@ -801,7 +801,16 @@ class SlicePortService
                         'required' => ! $nullable,
                         'rules' => $nullable ? ['nullable'] : ['required'],
                         'options' => $f['options'] ?? [],
-                        'relation' => $f['relation'] ?? null,
+                        // D-042: the generator's relation dialect
+                        // is a plain entity string; the blueprint
+                        // dialect's ['model' => …] array and the
+                        // FK-target evidence both resolve to it
+                        // here, so scaffolded slices get pickers.
+                        'relation' => is_string($f['relation'] ?? null)
+                            ? $f['relation']
+                            : (is_array($f['relation'] ?? null) && is_string($f['relation']['model'] ?? null)
+                                ? $f['relation']['model']
+                                : ($f['relation_target'] ?? null)),
                         // Decimal precision parsed from the source
                         // raw_type (see convertColumnsToFields); without
                         // carrying it here the generator fell back to
@@ -2267,6 +2276,13 @@ PHP;
             $fkTarget = $fkTargets[$cName] ?? null;
             if (is_string($fkTarget) && $fkTarget !== '' && str_ends_with($cName, '_id')) {
                 $targetHandle = Str::snake(Str::singular($fkTarget));
+                // D-042: record the FK target for EVERY linked
+                // column, not only name-mismatched ones — the
+                // scaffold seam turns it into the field's
+                // `relation`, so a declared Link always yields
+                // a picker instead of a raw-id input (the
+                // D-050 degradation family).
+                $field['relation_target'] = $targetHandle;
                 if ($targetHandle !== Str::replaceLast('_id', '', $cName)) {
                     $field['relation'] = ['model' => $targetHandle];
                 }
@@ -2385,7 +2401,7 @@ PHP;
                 continue;
             }
             $fk = Str::singular($primaryTable).'_id';
-            $repFields = $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey);
+            $repFields = $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey, $tables[$childTable]['foreign_key_targets'] ?? []);
             $childNames = array_map(static fn ($f) => (string) ($f['handle'] ?? $f['name'] ?? ''), $repFields);
             $rootNames = array_map(static fn ($c) => (string) ($c['name'] ?? ''), $tables[$primaryTable]['columns'] ?? []);
             $relations[] = [
@@ -2402,22 +2418,35 @@ PHP;
         return $relations;
     }
 
-    protected function repeaterFieldsForChild(array $columns, string $foreignKey, string $tenantKey = 'company_id'): array
+    protected function repeaterFieldsForChild(array $columns, string $foreignKey, string $tenantKey = 'company_id', array $fkTargets = []): array
     {
         $skip = [$foreignKey, $tenantKey, 'id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'added_by', 'last_updated_by'];
         $out = [];
-        foreach ($this->convertColumnsToFields($columns) as $f) {
+        foreach ($this->convertColumnsToFields($columns, $fkTargets) as $f) {
             $handle = $f['handle'] ?? '';
             if ($handle === '' || in_array($handle, $skip, true)) {
                 continue;
             }
-            $out[] = [
+            $row = [
                 'handle' => $handle,
                 'label' => $f['label'] ?? Str::headline($handle),
                 'type' => $f['type'] ?? 'string',
                 'required' => (bool) ($f['required'] ?? false),
                 'options' => $f['options'] ?? [],
             ];
+            // D-042: a Link sub-field carries its target so the
+            // repeater renders a record picker (the generator's
+            // repeater seat resolves `target` exactly like a
+            // top-level `relation`). FK evidence wins; the
+            // name-derived target is the fallback.
+            $target = $f['relation_target'] ?? null;
+            if (! is_string($target) && str_ends_with($handle, '_id')) {
+                $target = Str::replaceLast('_id', '', $handle);
+            }
+            if (is_string($target) && $target !== '') {
+                $row['target'] = $target;
+            }
+            $out[] = $row;
         }
 
         return $out;
@@ -2457,7 +2486,7 @@ PHP;
                         'model' => $childHandle,
                         'foreign_key' => $fk,
                         'table' => $childTable,
-                        'fields' => $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey),
+                        'fields' => $this->repeaterFieldsForChild($tables[$childTable]['columns'] ?? [], $fk, $tenantKey, $tables[$childTable]['foreign_key_targets'] ?? []),
                     ];
                     $allRelations[] = [
                         'type' => 'hasMany',

@@ -60,7 +60,7 @@ class FormRegenerator
                 'options' => $def['options'] ?? [],
                 'length' => $def['length'] ?? null,
             ];
-            foreach (['relation', 'references', 'hidden', 'show_in_form', 'show_in_list', 'encrypted', 'cast'] as $extra) {
+            foreach (['relation', 'references', 'hidden', 'show_in_form', 'show_in_list', 'encrypted', 'cast', 'options_from', 'depends_on', 'mandatory_depends_on', 'read_only_depends_on', 'fetch_from', 'computed', 'fallback_from', 'in_list_view', 'in_standard_filter', 'section', 'table', 'foreign_key', 'repeater_fields', 'model', 'target_field', 'target', 'parent_type', 'description', 'label_depends_on', 'actions', 'document'] as $extra) {
                 if (array_key_exists($extra, $def)) {
                     $field[$extra] = $def[$extra];
                 }
@@ -162,6 +162,11 @@ class FormRegenerator
             'super_domain' => $manifest->super_domain ?? ($raw['super_domain'] ?? null),
             'app' => $manifest->app ?? ($raw['app'] ?? null),
             'ui' => is_array($raw['ui'] ?? null) ? $raw['ui'] : [],
+            // Conversion declarations ride along: the form's
+            // Create▾ emission branches on pre_steps at runtime
+            // and the lsRunConversion helper script is emitted
+            // when any conversion declares them (D-073).
+            'conversions' => is_array($raw['conversions'] ?? null) ? $raw['conversions'] : [],
             'table' => is_array($raw['tables'] ?? null) ? ($raw['tables'][0] ?? null) : null,
             'table_prefix' => $manifest->table_prefix ?? '',
             'multitenant' => $manifest->multitenant,

@@ -418,7 +418,7 @@
         </x-ui.card>
 
         <!-- Form Submission Actions -->
-        <div class="flex items-center justify-end gap-3 pt-4 border-t border-border">
+        <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3 pt-4 border-t border-border">
             <x-ui.button href="{{ route('roles.index') }}" as="a" variant="outline">
                 Cancel
             </x-ui.button>

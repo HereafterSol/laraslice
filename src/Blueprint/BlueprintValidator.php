@@ -10,7 +10,7 @@ final class BlueprintValidator
 {
     private const FIELD_TYPES = [
         'string', 'text', 'integer', 'bigInteger', 'foreign_id', 'decimal', 'float', 'boolean', 'date',
-        'datetime', 'timestamp', 'enum', 'email', 'url', 'json',
+        'datetime', 'timestamp', 'enum', 'email', 'url', 'json', 'select',
     ];
 
     private const RELATION_TYPES = ['belongsTo', 'hasOne', 'hasMany', 'belongsToMany'];
@@ -38,7 +38,7 @@ final class BlueprintValidator
             'models', 'fields', 'tenant', 'domain', 'app', 'module', 'super_domain', 'sub_domain',
             'table_prefix', 'multitenant', 'tenant_key', 'navigation', 'permissions', 'workflow', 'roles',
             'icon', 'priority', 'taxonomy', 'ui', 'dependencies', 'porting_notes', 'table_source',
-            'enabled', 'table',
+            'enabled', 'table', 'autoname', 'conversions',
         ], 'blueprint', $errors);
 
         $sv = $blueprint['schema_version'] ?? null;
@@ -137,7 +137,7 @@ final class BlueprintValidator
 
                     continue;
                 }
-                $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'options_from', 'encrypted', 'width', 'length', 'input_type', 'input', 'optionsText', 'hidden', 'searchable', 'name', 'show_in_form', 'show_in_list', 'rules', 'relation', 'span', 'is_searchable'], $fieldPath, $errors);
+                $this->checkKeys($field, ['handle', 'label', 'type', 'required', 'nullable', 'default', 'options', 'options_from', 'encrypted', 'width', 'length', 'input_type', 'input', 'optionsText', 'hidden', 'searchable', 'name', 'show_in_form', 'show_in_list', 'rules', 'relation', 'span', 'is_searchable', 'depends_on', 'mandatory_depends_on', 'read_only_depends_on', 'fetch_from', 'computed', 'fallback_from', 'in_list_view', 'in_standard_filter', 'section'], $fieldPath, $errors);
 
                 $fieldHandle = $field['handle'] ?? null;
                 if (! $this->isHandle($fieldHandle)) {

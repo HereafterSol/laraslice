@@ -39,14 +39,19 @@
     $actionsLabel ??= __('Action');
 
     $htmlFormatters = ['composite_user', 'user_stack', 'code_badge', 'status_pill', 'money_breakdown', 'progress_bar', 'text_with_badge', 'date_overdue', 'badge'];
-    $cols = collect($columns)->map(function ($c) use ($htmlFormatters) {
+    $cols = collect($columns)->map(function ($c, $colIdx) use ($htmlFormatters) {
         $fmt = $c['formatter'] ?? $c['type'] ?? null;
         $html = (bool) ($c['html'] ?? ($fmt && in_array($fmt, $htmlFormatters, true)));
         return [
             'key' => $c['key'] ?? $c['handle'] ?? '',
             'label' => $c['label'] ?? ucfirst($c['key'] ?? $c['handle'] ?? ''),
             'sortable' => $c['sortable'] ?? true,
-            'class' => $c['class'] ?? '',
+            // Responsive columns (D-044): below the sm
+            // breakpoint only the first two data columns stay
+            // visible — the rest would squeeze until cell text
+            // wrapped mid-token. The Columns menu (x-show)
+            // still governs visibility at sm and up.
+            'class' => trim(($c['class'] ?? '').($colIdx >= 2 ? ' hidden sm:table-cell' : '')),
             'formatter' => $fmt,
             'html' => $html,
             'badge_from' => $c['badge_from'] ?? null,
@@ -132,7 +137,10 @@
             @if(isset($belowToolbar) && $belowToolbar->isNotEmpty())
                 {{ $belowToolbar }}
             @endif
-            <div class="ml-auto flex items-center gap-2">
+            <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+                @isset($toolbarTools)
+                    {{ $toolbarTools }}
+                @endisset
                 @include('components.ui.data-table-controls')
             </div>
         </div>
@@ -188,13 +196,16 @@
              generator (data-ls-filters-btn) so it travels with the
              filter bar in both compositions. -->
         <div class="flex items-center gap-2">
+            @isset($toolbarTools)
+                {{ $toolbarTools }}
+            @endisset
             @include('components.ui.data-table-controls')
         </div>
     </div>
     @endif
 
     @if(!$externalBar && isset($belowToolbar) && $belowToolbar->isNotEmpty())
-        <div class="flex items-center gap-2 flex-wrap border-b border-border/60 px-4 py-2.5 bg-muted/10">
+        <div class="flex items-center gap-2 flex-wrap border-b border-border/60 px-3 py-2 bg-muted/10">
             {{ $belowToolbar }}
         </div>
     @endif
@@ -288,8 +299,8 @@
     <!-- High-Density Data Grid -->
     <div x-show="viewMode === 'table' || !views || views.length <= 1" x-cloak>
     <div class="relative w-full overflow-x-auto rounded-xl border border-border bg-card shadow-2xs">
-        <table data-slot="table" class="w-full caption-bottom text-xs">
-            <thead data-slot="table-header" class="bg-muted/30 border-b border-border">
+        <table data-slot="table" class="w-full min-w-[36rem] caption-bottom text-[13px]">
+            <thead data-slot="table-header" class="bg-muted/50 border-b border-border">
                 <tr class="hover:bg-muted/50 border-b transition-colors">
                     @if ($selectable)
                         <th scope="col" class="h-9 w-10 px-3 text-start align-middle">
@@ -325,6 +336,13 @@
                             <span>{{ $actionsLabel }}</span>
                         </th>
                     @endisset
+                    {{-- Record count at the header band's right
+                         end (D-023 — the source's "N of M" sits
+                         in the fused grey header, not only in
+                         the footer). --}}
+                    <th scope="col" class="h-9 px-3 text-end align-middle whitespace-nowrap text-[11px] font-medium text-muted-foreground">
+                        <span x-text="paged.length + ' of ' + filtered.length"></span>
+                    </th>
                 </tr>
             </thead>
             <tbody data-slot="table-body" class="divide-y divide-border/50">
@@ -391,8 +409,12 @@
         </table>
     </div>
 
-    <!-- Pagination footer (inside the card): range + page size + pager -->
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border px-4 py-2.5 mt-0 text-xs bg-muted/20">
+    <!-- Pagination footer (inside the card): range + page size + pager.
+         Sticky to the viewport bottom while the table scrolls
+         (structure correction, 13 Nov 2026 — the source's list
+         footer stays stuck at the bottom); the solid card
+         background keeps rows from bleeding through. -->
+    <div class="sticky bottom-0 z-10 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border px-4 py-2.5 mt-0 text-xs bg-card">
         <p class="text-muted-foreground">
             <span>{{ __('Showing') }}</span>
             <span class="font-semibold text-foreground" x-text="filtered.length === 0 ? 0 : (page - 1) * pageSize + 1"></span>
@@ -414,6 +436,9 @@
                     <option value="25">25</option>
                     <option value="50">50</option>
                     <option value="100">100</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                    <option value="2500">2500</option>
                 </select>
             </label>
             <span class="font-medium text-muted-foreground" x-text="@js(__('Page :page of :pages')).replace(':pages', pageCount).replace(':page', page)"></span>
@@ -590,7 +615,83 @@ if (typeof window.blatDataTable === 'undefined') {
             },
             hiddenCols: [],
             colMenuOpen: false,
-            init() { this.initColumnVisibility(); },
+            // Mobile discipline (Stage C-4): below the md
+            // breakpoint the table keeps only a priority set of
+            // columns — the desktop set truncated mid-text
+            // before (emails and names clipped at 390px). Ranks:
+            // the identity column and the name/title column
+            // outrank status and always-visible, which outrank
+            // amount columns, which outrank everything else;
+            // the top 4 by rank stay. A measurement pass then
+            // sheds the lowest-ranked kept column until the
+            // table actually fits its container (a wide
+            // composite name cell can still squeeze an email
+            // column out at 390px — ranks alone cannot know).
+            // Checkbox and row-action columns are separate
+            // markup and always stay; shed columns remain in
+            // the Columns menu and the record view.
+            isNarrow: window.innerWidth < 768,
+            mobileShed: [],
+            mobileRank(key, index) {
+                if (index === 0) return 0;
+                const c = this.cols[index];
+                // Document identity (invoice_number, order_code)
+                // and the record's own name/title outrank the
+                // rest; a relation's *_name column (project_name
+                // on an invoice) is just another field.
+                if (/(^|_)(number|code)$/.test(key) || /^(name|title|subject|heading)$/.test(key)) return 1;
+                if ((c && c.alwaysVisible) || key === this.statusKey) return 2;
+                if (/(^|_)(amount|total|price|value|balance)$/.test(key)) return 3;
+                return 4;
+            },
+            mobileKeep() {
+                const ranked = this.cols.map((c, i) => ({ key: c.key, rank: this.mobileRank(c.key, i), i }));
+                ranked.sort((a, b) => a.rank - b.rank || a.i - b.i);
+                return new Set(ranked.slice(0, 4).map(r => r.key));
+            },
+            fitMobileColumns() {
+                if (!this.isNarrow) {
+                    if (this.mobileShed.length) this.mobileShed = [];
+                    return;
+                }
+                const table = this.$el ? this.$el.querySelector('table') : null;
+                if (!table || !table.parentElement) return;
+                // Not laid out yet (fonts/Alpine still settling):
+                // a near-zero container width would shed every
+                // column to the floor. The caller retries on a
+                // timer until the layout is real.
+                if (table.parentElement.clientWidth < 200) return;
+                let guard = 0;
+                const check = () => {
+                    if (guard++ > 4) return;
+                    if (table.scrollWidth <= table.parentElement.clientWidth + 2) return;
+                    const keep = [...this.mobileKeep()].filter(k => !this.mobileShed.includes(k));
+                    if (keep.length <= 2) return;
+                    let worst = keep[0], worstRank = -1;
+                    for (const k of keep) {
+                        const idx = this.cols.findIndex(c => c.key === k);
+                        const r = this.mobileRank(k, idx);
+                        if (r >= worstRank) { worstRank = r; worst = k; }
+                    }
+                    this.mobileShed = [...this.mobileShed, worst];
+                    this.$nextTick(check);
+                };
+                check();
+            },
+            init() {
+                this.initColumnVisibility();
+                let resizeTimer = null;
+                window.addEventListener('resize', () => {
+                    this.isNarrow = window.innerWidth < 768;
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => this.fitMobileColumns(), 200);
+                });
+                // Measure only once the page has truly settled;
+                // an early pass reads a half-built layout and
+                // sheds columns the final layout could have fit.
+                setTimeout(() => this.fitMobileColumns(), 600);
+                setTimeout(() => this.fitMobileColumns(), 1600);
+            },
             colStorageKey() { return 'ls-cols:' + window.location.pathname; },
             initColumnVisibility() {
                 try {
@@ -626,7 +727,11 @@ if (typeof window.blatDataTable === 'undefined') {
                     : [...this.hiddenCols, key];
                 try { localStorage.setItem(this.colStorageKey(), JSON.stringify(this.hiddenCols)); } catch (e) {}
             },
-            colVisible(key) { return !this.hiddenCols.includes(key); },
+            colVisible(key) {
+                if (this.hiddenCols.includes(key)) return false;
+                if (this.isNarrow && (!this.mobileKeep().has(key) || this.mobileShed.includes(key))) return false;
+                return true;
+            },
             inlineEdit: cfg.inlineEdit || [],
             inlineUpdateUrl: cfg.inlineUpdateUrl || null,
             dateKey: cfg.dateKey || null,
@@ -860,11 +965,21 @@ if (typeof window.blatDataTable === 'undefined') {
             toggleRow(i) { this.selected.includes(i) ? this.selected = this.selected.filter(x => x !== i) : this.selected.push(i); this.emitSelection(); },
             toggleAll() { const idx = this.pageIndices; this.allPageSelected ? this.selected = this.selected.filter(i => !idx.includes(i)) : idx.forEach(i => this.selected.includes(i) || this.selected.push(i)); this.emitSelection(); },
             selectedRecordIds() {
+                // Selection stores indices into `sorted`, whose
+                // items wrap the flat row payload as {r, i}; the
+                // row's identity lives in its key column, then
+                // the framework's __id convention (DataTableRows),
+                // then a plain id — the same ladder the rest of
+                // this component uses. (The old body searched
+                // this.rows for an `i` the flat rows never carry
+                // and never read __id, so it resolved [] and the
+                // bulk actions posted no ids at all — D-085.)
                 const key = this.rowKey || 'id';
                 return this.selected.map(i => {
-                    const row = this.rows.find(r => r.i === i);
+                    const item = this.sorted.find(p => p.i === i);
+                    const row = item ? item.r : null;
                     if (!row) return null;
-                    return (row.r && (row.r[key] ?? row.r.id)) ?? row[key] ?? row.id ?? null;
+                    return row[key] ?? row.__id ?? row.id ?? null;
                 }).filter(id => id !== null && id !== undefined && id !== '');
             },
             emitSelection() {

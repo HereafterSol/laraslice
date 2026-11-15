@@ -55,13 +55,25 @@ class OverlayPresentationTest extends TestCase
         $this->assertStringNotContainsString('fetch(form.action', $generator);
     }
 
-    public function test_generated_form_sections_are_collapsible(): void
+    public function test_generated_form_sections_are_flat_sheet_sections(): void
     {
-        // C8: generated form section cards carry the collapse
-        // toggle (Alpine state + chevron + x-show on the content).
+        // Stage E UX pass (owner-directed, Desk benchmark):
+        // generated form sections are FLAT sections inside
+        // one sheet (no card chrome, no collapse toggle),
+        // and the sheet carries the record header.
+        // Phase 6 (D-049/D-051, Desk parity): a section the
+        // Heart declares collapsed (ui.form_sections.*.collapsed,
+        // the source's collapsible Section Breaks) MAY render
+        // behind a chevron toggle — but only inside that
+        // declared branch; the default branch stays flat.
         $generator = file_get_contents(dirname(__DIR__, 3).'/src/Generator/SliceGenerator.php');
-        $this->assertStringContainsString('lsSectionOpen', $generator);
-        $this->assertStringContainsString('aria-label="Toggle section"', $generator);
+        $this->assertStringContainsString('ls-form-sheet', $generator);
+        $this->assertStringContainsString('<section class="border-t border-border/60 px-6 py-5">', $generator);
+        $collapsedBranch = strpos($generator, "if (! empty(\$sectionMeta['collapsed']))");
+        $toggle = strpos($generator, 'lsSectionOpen');
+        $this->assertNotFalse($collapsedBranch);
+        $this->assertNotFalse($toggle);
+        $this->assertGreaterThan($collapsedBranch, $toggle, 'the collapse toggle must live inside the declared-collapsed branch only');
     }
 
     public function test_overlay_request_gets_fragment_layout(): void

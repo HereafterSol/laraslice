@@ -999,7 +999,11 @@ class DataTableRows
             'leave' => 'sky',
         ];
 
-        $resolved = $color ?: ($colorMap[$statusKey] ?? 'indigo');
+        // Default pill (D-048): an unmapped status renders
+        // the muted grey pill the source directories use,
+        // not a coloured one — only the semantic map above
+        // earns a colour.
+        $resolved = $color ?: ($colorMap[$statusKey] ?? 'slate');
 
         $dotColor = match ($resolved) {
             'emerald', 'green', 'success' => 'bg-emerald-500',

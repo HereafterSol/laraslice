@@ -86,7 +86,19 @@ final class DirectoryUi
         $manifest = self::readManifest($sliceName);
         $dirCols = $manifest['ui']['directory']['columns'] ?? null;
         if (! is_array($dirCols) || $dirCols === []) {
-            return $fallback;
+            // Seat 1 (Stage D): fields flagged in_list_view
+            // ARE the column declaration when the manifest
+            // declares no ui.directory.columns — the flag
+            // replaces the generator's first-five guess.
+            $dirCols = [];
+            foreach (self::fieldIndex($manifest) as $key => $def) {
+                if (is_array($def) && ! empty($def['in_list_view'])) {
+                    $dirCols[] = ['handle' => (string) $key, 'label' => $def['label'] ?? null, 'formatter' => 'text', 'sortable' => true];
+                }
+            }
+            if ($dirCols === []) {
+                return $fallback;
+            }
         }
 
         $fieldIndex = self::fieldIndex($manifest);
@@ -233,6 +245,35 @@ final class DirectoryUi
             if (is_scalar($value) && (string) $value !== '') {
                 return (string) $value;
             }
+        }
+        // Last resort (D-053): the record's first free-text
+        // attribute is its identity when no conventional
+        // column exists — a ported slice whose records are
+        // named by a stem column (market_segments'
+        // `market_segment`) otherwise titles every form
+        // with the slice's class name. Mirrors the
+        // SliceRecordOptions (D-041) late fallback.
+        // Foreign keys, status/type columns, timestamps
+        // and date/email/URL/number-shaped values are
+        // never identity.
+        foreach ($attrs as $attr) {
+            $attr = (string) $attr;
+            if ($attr === 'id' || $attr === 'status' || $attr === 'type'
+                || str_ends_with($attr, '_id') || str_ends_with($attr, '_at')
+                || str_starts_with($attr, '_')) {
+                continue;
+            }
+            $value = data_get($record, $attr);
+            if (! is_string($value) || trim($value) === '' || strlen($value) > 120) {
+                continue;
+            }
+            $value = trim($value);
+            if (str_contains($value, '@') || is_numeric($value)
+                || preg_match('/^\d{4}-\d{2}-\d{2}/', $value) === 1
+                || str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+                continue;
+            }
+            return $value;
         }
 
         return null;
@@ -3270,6 +3311,268 @@ final class DirectoryUi
             'skip_weekends' => (bool) ($decl['skip_weekends'] ?? false),
             'holidays' => $holidays,
         ];
+    }
+
+    /**
+     * Quick-entry dialog seat (D-011): the field subset a
+     * slice declares for its directory Add dialog, as
+     * `ui.quick_entry.fields` — an explicit list of field
+     * handles (strings, or {handle} entries). Only scalar
+     * and relation fields are quick-entry material:
+     * repeater / multiselect / relation_multi fields and
+     * computed fields named in the subset are IGNORED
+     * (ignore-with-warning policy — the warning is this
+     * filter itself, documented in the generator test; a
+     * bad handle never breaks the directory). Relation
+     * fields resolve their options from the field's own
+     * declared options first, then the controller-resolved
+     * relationship options ({handle}Options / {base}Options
+     * for *_id handles) — the same lists the full create
+     * form's pickers receive.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $relationshipOptions
+     * @return list<array{handle: string, label: string, input: string, required: bool, options: list<array{value: mixed, label: string}>, default: mixed}>
+     */
+    public static function quickEntryFields(array $manifest, array $relationshipOptions = []): array
+    {
+        $declared = $manifest['ui']['quick_entry']['fields'] ?? null;
+        if (! is_array($declared) || $declared === []) {
+            return [];
+        }
+        $fields = self::fieldIndex($manifest);
+        $excludedTypes = ['repeater', 'multiselect', 'relation_multi', 'table', 'table_multiselect'];
+        $out = [];
+        foreach ($declared as $entry) {
+            $handle = is_array($entry) ? (string) ($entry['handle'] ?? '') : (string) $entry;
+            if ($handle === '' || ! isset($fields[$handle]) || ! is_array($fields[$handle])) {
+                continue;
+            }
+            $def = $fields[$handle];
+            $type = (string) ($def['type'] ?? 'string');
+            if (in_array($type, $excludedTypes, true) || ! empty($def['computed']) || ! empty($def['hidden'])
+                || ($def['show_in_form'] ?? true) === false) {
+                continue;
+            }
+            $options = self::normalizeOptions($def['options'] ?? null);
+            $staticOptions = $options !== [];
+            if ($options === []) {
+                // Controller-resolved relationship options ride
+                // as id => label maps (the shape the full form's
+                // pickers foreach over), which normalizeOptions
+                // would misread as a plain list — convert directly.
+                $base = str_ends_with($handle, '_id') ? substr($handle, 0, -3) : $handle;
+                foreach ([Str::camel($handle).'Options', Str::camel($base).'Options', Str::camel(Str::plural($base)).'Options'] as $key) {
+                    if (empty($relationshipOptions[$key]) || ! is_array($relationshipOptions[$key])) {
+                        continue;
+                    }
+                    $map = [];
+                    foreach ($relationshipOptions[$key] as $optValue => $optLabel) {
+                        if (is_array($optLabel) && isset($optLabel['value'])) {
+                            $map[(string) $optLabel['value']] = (string) ($optLabel['label'] ?? $optLabel['value']);
+                        } elseif (is_scalar($optLabel)) {
+                            $map[(string) $optValue] = (string) $optLabel;
+                        }
+                    }
+                    if ($map !== []) {
+                        $options = $map;
+                        break;
+                    }
+                }
+            }
+            $input = match (true) {
+                in_array($type, ['boolean', 'bool'], true) => 'checkbox',
+                $options !== [] => 'select',
+                $type === 'date' => 'date',
+                $type === 'datetime' => 'datetime-local',
+                in_array($type, ['integer', 'decimal', 'number', 'float'], true) => 'number',
+                $type === 'email' => 'email',
+                $type === 'text' => 'textarea',
+                in_array($type, ['richtext', 'code'], true) => 'textarea',
+                default => 'text',
+            };
+            $optionPairs = [];
+            foreach ($options as $optValue => $optLabel) {
+                $optionPairs[] = ['value' => $optValue, 'label' => $optLabel];
+            }
+            // Select parity (D-059): the source pre-selects a
+            // static Select's FIRST option when the field declares
+            // no default (its Address Type opens on "Billing", an
+            // Appointment's Status on "Open"). Relationship-fed
+            // pickers stay empty until chosen — only options the
+            // field itself declares get the first-option default.
+            $default = $def['default'] ?? null;
+            if ($default === null && $input === 'select' && $staticOptions && $optionPairs !== []) {
+                $default = $optionPairs[0]['value'];
+            }
+            // Caption (D-066): the field's declared description,
+            // with the app timezone appended for datetime inputs
+            // — the same caption the full form prints (D-059).
+            $description = isset($def['description']) && is_string($def['description']) && trim($def['description']) !== ''
+                ? trim($def['description'])
+                : null;
+            if ($input === 'datetime-local') {
+                $tz = 'UTC';
+                try {
+                    $configured = config('app.timezone');
+                    if (is_string($configured) && $configured !== '') {
+                        $tz = $configured;
+                    }
+                } catch (\Throwable) {
+                }
+                if ($description === null) {
+                    $description = $tz;
+                } elseif (! str_contains($description, $tz)) {
+                    $description .= ' · '.$tz;
+                }
+            }
+            $out[] = [
+                'handle' => $handle,
+                'label' => (string) ($def['label'] ?? Str::headline($handle)),
+                'input' => $input,
+                'required' => (bool) ($def['required'] ?? (($def['nullable'] ?? true) === false)),
+                'options' => $optionPairs,
+                'default' => $default,
+                'description' => $description,
+                // Behaviour (D-039): the modal evaluates the same
+                // depends_on clauses as the full form — the blade
+                // emits them as data-ls-* attributes and the
+                // shell's behaviour engine applies them per form.
+                'depends_on' => self::quickEntryClauses($def['depends_on'] ?? null),
+                'mandatory_depends_on' => self::quickEntryClauses($def['mandatory_depends_on'] ?? null),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Quick-entry companion fields (D-040): a slice's quick
+     * entry may declare a companion record created in the
+     * same dialog — Desk's New Customer carries a Primary
+     * Address section whose values become an Address record
+     * linked from the customer. Declaration:
+     * ui.quick_entry.companion = {slice, title, fields,
+     * defaults?, title_from?, title_field?, link_field}.
+     * The returned fields are ordinary quick-entry field
+     * arrays whose submit name is companion[<handle>]; the
+     * first carries the section title for the dialog.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function quickEntryCompanionFields(array $manifest): array
+    {
+        $decl = self::quickEntryCompanionDecl($manifest);
+        if ($decl === null) {
+            return [];
+        }
+        try {
+            $companion = app(SliceManager::class)->getSlice($decl['slice']);
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($companion === null) {
+            return [];
+        }
+        $companionManifest = $companion->raw;
+        $companionManifest['ui']['quick_entry']['fields'] = $decl['fields'];
+        // Relationship pickers resolve straight from the
+        // target slices (the owning slice's create form has
+        // no options for the companion's fields).
+        $relationshipOptions = [];
+        foreach (SliceRecordOptions::manifestFieldsOf($companionManifest) as $fieldName => $fieldDef) {
+            $relation = is_array($fieldDef) ? ($fieldDef['relation'] ?? null) : null;
+            if (is_string($relation) && $relation !== '' && in_array($fieldName, $decl['fields'], true)) {
+                $relationshipOptions[Str::camel($fieldName).'Options'] = SliceRecordOptions::forSlice($relation);
+            }
+        }
+        $fields = self::quickEntryFields($companionManifest, $relationshipOptions);
+        foreach ($fields as $i => &$field) {
+            $field['name'] = 'companion['.$field['handle'].']';
+            // The companion section is optional in the dialog
+            // (the server creates the record only when its
+            // required core is filled), so no field renders
+            // as hard-required here.
+            $field['required'] = false;
+            if ($i === 0) {
+                $field['section_title'] = $decl['title'];
+            }
+        }
+        unset($field);
+
+        return $fields;
+    }
+
+    /**
+     * The validated companion declaration, or null. Shared
+     * by the dialog (DirectoryUi) and the store (the web
+     * controller creates the companion record from it).
+     *
+     * @return array{slice: string, title: string, fields: array<int, string>, defaults: array<string, mixed>, title_from: ?string, title_field: ?string, link_field: ?string}|null
+     */
+    public static function quickEntryCompanionDecl(array $manifest): ?array
+    {
+        $decl = $manifest['ui']['quick_entry']['companion'] ?? null;
+        if (! is_array($decl) || ! is_string($decl['slice'] ?? null) || $decl['slice'] === ''
+            || ! is_array($decl['fields'] ?? null) || $decl['fields'] === []) {
+            return null;
+        }
+
+        return [
+            'slice' => $decl['slice'],
+            'title' => is_string($decl['title'] ?? null) ? $decl['title'] : 'Companion',
+            'fields' => array_values(array_filter($decl['fields'], 'is_string')),
+            'defaults' => is_array($decl['defaults'] ?? null) ? $decl['defaults'] : [],
+            'title_from' => is_string($decl['title_from'] ?? null) ? $decl['title_from'] : null,
+            'title_field' => is_string($decl['title_field'] ?? null) ? $decl['title_field'] : null,
+            'link_field' => is_string($decl['link_field'] ?? null) ? $decl['link_field'] : null,
+        ];
+    }
+
+    /**
+     * Convert a Heart behaviour dialect value into the clause
+     * JSON the shell's behaviour engine evaluates: a list of
+     * {field, op, value} clauses (AND), or {"any": [[...]]}
+     * for OR groups. Unknown shapes yield null (no behaviour).
+     *
+     * @return array<mixed>|null
+     */
+    private static function quickEntryClauses(mixed $raw): ?array
+    {
+        if (! is_array($raw) || $raw === []) {
+            return null;
+        }
+        if (isset($raw['any']) && is_array($raw['any'])) {
+            $groups = [];
+            foreach ($raw['any'] as $sub) {
+                $converted = self::quickEntryClauses($sub);
+                if ($converted !== null) {
+                    $groups[] = $converted;
+                }
+            }
+
+            return $groups === [] ? null : ['any' => $groups];
+        }
+        if (isset($raw['field'])) {
+            $raw = [$raw];
+        }
+        $out = [];
+        foreach ($raw as $clause) {
+            if (! is_array($clause) || ! isset($clause['field'])) {
+                continue;
+            }
+            if (isset($clause['op'])) {
+                $out[] = ['field' => (string) $clause['field'], 'op' => (string) $clause['op'], 'value' => $clause['value'] ?? true];
+            } elseif (array_key_exists('is', $clause)) {
+                $out[] = ['field' => (string) $clause['field'], 'op' => 'is', 'value' => $clause['is']];
+            } elseif (! empty($clause['not_empty'])) {
+                $out[] = ['field' => (string) $clause['field'], 'op' => 'not_empty', 'value' => true];
+            } elseif (! empty($clause['empty'])) {
+                $out[] = ['field' => (string) $clause['field'], 'op' => 'empty', 'value' => true];
+            }
+        }
+
+        return $out === [] ? null : $out;
     }
 
     /**

@@ -1,12 +1,12 @@
 @if (app(\LaraSlice\Core\Ai\AiEngine::class)->copilotBubbleVisible())
 @php($copilotStatus = app(\LaraSlice\Core\Ai\AiEngine::class)->copilotStatus())
-<div id="laraslice-copilot-container" class="fixed bottom-6 right-6 z-[5] font-sans" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
+<div id="laraslice-copilot-container" class="fixed bottom-24 right-4 z-[5] font-sans sm:bottom-6 sm:right-6" :style="(typeof posLeft !== 'undefined' && posLeft !== null) ? 'left: ' + posLeft + 'px; top: ' + posTop + 'px; bottom: auto; right: auto;' : ''" x-data="larasliceCopilot()" x-cloak>
     <!-- Collapsed restore chip (mobile) -->
     <button
         x-show="collapsed && !isOpen"
         @click="collapsed = false"
         type="button"
-        class="fixed bottom-4 right-4 z-50 flex size-10 items-center justify-center rounded-lg bg-slate-900 text-white shadow-md border border-slate-700 sm:hidden"
+        class="fixed bottom-[4.5rem] right-4 z-50 flex size-10 items-center justify-center rounded-lg bg-slate-900 text-white shadow-md border border-slate-700 sm:hidden"
         aria-label="Show AI Copilot">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
     </button>
@@ -37,7 +37,7 @@
         x-transition:leave="transition ease-in duration-200 transform"
         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
         x-transition:leave-end="opacity-0 translate-y-8 scale-95"
-        class="flex flex-col w-[380px] sm:w-[470px] h-[640px] max-h-[88vh] bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-3xl shadow-2xl overflow-hidden">
+        class="flex flex-col w-[min(380px,calc(100vw-2rem))] sm:w-[470px] h-[640px] max-h-[88vh] bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-3xl shadow-2xl overflow-hidden">
         
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800/80 cursor-grab active:cursor-grabbing select-none" @mousedown="startDrag($event)" @touchstart="startDrag($event)">

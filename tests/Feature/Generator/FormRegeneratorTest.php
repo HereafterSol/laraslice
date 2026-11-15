@@ -124,4 +124,31 @@ final class FormRegeneratorTest extends TestCase
             $regenerator->discardStaging($staged['staging']);
         }
     }
+
+    public function test_stage_preserves_repeater_sub_field_targets(): void
+    {
+        // D-030: the repeater Link-picker `target` key rides
+        // inside repeater_fields, which staging copies from
+        // the Heart verbatim — a form regen must keep the
+        // picker declaration, never drop it back to a number
+        // input.
+        $sliceDir = (new SliceGenerator($this->root, 'App\Slices'))->generate('RegenOrder', [
+            ['name' => 'reference', 'type' => 'string', 'nullable' => false],
+            ['name' => 'lines', 'type' => 'repeater', 'label' => 'Lines', 'table' => 'order_lines', 'foreign_key' => 'order_id', 'repeater_fields' => [
+                ['handle' => 'company', 'label' => 'Company', 'type' => 'integer', 'required' => true, 'target' => 'Companies'],
+                ['handle' => 'memo', 'label' => 'Memo', 'type' => 'string'],
+            ]],
+        ], false, ['table' => 'orders']);
+        $manifest = new SliceManifest($sliceDir.'/slice.yaml');
+
+        $regenerator = new FormRegenerator;
+        $staged = $regenerator->stage($manifest);
+        try {
+            $form = (string) file_get_contents($staged['files']['form.blade.php']);
+            $this->assertStringContainsString("'target' => 'Companies'", $form);
+            $this->assertSame(1, substr_count($form, "'target' =>"));
+        } finally {
+            $regenerator->discardStaging($staged['staging']);
+        }
+    }
 }
