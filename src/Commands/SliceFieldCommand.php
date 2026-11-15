@@ -3,10 +3,12 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use LaraSlice\Generator\SliceModifier;
 
 class SliceFieldCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:field 
                             {slice : The target slice name (e.g. Product, User, Invoice)}
                             {field? : Field column name or comma-separated list (e.g. price, "sku:string,stock:integer:default=0")}
@@ -44,7 +46,7 @@ class SliceFieldCommand extends Command
                     0
                 );
 
-                $nullable = $this->confirm("Make '{$colName}' nullable?", true);
+                $nullable = $this->safeConfirm("Make '{$colName}' nullable?", true);
                 $default = $this->ask('Default value (press Enter for none)', null);
 
                 $fieldsToAdd[] = [
@@ -127,7 +129,7 @@ class SliceFieldCommand extends Command
             $this->line("<fg=green>✓</> Incremented slice version to <comment>v{$result['version']}</comment> in slice.yaml");
             $this->line("<fg=green>✓</> Appended unified version history record: \"{$result['description']}\"");
 
-            if ($this->option('migrate') || $this->confirm('Would you like to run the consolidated migration now?', false)) {
+            if ($this->option('migrate') || $this->safeConfirm('Would you like to run the consolidated migration now?', false)) {
                 $this->call('migrate');
                 $this->info('✓ Database table updated successfully in a single query pass!');
             } else {

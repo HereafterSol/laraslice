@@ -62,6 +62,18 @@ class SliceRegenArtefactsCommand extends Command
             }
         }
 
+        // D-014: a declared child table (repeater /
+        // multiselect) that was never migrated must be
+        // named loudly before any artefact work — regen
+        // re-syncs artefacts, it does not create tables.
+        // Checked here, at the command layer, where the
+        // target app's database is booted, and before
+        // staging so the warning fires on every outcome
+        // path (including "artefacts already match").
+        foreach ($regenerator->missingChildTables($manifest) as $missingChildTable) {
+            $this->warn(ArtefactRegenerator::missingChildTableWarning($manifest->name, $missingChildTable));
+        }
+
         $staged = $regenerator->stage($manifest);
         try {
             $report = $regenerator->diff($manifest, $staged, ArtefactRegenerator::allArtefacts());

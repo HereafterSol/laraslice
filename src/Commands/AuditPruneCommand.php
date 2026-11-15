@@ -3,12 +3,14 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use Illuminate\Support\Facades\DB;
 use LaraSlice\Core\Audit\AuditLogger;
 use LaraSlice\Support\SchemaCache;
 
 class AuditPruneCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'laraslice:audit:prune 
                             {--days= : Days of audit records to retain (default: the audit.retention_days setting, else config)}
                             {--slice= : Optional slice filter to prune}
@@ -50,7 +52,7 @@ class AuditPruneCommand extends Command
             return self::SUCCESS;
         }
 
-        if (! $this->option('force') && ! $this->confirm("Are you sure you want to permanently delete {$count} audit records older than {$cutoff->toDateTimeString()}?")) {
+        if (! $this->option('force') && ! $this->safeConfirm("Are you sure you want to permanently delete {$count} audit records older than {$cutoff->toDateTimeString()}?")) {
             $this->warn('Pruning aborted.');
 
             return self::SUCCESS;

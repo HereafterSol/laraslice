@@ -14,6 +14,7 @@ use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Core\Discovery\UpdateSemantics;
 use LaraSlice\Support\DocumentMath;
 use LaraSlice\Support\SchemaCache;
+use LaraSlice\Support\SliceRecordOptions;
 use Symfony\Component\Yaml\Yaml;
 
 abstract class BaseSliceService implements IFormDataService, IListingDataService
@@ -64,6 +65,10 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
             foreach (array_keys($this->relationMultiDefinitions()) as $multiHandle) {
                 unset($data[$multiHandle]);
             }
+            // Multiselect (child-table) selections likewise
+            foreach (array_keys($this->multiselectDefinitions()) as $multiselectHandle) {
+                unset($data[$multiselectHandle]);
+            }
 
             // Update semantics are declared in the Heart
             // (Proposal #6): 'patch' — the framework default and
@@ -110,6 +115,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
             $this->afterSave($form, $model, $isNew);
             $this->syncRepeaters($form, $model);
             $this->syncRelationMulti($form, $model);
+            $this->syncMultiselects($form, $model);
 
             return $model->getKey();
         });
@@ -157,6 +163,9 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
             $serverOwned[(string) $handle] = true;
         }
         foreach (array_keys($this->relationMultiDefinitions()) as $handle) {
+            $serverOwned[(string) $handle] = true;
+        }
+        foreach (array_keys($this->multiselectDefinitions()) as $handle) {
             $serverOwned[(string) $handle] = true;
         }
         foreach ($this->repeaterDefinitions() as $def) {
@@ -528,6 +537,23 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
     }
 
     /**
+     * Multiselect (Table MultiSelect) picker definitions for
+     * this slice's child-table selections. Generated services
+     * override this from the manifest's multiselect fields.
+     * Shape per handle: ['table' => string, 'foreign_key' =>
+     * string, 'target_field' => string, 'target' => string,
+     * 'parent_type' => ?string]. The form BO carries the
+     * selection as an int-id array under the handle; the
+     * child rows — never a model column — are its storage.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function multiselectDefinitions(): array
+    {
+        return [];
+    }
+
+    /**
      * Sync declared BelongsToMany selections from the form BO onto
      * the saved model. Updates only touch selections the request
      * actually provided, so partial API updates keep the rest.
@@ -550,6 +576,128 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                 fn (int $id) => $id > 0
             )));
             $model->{$relation}()->sync($ids);
+        }
+    }
+
+    /** Load child-row target ids into the form DTO so edit forms render the current selection. */
+    protected function attachMultiselectSelections(IBusinessObject $form, Model $model): void
+    {
+        foreach ($this->multiselectDefinitions() as $handle => $def) {
+            if (! property_exists($form, $handle)) {
+                continue;
+            }
+            $table = $def['table'] ?? null;
+            $fk = $def['foreign_key'] ?? null;
+            $targetField = $def['target_field'] ?? null;
+            if (! $table || ! $fk || ! $targetField) {
+                continue;
+            }
+            try {
+                $query = DB::table($table)->where($fk, $model->getKey());
+                $parentType = $def['parent_type'] ?? null;
+                if ($parentType !== null && SchemaCache::hasColumn($table, 'parent_type')) {
+                    $query->where('parent_type', $parentType);
+                }
+                $form->{$handle} = $query->orderBy('id')->pluck($targetField)
+                    ->map(fn ($v) => (int) $v)->all();
+            } catch (\Throwable) {
+                $form->{$handle} = [];
+            }
+        }
+    }
+
+    /**
+     * Sync provided multiselect selections against the child
+     * table: the submitted id set IS the new selection —
+     * child rows for targets no longer selected are deleted,
+     * rows for newly selected targets are inserted. Every
+     * submitted id must exist in the target slice's table;
+     * the picker is a convenience, not a trust boundary, so
+     * a stale or forged id rejects the save. Runs inside
+     * save()'s transaction.
+     */
+    protected function syncMultiselects(IBusinessObject $form, Model $model): void
+    {
+        foreach ($this->multiselectDefinitions() as $handle => $def) {
+            if (! $this->repeaterRowsProvided($form, $handle)) {
+                continue;
+            }
+            $table = $def['table'] ?? null;
+            $fk = $def['foreign_key'] ?? null;
+            $targetField = $def['target_field'] ?? null;
+            $target = $def['target'] ?? null;
+            if (! $table || ! $fk || ! $targetField || ! $target) {
+                continue;
+            }
+            if (! SchemaCache::hasColumn($table, $fk) || ! SchemaCache::hasColumn($table, $targetField)) {
+                continue;
+            }
+            $ids = array_values(array_unique(array_filter(
+                array_map('intval', (array) $form->{$handle}),
+                fn (int $id) => $id > 0
+            )));
+
+            $targetTable = SliceRecordOptions::tableForSlice((string) $target);
+            if ($targetTable === null) {
+                throw new \LogicException("Multiselect field '{$handle}' targets unknown slice '{$target}'.");
+            }
+            if ($ids !== []) {
+                $found = DB::table($targetTable)->whereIn('id', $ids)->count();
+                if ($found !== count($ids)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        $handle => ['One or more selected records no longer exist.'],
+                    ]);
+                }
+            }
+
+            $parentType = $def['parent_type'] ?? null;
+            $scopedByType = $parentType !== null && SchemaCache::hasColumn($table, 'parent_type');
+            $query = DB::table($table)->where($fk, $model->getKey());
+            if ($scopedByType) {
+                $query->where('parent_type', $parentType);
+            }
+            $existing = $query->get(['id', $targetField]);
+            $existingTargets = $existing->map(fn ($r) => (int) $r->{$targetField})->all();
+            $staleIds = $existing
+                ->filter(fn ($r) => ! in_array((int) $r->{$targetField}, $ids, true))
+                ->pluck('id')->all();
+            if ($staleIds !== []) {
+                DB::table($table)->whereIn('id', $staleIds)->delete();
+            }
+            foreach (array_diff($ids, $existingTargets) as $targetId) {
+                $payload = [$fk => $model->getKey(), $targetField => (int) $targetId];
+                if ($scopedByType) {
+                    $payload['parent_type'] = $parentType;
+                }
+                if (SchemaCache::hasColumn($table, 'created_at')) {
+                    $payload['created_at'] = now();
+                }
+                if (SchemaCache::hasColumn($table, 'updated_at')) {
+                    $payload['updated_at'] = now();
+                }
+                DB::table($table)->insert($payload);
+            }
+        }
+    }
+
+    /** Remove a deleted record's multiselect child rows (best effort, like the repeater cleanup). */
+    protected function deleteMultiselectRows(Model $model): void
+    {
+        foreach ($this->multiselectDefinitions() as $def) {
+            $table = $def['table'] ?? null;
+            $fk = $def['foreign_key'] ?? null;
+            if ($table && $fk) {
+                try {
+                    $query = DB::table($table)->where($fk, $model->getKey());
+                    $parentType = $def['parent_type'] ?? null;
+                    if ($parentType !== null && SchemaCache::hasColumn($table, 'parent_type')) {
+                        $query->where('parent_type', $parentType);
+                    }
+                    $query->delete();
+                } catch (\Throwable) {
+                    // Child cleanup is best-effort; FK cascades may already handle it
+                }
+            }
         }
     }
 
@@ -976,6 +1124,7 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
 
         $form = $this->mapToForm($model);
         $this->attachRepeaterRows($form, $model);
+        $this->attachMultiselectSelections($form, $model);
 
         return $form;
     }
@@ -988,9 +1137,29 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
             return false;
         }
 
+        // Link-integrity guard (D-081): the source refuses to
+        // delete a record other records link to; deleting
+        // anyway orphans every inbound reference. Discovery
+        // problems never block a delete (they read as zero).
+        try {
+            $sliceName = (string) ($this->ownManifest()['name'] ?? '');
+            if ($sliceName !== '' && app()->bound(\LaraSlice\Core\Discovery\SliceManager::class)) {
+                $links = \LaraSlice\Support\RecordWorkplace::inboundLinkCount(
+                    app(\LaraSlice\Core\Discovery\SliceManager::class), $sliceName, $id);
+                if ($links > 0) {
+                    throw new LinkedRecordException($links);
+                }
+            }
+        } catch (LinkedRecordException $e) {
+            throw $e;
+        } catch (\Throwable) {
+            // Guard infrastructure unavailable: proceed.
+        }
+
         return DB::transaction(function () use ($model, $id) {
             $this->beforeDelete($model);
             $this->deleteRepeaterRows($model);
+            $this->deleteMultiselectRows($model);
             $result = (bool) $model->delete();
             $this->afterDelete($id);
 
@@ -1008,14 +1177,38 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
      */
     public function bulkDelete(array $ids): int
     {
+        return $this->bulkDeleteDetailed($ids)['deleted'];
+    }
+
+    /**
+     * Bulk delete with the skip accounting the directory
+     * reports (Phase 8): a linked record the D-081 guard
+     * refuses must be VISIBLE in the outcome ("2 deleted,
+     * 1 skipped — linked"), not silently absent from the
+     * count.
+     *
+     * @param  array<int, string|int>  $ids
+     * @return array{deleted: int, skipped_linked: int}
+     */
+    public function bulkDeleteDetailed(array $ids): array
+    {
         $deleted = 0;
+        $skippedLinked = 0;
         foreach ($ids as $id) {
-            if ((is_int($id) || (is_string($id) && $id !== '')) && $this->delete($id)) {
-                $deleted++;
+            if (! (is_int($id) || (is_string($id) && $id !== ''))) {
+                continue;
+            }
+            try {
+                if ($this->delete($id)) {
+                    $deleted++;
+                }
+            } catch (LinkedRecordException) {
+                // Linked records are skipped, never orphaned (D-081).
+                $skippedLinked++;
             }
         }
 
-        return $deleted;
+        return ['deleted' => $deleted, 'skipped_linked' => $skippedLinked];
     }
 
     /**
@@ -1316,6 +1509,14 @@ abstract class BaseSliceService implements IFormDataService, IListingDataService
                     $query->where($key, $value);
                 }
             }
+        }
+
+        // Free-form conditions (Seat 3): field + operator
+        // + value rows the controller validated against
+        // the Heart — applied with the operator semantics
+        // the chips display.
+        if (method_exists($filter, 'getConditions')) {
+            \LaraSlice\Support\DirectoryConditions::apply($query, $filter->getConditions());
         }
     }
 

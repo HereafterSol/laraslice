@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use LaraSlice\Core\Base\Traits\AppliesFieldBehaviour;
 use LaraSlice\Core\Contracts\IFormDataService;
 use LaraSlice\Core\Contracts\IListingDataService;
 use LaraSlice\Core\Metadata\MetadataIssues;
@@ -15,6 +16,7 @@ use LaraSlice\Core\Security\Traits\AuthorizesSliceActions;
 
 abstract class BaseSliceApiController extends Controller
 {
+    use AppliesFieldBehaviour;
     use AuthorizesSliceActions;
 
     abstract protected function getService(): IFormDataService&IListingDataService;
@@ -65,6 +67,22 @@ abstract class BaseSliceApiController extends Controller
         }
 
         try {
+            // Field behaviour parity with the web surface
+            // (Seat 1, W5/D-012): the shared trait judges
+            // this write exactly as BaseSliceWebController
+            // judges a form post — mandatory_depends_on
+            // throws ValidationException (rendered below in
+            // this controller's 422 shape), fetch_from fills
+            // only an empty value, read_only_depends_on
+            // restores, computed/fallback recompute, and a
+            // create mints the declared autoname series.
+            // Display-only depends_on has no server effect.
+            $existing = $isUpdate ? $this->getService()->getItemById($request->input('id')) : null;
+            $this->applyFieldBehaviour($request, $form, $existing, ! $isUpdate);
+            if (! $isUpdate) {
+                $this->applyAutoname($form, $request);
+            }
+
             $id = $this->getService()->save($form);
 
             return response()->json([
@@ -91,7 +109,11 @@ abstract class BaseSliceApiController extends Controller
     {
         $this->authorizeSlice('delete');
 
-        $deleted = $this->getService()->delete($id);
+        try {
+            $deleted = $this->getService()->delete($id);
+        } catch (LinkedRecordException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'links' => $e->linkCount()], 409);
+        }
 
         if (! $deleted) {
             return response()->json(['error' => 'Record not found or could not be deleted'], 404);

@@ -3,11 +3,13 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use LaraSlice\Generator\FlutterSliceGenerator;
 use LaraSlice\Generator\SliceGenerator;
 
 class SliceWizardCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:wizard 
                             {--web : Automatically start dev server and open the web wizard in your default browser}';
 
@@ -53,11 +55,11 @@ class SliceWizardCommand extends Command
         $defaultType = $this->choice("Type for '{$defaultField}'", ['string', 'text', 'integer', 'decimal', 'boolean', 'date'], 0);
         $fields[] = ['name' => $defaultField, 'type' => $defaultType, 'required' => true];
 
-        while ($this->confirm('Would you like to add another field?', false)) {
+        while ($this->safeConfirm('Would you like to add another field?', false)) {
             $fieldName = $this->ask('Field name (snake_case, e.g. amount, due_date, status)');
             if (! empty($fieldName)) {
                 $fieldType = $this->choice("Field type for '{$fieldName}'", ['string', 'text', 'integer', 'decimal', 'boolean', 'date'], 0);
-                $isRequired = $this->confirm("Is '{$fieldName}' required?", true);
+                $isRequired = $this->safeConfirm("Is '{$fieldName}' required?", true);
                 $fields[] = [
                     'name' => trim($fieldName),
                     'type' => $fieldType,
@@ -68,11 +70,11 @@ class SliceWizardCommand extends Command
 
         $this->newLine();
         $this->comment('Step 3: Workflow State Machine');
-        $includeWorkflow = $this->confirm('Enable state machine workflow (draft -> active -> archived)?', true);
+        $includeWorkflow = $this->safeConfirm('Enable state machine workflow (draft -> active -> archived)?', true);
 
         $this->newLine();
         $this->comment('Step 4: Cross-Platform Client');
-        $includeFlutter = $this->confirm('Generate matching Flutter client slice (Model, Service, UI)?', true);
+        $includeFlutter = $this->safeConfirm('Generate matching Flutter client slice (Model, Service, UI)?', true);
 
         // Summary
         $this->newLine();

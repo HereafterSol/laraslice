@@ -3,6 +3,7 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -21,6 +22,7 @@ use LaraSlice\Support\DeclarationHistory;
  */
 class SliceSyncCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:sync 
                             {slice? : The name of the vertical slice (e.g. Orders, Billing/Invoices, or empty for all)}
                             {--migrate : Automatically run pending slice migrations}
@@ -153,7 +155,7 @@ class SliceSyncCommand extends Command
             if (! $dryRun && count($pendingMigrations) > 0) {
                 $shouldRun = $runMigrations;
                 if (! $shouldRun && $this->input->isInteractive()) {
-                    $shouldRun = $this->confirm('Run '.count($pendingMigrations)." pending migration(s) for slice [{$slice->name}]?", true);
+                    $shouldRun = $this->safeConfirm('Run '.count($pendingMigrations)." pending migration(s) for slice [{$slice->name}]?", true);
                 }
                 if ($shouldRun && app()->environment('production') && ! $force) {
                     $this->error("Slice [{$slice->name}]: refusing to run migrations in production without --force.");

@@ -10,10 +10,12 @@ use LaraSlice\Blueprint\BlueprintApplier;
 use LaraSlice\Blueprint\BlueprintLoader;
 use LaraSlice\Blueprint\BlueprintPlanner;
 use LaraSlice\Blueprint\BlueprintValidator;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use Throwable;
 
 final class BlueprintApplyCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:blueprint:apply
                             {path : Path to a validated .json, .yaml, or .yml blueprint}
                             {--plan-hash= : SHA-256 plan hash shown by slice:blueprint:plan}
@@ -42,8 +44,20 @@ final class BlueprintApplyCommand extends Command
 
                 return self::FAILURE;
             }
-            if (! $this->option('yes') && ! $this->confirm('Generate the reviewed files?', false)) {
-                return self::FAILURE;
+            if (! $this->option('yes')) {
+                // F1 (Stage C-6): without a TTY this confirm
+                // blocked forever on a piped stdin. The plan
+                // hash is the review evidence; in a scripted
+                // session the run must say what it needs
+                // instead of hanging.
+                if (! $this->promptable()) {
+                    $this->components->error('Non-interactive session: review the plan, then re-run with --yes.');
+
+                    return self::FAILURE;
+                }
+                if (! $this->confirm('Generate the reviewed files?', false)) {
+                    return self::FAILURE;
+                }
             }
 
             $target = $applier->apply($blueprint, $plan, $slicesPath, config('laraslice.slices_namespace', 'App\\Slices'));
@@ -51,8 +65,11 @@ final class BlueprintApplyCommand extends Command
             $this->comment('Files were written atomically.');
 
             $doMigrate = (bool) $this->option('migrate') || (bool) $this->option('seed');
-            if (! $doMigrate && $this->input->isInteractive() && ! $this->option('no-interaction')) {
-                $doMigrate = $this->confirm('Run database migrations now?', true);
+            if (! $doMigrate) {
+                // safeConfirm takes the default (yes) without
+                // blocking when there is no TTY — the old
+                // /dev/null behaviour, minus the pipe hang.
+                $doMigrate = $this->safeConfirm('Run database migrations now?', true);
             }
 
             if ($doMigrate) {

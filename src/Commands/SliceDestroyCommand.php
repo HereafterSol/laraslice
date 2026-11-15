@@ -3,10 +3,12 @@
 namespace LaraSlice\Commands;
 
 use Illuminate\Console\Command;
+use LaraSlice\Commands\Concerns\PromptsSafely;
 use LaraSlice\Core\Discovery\SliceManager;
 
 class SliceDestroyCommand extends Command
 {
+    use PromptsSafely;
     protected $signature = 'slice:destroy 
                             {slice? : The name of the slice to destroy} 
                             {--domain= : Destroy all slices within a domain} 
@@ -37,7 +39,7 @@ class SliceDestroyCommand extends Command
 
         $target = $domainName ? "all slices in domain [{$domainName}]" : "slice [{$sliceName}]";
 
-        if (! $force && ! $this->confirm("🚨 DANGER: Are you sure you want to DESTROY {$target} (Mode: {$mode})?", false)) {
+        if (! $force && ! $this->safeConfirm("🚨 DANGER: Are you sure you want to DESTROY {$target} (Mode: {$mode})?", false)) {
             $this->info('Operation cancelled.');
 
             return Command::SUCCESS;

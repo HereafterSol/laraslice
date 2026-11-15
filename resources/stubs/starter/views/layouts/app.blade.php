@@ -38,82 +38,25 @@
               }
           }"
           @keydown.window.cmd.k.prevent="searchOpen = true"
-          @keydown.window.ctrl.k.prevent="searchOpen = true">
+          @keydown.window.ctrl.k.prevent="searchOpen = true"
+          x-init="$watch('searchOpen', function (v) { if (v && window.__lsLoadPalette) { window.__lsLoadPalette(); } })">
 
-        @php
-            $navSlices = \LaraSlice\Facades\LaraSlice::getNavigableSlices();
-
-            // Lucide Icon Resolver helper
-            $resolveLucide = function ($iconName) {
-                static $factory = null;
-                if ($factory === null) {
-                    $factory = app(\BladeUI\Icons\Factory::class);
-                }
-                $map = [
-                    'basket'             => 'shopping-bag',
-                    'shop'               => 'shopping-bag',
-                    'cart'               => 'shopping-cart',
-                    'bag'                => 'shopping-bag',
-                    'box'                => 'box',
-                    'cube'               => 'box',
-                    'cube-2'             => 'boxes',
-                    'cube-3'             => 'box',
-                    'people'             => 'users',
-                    'user'               => 'user',
-                    'security-user'      => 'shield-check',
-                    'shield'             => 'shield',
-                    'shield-check'       => 'shield-check',
-                    'lock'               => 'lock',
-                    'key'                => 'key',
-                    'setting-2'          => 'settings',
-                    'settings'           => 'settings',
-                    'document'           => 'file-text',
-                    'file'               => 'file-text',
-                    'chart-pie-simple'   => 'pie-chart',
-                    'chart'              => 'bar-chart-3',
-                    'element-11'         => 'layout-dashboard',
-                    'dashboard'          => 'layout-dashboard',
-                    'wallet'             => 'wallet',
-                    'notification-status'=> 'bell',
-                    'bell'               => 'bell',
-                    'message-text-2'     => 'message-square',
-                    'chat'               => 'message-square',
-                    'wand'               => 'wand-2',
-                    'code'               => 'code',
-                    'database'           => 'database',
-                    'tag'                => 'tag',
-                    'layers'             => 'layers',
-                    'package'            => 'package',
-                ];
-                $clean = strtolower(trim((string) $iconName));
-                $target = $map[$clean] ?? (str_starts_with($clean, 'lucide-') ? substr($clean, 7) : ($clean ?: 'box'));
-                try {
-                    $factory->svg('lucide-' . $target);
-                    return $target;
-                } catch (\Throwable $e) {
-                    return 'box';
-                }
-            };
+                @php
+            // Navigation structure (Stage C-1): assembled by
+            // the framework — grouped items for the shell, the
+            // raw slice list, and the group that owns the
+            // current page (the only domain group shipped in
+            // full; the rest load lazily on first expand).
+            $navData = \LaraSlice\Support\NavStructure::build();
+            $navSlices = $navData['slices'];
+            $navMain = $navData['main'];
+            $navActiveGroup = $navData['activeGroup'];
         @endphp
 
         @php
             $laraSliceVersion = class_exists(\Composer\InstalledVersions::class) && \Composer\InstalledVersions::isInstalled('hereafter/laraslice')
                 ? ltrim((string) \Composer\InstalledVersions::getPrettyVersion('hereafter/laraslice'), 'v')
                 : '1.0';
-
-            $sliceNavItem = fn (array $s) => [
-                'title'    => $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice',
-                'url'      => $s['url'],
-                'icon'     => $resolveLucide($s['icon'] ?? 'box'),
-                'order'    => $s['order'] ?? 10,
-                'isOpen'   => collect($s['children'] ?? [])->contains(fn ($c) => !empty($c['active'])),
-                'isActive' => !empty($s['active']) && !collect($s['children'] ?? [])->contains(fn ($c) => !empty($c['active'])),
-                'children' => array_map(fn ($c) => [
-                    'title'    => $c['label'],
-                    'url'      => $c['url'],
-                    'isActive' => !empty($c['active']),
-                ], $s['children'] ?? []),
-            ];
 
             // Slice Studio links only for users who may open it
             $canUseStudio = Route::has('laraslice.wizard') && auth()->check()
@@ -125,57 +68,7 @@
             $canUseAi = auth()->check()
                 && \LaraSlice\Core\Security\Access::allows(auth()->user(), 'ai.copilot.use');
 
-            $workspaceItems = [
-                ['title' => 'Dashboard', 'icon' => 'layout-dashboard', 'url' => (Route::has('dashboard') ? route('dashboard') : url('/')), 'isActive' => request()->routeIs('dashboard')],
-            ];
-            // My Profile: the signed-in user's own-record hub,
-            // resolved by the framework from the slice that
-            // declares a profile widget for their audience —
-            // present only when the user actually has a record
-            // there (an employee's path to her own hub).
-            $ownProfileUrl = auth()->check() ? \LaraSlice\Support\DashboardUi::ownRecordUrl() : null;
-            if ($ownProfileUrl) {
-                $workspaceItems[] = ['title' => 'My Profile', 'icon' => 'user', 'url' => $ownProfileUrl, 'isActive' => request()->url() === url($ownProfileUrl)];
-            }
-            if ($canUseStudio) {
-                $workspaceItems[] = ['title' => 'Slice Studio', 'icon' => 'wand-2', 'url' => route('laraslice.wizard'), 'isActive' => request()->routeIs('laraslice.wizard*')];
-            }
-            $navMain = [
-                ['title' => 'Workspace', 'items' => $workspaceItems],
-            ];
-
-            // Domain slices first, then ungrouped app slices, then LaraSlice's core slices under Administration.
-            // A group named after the ungrouped bucket is treated as ungrouped so it never appears twice.
-            $navDomains = [];
-            $navUngrouped = [];
-            $navCore = [];
-            foreach ($navSlices as $s) {
-                $grp = $s['group'] ?? null;
-                if (!empty($s['core'])) {
-                    $navCore[] = $sliceNavItem($s);
-                } elseif ($grp && $grp !== 'Vertical Slices') {
-                    $navDomains[$grp][] = $sliceNavItem($s);
-                } else {
-                    $navUngrouped[] = $sliceNavItem($s);
-                }
-            }
-            // Sort domains by lowest order of member slices
-            uasort($navDomains, function ($a, $b) {
-                $minA = min(array_map(fn ($i) => $i['order'] ?? 10, $a));
-                $minB = min(array_map(fn ($i) => $i['order'] ?? 10, $b));
-                return $minA <=> $minB;
-            });
-
-            foreach ($navDomains as $groupName => $items) {
-                $navMain[] = ['title' => $groupName, 'items' => $items];
-            }
-            if (!empty($navUngrouped)) {
-                $navMain[] = ['title' => 'Vertical Slices', 'items' => $navUngrouped];
-            }
-            if (!empty($navCore)) {
-                $navMain[] = ['title' => 'Administration', 'items' => $navCore];
-            }
-        @endphp
+@endphp
 
         <x-ui.sidebar-provider>
             <x-ui.sidebar>
@@ -191,15 +84,42 @@
                         <span class="truncate">{{ auth()->user()->name ?? 'Administrator' }}</span>
                     </div>
                     @else
-                    <x-block.version-switcher title="LaraSlice" :versions="[$laraSliceVersion]">
-                        <x-slot:icon><x-lucide-layers class="size-4" /></x-slot:icon>
-                    </x-block.version-switcher>
+                    {{-- Standard shell brand (Stage E): the app's
+                         own identity, not the framework's version
+                         switcher — the version rides quietly as
+                         the subtitle. --}}
+                    @php
+                        $brandName = null;
+                        try {
+                            $brandName = \LaraSlice\Slices\Settings\Models\Setting::get('app_name');
+                        } catch (\Throwable) {
+                        }
+                        if (! is_string($brandName) || trim($brandName) === '') {
+                            $brandName = \LaraSlice\Support\SettingsUi::appName();
+                        }
+                        if ($brandName === 'Laravel') {
+                            $brandName = 'LaraSlice';
+                        }
+                        $brandVersion = preg_match('/^\d+\.\d+\.\d+/', $laraSliceVersion) ? 'v'.$laraSliceVersion : null;
+                    @endphp
+                    <div class="flex items-center gap-2.5 px-2 py-1">
+                        <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                            <x-lucide-layers class="size-4" />
+                        </span>
+                        <span class="min-w-0">
+                            <span class="block truncate text-[13.5px] font-semibold leading-tight text-sidebar-foreground">{{ $brandName }}</span>
+                            @if($brandVersion)
+                            <span class="block text-[11px] leading-tight text-sidebar-foreground/55">{{ $brandVersion }}</span>
+                            @endif
+                        </span>
+                    </div>
                     <x-block.search-form placeholder="Search slices, routes..." readonly @focus="searchOpen = true; $el.blur()" @click="searchOpen = true" />
                     @endif
                 </x-ui.sidebar-header>
                 <x-ui.sidebar-content class="gap-0">
-                    {!! \LaraSlice\Support\NavHtml::cached($navMain) !!}
+                    {!! \LaraSlice\Support\NavHtml::cachedShell($navMain, $navActiveGroup) !!}
                     {!! \LaraSlice\Support\NavHtml::activeScript() !!}
+                    {!! \LaraSlice\Support\NavHtml::lazyScript(route('laraslice.nav_group'), route('laraslice.nav_index')) !!}
                 </x-ui.sidebar-content>
                 <x-ui.sidebar-footer>
                     @if($activeKit === 'replica')
@@ -221,7 +141,7 @@
 
                 <x-ui.sidebar-inset>
                     {{-- Site Header --}}
-                    <header class="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 lg:px-6 bg-background/95 backdrop-blur-xs sticky top-0 z-30">
+                    <header class="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4 lg:px-6 bg-background/95 backdrop-blur-xs sticky top-0 z-30">
                         @if($activeKit === 'replica')
                         {{-- Replica shell topbar: title + breadcrumb left, setup + utilities right (source chrome) --}}
                         <x-ui.sidebar-trigger class="-ml-1" />
@@ -353,10 +273,10 @@
                     {{-- Filterbar stack: directory facet bands and overview
                          hub tab strips push here (layout kit). Without this
                          stack those bands silently never render. --}}
-                    <div class="sticky top-14 z-20 min-w-0">@stack('filterbar')</div>
+                    <div class="sticky top-12 z-20 min-w-0">@stack('filterbar')</div>
 
                     {{-- Main Content Body --}}
-                    <main class="@container/main flex flex-1 flex-col gap-4 p-4 lg:p-6 w-full max-w-[1600px] mx-auto">
+                    <main class="@container/main flex flex-1 flex-col gap-4 px-4 py-4 lg:px-6 lg:py-5 w-full">
                         @yield('content')
                         {{ $slot ?? '' }}
                     </main>
@@ -370,13 +290,9 @@
                     <x-ui.command-list>
                         <x-ui.command-empty>No results found.</x-ui.command-empty>
                         <x-ui.command-group heading="Slices & Domains">
-                            @foreach ($navSlices as $s)
-                                <x-ui.command-item href="{{ $s['url'] }}">
-                                    <x-dynamic-component :component="'lucide-' . $resolveLucide($s['icon'] ?? 'box')" class="size-4 mr-2" />
-                                    <span>{{ $s['label'] ?? $s['title'] ?? $s['name'] ?? 'Slice' }}</span>
-                                    <span class="ml-auto text-xs text-muted-foreground font-mono">{{ $s['url'] }}</span>
-                                </x-ui.command-item>
-                            @endforeach
+                            <div id="ls-palette-slices">
+                                <div class="px-2 py-1.5 text-sm text-muted-foreground">Loading slices…</div>
+                            </div>
                         </x-ui.command-group>
                         <x-ui.command-separator />
                         <x-ui.command-group heading="Quick Actions">

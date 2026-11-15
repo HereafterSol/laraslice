@@ -2229,12 +2229,17 @@ BLADE;
                             $vChanged = true;
                         }
                     }
-                    // (aa) Retire the in-page title row on
-                    // ERP slices: the shell topbar carries the
-                    // title + breadcrumb there now (gate
-                    // computed at the top of repairSlice from
-                    // the routes prefix).
-                    if ($base === 'index.blade.php' && $isErpSlice) {
+                    // (aa) Retire the in-page title row:
+                    // page identity (title + breadcrumb) lives
+                    // only in the shell topbar, on every shell —
+                    // the gate was ERP-only when the replica
+                    // topbar landed (25 Oct 2026); the owner
+                    // made the rule universal 13 Nov 2026 after
+                    // the standard shell showed the same
+                    // duplicate. The rule is shape-guarded and
+                    // keeps header-right action rows alive via
+                    // empty:hidden.
+                    if ($base === 'index.blade.php') {
                         $retired = $this->retireInPageTitleRow($vContent);
                         if ($retired !== null) {
                             $vContent = $retired;
@@ -3062,7 +3067,7 @@ BLADE;
                             $comboboxSnippet = "@if(\$parentId)\n"
                                 ."                <input type=\"hidden\" name=\"{$fkDefault}\" value=\"{{ \$parentId }}\">\n"
                                 ."                @else\n"
-                                ."                <div class=\"space-y-1.5\">\n"
+                                ."                <div class=\"space-y-1\">\n"
                                 ."                    <x-ui.combobox-relationship\n"
                                 ."                        name=\"{$fkDefault}\"\n"
                                 ."                        label=\"{$parentLabel}\"\n"
@@ -3957,12 +3962,12 @@ BLADE;
         }
     }
 
-    public function getNavigableSlices(): array
+    public function getNavigableSlices(bool $forSearch = false): array
     {
         $currentUser = auth()->check() ? auth()->user() : null;
 
         // Built once per user per request: every view and component asks for it
-        $cacheKey = $currentUser ? 'user:'.$currentUser->getAuthIdentifier() : 'guest';
+        $cacheKey = ($currentUser ? 'user:'.$currentUser->getAuthIdentifier() : 'guest').($forSearch ? ':search' : '');
         if (isset($this->navigationCache[$cacheKey])) {
             return $this->navigationCache[$cacheKey];
         }
@@ -3973,14 +3978,22 @@ BLADE;
         $isSuperAdmin = $currentUser && Access::isSuperAdmin($currentUser);
 
         foreach ($this->getActiveSlices() as $slice) {
-            if (isset($slice->navigation['visible']) && $slice->navigation['visible'] === false) {
-                continue;
-            }
-            if (! empty($slice->navigation['hidden'])) {
-                continue;
-            }
-            if (isset($slice->navigation['show_in_navigation']) && $slice->navigation['show_in_navigation'] === false) {
-                continue;
+            // Search (the command palette) reaches every slice
+            // the user may open, including ones the sidebar
+            // hides — the source systems' global search finds
+            // every DocType, workspace-curated or not. The
+            // sidebar build ($forSearch = false) applies the
+            // visibility filters below.
+            if (! $forSearch) {
+                if (isset($slice->navigation['visible']) && $slice->navigation['visible'] === false) {
+                    continue;
+                }
+                if (! empty($slice->navigation['hidden'])) {
+                    continue;
+                }
+                if (isset($slice->navigation['show_in_navigation']) && $slice->navigation['show_in_navigation'] === false) {
+                    continue;
+                }
             }
             // Feature-module switch (module_settings): a module
             // deactivated for the user's type leaves the menu.
@@ -4203,6 +4216,7 @@ BLADE;
                 'domain' => $slice->domain,
                 'sub_domain' => $slice->sub_domain,
                 'group' => $slice->navigation['group'] ?? $slice->domain ?? null,
+                'section' => $slice->navigation['section'] ?? null,
                 'table_prefix' => $slice->table_prefix,
                 'multitenant' => $slice->multitenant,
                 'tenant_key' => $slice->tenant_key,
